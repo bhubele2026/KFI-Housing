@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { getRenewalInfo } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating } from "@/data/mockData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, ChevronRight, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
+import { StarRating } from "@/components/star-rating";
 
 export default function Properties() {
   const [, navigate] = useLocation();
@@ -82,6 +83,7 @@ export default function Properties() {
                   <TableHead className="text-center">Vacant</TableHead>
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead>Rating</TableHead>
                   <TableHead>Lease Renewal</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
@@ -89,7 +91,7 @@ export default function Properties() {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                       No properties found.
                     </TableCell>
                   </TableRow>
@@ -101,6 +103,7 @@ export default function Properties() {
                     const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
                     const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
                     const showRenewal = renewal && renewal.level !== "ok";
+                    const overallRating = computeOverallRating(property.ratings);
 
                     return (
                       <motion.tr
@@ -127,6 +130,16 @@ export default function Properties() {
                           <Badge variant={property.status === "Active" ? "default" : "secondary"}>
                             {property.status}
                           </Badge>
+                        </td>
+                        <td className="p-4" data-testid={`cell-rating-${property.id}`}>
+                          {overallRating === null ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              <StarRating value={overallRating} readOnly size="sm" ariaLabel={`${property.name} overall rating`} />
+                              <span className="text-xs font-medium tabular-nums">{overallRating.toFixed(1)}</span>
+                            </span>
+                          )}
                         </td>
                         <td className="p-4">
                           {showRenewal && renewal ? (

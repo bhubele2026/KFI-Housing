@@ -18,13 +18,14 @@ import {
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
-  ShieldCheck, Trees, Sparkles, CheckCircle2,
+  ShieldCheck, Trees, Sparkles, CheckCircle2, Star,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT } from "@/data/mockData";
+import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, type Ratings } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
+import { StarRating } from "@/components/star-rating";
 
 const FURNISHING_ICONS: Record<string, LucideIcon> = {
   BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
@@ -144,6 +145,59 @@ function BedMap({ beds, occupants, propertyId, onAddBed, onDeleteBed }: {
               </Tooltip>
             );
           })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onChange: (next: Ratings) => void }) {
+  const current: Ratings = ratings ?? EMPTY_RATINGS;
+  const overall = computeOverallRating(current);
+  const ratedCount = RATING_CATEGORIES.filter(c => current[c.key] > 0).length;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Star className="h-4 w-4" />Ratings
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Overall summary */}
+        <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3" data-testid="ratings-overall">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Overall</p>
+            {overall === null ? (
+              <p className="text-sm text-muted-foreground mt-1">No ratings yet</p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Average of {ratedCount} rated categor{ratedCount === 1 ? "y" : "ies"}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <StarRating value={overall ?? 0} readOnly size="md" ariaLabel="Overall rating" />
+            <span className="text-base font-semibold tabular-nums w-16 text-right" data-testid="ratings-overall-value">
+              {overall === null ? "— / 5" : `${overall.toFixed(1)} / 5`}
+            </span>
+          </div>
+        </div>
+
+        {/* Categories */}
+        <div className="space-y-2">
+          {RATING_CATEGORIES.map(({ key, label }) => (
+            <div key={key} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
+              <span className="text-sm text-muted-foreground">{label}</span>
+              <StarRating
+                value={current[key]}
+                size="md"
+                ariaLabel={`${label} rating`}
+                testId={`rating-${key}`}
+                onChange={(v) => onChange({ ...current, [key]: v })}
+              />
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -340,26 +394,35 @@ export default function PropertyDetail() {
                 </CardContent>
               </Card>
 
-              {/* Landlord Info */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />Landlord / Contact</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {([
-                    { label: "Name", field: "landlordName", icon: Users },
-                    { label: "Email", field: "landlordEmail", icon: Mail },
-                    { label: "Phone", field: "landlordPhone", icon: Phone },
-                  ] as { label: string; field: keyof typeof property; icon: React.ElementType }[]).map(({ label, field, icon: Icon }) => (
-                    <div key={field} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0">
-                        <Icon className="h-3.5 w-3.5" />{label}
+              {/* Right column: Landlord stacked above Ratings */}
+              <div className="space-y-4">
+                {/* Landlord Info */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />Landlord / Contact</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {([
+                      { label: "Name", field: "landlordName", icon: Users },
+                      { label: "Email", field: "landlordEmail", icon: Mail },
+                      { label: "Phone", field: "landlordPhone", icon: Phone },
+                    ] as { label: string; field: keyof typeof property; icon: React.ElementType }[]).map(({ label, field, icon: Icon }) => (
+                      <div key={field} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0">
+                          <Icon className="h-3.5 w-3.5" />{label}
+                        </div>
+                        <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as any)} />
                       </div>
-                      <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as any)} />
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {/* Ratings */}
+                <RatingsCard
+                  ratings={property.ratings}
+                  onChange={(next) => updateProperty(id, { ratings: next })}
+                />
+              </div>
 
               {/* Payment Info */}
               <Card className="lg:col-span-2">

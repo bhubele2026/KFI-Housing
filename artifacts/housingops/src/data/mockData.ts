@@ -1,5 +1,45 @@
 import { z } from "zod";
 
+// ── Property ratings ───────────────────────────────────────────────────
+// Each category is a whole-star value 0–5. A value of 0 means "not yet rated"
+// and is excluded from the overall average.
+export const RATING_CATEGORIES = [
+  { key: "landlord",      label: "Landlord" },
+  { key: "cleanliness",   label: "Cleanliness" },
+  { key: "amenities",     label: "Amenities" },
+  { key: "occupants",     label: "Occupants" },
+  { key: "location",      label: "Location" },
+  { key: "valueForMoney", label: "Value for Money" },
+] as const;
+
+export type RatingCategoryKey = typeof RATING_CATEGORIES[number]["key"];
+
+export const RatingsSchema = z.object({
+  landlord:      z.number().int().min(0).max(5).default(0),
+  cleanliness:   z.number().int().min(0).max(5).default(0),
+  amenities:     z.number().int().min(0).max(5).default(0),
+  occupants:     z.number().int().min(0).max(5).default(0),
+  location:      z.number().int().min(0).max(5).default(0),
+  valueForMoney: z.number().int().min(0).max(5).default(0),
+});
+export type Ratings = z.infer<typeof RatingsSchema>;
+
+export const EMPTY_RATINGS: Ratings = {
+  landlord: 0, cleanliness: 0, amenities: 0,
+  occupants: 0, location: 0, valueForMoney: 0,
+};
+
+/** Average of the non-zero category ratings. Returns null when nothing is rated. */
+export function computeOverallRating(ratings?: Ratings | null): number | null {
+  if (!ratings) return null;
+  const values = RATING_CATEGORIES
+    .map(c => ratings[c.key])
+    .filter(v => typeof v === "number" && v > 0);
+  if (values.length === 0) return null;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return Math.round((sum / values.length) * 10) / 10;
+}
+
 export const PropertySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -24,6 +64,7 @@ export const PropertySchema = z.object({
   portalUrl: z.string(),
   notes: z.string(),
   furnishings: z.array(z.string()).default([]),
+  ratings: RatingsSchema.optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 
@@ -332,6 +373,7 @@ export const MOCK_PROPERTIES: Property[] = [
       "Gym / Fitness center", "Swimming pool", "Parking",
       "Vacuum cleaner",
     ],
+    ratings: { landlord: 5, cleanliness: 4, amenities: 5, occupants: 4, location: 4, valueForMoney: 3 },
   },
   {
     id: "p2",
@@ -371,6 +413,7 @@ export const MOCK_PROPERTIES: Property[] = [
       "Parking", "Garage", "Elevator",
       "Vacuum cleaner", "Cleaning supplies",
     ],
+    ratings: { landlord: 4, cleanliness: 3, amenities: 4, occupants: 3, location: 5, valueForMoney: 4 },
   },
   {
     id: "p3",
@@ -449,6 +492,7 @@ export const MOCK_PROPERTIES: Property[] = [
       "Gym / Fitness center", "Swimming pool", "Game room", "Parking", "Garage", "Bike storage",
       "Vacuum cleaner", "Mop", "Broom", "Cleaning supplies",
     ],
+    ratings: { landlord: 5, cleanliness: 5, amenities: 4, occupants: 4, location: 3, valueForMoney: 5 },
   },
   {
     id: "p5",

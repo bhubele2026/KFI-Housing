@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,9 +17,47 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers } = useData();
-  const [customerFilter, setCustomerFilter] = useState("All");
+  const { properties, beds, leases, utilities, customers, isLoading } = useData();
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
+
+  // Derive the filter directly from the URL + known customers so the
+  // URL is the single source of truth. Unknown ids fall back to "All",
+  // but while customer data is still loading we keep the URL value so
+  // /dashboard?customer=<id> on a hard refresh pre-selects correctly
+  // once the data arrives.
+  const customerFilter = useMemo(() => {
+    const param = new URLSearchParams(searchString).get("customer");
+    if (!param) return "All";
+    if (isLoading) return param;
+    if (customers.some((c) => c.id === param)) return param;
+    return "All";
+  }, [searchString, customers, isLoading]);
+
+  // Once customers have loaded, if the URL still carries an unknown
+  // customer id, normalize it out so the visible state and the URL
+  // stay in sync (and shareable).
+  useEffect(() => {
+    if (isLoading) return;
+    const params = new URLSearchParams(searchString);
+    const param = params.get("customer");
+    if (param && !customers.some((c) => c.id === param)) {
+      params.delete("customer");
+      const qs = params.toString();
+      const base = window.location.pathname;
+      navigate(qs ? `${base}?${qs}` : base, { replace: true });
+    }
+  }, [searchString, customers, isLoading, navigate]);
+
+  const updateCustomerFilter = (next: string) => {
+    const params = new URLSearchParams(window.location.search);
+    if (next === "All") params.delete("customer");
+    else params.set("customer", next);
+    const qs = params.toString();
+    const base = window.location.pathname;
+    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+  };
 
   const scopedProperties = useMemo(() => {
     if (customerFilter === "All") return properties;
@@ -126,7 +165,7 @@ export default function Dashboard() {
               </p>
             )}
           </div>
-          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <Select value={customerFilter} onValueChange={updateCustomerFilter}>
             <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
               <SelectValue placeholder="Customer" />
             </SelectTrigger>

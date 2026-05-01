@@ -1,16 +1,56 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { toMonthlyCharge } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { motion } from "framer-motion";
+import { Briefcase, X } from "lucide-react";
 
 export default function Finance() {
-  const { properties, beds, leases, utilities, occupants } = useData();
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
+  const { properties, beds, leases, utilities, occupants, customers } = useData();
+  const [customerFilter, setCustomerFilter] = useState("All");
 
-  const financialData = properties.map(p => {
+  const customerById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of customers) map.set(c.id, c.name);
+    return map;
+  }, [customers]);
+
+  // Sync ?customer=<id> URL parameter into the filter state.
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const param = params.get("customer");
+    if (param && customers.some((c) => c.id === param)) {
+      setCustomerFilter(param);
+    } else if (!param && customerFilter !== "All") {
+      setCustomerFilter("All");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString, customers]);
+
+  const updateCustomerFilter = (next: string) => {
+    setCustomerFilter(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "All") params.delete("customer");
+    else params.set("customer", next);
+    const qs = params.toString();
+    const base = window.location.pathname;
+    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+  };
+
+  const visibleProperties = useMemo(() => {
+    if (customerFilter === "All") return properties;
+    return properties.filter((p) => p.customerId === customerFilter);
+  }, [properties, customerFilter]);
+
+  const financialData = visibleProperties.map(p => {
     const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
     const revenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
     const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent ?? 0;
@@ -44,6 +84,9 @@ export default function Finance() {
     { revenue: 0, leaseCost: 0, utilCost: 0, totalCost: 0, profit: 0 }
   );
 
+  const activeCustomerName =
+    customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
+
   return (
     <MainLayout>
       <motion.div
@@ -74,6 +117,43 @@ export default function Finance() {
             </div>
           </div>
         </div>
+
+        {activeCustomerName && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+              <Briefcase className="h-3 w-3" />
+              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              <button
+                type="button"
+                onClick={() => updateCustomerFilter("All")}
+                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                aria-label="Clear customer filter"
+                data-testid="button-clear-customer-filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </div>
+        )}
+
+        <Card>
+          <CardContent className="p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Customers</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              {financialData.length} of {properties.length} propert{properties.length === 1 ? "y" : "ies"}
+            </span>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -114,48 +194,58 @@ export default function Finance() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {financialData.map((d, i) => (
-                  <motion.tr
-                    key={d.id}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
-                  >
-                    <td className="p-4 font-medium">{d.name}</td>
-                    <td className="p-4 text-center text-sm text-muted-foreground">
-                      {d.occupiedBeds}/{d.totalBeds}
+                {financialData.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                      No properties match this filter.
                     </td>
-                    <td className="p-4 text-right font-medium text-green-600">${d.revenue.toLocaleString()}</td>
-                    <td className="p-4 text-right text-sm text-muted-foreground">${d.leaseCost.toLocaleString()}</td>
-                    <td className="p-4 text-right text-sm text-muted-foreground">${d.utilCost.toLocaleString()}</td>
-                    <td className="p-4 text-right text-sm font-medium">${d.totalCost.toLocaleString()}</td>
-                    <td className="p-4 text-right">
-                      <Badge
-                        variant={d.profit >= 0 ? "default" : "destructive"}
-                        className={d.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+                  </tr>
+                ) : (
+                  <>
+                    {financialData.map((d, i) => (
+                      <motion.tr
+                        key={d.id}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
                       >
-                        {d.profit >= 0 ? "+" : "-"}${Math.abs(d.profit).toLocaleString()}
-                      </Badge>
-                    </td>
-                  </motion.tr>
-                ))}
-                <tr className="bg-muted/50 border-t-2 border-border">
-                  <td className="p-4 font-bold">Portfolio Total</td>
-                  <td />
-                  <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
-                  <td className="p-4 text-right font-bold">${totals.leaseCost.toLocaleString()}</td>
-                  <td className="p-4 text-right font-bold">${totals.utilCost.toLocaleString()}</td>
-                  <td className="p-4 text-right font-bold">${totals.totalCost.toLocaleString()}</td>
-                  <td className="p-4 text-right">
-                    <Badge
-                      variant={totals.profit >= 0 ? "default" : "destructive"}
-                      className={totals.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
-                    >
-                      {totals.profit >= 0 ? "+" : "-"}${Math.abs(totals.profit).toLocaleString()}
-                    </Badge>
-                  </td>
-                </tr>
+                        <td className="p-4 font-medium">{d.name}</td>
+                        <td className="p-4 text-center text-sm text-muted-foreground">
+                          {d.occupiedBeds}/{d.totalBeds}
+                        </td>
+                        <td className="p-4 text-right font-medium text-green-600">${d.revenue.toLocaleString()}</td>
+                        <td className="p-4 text-right text-sm text-muted-foreground">${d.leaseCost.toLocaleString()}</td>
+                        <td className="p-4 text-right text-sm text-muted-foreground">${d.utilCost.toLocaleString()}</td>
+                        <td className="p-4 text-right text-sm font-medium">${d.totalCost.toLocaleString()}</td>
+                        <td className="p-4 text-right">
+                          <Badge
+                            variant={d.profit >= 0 ? "default" : "destructive"}
+                            className={d.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+                          >
+                            {d.profit >= 0 ? "+" : "-"}${Math.abs(d.profit).toLocaleString()}
+                          </Badge>
+                        </td>
+                      </motion.tr>
+                    ))}
+                    <tr className="bg-muted/50 border-t-2 border-border">
+                      <td className="p-4 font-bold">{activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total"}</td>
+                      <td />
+                      <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold">${totals.leaseCost.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold">${totals.utilCost.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold">${totals.totalCost.toLocaleString()}</td>
+                      <td className="p-4 text-right">
+                        <Badge
+                          variant={totals.profit >= 0 ? "default" : "destructive"}
+                          className={totals.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+                        >
+                          {totals.profit >= 0 ? "+" : "-"}${Math.abs(totals.profit).toLocaleString()}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </>
+                )}
               </TableBody>
             </Table>
           </CardContent>

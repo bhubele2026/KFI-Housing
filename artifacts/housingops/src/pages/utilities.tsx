@@ -1,12 +1,12 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, Zap } from "lucide-react";
+import { Briefcase, ChevronRight, X, Zap } from "lucide-react";
 import { UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,17 +24,74 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function Utilities() {
   const [, navigate] = useLocation();
-  const { utilities, properties, isLoading } = useData();
+  const searchString = useSearch();
+  const { utilities, properties, customers, isLoading } = useData();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [customerFilter, setCustomerFilter] = useState("All");
+
+  const customerById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of customers) map.set(c.id, c.name);
+    return map;
+  }, [customers]);
+
+  const propertyById = useMemo(() => {
+    const map = new Map(properties.map((p) => [p.id, p] as const));
+    return map;
+  }, [properties]);
+
+  // Sync ?customer=<id> URL parameter into the filter state.
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const param = params.get("customer");
+    if (param && customers.some((c) => c.id === param)) {
+      setCustomerFilter(param);
+    } else if (!param && customerFilter !== "All") {
+      setCustomerFilter("All");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString, customers]);
+
+  const updateCustomerFilter = (next: string) => {
+    setCustomerFilter(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "All") params.delete("customer");
+    else params.set("customer", next);
+    const qs = params.toString();
+    const base = window.location.pathname;
+    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+  };
 
   const filtered = utilities.filter(u => {
     const matchesProp = propertyFilter === "All" || u.propertyId === propertyFilter;
     const matchesType = typeFilter === "All" || u.type === typeFilter;
-    return matchesProp && matchesType;
+    if (!matchesProp || !matchesType) return false;
+    if (customerFilter === "All") return true;
+    const property = propertyById.get(u.propertyId);
+    return property?.customerId === customerFilter;
   });
 
   const totalMonthly = filtered.reduce((s, u) => s + u.monthlyCost, 0);
+
+  const activeCustomerName =
+    customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
+
+  // Restrict the property dropdown to properties owned by the active customer.
+  const availableProperties = useMemo(() => {
+    if (customerFilter === "All") return properties;
+    return properties.filter((p) => p.customerId === customerFilter);
+  }, [properties, customerFilter]);
+
+  // If the selected property is no longer valid under the active customer,
+  // snap the property filter back to "All" so the table doesn't appear empty
+  // for a stale combination the user can't see.
+  useEffect(() => {
+    if (propertyFilter === "All") return;
+    if (!availableProperties.some((p) => p.id === propertyFilter)) {
+      setPropertyFilter("All");
+    }
+  }, [availableProperties, propertyFilter]);
 
   return (
     <MainLayout>
@@ -59,16 +116,46 @@ export default function Utilities() {
           </div>
         </div>
 
+        {activeCustomerName && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+              <Briefcase className="h-3 w-3" />
+              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              <button
+                type="button"
+                onClick={() => updateCustomerFilter("All")}
+                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                aria-label="Clear customer filter"
+                data-testid="button-clear-customer-filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </div>
+        )}
+
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-3 items-center">
+              <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+                <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
+                  <SelectValue placeholder="Customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Customers</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
                 <SelectTrigger className="w-full sm:w-56">
                   <SelectValue placeholder="All Properties" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Properties</SelectItem>
-                  {properties.map(p => (
+                  {availableProperties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -111,7 +198,7 @@ export default function Utilities() {
                 ) : (
                   <>
                     {filtered.map((u, i) => {
-                      const property = properties.find(p => p.id === u.propertyId);
+                      const property = propertyById.get(u.propertyId);
                       return (
                         <motion.tr
                           key={u.id}

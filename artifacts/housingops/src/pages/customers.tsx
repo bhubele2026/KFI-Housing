@@ -19,7 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -427,6 +427,13 @@ export default function Customers() {
                                 >
                                   <FileText className="mr-2 h-4 w-4" />
                                   View leases
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => navigate(`/utilities?customer=${encodeURIComponent(c.id)}`)}
+                                  data-testid={`link-customer-goto-utilities-${c.id}`}
+                                >
+                                  <Zap className="mr-2 h-4 w-4" />
+                                  View utilities
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

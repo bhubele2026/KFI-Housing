@@ -1,4 +1,23 @@
-import { pgTable, text, integer, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, doublePrecision, jsonb } from "drizzle-orm/pg-core";
+
+/** Per-property subjective ratings, 0–5 whole-star scale. 0 = not rated. */
+export interface PropertyRatings {
+  landlord: number;
+  cleanliness: number;
+  amenities: number;
+  occupants: number;
+  location: number;
+  valueForMoney: number;
+}
+
+const EMPTY_RATINGS: PropertyRatings = {
+  landlord: 0,
+  cleanliness: 0,
+  amenities: 0,
+  occupants: 0,
+  location: 0,
+  valueForMoney: 0,
+};
 
 export const propertiesTable = pgTable("properties", {
   id: text("id").primaryKey(),
@@ -25,6 +44,10 @@ export const propertiesTable = pgTable("properties", {
   notes: text("notes").notNull().default(""),
   furnishings: text("furnishings").array().notNull().default([]),
   customerId: text("customer_id").notNull().default(""),
+  ratings: jsonb("ratings")
+    .$type<PropertyRatings>()
+    .notNull()
+    .default(EMPTY_RATINGS),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

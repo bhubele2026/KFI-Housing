@@ -519,6 +519,8 @@ components:
           type: array
           items: { type: string }
         customerId: { type: string }
+        ratings:
+          $ref: "#/components/schemas/Ratings"
     PropertyUpdate:
       type: object
       properties:
@@ -549,6 +551,23 @@ components:
           type: array
           items: { type: string }
         customerId: { type: string }
+        ratings:
+          $ref: "#/components/schemas/Ratings"
+
+    Ratings:
+      type: object
+      description: |
+        Per-property subjective ratings on a 0–5 whole-star scale.
+        A category value of 0 means "not rated yet" and is excluded
+        from the overall average shown in the UI.
+      required: [landlord, cleanliness, amenities, occupants, location, valueForMoney]
+      properties:
+        landlord:      { type: integer, minimum: 0, maximum: 5 }
+        cleanliness:   { type: integer, minimum: 0, maximum: 5 }
+        amenities:     { type: integer, minimum: 0, maximum: 5 }
+        occupants:     { type: integer, minimum: 0, maximum: 5 }
+        location:      { type: integer, minimum: 0, maximum: 5 }
+        valueForMoney: { type: integer, minimum: 0, maximum: 5 }
 
     Lease:
       type: object

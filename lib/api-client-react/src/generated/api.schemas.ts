@@ -45,6 +45,45 @@ export const PropertyPaymentMethod = {
   Money_Order: "Money Order",
 } as const;
 
+/**
+ * Per-property subjective ratings on a 0–5 whole-star scale.
+A category value of 0 means "not rated yet" and is excluded
+from the overall average shown in the UI.
+
+ */
+export interface Ratings {
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  landlord: number;
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  cleanliness: number;
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  amenities: number;
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  occupants: number;
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  location: number;
+  /**
+   * @minimum 0
+   * @maximum 5
+   */
+  valueForMoney: number;
+}
+
 export interface Property {
   id: string;
   name: string;
@@ -70,6 +109,7 @@ export interface Property {
   notes: string;
   furnishings: string[];
   customerId: string;
+  ratings?: Ratings;
 }
 
 export type PropertyUpdateStatus =
@@ -115,6 +155,7 @@ export interface PropertyUpdate {
   notes?: string;
   furnishings?: string[];
   customerId?: string;
+  ratings?: Ratings;
 }
 
 export type LeaseStatus = (typeof LeaseStatus)[keyof typeof LeaseStatus];

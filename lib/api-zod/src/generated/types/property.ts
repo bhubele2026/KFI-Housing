@@ -7,6 +7,7 @@
  */
 import type { PropertyPaymentMethod } from "./propertyPaymentMethod";
 import type { PropertyStatus } from "./propertyStatus";
+import type { Ratings } from "./ratings";
 
 export interface Property {
   id: string;
@@ -33,4 +34,5 @@ export interface Property {
   notes: string;
   furnishings: string[];
   customerId: string;
+  ratings?: Ratings;
 }

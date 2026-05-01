@@ -83,6 +83,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
       "Gym / Fitness center", "Swimming pool", "Parking",
       "Vacuum cleaner",
     ],
+    ratings: { landlord: 5, cleanliness: 4, amenities: 5, occupants: 4, location: 4, valueForMoney: 3 },
   },
   {
     id: "p2",
@@ -123,6 +124,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
       "Parking", "Garage", "Elevator",
       "Vacuum cleaner", "Cleaning supplies",
     ],
+    ratings: { landlord: 4, cleanliness: 3, amenities: 4, occupants: 3, location: 5, valueForMoney: 4 },
   },
   {
     id: "p3",
@@ -204,6 +206,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
       "Gym / Fitness center", "Swimming pool", "Game room", "Parking", "Garage", "Bike storage",
       "Vacuum cleaner", "Mop", "Broom", "Cleaning supplies",
     ],
+    ratings: { landlord: 5, cleanliness: 5, amenities: 4, occupants: 4, location: 3, valueForMoney: 5 },
   },
   {
     id: "p5",

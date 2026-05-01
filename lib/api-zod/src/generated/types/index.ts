@@ -31,6 +31,7 @@ export * from "./propertyStatus";
 export * from "./propertyUpdate";
 export * from "./propertyUpdatePaymentMethod";
 export * from "./propertyUpdateStatus";
+export * from "./ratings";
 export * from "./utility";
 export * from "./utilityType";
 export * from "./utilityUpdate";

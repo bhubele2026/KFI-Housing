@@ -25,6 +25,24 @@ export const ResetToSampleDataResponse = zod.object({
 /**
  * @summary Wipe all data and replace with the supplied dataset
  */
+export const importDataBodyPropertiesItemRatingsLandlordMin = 0;
+export const importDataBodyPropertiesItemRatingsLandlordMax = 5;
+
+export const importDataBodyPropertiesItemRatingsCleanlinessMin = 0;
+export const importDataBodyPropertiesItemRatingsCleanlinessMax = 5;
+
+export const importDataBodyPropertiesItemRatingsAmenitiesMin = 0;
+export const importDataBodyPropertiesItemRatingsAmenitiesMax = 5;
+
+export const importDataBodyPropertiesItemRatingsOccupantsMin = 0;
+export const importDataBodyPropertiesItemRatingsOccupantsMax = 5;
+
+export const importDataBodyPropertiesItemRatingsLocationMin = 0;
+export const importDataBodyPropertiesItemRatingsLocationMax = 5;
+
+export const importDataBodyPropertiesItemRatingsValueForMoneyMin = 0;
+export const importDataBodyPropertiesItemRatingsValueForMoneyMax = 5;
+
 export const ImportDataBody = zod.object({
   customers: zod.array(
     zod.object({
@@ -68,6 +86,37 @@ export const ImportDataBody = zod.object({
       notes: zod.string(),
       furnishings: zod.array(zod.string()),
       customerId: zod.string(),
+      ratings: zod
+        .object({
+          landlord: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsLandlordMin)
+            .max(importDataBodyPropertiesItemRatingsLandlordMax),
+          cleanliness: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsCleanlinessMin)
+            .max(importDataBodyPropertiesItemRatingsCleanlinessMax),
+          amenities: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsAmenitiesMin)
+            .max(importDataBodyPropertiesItemRatingsAmenitiesMax),
+          occupants: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsOccupantsMin)
+            .max(importDataBodyPropertiesItemRatingsOccupantsMax),
+          location: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsLocationMin)
+            .max(importDataBodyPropertiesItemRatingsLocationMax),
+          valueForMoney: zod
+            .number()
+            .min(importDataBodyPropertiesItemRatingsValueForMoneyMin)
+            .max(importDataBodyPropertiesItemRatingsValueForMoneyMax),
+        })
+        .optional()
+        .describe(
+          'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+        ),
     }),
   ),
   leases: zod.array(
@@ -194,6 +243,24 @@ export const DeleteCustomerParams = zod.object({
 /**
  * @summary List all properties
  */
+export const listPropertiesResponseRatingsLandlordMin = 0;
+export const listPropertiesResponseRatingsLandlordMax = 5;
+
+export const listPropertiesResponseRatingsCleanlinessMin = 0;
+export const listPropertiesResponseRatingsCleanlinessMax = 5;
+
+export const listPropertiesResponseRatingsAmenitiesMin = 0;
+export const listPropertiesResponseRatingsAmenitiesMax = 5;
+
+export const listPropertiesResponseRatingsOccupantsMin = 0;
+export const listPropertiesResponseRatingsOccupantsMax = 5;
+
+export const listPropertiesResponseRatingsLocationMin = 0;
+export const listPropertiesResponseRatingsLocationMax = 5;
+
+export const listPropertiesResponseRatingsValueForMoneyMin = 0;
+export const listPropertiesResponseRatingsValueForMoneyMax = 5;
+
 export const ListPropertiesResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -225,12 +292,61 @@ export const ListPropertiesResponseItem = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  ratings: zod
+    .object({
+      landlord: zod
+        .number()
+        .min(listPropertiesResponseRatingsLandlordMin)
+        .max(listPropertiesResponseRatingsLandlordMax),
+      cleanliness: zod
+        .number()
+        .min(listPropertiesResponseRatingsCleanlinessMin)
+        .max(listPropertiesResponseRatingsCleanlinessMax),
+      amenities: zod
+        .number()
+        .min(listPropertiesResponseRatingsAmenitiesMin)
+        .max(listPropertiesResponseRatingsAmenitiesMax),
+      occupants: zod
+        .number()
+        .min(listPropertiesResponseRatingsOccupantsMin)
+        .max(listPropertiesResponseRatingsOccupantsMax),
+      location: zod
+        .number()
+        .min(listPropertiesResponseRatingsLocationMin)
+        .max(listPropertiesResponseRatingsLocationMax),
+      valueForMoney: zod
+        .number()
+        .min(listPropertiesResponseRatingsValueForMoneyMin)
+        .max(listPropertiesResponseRatingsValueForMoneyMax),
+    })
+    .optional()
+    .describe(
+      'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+    ),
 });
 export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
 
 /**
  * @summary Create a property
  */
+export const createPropertyBodyRatingsLandlordMin = 0;
+export const createPropertyBodyRatingsLandlordMax = 5;
+
+export const createPropertyBodyRatingsCleanlinessMin = 0;
+export const createPropertyBodyRatingsCleanlinessMax = 5;
+
+export const createPropertyBodyRatingsAmenitiesMin = 0;
+export const createPropertyBodyRatingsAmenitiesMax = 5;
+
+export const createPropertyBodyRatingsOccupantsMin = 0;
+export const createPropertyBodyRatingsOccupantsMax = 5;
+
+export const createPropertyBodyRatingsLocationMin = 0;
+export const createPropertyBodyRatingsLocationMax = 5;
+
+export const createPropertyBodyRatingsValueForMoneyMin = 0;
+export const createPropertyBodyRatingsValueForMoneyMax = 5;
+
 export const CreatePropertyBody = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -262,6 +378,37 @@ export const CreatePropertyBody = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  ratings: zod
+    .object({
+      landlord: zod
+        .number()
+        .min(createPropertyBodyRatingsLandlordMin)
+        .max(createPropertyBodyRatingsLandlordMax),
+      cleanliness: zod
+        .number()
+        .min(createPropertyBodyRatingsCleanlinessMin)
+        .max(createPropertyBodyRatingsCleanlinessMax),
+      amenities: zod
+        .number()
+        .min(createPropertyBodyRatingsAmenitiesMin)
+        .max(createPropertyBodyRatingsAmenitiesMax),
+      occupants: zod
+        .number()
+        .min(createPropertyBodyRatingsOccupantsMin)
+        .max(createPropertyBodyRatingsOccupantsMax),
+      location: zod
+        .number()
+        .min(createPropertyBodyRatingsLocationMin)
+        .max(createPropertyBodyRatingsLocationMax),
+      valueForMoney: zod
+        .number()
+        .min(createPropertyBodyRatingsValueForMoneyMin)
+        .max(createPropertyBodyRatingsValueForMoneyMax),
+    })
+    .optional()
+    .describe(
+      'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+    ),
 });
 
 /**
@@ -270,6 +417,24 @@ export const CreatePropertyBody = zod.object({
 export const UpdatePropertyParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const updatePropertyBodyRatingsLandlordMin = 0;
+export const updatePropertyBodyRatingsLandlordMax = 5;
+
+export const updatePropertyBodyRatingsCleanlinessMin = 0;
+export const updatePropertyBodyRatingsCleanlinessMax = 5;
+
+export const updatePropertyBodyRatingsAmenitiesMin = 0;
+export const updatePropertyBodyRatingsAmenitiesMax = 5;
+
+export const updatePropertyBodyRatingsOccupantsMin = 0;
+export const updatePropertyBodyRatingsOccupantsMax = 5;
+
+export const updatePropertyBodyRatingsLocationMin = 0;
+export const updatePropertyBodyRatingsLocationMax = 5;
+
+export const updatePropertyBodyRatingsValueForMoneyMin = 0;
+export const updatePropertyBodyRatingsValueForMoneyMax = 5;
 
 export const UpdatePropertyBody = zod.object({
   name: zod.string().optional(),
@@ -297,7 +462,56 @@ export const UpdatePropertyBody = zod.object({
   notes: zod.string().optional(),
   furnishings: zod.array(zod.string()).optional(),
   customerId: zod.string().optional(),
+  ratings: zod
+    .object({
+      landlord: zod
+        .number()
+        .min(updatePropertyBodyRatingsLandlordMin)
+        .max(updatePropertyBodyRatingsLandlordMax),
+      cleanliness: zod
+        .number()
+        .min(updatePropertyBodyRatingsCleanlinessMin)
+        .max(updatePropertyBodyRatingsCleanlinessMax),
+      amenities: zod
+        .number()
+        .min(updatePropertyBodyRatingsAmenitiesMin)
+        .max(updatePropertyBodyRatingsAmenitiesMax),
+      occupants: zod
+        .number()
+        .min(updatePropertyBodyRatingsOccupantsMin)
+        .max(updatePropertyBodyRatingsOccupantsMax),
+      location: zod
+        .number()
+        .min(updatePropertyBodyRatingsLocationMin)
+        .max(updatePropertyBodyRatingsLocationMax),
+      valueForMoney: zod
+        .number()
+        .min(updatePropertyBodyRatingsValueForMoneyMin)
+        .max(updatePropertyBodyRatingsValueForMoneyMax),
+    })
+    .optional()
+    .describe(
+      'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+    ),
 });
+
+export const updatePropertyResponseRatingsLandlordMin = 0;
+export const updatePropertyResponseRatingsLandlordMax = 5;
+
+export const updatePropertyResponseRatingsCleanlinessMin = 0;
+export const updatePropertyResponseRatingsCleanlinessMax = 5;
+
+export const updatePropertyResponseRatingsAmenitiesMin = 0;
+export const updatePropertyResponseRatingsAmenitiesMax = 5;
+
+export const updatePropertyResponseRatingsOccupantsMin = 0;
+export const updatePropertyResponseRatingsOccupantsMax = 5;
+
+export const updatePropertyResponseRatingsLocationMin = 0;
+export const updatePropertyResponseRatingsLocationMax = 5;
+
+export const updatePropertyResponseRatingsValueForMoneyMin = 0;
+export const updatePropertyResponseRatingsValueForMoneyMax = 5;
 
 export const UpdatePropertyResponse = zod.object({
   id: zod.string(),
@@ -330,6 +544,37 @@ export const UpdatePropertyResponse = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  ratings: zod
+    .object({
+      landlord: zod
+        .number()
+        .min(updatePropertyResponseRatingsLandlordMin)
+        .max(updatePropertyResponseRatingsLandlordMax),
+      cleanliness: zod
+        .number()
+        .min(updatePropertyResponseRatingsCleanlinessMin)
+        .max(updatePropertyResponseRatingsCleanlinessMax),
+      amenities: zod
+        .number()
+        .min(updatePropertyResponseRatingsAmenitiesMin)
+        .max(updatePropertyResponseRatingsAmenitiesMax),
+      occupants: zod
+        .number()
+        .min(updatePropertyResponseRatingsOccupantsMin)
+        .max(updatePropertyResponseRatingsOccupantsMax),
+      location: zod
+        .number()
+        .min(updatePropertyResponseRatingsLocationMin)
+        .max(updatePropertyResponseRatingsLocationMax),
+      valueForMoney: zod
+        .number()
+        .min(updatePropertyResponseRatingsValueForMoneyMin)
+        .max(updatePropertyResponseRatingsValueForMoneyMax),
+    })
+    .optional()
+    .describe(
+      'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+    ),
 });
 
 /**

@@ -21,6 +21,8 @@ import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 type SortDir = "asc" | "desc" | null;
+type SortKey = "customer" | "rating";
+type MinRating = "any" | "3" | "4" | "5";
 
 interface PropertyDraft {
   name: string;
@@ -64,6 +66,8 @@ export default function Properties() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
+  const [minRating, setMinRating] = useState<MinRating>("any");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -101,6 +105,8 @@ export default function Properties() {
   };
 
   const filtered = useMemo(() => {
+    const minRatingValue = minRating === "any" ? null : Number(minRating);
+
     const list = properties.filter((p) => {
       const customerName = customerById.get(p.customerId)?.name ?? "";
       const q = search.toLowerCase();
@@ -111,23 +117,61 @@ export default function Properties() {
         customerName.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "All" || p.status === statusFilter;
       const matchesCustomer = customerFilter === "All" || p.customerId === customerFilter;
-      return matchesSearch && matchesStatus && matchesCustomer;
+      let matchesRating = true;
+      if (minRatingValue !== null) {
+        const overall = computeOverallRating(p.ratings);
+        // Unrated properties are excluded when a minimum is set.
+        matchesRating = overall !== null && overall >= minRatingValue;
+      }
+      return matchesSearch && matchesStatus && matchesCustomer && matchesRating;
     });
 
-    if (sortDir) {
-      list.sort((a, b) => {
-        const an = customerById.get(a.customerId)?.name ?? "";
-        const bn = customerById.get(b.customerId)?.name ?? "";
-        const cmp = an.localeCompare(bn);
-        return sortDir === "asc" ? cmp : -cmp;
-      });
+    if (sortKey && sortDir) {
+      if (sortKey === "customer") {
+        list.sort((a, b) => {
+          const an = customerById.get(a.customerId)?.name ?? "";
+          const bn = customerById.get(b.customerId)?.name ?? "";
+          const cmp = an.localeCompare(bn);
+          return sortDir === "asc" ? cmp : -cmp;
+        });
+      } else if (sortKey === "rating") {
+        list.sort((a, b) => {
+          const ar = computeOverallRating(a.ratings);
+          const br = computeOverallRating(b.ratings);
+          // Unrated properties always sort to the end, regardless of direction.
+          if (ar === null && br === null) return 0;
+          if (ar === null) return 1;
+          if (br === null) return -1;
+          const cmp = ar - br;
+          return sortDir === "asc" ? cmp : -cmp;
+        });
+      }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, sortDir, customerById]);
+  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, customerById]);
 
-  const toggleCustomerSort = () => {
-    setSortDir((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null));
+  const cycleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+      return;
+    }
+    // Same column: asc -> desc -> off
+    if (sortDir === "asc") {
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+    } else {
+      setSortDir("asc");
+    }
   };
+
+  const toggleCustomerSort = () => cycleSort("customer");
+  const toggleRatingSort = () => cycleSort("rating");
+
+  const customerSortDir: SortDir = sortKey === "customer" ? sortDir : null;
+  const ratingSortDir: SortDir = sortKey === "rating" ? sortDir : null;
 
   const openAdd = () => {
     setDraft(EMPTY_PROPERTY_DRAFT);
@@ -316,6 +360,17 @@ export default function Properties() {
                     <SelectItem value="Inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={minRating} onValueChange={(v) => setMinRating(v as MinRating)}>
+                  <SelectTrigger className="w-full sm:w-36" data-testid="select-min-rating">
+                    <SelectValue placeholder="Min rating" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Any rating</SelectItem>
+                    <SelectItem value="3">3+ stars</SelectItem>
+                    <SelectItem value="4">4+ stars</SelectItem>
+                    <SelectItem value="5">5 stars</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -331,9 +386,9 @@ export default function Properties() {
                       data-testid="button-sort-customer"
                     >
                       Customer
-                      {sortDir === "asc" ? (
+                      {customerSortDir === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5" />
-                      ) : sortDir === "desc" ? (
+                      ) : customerSortDir === "desc" ? (
                         <ArrowDown className="h-3.5 w-3.5" />
                       ) : (
                         <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
@@ -347,7 +402,23 @@ export default function Properties() {
                   <TableHead className="text-center">Vacant</TableHead>
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
-                  <TableHead>Rating</TableHead>
+                  <TableHead>
+                    <button
+                      type="button"
+                      onClick={toggleRatingSort}
+                      className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                      data-testid="button-sort-rating"
+                    >
+                      Rating
+                      {ratingSortDir === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      ) : ratingSortDir === "desc" ? (
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead>Lease Renewal</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>

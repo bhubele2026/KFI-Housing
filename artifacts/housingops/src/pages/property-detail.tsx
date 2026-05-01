@@ -248,11 +248,10 @@ export default function PropertyDetail() {
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid grid-cols-6 w-full max-w-3xl">
+          <TabsList className="grid grid-cols-5 w-full max-w-2xl">
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
             <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />Beds</TabsTrigger>
-            <TabsTrigger value="occupants"><Users className="h-3.5 w-3.5 mr-1.5" />Occupants</TabsTrigger>
             <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
             <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />Finance</TabsTrigger>
           </TabsList>
@@ -445,12 +444,13 @@ export default function PropertyDetail() {
             </Card>
           </TabsContent>
 
-          {/* ── BEDS TAB ── */}
+          {/* ── BEDS TAB (merged with occupants) ── */}
           <TabsContent value="beds" className="space-y-4">
             <div className="flex justify-between items-center">
-              <div className="flex gap-4 text-sm">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />{occupiedBeds} Occupied</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" />{vacantBeds} Vacant</span>
+              <div className="flex gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{occupiedBeds} occupied</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{vacantBeds} vacant</span>
+                <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + o.chargePerBed, 0).toLocaleString()}/mo revenue</span>
               </div>
             </div>
             <Card>
@@ -458,64 +458,12 @@ export default function PropertyDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Bed #</TableHead>
+                      <TableHead className="w-12">Bed #</TableHead>
                       <TableHead>Room</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Occupant</TableHead>
-                      <TableHead className="text-right">Charge / Bed</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {propBeds.map(bed => {
-                      const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
-                      return (
-                        <TableRow key={bed.id}>
-                          <TableCell className="font-medium">{bed.bedNumber}</TableCell>
-                          <TableCell>
-                            <InlineEdit value={bed.room} onSave={v => updateBed(bed.id, { room: v })} />
-                          </TableCell>
-                          <TableCell>
-                            <Select value={bed.status} onValueChange={v => updateBed(bed.id, { status: v as any })}>
-                              <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Occupied">Occupied</SelectItem>
-                                <SelectItem value="Vacant">Vacant</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {occ ? occ.name : <span className="italic text-muted-foreground/50">Vacant</span>}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {occ ? (
-                              <InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} />
-                            ) : (
-                              <span className="text-sm text-muted-foreground/50">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ── OCCUPANTS TAB ── */}
-          <TabsContent value="occupants" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">{propOccupants.length} active occupant{propOccupants.length !== 1 ? "s" : ""}</p>
-            </div>
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
+                      <TableHead>Occupant Name</TableHead>
                       <TableHead>Employee ID</TableHead>
                       <TableHead>Company</TableHead>
-                      <TableHead>Bed</TableHead>
                       <TableHead>Move-in</TableHead>
                       <TableHead className="text-right">Charge / Bed</TableHead>
                       <TableHead>Email</TableHead>
@@ -523,20 +471,62 @@ export default function PropertyDetail() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {propOccupants.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No active occupants.</TableCell></TableRow>
-                    ) : propOccupants.map(occ => {
-                      const bed = beds.find(b => b.id === occ.bedId);
+                    {propBeds.length === 0 ? (
+                      <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No beds added yet. Use the + button above.</TableCell></TableRow>
+                    ) : propBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
+                      const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
+                      const isOccupied = bed.status === "Occupied";
+
+                      const handleStatusChange = (newStatus: string) => {
+                        updateBed(bed.id, { status: newStatus as "Occupied" | "Vacant", occupantId: newStatus === "Vacant" ? null : bed.occupantId });
+                        if (newStatus === "Vacant" && occ) {
+                          updateOccupant(occ.id, { status: "Former", bedId: null });
+                        }
+                      };
+
                       return (
-                        <TableRow key={occ.id}>
-                          <TableCell className="font-medium"><InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} /></TableCell>
-                          <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
-                          <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
-                          <TableCell className="text-sm text-muted-foreground">{bed ? `Bed ${bed.bedNumber}` : "—"}</TableCell>
-                          <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
-                          <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
-                          <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
-                          <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
+                        <TableRow key={bed.id} className={isOccupied ? "" : "bg-muted/20"}>
+                          <TableCell className="font-bold text-center">{bed.bedNumber}</TableCell>
+                          <TableCell>
+                            <InlineEdit value={bed.room || ""} onSave={v => updateBed(bed.id, { room: v })} />
+                          </TableCell>
+                          <TableCell>
+                            <Select value={bed.status} onValueChange={handleStatusChange}>
+                              <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Occupied">Occupied</SelectItem>
+                                <SelectItem value="Vacant">Vacant</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          {occ ? (
+                            <>
+                              <TableCell className="font-medium"><InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} /></TableCell>
+                              <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
+                              <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
+                              <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
+                              <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
+                              <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
+                              <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell colSpan={6}>
+                                <AssignOccupantDialog
+                                  bedId={bed.id}
+                                  propertyId={id}
+                                  onAssign={(occ) => {
+                                    addOccupant(occ);
+                                    updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground/40 text-sm">—</TableCell>
+                              <TableCell />
+                            </>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -710,6 +700,65 @@ function AddLeaseDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (l: 
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={submit}>Add Lease</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
+  bedId: string;
+  propertyId: string;
+  onAssign: (o: Occupant) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", email: "", phone: "" });
+
+  const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
+
+  const submit = () => {
+    if (!form.name) return;
+    onAssign({
+      id: `occ-${Date.now()}`,
+      propertyId,
+      bedId,
+      name: form.name,
+      employeeId: form.employeeId,
+      company: form.company,
+      moveInDate: form.moveInDate || new Date().toISOString().split("T")[0],
+      moveOutDate: null,
+      status: "Active",
+      chargePerBed: parseFloat(form.chargePerBed) || 0,
+      email: form.email,
+      phone: form.phone,
+    });
+    setOpen(false);
+    setForm({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", email: "", phone: "" });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button className="text-xs text-muted-foreground hover:text-foreground italic flex items-center gap-1 transition-colors">
+          <Plus className="h-3 w-3" />Assign occupant
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Assign Occupant to Bed</DialogTitle></DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><Label>Full Name *</Label><Input value={form.name} onChange={f("name")} placeholder="Jane Smith" /></div>
+            <div><Label>Employee ID</Label><Input value={form.employeeId} onChange={f("employeeId")} placeholder="EMP-001" /></div>
+            <div><Label>Company</Label><Input value={form.company} onChange={f("company")} placeholder="Acme Corp" /></div>
+            <div><Label>Move-in Date</Label><Input type="date" value={form.moveInDate} onChange={f("moveInDate")} /></div>
+            <div><Label>Charge / Bed ($)</Label><Input type="number" value={form.chargePerBed} onChange={f("chargePerBed")} placeholder="0.00" /></div>
+            <div><Label>Email</Label><Input value={form.email} onChange={f("email")} placeholder="jane@company.com" /></div>
+            <div><Label>Phone</Label><Input value={form.phone} onChange={f("phone")} placeholder="555-000-0000" /></div>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={submit} disabled={!form.name}>Assign</Button>
           </div>
         </div>
       </DialogContent>

@@ -18,10 +18,18 @@ import {
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown,
 } from "lucide-react";
-import { Lease, Bed, Occupant, Utility } from "@/data/mockData";
+import { Lease, Bed, Occupant, Utility, UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TYPE_COLORS: Record<string, string> = {
+  Electric: "bg-yellow-100 text-yellow-800",
+  Gas:      "bg-orange-100 text-orange-800",
+  Propane:  "bg-amber-100 text-amber-800",
+  Water:    "bg-blue-100 text-blue-800",
+  Garbage:  "bg-slate-100 text-slate-700",
+  Internet: "bg-purple-100 text-purple-800",
+  Other:    "bg-gray-100 text-gray-700",
+};
 
 function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: { label: string; value: string | number; sub?: string; icon?: React.ElementType; color?: string }) {
   return (
@@ -96,8 +104,7 @@ export default function PropertyDetail() {
   const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;
   const vacantBeds = propBeds.length - occupiedBeds;
   const monthlyRevenue = propOccupants.reduce((s, o) => s + o.chargePerBed, 0);
-  const latestUtils = propUtils.slice(-1)[0];
-  const monthlyUtilCost = latestUtils ? latestUtils.total : 0;
+  const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
   const monthlyLeaseCost = activeLease?.monthlyRent ?? 0;
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
@@ -445,7 +452,9 @@ export default function PropertyDetail() {
           {/* ── UTILITIES TAB ── */}
           <TabsContent value="utilities" className="space-y-4">
             <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">{propUtils.length} utility records</p>
+              <p className="text-sm text-muted-foreground">
+                {propUtils.length} service{propUtils.length !== 1 ? "s" : ""} &mdash; ${propUtils.reduce((s, u) => s + u.monthlyCost, 0).toLocaleString()}/mo total
+              </p>
               <AddUtilityDialog propertyId={id} onAdd={addUtility} />
             </div>
             <Card>
@@ -453,43 +462,35 @@ export default function PropertyDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Period</TableHead>
-                      <TableHead className="text-right">Electric</TableHead>
-                      <TableHead className="text-right">Gas</TableHead>
-                      <TableHead className="text-right">Water</TableHead>
-                      <TableHead className="text-right">Internet</TableHead>
-                      <TableHead className="text-right">Trash</TableHead>
-                      <TableHead className="text-right">Other</TableHead>
-                      <TableHead className="text-right font-semibold">Total</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Company</TableHead>
+                      <TableHead>Account #</TableHead>
+                      <TableHead className="text-right">Monthly Cost</TableHead>
+                      <TableHead>Notes</TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {propUtils.length === 0 ? (
-                      <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No utility records.</TableCell></TableRow>
-                    ) : propUtils.map(u => {
-                      const total = u.electric + u.gas + u.water + u.internet + u.trash + u.other;
-                      return (
-                        <TableRow key={u.id}>
-                          <TableCell className="font-medium whitespace-nowrap">{MONTHS[u.month - 1]} {u.year}</TableCell>
-                          {(["electric", "gas", "water", "internet", "trash", "other"] as const).map(field => (
-                            <TableCell key={field} className="text-right">
-                              <InlineEdit value={parseFloat(u[field].toFixed(2))} prefix="$" type="number" onSave={v => {
-                                const updated = { ...u, [field]: parseFloat(v) };
-                                const newTotal = updated.electric + updated.gas + updated.water + updated.internet + updated.trash + updated.other;
-                                updateUtility(u.id, { [field]: parseFloat(v), total: Math.round(newTotal * 100) / 100 });
-                              }} />
-                            </TableCell>
-                          ))}
-                          <TableCell className="text-right font-semibold">${total.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteUtility(u.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                      <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No utility services added yet.</TableCell></TableRow>
+                    ) : propUtils.map(u => (
+                      <TableRow key={u.id}>
+                        <TableCell>
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}>
+                            <Zap className="h-3 w-3" />{u.type}
+                          </span>
+                        </TableCell>
+                        <TableCell><InlineEdit value={u.company} onSave={v => updateUtility(u.id, { company: v })} /></TableCell>
+                        <TableCell className="font-mono text-sm"><InlineEdit value={u.accountNumber} onSave={v => updateUtility(u.id, { accountNumber: v })} /></TableCell>
+                        <TableCell className="text-right"><InlineEdit value={u.monthlyCost} prefix="$" type="number" onSave={v => updateUtility(u.id, { monthlyCost: parseFloat(v) })} /></TableCell>
+                        <TableCell><InlineEdit value={u.notes || ""} onSave={v => updateUtility(u.id, { notes: v })} /></TableCell>
+                        <TableCell>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteUtility(u.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -538,36 +539,12 @@ export default function PropertyDetail() {
                   <span className="text-muted-foreground">Lease (active)</span>
                   <span className="text-destructive">-${monthlyLeaseCost.toLocaleString()}</span>
                 </div>
-                {latestUtils && (
-                  <>
-                    <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                      <span className="text-muted-foreground">Electric ({MONTHS[(latestUtils.month ?? 1) - 1]})</span>
-                      <span className="text-destructive">-${latestUtils.electric.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                      <span className="text-muted-foreground">Gas</span>
-                      <span className="text-destructive">-${latestUtils.gas.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                      <span className="text-muted-foreground">Water</span>
-                      <span className="text-destructive">-${latestUtils.water.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                      <span className="text-muted-foreground">Internet</span>
-                      <span className="text-destructive">-${latestUtils.internet.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                      <span className="text-muted-foreground">Trash</span>
-                      <span className="text-destructive">-${latestUtils.trash.toFixed(2)}</span>
-                    </div>
-                    {latestUtils.other > 0 && (
-                      <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                        <span className="text-muted-foreground">Other</span>
-                        <span className="text-destructive">-${latestUtils.other.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </>
-                )}
+                {propUtils.map(u => (
+                  <div key={u.id} className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
+                    <span className="text-muted-foreground">{u.type} ({u.company})</span>
+                    <span className="text-destructive">-${u.monthlyCost.toLocaleString()}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
                   <span>Total Costs</span>
                   <span className="text-destructive">-${totalCost.toLocaleString()}</span>
@@ -645,39 +622,53 @@ function AddLeaseDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (l: 
 
 function AddUtilityDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (u: Utility) => void }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ month: "1", year: "2024", electric: "", gas: "", water: "", internet: "99.99", trash: "45", other: "0" });
+  const [form, setForm] = useState({
+    type: "Electric" as Utility["type"],
+    company: "",
+    monthlyCost: "",
+    accountNumber: "",
+    notes: "",
+  });
 
   const submit = () => {
-    const fields = { electric: parseFloat(form.electric) || 0, gas: parseFloat(form.gas) || 0, water: parseFloat(form.water) || 0, internet: parseFloat(form.internet) || 0, trash: parseFloat(form.trash) || 0, other: parseFloat(form.other) || 0 };
-    const total = Object.values(fields).reduce((s, v) => s + v, 0);
-    onAdd({ id: `u-${Date.now()}`, propertyId, month: parseInt(form.month), year: parseInt(form.year), ...fields, total: Math.round(total * 100) / 100 });
+    if (!form.company || !form.monthlyCost) return;
+    onAdd({
+      id: `u-${Date.now()}`,
+      propertyId,
+      type: form.type,
+      company: form.company,
+      monthlyCost: parseFloat(form.monthlyCost),
+      accountNumber: form.accountNumber,
+      notes: form.notes,
+    });
     setOpen(false);
+    setForm({ type: "Electric", company: "", monthlyCost: "", accountNumber: "", notes: "" });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Month</Button>
+        <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Service</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Add Utility Record</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Add Utility Service</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Month</Label>
-              <Select value={form.month} onValueChange={v => setForm(f => ({ ...f, month: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Year</Label><Input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} /></div>
-            {(["electric", "gas", "water", "internet", "trash", "other"] as const).map(field => (
-              <div key={field}><Label className="capitalize">{field} ($)</Label><Input type="number" value={(form as any)[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))} /></div>
-            ))}
+          <div>
+            <Label>Type</Label>
+            <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v as Utility["type"] }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{UTILITY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label>Company</Label><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="e.g. Austin Energy" /></div>
+            <div><Label>Monthly Cost ($)</Label><Input type="number" value={form.monthlyCost} onChange={e => setForm(f => ({ ...f, monthlyCost: e.target.value }))} placeholder="0.00" /></div>
+            <div><Label>Account Number</Label><Input value={form.accountNumber} onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))} placeholder="Optional" /></div>
+          </div>
+          <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={submit}>Add Record</Button>
+            <Button onClick={submit}>Add Service</Button>
           </div>
         </div>
       </DialogContent>

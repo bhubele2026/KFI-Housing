@@ -1,63 +1,98 @@
 import { MainLayout } from "@/components/layout/main-layout";
-import { MOCK_PROPERTIES, MOCK_BEDS, MOCK_LEASES, MOCK_UTILITIES } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { motion } from "framer-motion";
 
 export default function Finance() {
-  const financialData = MOCK_PROPERTIES.map(p => {
-    // Current month revenue
-    const occupiedBeds = MOCK_BEDS.filter(b => b.propertyId === p.id && b.status === "Occupied").length;
-    const revenue = occupiedBeds * p.monthlyRent;
-    
-    // Current month costs
-    const leaseCost = MOCK_LEASES.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
-    // Assuming month 3 for current month in mock data
-    const utilCost = MOCK_UTILITIES.find(u => u.propertyId === p.id && u.month === 3 && u.year === 2024)?.total || 0;
+  const { properties, beds, leases, utilities, occupants } = useData();
+
+  const financialData = properties.map(p => {
+    const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
+    const revenue = propOccupants.reduce((s, o) => s + o.chargePerBed, 0);
+    const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent ?? 0;
+    const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((s, u) => s + u.monthlyCost, 0);
     const totalCost = leaseCost + utilCost;
-    
+    const occupiedBeds = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length;
+    const totalBeds = beds.filter(b => b.propertyId === p.id).length;
+
     return {
       id: p.id,
       name: p.name,
+      shortName: p.name.split(" ")[0],
       revenue,
       leaseCost,
       utilCost,
       totalCost,
-      profit: revenue - totalCost
+      profit: revenue - totalCost,
+      occupiedBeds,
+      totalBeds,
     };
   });
 
-  const totals = financialData.reduce((acc, d) => ({
-    revenue: acc.revenue + d.revenue,
-    leaseCost: acc.leaseCost + d.leaseCost,
-    utilCost: acc.utilCost + d.utilCost,
-    totalCost: acc.totalCost + d.totalCost,
-    profit: acc.profit + d.profit
-  }), { revenue: 0, leaseCost: 0, utilCost: 0, totalCost: 0, profit: 0 });
+  const totals = financialData.reduce(
+    (acc, d) => ({
+      revenue: acc.revenue + d.revenue,
+      leaseCost: acc.leaseCost + d.leaseCost,
+      utilCost: acc.utilCost + d.utilCost,
+      totalCost: acc.totalCost + d.totalCost,
+      profit: acc.profit + d.profit,
+    }),
+    { revenue: 0, leaseCost: 0, utilCost: 0, totalCost: 0, profit: 0 }
+  );
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financials</h1>
-          <p className="text-muted-foreground mt-1">Profit & loss analysis per property for current month</p>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="p-8 max-w-7xl mx-auto space-y-8"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Financials</h1>
+            <p className="text-muted-foreground mt-1">Profit & loss per property (monthly)</p>
+          </div>
+          <div className="flex gap-6 text-right">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Revenue</p>
+              <p className="text-xl font-bold text-green-600">${totals.revenue.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Costs</p>
+              <p className="text-xl font-bold text-destructive">${totals.totalCost.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Net Profit</p>
+              <p className={`text-xl font-bold ${totals.profit >= 0 ? "text-green-600" : "text-destructive"}`}>
+                {totals.profit >= 0 ? "+" : ""}${totals.profit.toLocaleString()}
+              </p>
+            </div>
+          </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Revenue vs Cost by Property</CardTitle>
+            <CardTitle className="text-base">Revenue vs Cost by Property</CardTitle>
           </CardHeader>
-          <CardContent className="h-[400px]">
+          <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financialData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                <Tooltip formatter={(value) => `$${value}`} cursor={{fill: 'transparent'}} />
-                <Legend />
-                <Bar dataKey="revenue" name="Revenue" fill="#0f172a" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="totalCost" name="Total Costs" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+              <BarChart data={financialData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                <XAxis dataKey="shortName" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                  contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", fontSize: "12px" }}
+                  cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
+                />
+                <Legend wrapperStyle={{ fontSize: "12px" }} />
+                <Bar dataKey="revenue" name="Revenue" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="leaseCost" name="Lease Cost" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} stackId="cost" />
+                <Bar dataKey="utilCost" name="Utility Cost" fill="hsl(25 95% 53%)" radius={[4, 4, 0, 0]} stackId="cost" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -69,6 +104,7 @@ export default function Finance() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
+                  <TableHead className="text-center">Occupancy</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">Lease Cost</TableHead>
                   <TableHead className="text-right">Utility Cost</TableHead>
@@ -77,37 +113,53 @@ export default function Finance() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {financialData.map((data) => (
-                  <TableRow key={data.id}>
-                    <TableCell className="font-medium">{data.name}</TableCell>
-                    <TableCell className="text-right">${data.revenue.toLocaleString()}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">${data.leaseCost.toLocaleString()}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">${data.utilCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-medium">${data.totalCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge variant={data.profit >= 0 ? "default" : "destructive"} className={data.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                        ${Math.abs(data.profit).toLocaleString()} {data.profit >= 0 ? 'Profit' : 'Loss'}
+                {financialData.map((d, i) => (
+                  <motion.tr
+                    key={d.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
+                  >
+                    <td className="p-4 font-medium">{d.name}</td>
+                    <td className="p-4 text-center text-sm text-muted-foreground">
+                      {d.occupiedBeds}/{d.totalBeds}
+                    </td>
+                    <td className="p-4 text-right font-medium text-green-600">${d.revenue.toLocaleString()}</td>
+                    <td className="p-4 text-right text-sm text-muted-foreground">${d.leaseCost.toLocaleString()}</td>
+                    <td className="p-4 text-right text-sm text-muted-foreground">${d.utilCost.toLocaleString()}</td>
+                    <td className="p-4 text-right text-sm font-medium">${d.totalCost.toLocaleString()}</td>
+                    <td className="p-4 text-right">
+                      <Badge
+                        variant={d.profit >= 0 ? "default" : "destructive"}
+                        className={d.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+                      >
+                        {d.profit >= 0 ? "+" : "-"}${Math.abs(d.profit).toLocaleString()}
                       </Badge>
-                    </TableCell>
-                  </TableRow>
+                    </td>
+                  </motion.tr>
                 ))}
-                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableCell className="font-bold">Total Summary</TableCell>
-                  <TableCell className="text-right font-bold">${totals.revenue.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-bold">${totals.leaseCost.toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-bold">${totals.utilCost.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-bold">${totals.totalCost.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-bold">
-                    <Badge variant={totals.profit >= 0 ? "default" : "destructive"} className={totals.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                      ${Math.abs(totals.profit).toLocaleString()} {totals.profit >= 0 ? 'Profit' : 'Loss'}
+                <tr className="bg-muted/50 border-t-2 border-border">
+                  <td className="p-4 font-bold">Portfolio Total</td>
+                  <td />
+                  <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
+                  <td className="p-4 text-right font-bold">${totals.leaseCost.toLocaleString()}</td>
+                  <td className="p-4 text-right font-bold">${totals.utilCost.toLocaleString()}</td>
+                  <td className="p-4 text-right font-bold">${totals.totalCost.toLocaleString()}</td>
+                  <td className="p-4 text-right">
+                    <Badge
+                      variant={totals.profit >= 0 ? "default" : "destructive"}
+                      className={totals.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+                    >
+                      {totals.profit >= 0 ? "+" : "-"}${Math.abs(totals.profit).toLocaleString()}
                     </Badge>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               </TableBody>
             </Table>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
     </MainLayout>
   );
 }

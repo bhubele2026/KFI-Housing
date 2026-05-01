@@ -64,18 +64,17 @@ export const OccupantSchema = z.object({
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
 
+export const UTILITY_TYPES = ["Electric", "Gas", "Propane", "Water", "Garbage", "Internet", "Other"] as const;
+export type UtilityType = typeof UTILITY_TYPES[number];
+
 export const UtilitySchema = z.object({
   id: z.string(),
   propertyId: z.string(),
-  month: z.number(),
-  year: z.number(),
-  electric: z.number(),
-  gas: z.number(),
-  water: z.number(),
-  internet: z.number(),
-  trash: z.number(),
-  other: z.number(),
-  total: z.number(),
+  type: z.enum(UTILITY_TYPES),
+  company: z.string(),
+  monthlyCost: z.number(),
+  accountNumber: z.string(),
+  notes: z.string(),
 });
 export type Utility = z.infer<typeof UtilitySchema>;
 
@@ -256,26 +255,32 @@ export const MOCK_LEASES: Lease[] = [
   { id: "l6", propertyId: "p5", startDate: "2025-09-01", endDate: "2026-08-31", monthlyRent: 3000, securityDeposit: 6000, status: "Upcoming", notes: "Lease signed for reopening post-renovation." },
 ];
 
-export const MOCK_UTILITIES: Utility[] = MOCK_PROPERTIES.flatMap(p =>
-  [1, 2, 3, 4].map(month => {
-    const electric = round2(120 + Math.random() * 180);
-    const gas = round2(40 + Math.random() * 60);
-    const water = round2(60 + Math.random() * 50);
-    const internet = 99.99;
-    const trash = 45;
-    const other = round2(Math.random() * 50);
-    return {
-      id: `u-${p.id}-2024-${month}`,
-      propertyId: p.id,
-      month,
-      year: 2024,
-      electric,
-      gas,
-      water,
-      internet,
-      trash,
-      other,
-      total: round2(electric + gas + water + internet + trash + other),
-    };
-  })
-);
+export const MOCK_UTILITIES: Utility[] = [
+  { id: "u-p1-elec", propertyId: "p1", type: "Electric", company: "Austin Energy", monthlyCost: 220, accountNumber: "AE-110234", notes: "Avg based on last 6 months" },
+  { id: "u-p1-gas",  propertyId: "p1", type: "Gas",      company: "Atmos Energy",  monthlyCost: 85,  accountNumber: "AT-559812", notes: "" },
+  { id: "u-p1-water",propertyId: "p1", type: "Water",    company: "Austin Water",  monthlyCost: 95,  accountNumber: "AW-334410", notes: "" },
+  { id: "u-p1-garb", propertyId: "p1", type: "Garbage",  company: "Republic Services", monthlyCost: 45, accountNumber: "RS-00192", notes: "Pickup every Tuesday" },
+  { id: "u-p1-inet", propertyId: "p1", type: "Internet", company: "AT&T Fiber",    monthlyCost: 99,  accountNumber: "ATT-8821100", notes: "1Gbps plan" },
+
+  { id: "u-p2-elec", propertyId: "p2", type: "Electric", company: "Austin Energy", monthlyCost: 260, accountNumber: "AE-220345", notes: "" },
+  { id: "u-p2-gas",  propertyId: "p2", type: "Gas",      company: "Atmos Energy",  monthlyCost: 90,  accountNumber: "AT-661023", notes: "" },
+  { id: "u-p2-water",propertyId: "p2", type: "Water",    company: "Austin Water",  monthlyCost: 110, accountNumber: "AW-441520", notes: "Included in lease — tracking only" },
+  { id: "u-p2-garb", propertyId: "p2", type: "Garbage",  company: "Republic Services", monthlyCost: 45, accountNumber: "RS-00193", notes: "" },
+
+  { id: "u-p3-elec", propertyId: "p3", type: "Electric", company: "Oncor / TXU",   monthlyCost: 190, accountNumber: "TXU-773410", notes: "" },
+  { id: "u-p3-prop", propertyId: "p3", type: "Propane",  company: "AmeriGas",      monthlyCost: 130, accountNumber: "AG-44512",  notes: "Tank refill ~monthly in winter" },
+  { id: "u-p3-water",propertyId: "p3", type: "Water",    company: "Dallas Water",  monthlyCost: 80,  accountNumber: "DW-002211", notes: "" },
+  { id: "u-p3-garb", propertyId: "p3", type: "Garbage",  company: "Waste Management", monthlyCost: 50, accountNumber: "WM-55301", notes: "" },
+  { id: "u-p3-inet", propertyId: "p3", type: "Internet", company: "Spectrum",      monthlyCost: 89,  accountNumber: "SP-221004", notes: "" },
+
+  { id: "u-p4-elec", propertyId: "p4", type: "Electric", company: "Oncor / TXU",   monthlyCost: 340, accountNumber: "TXU-884521", notes: "" },
+  { id: "u-p4-gas",  propertyId: "p4", type: "Gas",      company: "Atmos Energy",  monthlyCost: 120, accountNumber: "AT-772134", notes: "" },
+  { id: "u-p4-water",propertyId: "p4", type: "Water",    company: "Dallas Water",  monthlyCost: 145, accountNumber: "DW-003312", notes: "" },
+  { id: "u-p4-garb", propertyId: "p4", type: "Garbage",  company: "Waste Management", monthlyCost: 65, accountNumber: "WM-55302", notes: "Two bins, picked up Wednesday" },
+  { id: "u-p4-inet", propertyId: "p4", type: "Internet", company: "Spectrum",      monthlyCost: 89,  accountNumber: "SP-221005", notes: "" },
+
+  { id: "u-p5-elec", propertyId: "p5", type: "Electric", company: "CenterPoint",  monthlyCost: 160, accountNumber: "CP-990011", notes: "Property inactive — minimal draw" },
+  { id: "u-p5-prop", propertyId: "p5", type: "Propane",  company: "Ferrellgas",   monthlyCost: 95,  accountNumber: "FG-112233", notes: "" },
+  { id: "u-p5-water",propertyId: "p5", type: "Water",    company: "Houston Water", monthlyCost: 70,  accountNumber: "HW-445600", notes: "" },
+  { id: "u-p5-garb", propertyId: "p5", type: "Garbage",  company: "Republic Services", monthlyCost: 45, accountNumber: "RS-00194", notes: "" },
+];

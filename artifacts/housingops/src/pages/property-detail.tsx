@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -204,6 +204,31 @@ function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onCh
   );
 }
 
+function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
+  const [draft, setDraft] = useState(value);
+  const lastIncomingRef = useRef(value);
+
+  // Whenever the persisted value changes from outside (e.g. an optimistic
+  // patch settles, or a save fails and the data store reverts), pull the new
+  // value into the local draft. This makes the textarea visibly snap back to
+  // the server-confirmed value after a failed save. On a successful save the
+  // incoming value matches the draft, so this is a no-op (no flicker).
+  useEffect(() => {
+    if (value === lastIncomingRef.current) return;
+    lastIncomingRef.current = value;
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <Textarea
+      value={draft}
+      className={className}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== value) onSave(draft); }}
+    />
+  );
+}
+
 function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | number; onSave: (v: string) => void; type?: string; prefix?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
@@ -385,10 +410,10 @@ export default function PropertyDetail() {
                   </div>
                   <div className="py-1">
                     <span className="text-sm text-muted-foreground block mb-1">Notes</span>
-                    <Textarea
-                      defaultValue={property.notes}
+                    <NotesEditor
+                      value={property.notes}
                       className="text-sm min-h-[72px]"
-                      onBlur={e => updateProperty(id, { notes: e.target.value })}
+                      onSave={v => updateProperty(id, { notes: v })}
                     />
                   </div>
                 </CardContent>
@@ -478,10 +503,10 @@ export default function PropertyDetail() {
                     )}
                     <div className="sm:col-span-2 pt-1">
                       <span className="text-sm text-muted-foreground block mb-1">Payment Notes</span>
-                      <Textarea
-                        defaultValue={property.paymentNotes}
+                      <NotesEditor
+                        value={property.paymentNotes}
                         className="text-sm min-h-[60px]"
-                        onBlur={e => updateProperty(id, { paymentNotes: e.target.value })}
+                        onSave={v => updateProperty(id, { paymentNotes: v })}
                       />
                     </div>
                   </div>

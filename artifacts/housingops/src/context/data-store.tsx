@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import {
   MOCK_PROPERTIES, MOCK_LEASES, MOCK_BEDS, MOCK_OCCUPANTS, MOCK_UTILITIES,
   Property, Lease, Bed, Occupant, Utility,
@@ -26,12 +26,57 @@ interface DataStore {
 
 const DataContext = createContext<DataStore | undefined>(undefined);
 
+const STORAGE_PREFIX = "housingops:v1:";
+const KEYS = {
+  properties: `${STORAGE_PREFIX}properties`,
+  leases: `${STORAGE_PREFIX}leases`,
+  beds: `${STORAGE_PREFIX}beds`,
+  occupants: `${STORAGE_PREFIX}occupants`,
+  utilities: `${STORAGE_PREFIX}utilities`,
+} as const;
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveToStorage<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore quota / serialization errors so a single bad write doesn't crash the app.
+  }
+}
+
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [properties, setProperties] = useState<Property[]>(MOCK_PROPERTIES);
-  const [leases, setLeases] = useState<Lease[]>(MOCK_LEASES);
-  const [beds, setBeds] = useState<Bed[]>(MOCK_BEDS);
-  const [occupants, setOccupants] = useState<Occupant[]>(MOCK_OCCUPANTS);
-  const [utilities, setUtilities] = useState<Utility[]>(MOCK_UTILITIES);
+  const [properties, setProperties] = useState<Property[]>(() =>
+    loadFromStorage(KEYS.properties, MOCK_PROPERTIES),
+  );
+  const [leases, setLeases] = useState<Lease[]>(() =>
+    loadFromStorage(KEYS.leases, MOCK_LEASES),
+  );
+  const [beds, setBeds] = useState<Bed[]>(() =>
+    loadFromStorage(KEYS.beds, MOCK_BEDS),
+  );
+  const [occupants, setOccupants] = useState<Occupant[]>(() =>
+    loadFromStorage(KEYS.occupants, MOCK_OCCUPANTS),
+  );
+  const [utilities, setUtilities] = useState<Utility[]>(() =>
+    loadFromStorage(KEYS.utilities, MOCK_UTILITIES),
+  );
+
+  useEffect(() => saveToStorage(KEYS.properties, properties), [properties]);
+  useEffect(() => saveToStorage(KEYS.leases, leases), [leases]);
+  useEffect(() => saveToStorage(KEYS.beds, beds), [beds]);
+  useEffect(() => saveToStorage(KEYS.occupants, occupants), [occupants]);
+  useEffect(() => saveToStorage(KEYS.utilities, utilities), [utilities]);
 
   const updateProperty = (id: string, updates: Partial<Property>) =>
     setProperties(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));

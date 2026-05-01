@@ -174,7 +174,7 @@ function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | 
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
-  const { properties, leases, beds, occupants, utilities, updateProperty, updateLease, addLease, deleteLease, updateBed, updateOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, beds, occupants, utilities, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, updateUtility, addUtility, deleteUtility } = useData();
 
   const property = properties.find(p => p.id === id);
   if (!property) {

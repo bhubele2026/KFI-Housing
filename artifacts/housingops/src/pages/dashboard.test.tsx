@@ -228,3 +228,188 @@ describe("Dashboard customer filter URL persistence", () => {
     expect(params2.get("other")).toBe("keep");
   });
 });
+
+describe("Dashboard customer filter back/forward navigation", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+  let nowMs: number;
+  let dateNowSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    // jsdom's history persists across tests; push a sentinel marker we
+    // can walk back to so each test has a clean, known baseline regardless
+    // of where prior tests left the history pointer.
+    window.history.pushState({}, "", "/__test_baseline__");
+    window.history.pushState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    // Drive the debounce window deterministically by spying on Date.now
+    // instead of using fake timers (we still need real setTimeout for
+    // jsdom popstate to flush).
+    nowMs = 1_700_000_000_000;
+    dateNowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowMs);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    dateNowSpy?.mockRestore();
+    dateNowSpy = null;
+  });
+
+  function advanceClockMs(ms: number) {
+    nowMs += ms;
+  }
+
+  async function renderAt(url: string) {
+    window.history.replaceState({}, "", url);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Dashboard />);
+    });
+  }
+
+  function getFilterSelect() {
+    const el = container.querySelector(`[data-testid="${FILTER_TESTID}"]`);
+    if (!el) throw new Error(`Could not find ${FILTER_TESTID}`);
+    return el;
+  }
+
+  function getHandler() {
+    const h = selectHandlers.get(FILTER_TESTID);
+    if (!h) throw new Error(`No handler captured for ${FILTER_TESTID}`);
+    return h;
+  }
+
+  // jsdom dispatches popstate via a delayed real timer (observed ~10–50ms),
+  // so waiting a single microtask is not enough — the URL itself does not
+  // update until the timer fires. Wait long enough for the URL to change,
+  // then flush React inside act so wouter re-renders the new state.
+  // Note: Date.now is spied to a frozen value, so we count poll iterations
+  // for the timeout instead of using wall-clock time.
+  async function waitForUrlChange(initialHref: string, maxAttempts = 60) {
+    for (let i = 0; i < maxAttempts; i++) {
+      if (window.location.href !== initialHref) return;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  async function goBack() {
+    const before = window.location.href;
+    window.history.back();
+    await waitForUrlChange(before);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  async function goForward() {
+    const before = window.location.href;
+    window.history.forward();
+    await waitForUrlChange(before);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it("pushes a new history entry when the user picks a customer", async () => {
+    await renderAt("/dashboard");
+
+    await act(async () => {
+      getHandler().onValueChange("c1");
+    });
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c1");
+
+    // The new entry must be undoable: a single Back returns to the
+    // unfiltered URL (which only happens if pushState — not replaceState
+    // — was used).
+    await goBack();
+    expect(window.location.pathname).toBe("/dashboard");
+    expect(window.location.search).toBe("");
+  });
+
+  it("Back restores the previous All filter after picking a customer", async () => {
+    await renderAt("/dashboard");
+
+    await act(async () => {
+      getHandler().onValueChange("c1");
+    });
+    expect(getFilterSelect().getAttribute("data-current")).toBe("c1");
+
+    await goBack();
+
+    expect(window.location.pathname).toBe("/dashboard");
+    expect(window.location.search).toBe("");
+    expect(getFilterSelect().getAttribute("data-current")).toBe("All");
+  });
+
+  it("Back then Forward re-applies the customer filter", async () => {
+    await renderAt("/dashboard");
+
+    await act(async () => {
+      getHandler().onValueChange("c2");
+    });
+
+    await goBack();
+    expect(getFilterSelect().getAttribute("data-current")).toBe("All");
+
+    await goForward();
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c2");
+    expect(getFilterSelect().getAttribute("data-current")).toBe("c2");
+  });
+
+  it("walks back through deliberate, well-spaced filter changes one at a time", async () => {
+    await renderAt("/dashboard");
+
+    await act(async () => {
+      getHandler().onValueChange("c1");
+    });
+    advanceClockMs(1000);
+    await act(async () => {
+      getHandler().onValueChange("c2");
+    });
+
+    expect(getFilterSelect().getAttribute("data-current")).toBe("c2");
+
+    await goBack();
+    expect(getFilterSelect().getAttribute("data-current")).toBe("c1");
+
+    await goBack();
+    expect(getFilterSelect().getAttribute("data-current")).toBe("All");
+  });
+
+  it("collapses rapid successive filter changes into one history entry", async () => {
+    await renderAt("/dashboard");
+
+    // Three changes in quick succession (all within the debounce window):
+    // the first should push, the next two should replace.
+    await act(async () => {
+      getHandler().onValueChange("c1");
+    });
+    advanceClockMs(50);
+    await act(async () => {
+      getHandler().onValueChange("c2");
+    });
+    advanceClockMs(50);
+    await act(async () => {
+      getHandler().onValueChange("c1");
+    });
+
+    expect(getFilterSelect().getAttribute("data-current")).toBe("c1");
+
+    // A single Back should jump straight to the original All state, not
+    // walk through the intermediate rapid selections (c2 and the first c1).
+    await goBack();
+    expect(window.location.pathname).toBe("/dashboard");
+    expect(window.location.search).toBe("");
+    expect(getFilterSelect().getAttribute("data-current")).toBe("All");
+  });
+});

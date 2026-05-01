@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -50,13 +50,33 @@ export default function Dashboard() {
     }
   }, [searchString, customers, isLoading, navigate]);
 
+  // Push a new history entry when the user picks a filter so the browser
+  // Back button can undo it. Collapse rapid follow-up changes (within
+  // HISTORY_DEBOUNCE_MS) into the same entry to avoid flooding history
+  // when the user quickly cycles through options.
+  const lastFilterChangeAtRef = useRef<number>(0);
+  const HISTORY_DEBOUNCE_MS = 500;
+
   const updateCustomerFilter = (next: string) => {
     const params = new URLSearchParams(window.location.search);
     if (next === "All") params.delete("customer");
     else params.set("customer", next);
     const qs = params.toString();
     const base = window.location.pathname;
-    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+    const target = qs ? `${base}?${qs}` : base;
+
+    // Don't add a no-op history entry if the user re-picked the current
+    // value (target URL is unchanged).
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (target === current) return;
+
+    const now = Date.now();
+    const isRapidChange =
+      lastFilterChangeAtRef.current !== 0 &&
+      now - lastFilterChangeAtRef.current < HISTORY_DEBOUNCE_MS;
+    lastFilterChangeAtRef.current = now;
+
+    navigate(target, { replace: isRapidChange });
   };
 
   const scopedProperties = useMemo(() => {

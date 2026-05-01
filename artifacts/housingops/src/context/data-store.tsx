@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import {
   CustomerSchema, PropertySchema, LeaseSchema, BedSchema, OccupantSchema, UtilitySchema,
+  RatingsSchema,
   type Customer, type Property, type Lease, type Bed, type Occupant, type Utility,
 } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +40,41 @@ export type ExportData = ExportPayload["data"];
 // v1 files have no `customers` array and properties have no `customerId`.
 // We accept them by auto-creating a single placeholder customer and
 // assigning every imported property to it.
-const LegacyPropertySchema = PropertySchema.omit({ customerId: true });
+//
+// Real-world v1 backups predate the landlord/payment/banking/furnishings
+// fields, so each of those is optional here with a sensible default. Only
+// the truly-core property fields (id, name, address, totals, status) stay
+// required — everything newer is filled in so the rest of the UI keeps
+// working and the user can edit the values later.
+const LegacyPropertySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string(),
+  city: z.string(),
+  state: z.string(),
+  zip: z.string(),
+  totalBeds: z.number(),
+  monthlyRent: z.number(),
+  chargePerBed: z.number(),
+  status: z.enum(["Active", "Inactive"]),
+  landlordName: z.string().optional().default(""),
+  landlordEmail: z.string().optional().default(""),
+  landlordPhone: z.string().optional().default(""),
+  paymentMethod: z
+    .enum(["ACH", "Check", "Wire", "Online Portal", "Money Order"])
+    .optional()
+    .default("ACH"),
+  paymentRecipient: z.string().optional().default(""),
+  paymentDueDay: z.number().optional().default(0),
+  paymentNotes: z.string().optional().default(""),
+  bankName: z.string().optional().default(""),
+  bankRouting: z.string().optional().default(""),
+  bankAccount: z.string().optional().default(""),
+  portalUrl: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
+  furnishings: z.array(z.string()).optional().default([]),
+  ratings: RatingsSchema.optional(),
+});
 const LegacyExportPayloadSchema = z.object({
   format: z.literal("housingops-export"),
   version: z.literal(1),

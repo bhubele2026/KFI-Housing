@@ -18,6 +18,7 @@ import {
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lease, Bed, Occupant, Utility, UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
 
@@ -42,6 +43,63 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: 
             {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
           </div>
           {Icon && <div className="p-2 rounded-lg bg-muted"><Icon className="h-4 w-4 text-muted-foreground" /></div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BedMap({ beds, occupants }: { beds: Bed[]; occupants: Occupant[] }) {
+  if (beds.length === 0) return null;
+  const occupied = beds.filter(b => b.status === "Occupied").length;
+  const pct = Math.round((occupied / beds.length) * 100);
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BedDouble className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold">Bed Occupancy</span>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block" />Occupied ({occupied})</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-400 inline-block" />Vacant ({beds.length - occupied})</span>
+            <span className="font-medium text-foreground">{pct}% full</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {beds.sort((a, b) => a.bedNumber - b.bedNumber).map((bed, i) => {
+            const occ = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
+            const isOccupied = bed.status === "Occupied";
+            return (
+              <Tooltip key={bed.id} delayDuration={100}>
+                <TooltipTrigger asChild>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.6 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.03, type: "spring", stiffness: 300, damping: 20 }}
+                    className={`flex flex-col items-center justify-center rounded-lg border-2 cursor-default select-none transition-all hover:scale-110
+                      ${isOccupied
+                        ? "bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-600"
+                        : "bg-rose-50 border-rose-300 text-rose-500 dark:bg-rose-950 dark:border-rose-700"
+                      }`}
+                    style={{ width: 52, height: 52 }}
+                  >
+                    <BedDouble className="h-5 w-5" />
+                    <span className="text-[10px] font-bold leading-none mt-0.5">#{bed.bedNumber}</span>
+                  </motion.div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  <p className="font-semibold">Bed {bed.bedNumber}{bed.room ? ` · ${bed.room}` : ""}</p>
+                  {isOccupied && occ
+                    ? <p className="text-muted-foreground">{occ.name}</p>
+                    : <p className="text-rose-400">Vacant</p>
+                  }
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -149,6 +207,9 @@ export default function PropertyDetail() {
           <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
+
+        {/* Bed Map */}
+        <BedMap beds={propBeds} occupants={propOccupants} />
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">

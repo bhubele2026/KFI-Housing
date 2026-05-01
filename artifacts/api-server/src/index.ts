@@ -1,3 +1,4 @@
+import { pushSchemaIfNeeded } from "@workspace/db";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedIfEmpty } from "./lib/seed";
@@ -17,6 +18,21 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function start(): Promise<void> {
+  try {
+    await pushSchemaIfNeeded({
+      log: (message, extra) => {
+        if (extra) {
+          logger.info(extra, message);
+        } else {
+          logger.info(message);
+        }
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Failed to apply database schema changes");
+    process.exit(1);
+  }
+
   try {
     await seedIfEmpty();
   } catch (err) {

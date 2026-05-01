@@ -1,8 +1,34 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { z } from "zod";
 import {
   MOCK_PROPERTIES, MOCK_LEASES, MOCK_BEDS, MOCK_OCCUPANTS, MOCK_UTILITIES,
   Property, Lease, Bed, Occupant, Utility,
+  PropertySchema, LeaseSchema, BedSchema, OccupantSchema, UtilitySchema,
 } from "@/data/mockData";
+
+export const EXPORT_FORMAT_VERSION = 1;
+
+export const ExportPayloadSchema = z.object({
+  format: z.literal("housingops-export"),
+  version: z.literal(EXPORT_FORMAT_VERSION),
+  exportedAt: z.string(),
+  data: z.object({
+    properties: z.array(PropertySchema),
+    leases: z.array(LeaseSchema),
+    beds: z.array(BedSchema),
+    occupants: z.array(OccupantSchema),
+    utilities: z.array(UtilitySchema),
+  }),
+});
+export type ExportPayload = z.infer<typeof ExportPayloadSchema>;
+
+export interface ImportSummary {
+  properties: number;
+  leases: number;
+  beds: number;
+  occupants: number;
+  utilities: number;
+}
 
 interface DataStore {
   properties: Property[];
@@ -23,6 +49,8 @@ interface DataStore {
   addUtility: (utility: Utility) => void;
   deleteUtility: (id: string) => void;
   resetToSampleData: () => void;
+  exportData: () => ExportPayload;
+  importData: (payload: unknown) => ImportSummary;
 }
 
 const DataContext = createContext<DataStore | undefined>(undefined);
@@ -122,13 +150,37 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setUtilities(MOCK_UTILITIES);
   };
 
+  const exportData = (): ExportPayload => ({
+    format: "housingops-export",
+    version: EXPORT_FORMAT_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: { properties, leases, beds, occupants, utilities },
+  });
+
+  const importData = (payload: unknown): ImportSummary => {
+    const parsed = ExportPayloadSchema.parse(payload);
+    const { data } = parsed;
+    setProperties(data.properties);
+    setLeases(data.leases);
+    setBeds(data.beds);
+    setOccupants(data.occupants);
+    setUtilities(data.utilities);
+    return {
+      properties: data.properties.length,
+      leases: data.leases.length,
+      beds: data.beds.length,
+      occupants: data.occupants.length,
+      utilities: data.utilities.length,
+    };
+  };
+
   return (
     <DataContext.Provider value={{
       properties, leases, beds, occupants, utilities,
       updateProperty, updateLease, addLease, deleteLease,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
-      resetToSampleData,
+      resetToSampleData, exportData, importData,
     }}>
       {children}
     </DataContext.Provider>

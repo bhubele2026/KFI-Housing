@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw } from "lucide-react";
+import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { useData } from "@/context/data-store";
+import { useData, type ImportSummary } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,9 +30,12 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { resetToSampleData } = useData();
+  const { resetToSampleData, exportData, importData } = useData();
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{ payload: unknown; fileName: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleConfirmReset = () => {
     resetToSampleData();
@@ -41,6 +44,83 @@ export function Sidebar() {
       title: "Sample data restored",
       description: "All saved changes were cleared and the demo data was reloaded.",
     });
+  };
+
+  const handleExport = () => {
+    try {
+      const payload = exportData();
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `housingops-export-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Data exported",
+        description: `Saved ${a.download} with ${payload.data.properties.length} properties, ${payload.data.leases.length} leases, ${payload.data.beds.length} beds, ${payload.data.occupants.length} occupants, ${payload.data.utilities.length} utilities.`,
+      });
+    } catch {
+      toast({
+        title: "Export failed",
+        description: "Could not generate the export file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePickImportFile = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      setPendingImport({ payload: parsed, fileName: file.name });
+      setImportOpen(true);
+    } catch {
+      toast({
+        title: "Could not read file",
+        description: "That file is not valid JSON. Please choose a HousingOps export file.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (!pendingImport) return;
+    let summary: ImportSummary;
+    try {
+      summary = importData(pendingImport.payload);
+    } catch {
+      toast({
+        title: "Import failed",
+        description: "That file doesn't look like a HousingOps export. No changes were made.",
+        variant: "destructive",
+      });
+      setImportOpen(false);
+      setPendingImport(null);
+      return;
+    }
+    setImportOpen(false);
+    setPendingImport(null);
+    toast({
+      title: "Data imported",
+      description: `Loaded ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities.`,
+    });
+  };
+
+  const handleCancelImport = () => {
+    setImportOpen(false);
+    setPendingImport(null);
   };
 
   return (
@@ -92,6 +172,32 @@ export function Sidebar() {
         <Button
           variant="outline"
           className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={handleExport}
+          data-testid="button-export-data"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Export data
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={handlePickImportFile}
+          data-testid="button-import-data"
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Import data
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={handleFileSelected}
+          data-testid="input-import-file"
+        />
+        <Button
+          variant="outline"
+          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => setResetOpen(true)}
           data-testid="button-reset-sample-data"
         >
@@ -121,6 +227,37 @@ export function Sidebar() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Reset data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCancelImport();
+          else setImportOpen(true);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace current data with import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span> will
+              replace every property, lease, bed, occupant, and utility in this browser with the contents
+              of the file. Your current data will be lost. Consider exporting first if you want a backup.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-import-cancel" onClick={handleCancelImport}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmImport}
+              data-testid="button-import-confirm"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Replace data
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

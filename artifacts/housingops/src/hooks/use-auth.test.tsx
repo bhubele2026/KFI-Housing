@@ -84,6 +84,86 @@ describe("AuthProvider", () => {
     document.body.removeChild(container);
   });
 
+  it("login() flips isAuthenticated to true and writes \"true\" to localStorage", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root!: Root;
+    const renders: boolean[] = [];
+    let loginFn!: () => void;
+
+    function LoginProbe() {
+      const { isAuthenticated, login } = useAuth();
+      renders.push(isAuthenticated);
+      loginFn = login;
+      return <span>{String(isAuthenticated)}</span>;
+    }
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <AuthProvider>
+          <LoginProbe />
+        </AuthProvider>,
+      );
+    });
+
+    expect(renders[renders.length - 1]).toBe(false);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    await act(async () => {
+      loginFn();
+    });
+
+    expect(renders[renders.length - 1]).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("true");
+
+    await act(async () => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
+  });
+
+  it("logout() flips isAuthenticated to false and removes the key from localStorage", async () => {
+    window.localStorage.setItem(STORAGE_KEY, "true");
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    let root!: Root;
+    const renders: boolean[] = [];
+    let logoutFn!: () => void;
+
+    function LogoutProbe() {
+      const { isAuthenticated, logout } = useAuth();
+      renders.push(isAuthenticated);
+      logoutFn = logout;
+      return <span>{String(isAuthenticated)}</span>;
+    }
+
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <AuthProvider>
+          <LogoutProbe />
+        </AuthProvider>,
+      );
+    });
+
+    expect(renders[renders.length - 1]).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe("true");
+
+    await act(async () => {
+      logoutFn();
+    });
+
+    expect(renders[renders.length - 1]).toBe(false);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
+  });
+
   it("also reacts to a global storage clear (event.key === null)", async () => {
     window.localStorage.setItem(STORAGE_KEY, "true");
 

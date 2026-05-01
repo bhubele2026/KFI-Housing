@@ -105,14 +105,36 @@ export default function Utilities() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Utilities</h1>
             <p className="text-muted-foreground mt-1">All utility services across your portfolio</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Monthly</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-28 mt-1 ml-auto" />
-            ) : (
-              <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
+            {activeCustomerName && (
+              <p
+                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                data-testid="text-utilities-active-customer"
+              >
+                <Briefcase className="h-3 w-3" />
+                Showing only <span className="font-semibold">{activeCustomerName}</span>
+              </p>
             )}
+          </div>
+          <div className="flex items-center gap-4">
+            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-customer-filter">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Customers</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Monthly</p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-28 mt-1 ml-auto" />
+              ) : (
+                <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
+              )}
+            </div>
           </div>
         </div>
 

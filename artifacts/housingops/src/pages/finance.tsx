@@ -95,25 +95,47 @@ export default function Finance() {
         transition={{ duration: 0.2 }}
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Financials</h1>
             <p className="text-muted-foreground mt-1">Profit & loss per property (monthly)</p>
-          </div>
-          <div className="flex gap-6 text-right">
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Revenue</p>
-              <p className="text-xl font-bold text-green-600">${totals.revenue.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Costs</p>
-              <p className="text-xl font-bold text-destructive">${totals.totalCost.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Net Profit</p>
-              <p className={`text-xl font-bold ${totals.profit >= 0 ? "text-green-600" : "text-destructive"}`}>
-                {totals.profit >= 0 ? "+" : ""}${totals.profit.toLocaleString()}
+            {activeCustomerName && (
+              <p
+                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                data-testid="text-finance-active-customer"
+              >
+                <Briefcase className="h-3 w-3" />
+                Showing only <span className="font-semibold">{activeCustomerName}</span>
               </p>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-finance-customer-filter">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Customers</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-6 text-right">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Revenue</p>
+                <p className="text-xl font-bold text-green-600">${totals.revenue.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Costs</p>
+                <p className="text-xl font-bold text-destructive">${totals.totalCost.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Net Profit</p>
+                <p className={`text-xl font-bold ${totals.profit >= 0 ? "text-green-600" : "text-destructive"}`}>
+                  {totals.profit >= 0 ? "+" : ""}${totals.profit.toLocaleString()}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -133,27 +155,11 @@ export default function Finance() {
                 <X className="h-3 w-3" />
               </button>
             </Badge>
-          </div>
-        )}
-
-        <Card>
-          <CardContent className="p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
-              <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
-                <SelectValue placeholder="Customer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Customers</SelectItem>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <span className="text-xs text-muted-foreground">
               {financialData.length} of {properties.length} propert{properties.length === 1 ? "y" : "ies"}
             </span>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
         <Card>
           <CardHeader>

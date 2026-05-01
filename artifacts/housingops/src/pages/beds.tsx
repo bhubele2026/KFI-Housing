@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,29 +8,83 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
+import { Briefcase } from "lucide-react";
 
 export default function Beds() {
-  const { beds, properties, occupants, isLoading } = useData();
+  const { beds, properties, occupants, customers, isLoading } = useData();
+  const [customerFilter, setCustomerFilter] = useState("All");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const filteredBeds = beds.filter((b) => {
+  const scopedPropertyIds = useMemo(() => {
+    if (customerFilter === "All") return null;
+    return new Set(
+      properties.filter((p) => p.customerId === customerFilter).map((p) => p.id),
+    );
+  }, [properties, customerFilter]);
+
+  const propertiesForFilter = useMemo(() => {
+    if (!scopedPropertyIds) return properties;
+    return properties.filter((p) => scopedPropertyIds.has(p.id));
+  }, [properties, scopedPropertyIds]);
+
+  const scopedBeds = useMemo(() => {
+    if (!scopedPropertyIds) return beds;
+    return beds.filter((b) => scopedPropertyIds.has(b.propertyId));
+  }, [beds, scopedPropertyIds]);
+
+  const filteredBeds = scopedBeds.filter((b) => {
     const matchesProperty = propertyFilter === "All" || b.propertyId === propertyFilter;
     const matchesStatus = statusFilter === "All" || b.status === statusFilter;
     return matchesProperty && matchesStatus;
   });
 
-  const occupiedCount = beds.filter(b => b.status === "Occupied").length;
-  const occupancyRate = beds.length > 0 ? (occupiedCount / beds.length) * 100 : 0;
+  const occupiedCount = scopedBeds.filter((b) => b.status === "Occupied").length;
+  const occupancyRate = scopedBeds.length > 0 ? (occupiedCount / scopedBeds.length) * 100 : 0;
+
+  const activeCustomerName =
+    customerFilter === "All" ? null : customers.find((c) => c.id === customerFilter)?.name ?? null;
+
+  const handleCustomerChange = (next: string) => {
+    setCustomerFilter(next);
+    // If the previously selected property no longer belongs to the new
+    // customer scope, drop it back to "All" so the table isn't stuck empty.
+    if (next !== "All" && propertyFilter !== "All") {
+      const stillVisible = properties.some(
+        (p) => p.id === propertyFilter && p.customerId === next,
+      );
+      if (!stillVisible) setPropertyFilter("All");
+    }
+  };
 
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Beds</h1>
             <p className="text-muted-foreground mt-1">Track individual bed inventory and assignments</p>
+            {activeCustomerName && (
+              <p
+                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                data-testid="text-beds-active-customer"
+              >
+                <Briefcase className="h-3 w-3" />
+                Showing only <span className="font-semibold">{activeCustomerName}</span>
+              </p>
+            )}
           </div>
+          <Select value={customerFilter} onValueChange={handleCustomerChange}>
+            <SelectTrigger className="w-full sm:w-56" data-testid="select-beds-customer-filter">
+              <SelectValue placeholder="Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Customers</SelectItem>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <Card>
@@ -47,7 +101,7 @@ export default function Beds() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="font-medium">Total Occupancy</span>
-                  <span className="text-muted-foreground">{occupiedCount} of {beds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
+                  <span className="text-muted-foreground">{occupiedCount} of {scopedBeds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
                 </div>
                 <Progress value={occupancyRate} className="h-3" />
               </div>
@@ -64,7 +118,7 @@ export default function Beds() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Properties</SelectItem>
-                  {properties.map(p => (
+                  {propertiesForFilter.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>

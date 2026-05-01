@@ -14,6 +14,8 @@ interface DataStore {
   updateLease: (id: string, updates: Partial<Lease>) => void;
   addLease: (lease: Lease) => void;
   deleteLease: (id: string) => void;
+  addBed: (bed: Bed) => void;
+  deleteBed: (id: string) => void;
   updateBed: (id: string, updates: Partial<Bed>) => void;
   updateOccupant: (id: string, updates: Partial<Occupant>) => void;
   addOccupant: (occupant: Occupant) => void;
@@ -40,6 +42,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addLease = (lease: Lease) => setLeases(prev => [...prev, lease]);
   const deleteLease = (id: string) => setLeases(prev => prev.filter(l => l.id !== id));
 
+  const addBed = (bed: Bed) => setBeds(prev => [...prev, bed]);
+  const deleteBed = (id: string) => setBeds(prev => prev.filter(b => b.id !== id));
+
   const updateBed = (id: string, updates: Partial<Bed>) =>
     setBeds(prev => prev.map(b => (b.id === id ? { ...b, ...updates } : b)));
 
@@ -58,7 +63,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     <DataContext.Provider value={{
       properties, leases, beds, occupants, utilities,
       updateProperty, updateLease, addLease, deleteLease,
-      updateBed, updateOccupant, addOccupant,
+      addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
     }}>
       {children}

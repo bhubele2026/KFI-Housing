@@ -49,10 +49,25 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: 
   );
 }
 
-function BedMap({ beds, occupants }: { beds: Bed[]; occupants: Occupant[] }) {
-  if (beds.length === 0) return null;
+function BedMap({ beds, occupants, propertyId, onAddBed, onDeleteBed }: {
+  beds: Bed[];
+  occupants: Occupant[];
+  propertyId: string;
+  onAddBed: (bed: Bed) => void;
+  onDeleteBed: (id: string) => void;
+}) {
   const occupied = beds.filter(b => b.status === "Occupied").length;
-  const pct = Math.round((occupied / beds.length) * 100);
+  const pct = beds.length > 0 ? Math.round((occupied / beds.length) * 100) : 0;
+
+  const addBed = () => {
+    const nextNum = beds.length > 0 ? Math.max(...beds.map(b => b.bedNumber)) + 1 : 1;
+    onAddBed({ id: `bed-${Date.now()}`, propertyId, bedNumber: nextNum, room: "", status: "Vacant", occupantId: null });
+  };
+
+  const removeBed = () => {
+    const vacants = beds.filter(b => b.status === "Vacant").sort((a, b) => b.bedNumber - a.bedNumber);
+    if (vacants.length > 0) onDeleteBed(vacants[0].id);
+  };
 
   return (
     <Card>
@@ -62,10 +77,30 @@ function BedMap({ beds, occupants }: { beds: Bed[]; occupants: Occupant[] }) {
             <BedDouble className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">Bed Occupancy</span>
           </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block" />Occupied ({occupied})</span>
-            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-400 inline-block" />Vacant ({beds.length - occupied})</span>
-            <span className="font-medium text-foreground">{pct}% full</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block" />Occupied ({occupied})</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-400 inline-block" />Vacant ({beds.length - occupied})</span>
+              {beds.length > 0 && <span className="font-medium text-foreground">{pct}% full</span>}
+            </div>
+            <div className="flex items-center gap-1 border rounded-lg p-0.5">
+              <Button
+                size="icon" variant="ghost"
+                className="h-6 w-6 rounded-md text-muted-foreground hover:text-destructive"
+                onClick={removeBed}
+                disabled={beds.filter(b => b.status === "Vacant").length === 0}
+              >
+                <span className="text-base leading-none font-bold">−</span>
+              </Button>
+              <span className="text-xs font-semibold w-8 text-center tabular-nums">{beds.length} beds</span>
+              <Button
+                size="icon" variant="ghost"
+                className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+                onClick={addBed}
+              >
+                <span className="text-base leading-none font-bold">+</span>
+              </Button>
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -209,7 +244,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Bed Map */}
-        <BedMap beds={propBeds} occupants={propOccupants} />
+        <BedMap beds={propBeds} occupants={propOccupants} propertyId={id} onAddBed={addBed} onDeleteBed={deleteBed} />
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">

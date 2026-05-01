@@ -177,7 +177,7 @@ export default function Utilities() {
               </Select>
 
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
-                <SelectTrigger className="w-full sm:w-56">
+                <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-property-filter">
                   <SelectValue placeholder="All Properties" />
                 </SelectTrigger>
                 <SelectContent>

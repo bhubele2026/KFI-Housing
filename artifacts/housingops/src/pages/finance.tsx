@@ -224,6 +224,7 @@ export default function Finance() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.04 }}
                         className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
+                        data-testid={`row-finance-${d.id}`}
                       >
                         <td className="p-4 font-medium">{d.name}</td>
                         {showCustomerColumn && (

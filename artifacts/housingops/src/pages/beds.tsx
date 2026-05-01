@@ -129,7 +129,7 @@ export default function Beds() {
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center">
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
-                <SelectTrigger className="w-full sm:w-64">
+                <SelectTrigger className="w-full sm:w-64" data-testid="select-beds-property-filter">
                   <SelectValue placeholder="Property" />
                 </SelectTrigger>
                 <SelectContent>

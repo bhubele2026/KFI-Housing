@@ -17,9 +17,12 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+const isProduction = process.env["NODE_ENV"] === "production";
+
 async function start(): Promise<void> {
   try {
     await pushSchemaIfNeeded({
+      checkOnly: isProduction,
       log: (message, extra) => {
         if (extra) {
           logger.info(extra, message);
@@ -29,7 +32,14 @@ async function start(): Promise<void> {
       },
     });
   } catch (err) {
-    logger.error({ err }, "Failed to apply database schema changes");
+    if (isProduction) {
+      logger.error(
+        { err },
+        "Database schema is out of date in production — run `pnpm --filter @workspace/db run push` to apply pending changes",
+      );
+    } else {
+      logger.error({ err }, "Failed to apply database schema changes");
+    }
     process.exit(1);
   }
 

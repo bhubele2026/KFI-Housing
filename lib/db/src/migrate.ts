@@ -11,6 +11,7 @@ export interface PushSchemaResult {
 
 export interface PushSchemaOptions {
   allowDataLoss?: boolean;
+  checkOnly?: boolean;
   log?: (message: string, extra?: Record<string, unknown>) => void;
 }
 
@@ -43,6 +44,20 @@ export async function pushSchemaIfNeeded(
       warnings,
       hasDataLoss: false,
     };
+  }
+
+  if (options.checkOnly) {
+    const message =
+      `Schema is out of date: ${statementsToExecute.length} pending ` +
+      "statement(s) detected. Refusing to auto-apply in this mode. " +
+      "Run `pnpm --filter @workspace/db run push` from a single place " +
+      "(e.g. the post-merge hook) to bring the database in sync.";
+    log(message, {
+      warnings,
+      statements: statementsToExecute,
+      hasDataLoss,
+    });
+    throw new Error(message);
   }
 
   if (hasDataLoss && !options.allowDataLoss) {

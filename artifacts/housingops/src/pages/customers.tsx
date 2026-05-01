@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData, CustomerInUseError } from "@/context/data-store";
-import { type Customer } from "@/data/mockData";
+import { type Customer, toMonthlyCharge } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const EMPTY_DRAFT: Customer = {
@@ -33,7 +33,7 @@ const EMPTY_DRAFT: Customer = {
 
 export default function Customers() {
   const [location, navigate] = useLocation();
-  const { customers, properties, addCustomer, updateCustomer, deleteCustomer } = useData();
+  const { customers, properties, beds, occupants, addCustomer, updateCustomer, deleteCustomer } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -41,13 +41,88 @@ export default function Customers() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
 
-  const propertyCountByCustomer = useMemo(() => {
-    const map = new Map<string, number>();
+  // Per-customer roll-ups: property count, total/occupied beds, occupancy %, and
+  // monthly revenue (summed from each occupant's normalized monthly charge).
+  // Recomputes whenever properties, beds, or occupants change so the numbers
+  // stay in sync with edits elsewhere in the app.
+  const statsByCustomer = useMemo(() => {
+    const propertiesByCustomer = new Map<string, string[]>();
     for (const p of properties) {
-      map.set(p.customerId, (map.get(p.customerId) ?? 0) + 1);
+      const list = propertiesByCustomer.get(p.customerId) ?? [];
+      list.push(p.id);
+      propertiesByCustomer.set(p.customerId, list);
+    }
+
+    const bedsByProperty = new Map<string, { total: number; occupied: number }>();
+    for (const b of beds) {
+      const entry = bedsByProperty.get(b.propertyId) ?? { total: 0, occupied: 0 };
+      entry.total += 1;
+      if (b.status === "Occupied") entry.occupied += 1;
+      bedsByProperty.set(b.propertyId, entry);
+    }
+
+    const revenueByProperty = new Map<string, number>();
+    for (const o of occupants) {
+      if (o.status !== "Active" || !o.propertyId) continue;
+      const monthly = toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly");
+      revenueByProperty.set(o.propertyId, (revenueByProperty.get(o.propertyId) ?? 0) + monthly);
+    }
+
+    const map = new Map<
+      string,
+      { propertyCount: number; totalBeds: number; occupiedBeds: number; occupancyPct: number; monthlyRevenue: number }
+    >();
+    for (const c of customers) {
+      const propIds = propertiesByCustomer.get(c.id) ?? [];
+      let totalBeds = 0;
+      let occupiedBeds = 0;
+      let monthlyRevenue = 0;
+      for (const pid of propIds) {
+        const bedInfo = bedsByProperty.get(pid);
+        if (bedInfo) {
+          totalBeds += bedInfo.total;
+          occupiedBeds += bedInfo.occupied;
+        }
+        monthlyRevenue += revenueByProperty.get(pid) ?? 0;
+      }
+      const occupancyPct = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
+      map.set(c.id, {
+        propertyCount: propIds.length,
+        totalBeds,
+        occupiedBeds,
+        occupancyPct,
+        monthlyRevenue: Math.round(monthlyRevenue),
+      });
     }
     return map;
-  }, [properties]);
+  }, [customers, properties, beds, occupants]);
+
+  // Top customers across the portfolio (highest occupancy %, highest revenue).
+  // Ties broken by revenue / occupancy to give a stable, sensible pick. Only
+  // customers with at least one bed (occupancy) or any revenue qualify.
+  const topCustomers = useMemo(() => {
+    let topOccupancy: { customer: Customer; pct: number; occupied: number; total: number } | null = null;
+    let topRevenue: { customer: Customer; revenue: number } | null = null;
+    for (const c of customers) {
+      const s = statsByCustomer.get(c.id);
+      if (!s) continue;
+      if (s.totalBeds > 0) {
+        if (
+          !topOccupancy ||
+          s.occupancyPct > topOccupancy.pct ||
+          (s.occupancyPct === topOccupancy.pct && s.monthlyRevenue > (statsByCustomer.get(topOccupancy.customer.id)?.monthlyRevenue ?? 0))
+        ) {
+          topOccupancy = { customer: c, pct: s.occupancyPct, occupied: s.occupiedBeds, total: s.totalBeds };
+        }
+      }
+      if (s.monthlyRevenue > 0) {
+        if (!topRevenue || s.monthlyRevenue > topRevenue.revenue) {
+          topRevenue = { customer: c, revenue: s.monthlyRevenue };
+        }
+      }
+    }
+    return { topOccupancy, topRevenue };
+  }, [customers, statsByCustomer]);
 
   // If we arrived via #customer-<id>, briefly highlight that row and scroll to it.
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -160,6 +235,67 @@ export default function Customers() {
           </Button>
         </div>
 
+        {/* Top customers summary — only meaningful when there's data to compare. */}
+        {(topCustomers.topOccupancy || topCustomers.topRevenue) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card data-testid="card-top-occupancy">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                      Highest occupancy
+                    </p>
+                    {topCustomers.topOccupancy ? (
+                      <>
+                        <p className="text-lg font-semibold">{topCustomers.topOccupancy.customer.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {topCustomers.topOccupancy.occupied}/{topCustomers.topOccupancy.total} beds occupied
+                          {" · "}
+                          <span className="font-medium text-foreground">
+                            {topCustomers.topOccupancy.pct.toFixed(0)}%
+                          </span>
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No bed data yet.</p>
+                    )}
+                  </div>
+                  <div className="p-2 rounded-md bg-emerald-100 text-emerald-700">
+                    <Trophy className="h-4 w-4" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card data-testid="card-top-revenue">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                      Highest monthly revenue
+                    </p>
+                    {topCustomers.topRevenue ? (
+                      <>
+                        <p className="text-lg font-semibold">{topCustomers.topRevenue.customer.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            ${topCustomers.topRevenue.revenue.toLocaleString()}
+                          </span>
+                          /mo across all properties
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No revenue yet.</p>
+                    )}
+                  </div>
+                  <div className="p-2 rounded-md bg-primary/10 text-primary">
+                    <TrendingUp className="h-4 w-4" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -186,13 +322,15 @@ export default function Customers() {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead className="text-center">Properties</TableHead>
+                  <TableHead className="text-center">Beds</TableHead>
+                  <TableHead className="text-right">Revenue / mo</TableHead>
                   <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                       {customers.length === 0
                         ? "No customers yet. Add your first customer to get started."
                         : "No customers match your search."}
@@ -200,7 +338,12 @@ export default function Customers() {
                   </TableRow>
                 ) : (
                   filtered.map((c, i) => {
-                    const count = propertyCountByCustomer.get(c.id) ?? 0;
+                    const stats = statsByCustomer.get(c.id);
+                    const count = stats?.propertyCount ?? 0;
+                    const totalBeds = stats?.totalBeds ?? 0;
+                    const occupiedBeds = stats?.occupiedBeds ?? 0;
+                    const occupancyPct = stats?.occupancyPct ?? 0;
+                    const monthlyRevenue = stats?.monthlyRevenue ?? 0;
                     const isHighlighted = highlightedId === c.id;
                     return (
                       <motion.tr
@@ -266,6 +409,27 @@ export default function Customers() {
                             </button>
                           ) : (
                             <Badge variant="outline" className="text-muted-foreground">0</Badge>
+                          )}
+                        </td>
+                        <td className="p-4 text-center text-sm" data-testid={`cell-customer-beds-${c.id}`}>
+                          {totalBeds > 0 ? (
+                            <div className="flex flex-col items-center leading-tight">
+                              <span className="font-medium tabular-nums">
+                                {occupiedBeds}/{totalBeds}
+                              </span>
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {occupancyPct.toFixed(0)}%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right text-sm tabular-nums" data-testid={`cell-customer-revenue-${c.id}`}>
+                          {monthlyRevenue > 0 ? (
+                            <span className="font-medium">${monthlyRevenue.toLocaleString()}</span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="p-4">
@@ -412,11 +576,11 @@ export default function Customers() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this customer?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget && (propertyCountByCustomer.get(deleteTarget.id) ?? 0) > 0 ? (
+              {deleteTarget && (statsByCustomer.get(deleteTarget.id)?.propertyCount ?? 0) > 0 ? (
                 <>
                   <span className="font-medium">{deleteTarget.name}</span> still owns{" "}
-                  {propertyCountByCustomer.get(deleteTarget.id)} propert
-                  {propertyCountByCustomer.get(deleteTarget.id) === 1 ? "y" : "ies"}.
+                  {statsByCustomer.get(deleteTarget.id)?.propertyCount} propert
+                  {statsByCustomer.get(deleteTarget.id)?.propertyCount === 1 ? "y" : "ies"}.
                   You'll need to reassign or remove those properties before this customer
                   can be deleted.
                 </>

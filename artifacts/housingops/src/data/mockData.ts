@@ -23,8 +23,124 @@ export const PropertySchema = z.object({
   bankAccount: z.string(),
   portalUrl: z.string(),
   notes: z.string(),
+  furnishings: z.array(z.string()).default([]),
 });
 export type Property = z.infer<typeof PropertySchema>;
+
+// ── Furnishings catalogue ──────────────────────────────────────────────
+// Each item is identified by its label string (stored on Property.furnishings).
+export interface FurnishingCategory {
+  id: string;
+  name: string;
+  iconName: string; // lucide-react icon name; resolved in the UI
+  items: string[];
+}
+
+export const FURNISHING_CATEGORIES: FurnishingCategory[] = [
+  {
+    id: "bedroom",
+    name: "Bedroom",
+    iconName: "BedDouble",
+    items: [
+      "Single beds", "Queen beds", "King beds", "Bunk beds",
+      "Mattresses", "Mattress protectors", "Pillows", "Bedding & linens",
+      "Nightstands", "Dressers", "Wardrobes / Closets",
+      "Desk", "Desk chair", "Reading lamps",
+    ],
+  },
+  {
+    id: "living",
+    name: "Living Room",
+    iconName: "Sofa",
+    items: [
+      "Sofa / Couch", "Loveseat", "Armchairs",
+      "Coffee table", "End tables", "Bookshelves",
+      "Floor lamps", "Area rug", "Curtains / Blinds",
+    ],
+  },
+  {
+    id: "kitchen",
+    name: "Kitchen",
+    iconName: "Refrigerator",
+    items: [
+      "Refrigerator", "Freezer", "Stove / Range", "Oven", "Microwave", "Dishwasher",
+      "Coffee maker", "Toaster", "Kettle", "Blender",
+      "Cookware set", "Dinnerware", "Utensils & cutlery", "Trash can",
+    ],
+  },
+  {
+    id: "dining",
+    name: "Dining",
+    iconName: "Utensils",
+    items: ["Dining table", "Dining chairs", "Bar stools"],
+  },
+  {
+    id: "bathroom",
+    name: "Bathroom",
+    iconName: "Bath",
+    items: ["Towels", "Shower curtain", "Bath mat", "Hair dryer", "Toilet plunger"],
+  },
+  {
+    id: "laundry",
+    name: "Laundry",
+    iconName: "WashingMachine",
+    items: ["Washing machine", "Dryer", "Iron", "Ironing board", "Drying rack"],
+  },
+  {
+    id: "climate",
+    name: "Climate Control",
+    iconName: "Thermometer",
+    items: [
+      "Central A/C", "Window A/C units", "Central heating",
+      "Space heaters", "Ceiling fans", "Smart thermostat",
+    ],
+  },
+  {
+    id: "tech",
+    name: "Tech & Entertainment",
+    iconName: "Tv",
+    items: [
+      "Wi-Fi", "Smart TV", "Cable / Satellite", "Streaming device",
+      "Sound system", "Printer",
+    ],
+  },
+  {
+    id: "safety",
+    name: "Safety & Security",
+    iconName: "ShieldCheck",
+    items: [
+      "Smoke detectors", "Carbon monoxide detectors", "Fire extinguisher",
+      "First aid kit", "Security system", "Smart locks", "Doorbell camera",
+    ],
+  },
+  {
+    id: "outdoor",
+    name: "Outdoor",
+    iconName: "Trees",
+    items: ["Patio furniture", "Grill / BBQ", "Fire pit", "Hot tub", "Yard / Garden"],
+  },
+  {
+    id: "amenities",
+    name: "Building Amenities",
+    iconName: "Building2",
+    items: [
+      "Gym / Fitness center", "Swimming pool", "Sauna", "Game room",
+      "Shared laundry room", "Parking", "Garage", "Bike storage",
+      "Elevator", "Rooftop deck", "Concierge",
+    ],
+  },
+  {
+    id: "cleaning",
+    name: "Cleaning",
+    iconName: "Sparkles",
+    items: ["Vacuum cleaner", "Mop", "Broom", "Cleaning supplies"],
+  },
+];
+
+export const ALL_FURNISHINGS_COUNT = FURNISHING_CATEGORIES.reduce(
+  (n, c) => n + c.items.length,
+  0,
+);
 
 export const LeaseSchema = z.object({
   id: z.string(),
@@ -202,6 +318,20 @@ export const MOCK_PROPERTIES: Property[] = [
     bankAccount: "4400123456",
     portalUrl: "",
     notes: "Property manager prefers email contact. Parking included.",
+    furnishings: [
+      "Queen beds", "Mattresses", "Mattress protectors", "Pillows", "Bedding & linens",
+      "Nightstands", "Dressers", "Desk", "Desk chair",
+      "Sofa / Couch", "Coffee table", "Area rug",
+      "Refrigerator", "Stove / Range", "Microwave", "Dishwasher", "Coffee maker", "Cookware set", "Dinnerware", "Utensils & cutlery",
+      "Dining table", "Dining chairs",
+      "Towels", "Shower curtain", "Hair dryer",
+      "Washing machine", "Dryer",
+      "Central A/C", "Central heating", "Smart thermostat",
+      "Wi-Fi", "Smart TV", "Streaming device",
+      "Smoke detectors", "Carbon monoxide detectors", "Fire extinguisher",
+      "Gym / Fitness center", "Swimming pool", "Parking",
+      "Vacuum cleaner",
+    ],
   },
   {
     id: "p2",
@@ -226,6 +356,21 @@ export const MOCK_PROPERTIES: Property[] = [
     bankAccount: "",
     portalUrl: "https://portal.maplerealty.com",
     notes: "Utilities included in lease except internet.",
+    furnishings: [
+      "Single beds", "Bunk beds", "Mattresses", "Pillows", "Bedding & linens",
+      "Nightstands", "Wardrobes / Closets",
+      "Sofa / Couch", "Coffee table", "Floor lamps",
+      "Refrigerator", "Stove / Range", "Microwave", "Coffee maker", "Toaster",
+      "Cookware set", "Dinnerware", "Utensils & cutlery", "Trash can",
+      "Dining table", "Dining chairs",
+      "Towels", "Shower curtain", "Bath mat",
+      "Washing machine", "Dryer", "Iron", "Ironing board",
+      "Window A/C units", "Central heating", "Ceiling fans",
+      "Wi-Fi", "Smart TV",
+      "Smoke detectors", "Fire extinguisher",
+      "Parking", "Garage", "Elevator",
+      "Vacuum cleaner", "Cleaning supplies",
+    ],
   },
   {
     id: "p3",
@@ -250,6 +395,20 @@ export const MOCK_PROPERTIES: Property[] = [
     bankAccount: "",
     portalUrl: "",
     notes: "Requires 30-day notice before move-out of any occupant.",
+    furnishings: [
+      "Single beds", "Mattresses", "Pillows", "Bedding & linens",
+      "Nightstands", "Dressers",
+      "Sofa / Couch", "Coffee table",
+      "Refrigerator", "Stove / Range", "Microwave",
+      "Cookware set", "Dinnerware", "Utensils & cutlery", "Trash can",
+      "Dining table", "Dining chairs",
+      "Towels", "Shower curtain",
+      "Washing machine", "Dryer",
+      "Window A/C units", "Central heating",
+      "Wi-Fi",
+      "Smoke detectors", "Fire extinguisher",
+      "Parking",
+    ],
   },
   {
     id: "p4",
@@ -274,6 +433,22 @@ export const MOCK_PROPERTIES: Property[] = [
     bankAccount: "9900556677",
     portalUrl: "",
     notes: "Best rate in portfolio. Lease up for renewal Dec 2025.",
+    furnishings: [
+      "Queen beds", "King beds", "Mattresses", "Mattress protectors", "Pillows", "Bedding & linens",
+      "Nightstands", "Dressers", "Wardrobes / Closets", "Desk", "Desk chair", "Reading lamps",
+      "Sofa / Couch", "Loveseat", "Armchairs", "Coffee table", "End tables", "Area rug", "Curtains / Blinds",
+      "Refrigerator", "Freezer", "Stove / Range", "Oven", "Microwave", "Dishwasher",
+      "Coffee maker", "Toaster", "Kettle", "Cookware set", "Dinnerware", "Utensils & cutlery", "Trash can",
+      "Dining table", "Dining chairs", "Bar stools",
+      "Towels", "Shower curtain", "Bath mat", "Hair dryer",
+      "Washing machine", "Dryer", "Iron", "Ironing board",
+      "Central A/C", "Central heating", "Ceiling fans", "Smart thermostat",
+      "Wi-Fi", "Smart TV", "Streaming device", "Sound system",
+      "Smoke detectors", "Carbon monoxide detectors", "Fire extinguisher", "First aid kit", "Security system", "Smart locks",
+      "Patio furniture", "Grill / BBQ", "Yard / Garden",
+      "Gym / Fitness center", "Swimming pool", "Game room", "Parking", "Garage", "Bike storage",
+      "Vacuum cleaner", "Mop", "Broom", "Cleaning supplies",
+    ],
   },
   {
     id: "p5",
@@ -298,6 +473,12 @@ export const MOCK_PROPERTIES: Property[] = [
     bankAccount: "1122334455",
     portalUrl: "",
     notes: "Currently inactive. Renovation underway. Expected reopening Q3 2025.",
+    furnishings: [
+      "Single beds", "Mattresses", "Pillows", "Bedding & linens",
+      "Refrigerator", "Stove / Range",
+      "Cookware set", "Dinnerware",
+      "Smoke detectors", "Fire extinguisher",
+    ],
   },
 ];
 

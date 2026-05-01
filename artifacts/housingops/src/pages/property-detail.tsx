@@ -17,10 +17,18 @@ import {
   ChevronLeft, Building2, Edit2, Check, X, Plus, Trash2,
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle,
+  Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
+  ShieldCheck, Trees, Sparkles, CheckCircle2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo } from "@/data/mockData";
+import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT } from "@/data/mockData";
 import { motion } from "framer-motion";
+
+const FURNISHING_ICONS: Record<string, LucideIcon> = {
+  BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
+  Thermometer, Tv, ShieldCheck, Trees, Building2, Sparkles,
+};
 
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
@@ -258,10 +266,11 @@ export default function PropertyDetail() {
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+          <TabsList className="grid grid-cols-6 w-full max-w-3xl">
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
             <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />Beds</TabsTrigger>
+            <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />Furnishings</TabsTrigger>
             <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
             <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />Finance</TabsTrigger>
           </TabsList>
@@ -553,6 +562,14 @@ export default function PropertyDetail() {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ── FURNISHINGS TAB ── */}
+          <TabsContent value="furnishings" className="space-y-4">
+            <FurnishingsPanel
+              selected={property.furnishings ?? []}
+              onChange={(next) => updateProperty(id, { furnishings: next })}
+            />
           </TabsContent>
 
           {/* ── UTILITIES TAB ── */}
@@ -848,5 +865,156 @@ function AddUtilityDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (u
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Furnishings Panel ──────────────────────────────────────────────────
+function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange: (next: string[]) => void }) {
+  const [search, setSearch] = useState("");
+  const selectedSet = new Set(selected);
+  const totalSelected = selected.length;
+  const totalAvailable = ALL_FURNISHINGS_COUNT;
+  const pct = totalAvailable === 0 ? 0 : Math.round((totalSelected / totalAvailable) * 100);
+
+  const toggleItem = (item: string) => {
+    if (selectedSet.has(item)) {
+      onChange(selected.filter(f => f !== item));
+    } else {
+      onChange([...selected, item]);
+    }
+  };
+
+  const setCategory = (items: string[], select: boolean) => {
+    const others = selected.filter(f => !items.includes(f));
+    onChange(select ? [...others, ...items] : others);
+  };
+
+  const clearAll = () => onChange([]);
+
+  const q = search.trim().toLowerCase();
+  const visibleCategories = FURNISHING_CATEGORIES.map(cat => ({
+    ...cat,
+    visibleItems: q ? cat.items.filter(i => i.toLowerCase().includes(q)) : cat.items,
+  })).filter(cat => cat.visibleItems.length > 0);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary header */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold flex items-center gap-2">
+                <Sofa className="h-4 w-4" /> Furnishings &amp; Amenities
+              </h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Track what's included at this property — from beds and appliances to building amenities like a gym or pool.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-2xl font-bold tabular-nums">{totalSelected}<span className="text-sm font-normal text-muted-foreground"> / {totalAvailable}</span></div>
+                <div className="text-xs text-muted-foreground">{pct}% included</div>
+              </div>
+              {totalSelected > 0 && (
+                <Button variant="outline" size="sm" onClick={clearAll} data-testid="furnishings-clear-all">
+                  <X className="h-3.5 w-3.5 mr-1" /> Clear all
+                </Button>
+              )}
+            </div>
+          </div>
+          {/* progress bar */}
+          <div className="mt-4 h-1.5 w-full bg-muted rounded-full overflow-hidden">
+            <motion.div
+              initial={false}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="h-full bg-emerald-500 rounded-full"
+            />
+          </div>
+          <div className="mt-4">
+            <Input
+              placeholder="Search furnishings (e.g. 'pool', 'wifi', 'fridge')..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-9 text-sm"
+              data-testid="furnishings-search"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Category cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {visibleCategories.length === 0 && (
+          <Card className="lg:col-span-2">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              No furnishings match "{search}".
+            </CardContent>
+          </Card>
+        )}
+        {visibleCategories.map(cat => {
+          const Icon = FURNISHING_ICONS[cat.iconName] ?? Sparkles;
+          const catSelectedInVisible = cat.visibleItems.filter(i => selectedSet.has(i)).length;
+          const catSelectedTotal = cat.items.filter(i => selectedSet.has(i)).length;
+          const allInCatSelected = catSelectedTotal === cat.items.length;
+
+          return (
+            <Card key={cat.id} data-testid={`furnishings-category-${cat.id}`}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    {cat.name}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {catSelectedTotal}/{cat.items.length}
+                    </span>
+                  </CardTitle>
+                  <button
+                    type="button"
+                    onClick={() => setCategory(cat.items, !allInCatSelected)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {allInCatSelected ? "Clear" : "Select all"}
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="flex flex-wrap gap-1.5">
+                  {cat.visibleItems.map(item => {
+                    const isOn = selectedSet.has(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => toggleItem(item)}
+                        data-testid={`furnishing-${item}`}
+                        className={
+                          "px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1 " +
+                          (isOn
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            : "bg-white text-muted-foreground border-border hover:bg-muted hover:text-foreground")
+                        }
+                      >
+                        {isOn ? <CheckCircle2 className="h-3 w-3" /> : <Plus className="h-3 w-3 opacity-60" />}
+                        {item}
+                      </button>
+                    );
+                  })}
+                  {cat.visibleItems.length !== cat.items.length && (
+                    <span className="text-xs text-muted-foreground self-center px-1">
+                      ({cat.items.length - cat.visibleItems.length} more match other searches)
+                    </span>
+                  )}
+                </div>
+                {catSelectedInVisible === 0 && cat.visibleItems.length === cat.items.length && (
+                  <p className="text-xs text-muted-foreground mt-3 italic">No items selected in this category.</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
   );
 }

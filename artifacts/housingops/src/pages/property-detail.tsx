@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, Building2, Edit2, Check, X, Plus, Trash2,
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
-  Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle,
+  Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
   ShieldCheck, Trees, Sparkles, CheckCircle2,
 } from "lucide-react";
@@ -24,6 +24,7 @@ import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT } from "@/data/mockData";
 import { motion } from "framer-motion";
+import { RenewLeasePopover } from "@/components/renew-lease-popover";
 
 const FURNISHING_ICONS: Record<string, LucideIcon> = {
   BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
@@ -241,10 +242,28 @@ export default function PropertyDetail() {
               const renewal = getRenewalInfo(activeLease.endDate);
               if (renewal.level === "ok") return null;
               return (
-                <Badge variant="outline" className={`ml-1 text-xs font-medium ${renewal.badgeClass}`}>
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  Renewal: {renewal.label}
-                </Badge>
+                <div className="flex items-center gap-1.5 ml-1">
+                  <Badge variant="outline" className={`text-xs font-medium ${renewal.badgeClass}`}>
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Renewal: {renewal.label}
+                  </Badge>
+                  <RenewLeasePopover
+                    currentEndDate={activeLease.endDate}
+                    propertyName={property.name}
+                    onRenew={(newEndDate) =>
+                      updateLease(activeLease.id, {
+                        endDate: newEndDate,
+                        status: activeLease.status === "Expired" ? "Active" : activeLease.status,
+                      })
+                    }
+                    trigger={
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1">
+                        <CalendarPlus className="h-3 w-3" />
+                        Renew
+                      </Button>
+                    }
+                  />
+                </div>
               );
             })()}
           </div>

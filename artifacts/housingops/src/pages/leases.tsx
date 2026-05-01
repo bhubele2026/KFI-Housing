@@ -1,25 +1,28 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
-import { MOCK_LEASES, MOCK_PROPERTIES, getRenewalInfo } from "@/data/mockData";
+import { getRenewalInfo } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, AlertTriangle, ChevronRight, Calendar } from "lucide-react";
+import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus } from "lucide-react";
 import { motion } from "framer-motion";
+import { RenewLeasePopover } from "@/components/renew-lease-popover";
 
 export default function Leases() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState("All");
+  const { leases, properties, updateLease } = useData();
 
-  const filteredLeases = MOCK_LEASES.filter((l) => {
+  const filteredLeases = leases.filter((l) => {
     return statusFilter === "All" || l.status === statusFilter;
   });
 
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
-  const renewalAlerts = MOCK_LEASES
+  const renewalAlerts = leases
     .filter((l) => l.status === "Active" || l.status === "Upcoming")
     .map((l) => ({ lease: l, info: getRenewalInfo(l.endDate) }))
     .filter(({ info }) => info.level !== "ok")
@@ -56,13 +59,21 @@ export default function Leases() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {renewalAlerts.map(({ lease, info }) => {
-                    const property = MOCK_PROPERTIES.find((p) => p.id === lease.propertyId);
+                    const property = properties.find((p) => p.id === lease.propertyId);
                     return (
-                      <motion.button
+                      <motion.div
                         key={lease.id}
                         whileHover={{ y: -2 }}
                         onClick={() => property && navigate(`/properties/${property.id}`)}
-                        className={`text-left bg-white rounded-lg border ${info.rowAccentClass.replace("border-l-4", "border-l-[3px]")} p-3 hover:shadow-md transition-all group`}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if ((e.key === "Enter" || e.key === " ") && property) {
+                            e.preventDefault();
+                            navigate(`/properties/${property.id}`);
+                          }
+                        }}
+                        className={`cursor-pointer text-left bg-white rounded-lg border ${info.rowAccentClass.replace("border-l-4", "border-l-[3px]")} p-3 hover:shadow-md transition-all group`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -74,14 +85,37 @@ export default function Leases() {
                           </div>
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
                         </div>
-                        <div className="flex items-center justify-between mt-2.5">
+                        <div className="flex items-center justify-between mt-2.5 gap-2">
                           <Badge variant="outline" className={`text-[11px] font-medium ${info.badgeClass}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${info.dotClass} mr-1.5 inline-block`} />
                             {info.label}
                           </Badge>
-                          <span className="text-xs font-medium text-muted-foreground">${lease.monthlyRent.toLocaleString()}/mo</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs font-medium text-muted-foreground">${lease.monthlyRent.toLocaleString()}/mo</span>
+                            <RenewLeasePopover
+                              currentEndDate={lease.endDate}
+                              propertyName={property?.name}
+                              onRenew={(newEndDate) =>
+                                updateLease(lease.id, {
+                                  endDate: newEndDate,
+                                  status: lease.status === "Expired" ? "Active" : lease.status,
+                                })
+                              }
+                              trigger={
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <CalendarPlus className="h-3 w-3" />
+                                  Renew
+                                </Button>
+                              }
+                            />
+                          </div>
                         </div>
-                      </motion.button>
+                      </motion.div>
                     );
                   })}
                 </div>
@@ -126,7 +160,7 @@ export default function Leases() {
                   </TableRow>
                 ) : (
                   filteredLeases.map((lease) => {
-                    const property = MOCK_PROPERTIES.find(p => p.id === lease.propertyId);
+                    const property = properties.find(p => p.id === lease.propertyId);
                     const info = getRenewalInfo(lease.endDate);
                     return (
                       <TableRow key={lease.id}>

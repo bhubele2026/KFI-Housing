@@ -23,6 +23,22 @@ export default function Beds() {
     );
   }, [properties, customerFilter]);
 
+  const customerById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of customers) map.set(c.id, c.name);
+    return map;
+  }, [customers]);
+
+  const propertyById = useMemo(() => {
+    const map = new Map(properties.map((p) => [p.id, p] as const));
+    return map;
+  }, [properties]);
+
+  // Hide the Customer column when a customer filter is active, since every
+  // row already belongs to that customer.
+  const showCustomerColumn = customerFilter === "All";
+  const columnCount = showCustomerColumn ? 5 : 4;
+
   const propertiesForFilter = useMemo(() => {
     if (!scopedPropertyIds) return properties;
     return properties.filter((p) => scopedPropertyIds.has(p.id));
@@ -140,6 +156,7 @@ export default function Beds() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
+                  {showCustomerColumn && <TableHead>Customer</TableHead>}
                   <TableHead>Bed #</TableHead>
                   <TableHead>Occupant</TableHead>
                   <TableHead className="text-center">Status</TableHead>
@@ -147,21 +164,29 @@ export default function Beds() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={4} />
+                  <SkeletonRows rows={6} columns={columnCount} />
                 ) : filteredBeds.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
+                    <TableCell colSpan={columnCount} className="h-24 text-center">
                       No beds found.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredBeds.map((bed) => {
-                    const property = properties.find(p => p.id === bed.propertyId);
+                    const property = propertyById.get(bed.propertyId);
+                    const customerName = property?.customerId
+                      ? customerById.get(property.customerId)
+                      : undefined;
                     const occupant = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
                     
                     return (
                       <TableRow key={bed.id}>
                         <TableCell className="font-medium">{property?.name}</TableCell>
+                        {showCustomerColumn && (
+                          <TableCell className="text-muted-foreground" data-testid={`text-bed-customer-${bed.id}`}>
+                            {customerName ?? "—"}
+                          </TableCell>
+                        )}
                         <TableCell>Bed {bed.bedNumber}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {occupant ? occupant.name : "-"}

@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
+import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
+import { StarRating } from "@/components/star-rating";
+import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
@@ -10,9 +13,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+type TopPropertiesSortKey = "overall" | RatingCategoryKey;
+
 export default function Dashboard() {
   const { properties, beds, leases, utilities, customers } = useData();
   const [customerFilter, setCustomerFilter] = useState("All");
+  const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
 
   const scopedProperties = useMemo(() => {
     if (customerFilter === "All") return properties;
@@ -56,6 +62,24 @@ export default function Dashboard() {
   const currentMonthUtilities = scopedUtilities.reduce((acc, u) => acc + u.monthlyCost, 0);
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
+
+  const topRatedProperties = useMemo(() => {
+    const scored = scopedProperties.map((p) => {
+      const overall = computeOverallRating(p.ratings);
+      const score =
+        topRatingSort === "overall" ? overall : (p.ratings?.[topRatingSort] ?? 0) || null;
+      return { property: p, overall, score };
+    });
+    return scored
+      .filter((row) => row.score !== null && row.score > 0)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .slice(0, 5);
+  }, [scopedProperties, topRatingSort]);
+
+  const sortLabel =
+    topRatingSort === "overall"
+      ? "Overall"
+      : RATING_CATEGORIES.find((c) => c.key === topRatingSort)?.label ?? "Overall";
 
   const chartData = useMemo(
     () =>
@@ -146,6 +170,81 @@ export default function Dashboard() {
               </div>
               <Progress value={occupancyRate} className="h-4" />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-top-properties">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              <CardTitle>Top Properties by Rating</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sort by</span>
+              <Select
+                value={topRatingSort}
+                onValueChange={(v) => setTopRatingSort(v as TopPropertiesSortKey)}
+              >
+                <SelectTrigger className="w-44 h-8" data-testid="select-top-rating-sort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="overall">Overall</SelectItem>
+                  {RATING_CATEGORIES.map((c) => (
+                    <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {topRatedProperties.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No properties have a {sortLabel.toLowerCase()} rating yet.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>{sortLabel}</TableHead>
+                    <TableHead className="text-right">Score</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {topRatedProperties.map((row, i) => {
+                    const customer = customers.find((c) => c.id === row.property.customerId);
+                    const score = row.score ?? 0;
+                    return (
+                      <TableRow key={row.property.id} data-testid={`row-top-rated-${row.property.id}`}>
+                        <TableCell className="text-sm font-semibold tabular-nums text-muted-foreground">
+                          {i + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/properties/${row.property.id}`}
+                            className="hover:underline text-primary"
+                          >
+                            {row.property.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {customer?.name ?? <span className="italic">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <StarRating value={score} readOnly size="sm" ariaLabel={`${sortLabel} rating`} />
+                        </TableCell>
+                        <TableCell className="text-right text-sm font-semibold tabular-nums">
+                          {score.toFixed(1)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 

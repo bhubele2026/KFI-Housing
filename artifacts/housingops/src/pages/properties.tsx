@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { getRenewalInfo, computeOverallRating, type Property, type Customer } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, RATING_CATEGORIES, type Property, type Customer } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowD
 import { motion } from "framer-motion";
 import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 type SortDir = "asc" | "desc" | null;
 
@@ -411,10 +412,61 @@ export default function Properties() {
                           {overallRating === null ? (
                             <span className="text-xs text-muted-foreground">—</span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5">
-                              <StarRating value={overallRating} readOnly size="sm" ariaLabel={`${property.name} overall rating`} />
-                              <span className="text-xs font-medium tabular-nums">{overallRating.toFixed(1)}</span>
-                            </span>
+                            <HoverCard openDelay={120} closeDelay={80}>
+                              <HoverCardTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                                  aria-label={`${property.name} rating breakdown`}
+                                  data-testid={`rating-trigger-${property.id}`}
+                                >
+                                  <StarRating value={overallRating} readOnly size="sm" ariaLabel={`${property.name} overall rating`} />
+                                  <span className="text-xs font-medium tabular-nums">{overallRating.toFixed(1)}</span>
+                                </button>
+                              </HoverCardTrigger>
+                              <HoverCardContent
+                                align="start"
+                                sideOffset={6}
+                                className="w-64 p-3"
+                                onClick={(e) => e.stopPropagation()}
+                                data-testid={`rating-breakdown-${property.id}`}
+                              >
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b">
+                                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Overall
+                                  </span>
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <StarRating value={overallRating} readOnly size="sm" ariaLabel="Overall" />
+                                    <span className="text-xs font-semibold tabular-nums">{overallRating.toFixed(1)}</span>
+                                  </span>
+                                </div>
+                                <ul className="space-y-1.5">
+                                  {RATING_CATEGORIES.map(({ key, label }) => {
+                                    const v = property.ratings?.[key] ?? 0;
+                                    return (
+                                      <li
+                                        key={key}
+                                        className="flex items-center justify-between gap-2 text-xs"
+                                        data-testid={`rating-breakdown-${property.id}-${key}`}
+                                      >
+                                        <span className="text-muted-foreground">{label}</span>
+                                        <span className="inline-flex items-center gap-1.5">
+                                          {v > 0 ? (
+                                            <>
+                                              <StarRating value={v} readOnly size="sm" ariaLabel={`${label} rating`} />
+                                              <span className="font-medium tabular-nums w-4 text-right">{v}</span>
+                                            </>
+                                          ) : (
+                                            <span className="text-muted-foreground italic">Not rated</span>
+                                          )}
+                                        </span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </HoverCardContent>
+                            </HoverCard>
                           )}
                         </td>
                         <td className="p-4">

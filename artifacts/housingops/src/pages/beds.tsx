@@ -6,9 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonRows } from "@/components/skeleton-rows";
 
 export default function Beds() {
-  const { beds, properties, occupants } = useData();
+  const { beds, properties, occupants, isLoading } = useData();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -33,13 +35,23 @@ export default function Beds() {
 
         <Card>
           <CardContent className="p-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium">Total Occupancy</span>
-                <span className="text-muted-foreground">{occupiedCount} of {beds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
+            {isLoading ? (
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-48" />
+                </div>
+                <Skeleton className="h-3 w-full" />
               </div>
-              <Progress value={occupancyRate} className="h-3" />
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">Total Occupancy</span>
+                  <span className="text-muted-foreground">{occupiedCount} of {beds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
+                </div>
+                <Progress value={occupancyRate} className="h-3" />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -80,7 +92,9 @@ export default function Beds() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredBeds.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonRows rows={6} columns={4} />
+                ) : filteredBeds.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
                       No beds found.

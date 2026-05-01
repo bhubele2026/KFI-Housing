@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronRight, Zap } from "lucide-react";
 import { UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonRows } from "@/components/skeleton-rows";
 
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
@@ -22,7 +24,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function Utilities() {
   const [, navigate] = useLocation();
-  const { utilities, properties } = useData();
+  const { utilities, properties, isLoading } = useData();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
 
@@ -49,7 +51,11 @@ export default function Utilities() {
           </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Monthly</p>
-            <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-28 mt-1 ml-auto" />
+            ) : (
+              <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
+            )}
           </div>
         </div>
 
@@ -94,7 +100,9 @@ export default function Utilities() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonRows rows={6} columns={7} />
+                ) : filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                       No utility services found.

@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Search, UserPlus } from "lucide-react";
+import { SkeletonRows } from "@/components/skeleton-rows";
 
 export default function Occupants() {
-  const { occupants, properties, beds } = useData();
+  const { occupants, properties, beds, isLoading } = useData();
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -83,7 +84,9 @@ export default function Occupants() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOccupants.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonRows rows={6} columns={6} />
+                ) : filteredOccupants.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center">
                       No occupants found.

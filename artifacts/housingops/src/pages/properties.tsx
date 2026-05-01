@@ -12,10 +12,11 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Plus, ChevronRight, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { StarRating } from "@/components/star-rating";
+import { SkeletonRows } from "@/components/skeleton-rows";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const { properties, beds, leases } = useData();
+  const { properties, beds, leases, isLoading } = useData();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -89,7 +90,9 @@ export default function Properties() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
+                {isLoading ? (
+                  <SkeletonRows rows={6} columns={11} />
+                ) : filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                       No properties found.

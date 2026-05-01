@@ -26,6 +26,7 @@ import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMo
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { StarRating } from "@/components/star-rating";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const FURNISHING_ICONS: Record<string, LucideIcon> = {
   BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
@@ -262,7 +263,39 @@ function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | 
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
-  const { properties, leases, beds, occupants, utilities, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, beds, occupants, utilities, isLoading, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="p-8 max-w-7xl mx-auto space-y-6" data-testid="property-detail-loading">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-7 w-28" />
+            <span className="text-muted-foreground">/</span>
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-11 w-11 rounded-xl" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-56" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full max-w-3xl rounded-md" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Skeleton className="h-72 w-full rounded-xl" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   const property = properties.find(p => p.id === id);
   if (!property) {

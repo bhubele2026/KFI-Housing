@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
-import { MOCK_PROPERTIES, MOCK_BEDS, MOCK_LEASES, MOCK_UTILITIES } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, KeyRound, Zap, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, Users } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -10,26 +9,28 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
-  const totalProperties = MOCK_PROPERTIES.length;
-  const totalBeds = MOCK_BEDS.length;
-  const occupiedBeds = MOCK_BEDS.filter(b => b.status === "Occupied").length;
-  const vacantBeds = MOCK_BEDS.filter(b => b.status === "Vacant").length;
-  const occupancyRate = (occupiedBeds / totalBeds) * 100;
+  const { properties, beds, leases, utilities } = useData();
 
-  const totalMonthlyRevenue = MOCK_PROPERTIES.reduce((acc, p) => {
-    const beds = MOCK_BEDS.filter(b => b.propertyId === p.id && b.status === "Occupied");
-    return acc + (beds.length * p.monthlyRent);
+  const totalProperties = properties.length;
+  const totalBeds = beds.length;
+  const occupiedBeds = beds.filter(b => b.status === "Occupied").length;
+  const vacantBeds = beds.filter(b => b.status === "Vacant").length;
+  const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
+
+  const totalMonthlyRevenue = properties.reduce((acc, p) => {
+    const occupied = beds.filter(b => b.propertyId === p.id && b.status === "Occupied");
+    return acc + (occupied.length * p.monthlyRent);
   }, 0);
 
-  const totalMonthlyLeaseCosts = MOCK_LEASES.filter(l => l.status === "Active").reduce((acc, l) => acc + l.monthlyRent, 0);
-  const currentMonthUtilities = MOCK_UTILITIES.reduce((acc, u) => acc + u.monthlyCost, 0);
+  const totalMonthlyLeaseCosts = leases.filter(l => l.status === "Active").reduce((acc, l) => acc + l.monthlyRent, 0);
+  const currentMonthUtilities = utilities.reduce((acc, u) => acc + u.monthlyCost, 0);
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
 
-  const chartData = MOCK_PROPERTIES.map(p => {
-    const revenue = MOCK_BEDS.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
-    const leaseCost = MOCK_LEASES.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
-    const utilCost = MOCK_UTILITIES.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
+  const chartData = properties.map(p => {
+    const revenue = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
+    const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
+    const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
     return {
       name: p.name,
       Revenue: revenue,
@@ -129,7 +130,7 @@ export default function Dashboard() {
                     <TableRow key={data.name}>
                       <TableCell className="font-medium">{data.name}</TableCell>
                       <TableCell>
-                        {Math.round((MOCK_BEDS.filter(b => b.propertyId === MOCK_PROPERTIES.find(p => p.name === data.name)?.id && b.status === "Occupied").length / (MOCK_PROPERTIES.find(p => p.name === data.name)?.totalBeds || 1)) * 100)}%
+                        {Math.round((beds.filter(b => b.propertyId === properties.find(p => p.name === data.name)?.id && b.status === "Occupied").length / (properties.find(p => p.name === data.name)?.totalBeds || 1)) * 100)}%
                       </TableCell>
                       <TableCell className="text-right">
                         <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>

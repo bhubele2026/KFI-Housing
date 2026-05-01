@@ -16,11 +16,10 @@ import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, Building2, Edit2, Check, X, Plus, Trash2,
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
-  Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown,
+  Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo } from "@/data/mockData";
-import { AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 const TYPE_COLORS: Record<string, string> = {

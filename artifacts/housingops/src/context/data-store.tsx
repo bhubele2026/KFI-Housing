@@ -22,6 +22,7 @@ interface DataStore {
   updateUtility: (id: string, updates: Partial<Utility>) => void;
   addUtility: (utility: Utility) => void;
   deleteUtility: (id: string) => void;
+  resetToSampleData: () => void;
 }
 
 const DataContext = createContext<DataStore | undefined>(undefined);
@@ -104,12 +105,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addUtility = (utility: Utility) => setUtilities(prev => [...prev, utility]);
   const deleteUtility = (id: string) => setUtilities(prev => prev.filter(u => u.id !== id));
 
+  const resetToSampleData = () => {
+    if (typeof window !== "undefined") {
+      try {
+        for (const key of Object.values(KEYS)) {
+          window.localStorage.removeItem(key);
+        }
+      } catch {
+        // Ignore storage errors; in-memory state will still be reset below.
+      }
+    }
+    setProperties(MOCK_PROPERTIES);
+    setLeases(MOCK_LEASES);
+    setBeds(MOCK_BEDS);
+    setOccupants(MOCK_OCCUPANTS);
+    setUtilities(MOCK_UTILITIES);
+  };
+
   return (
     <DataContext.Provider value={{
       properties, leases, beds, occupants, utilities,
       updateProperty, updateLease, addLease, deleteLease,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
+      resetToSampleData,
     }}>
       {children}
     </DataContext.Provider>

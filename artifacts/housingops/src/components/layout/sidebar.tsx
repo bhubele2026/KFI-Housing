@@ -1,8 +1,21 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut } from "lucide-react";
+import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useData } from "@/context/data-store";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -17,6 +30,18 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
+  const { resetToSampleData } = useData();
+  const { toast } = useToast();
+  const [resetOpen, setResetOpen] = useState(false);
+
+  const handleConfirmReset = () => {
+    resetToSampleData();
+    setResetOpen(false);
+    toast({
+      title: "Sample data restored",
+      description: "All saved changes were cleared and the demo data was reloaded.",
+    });
+  };
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg">
@@ -52,8 +77,8 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-4 bg-sidebar-accent/10">
-        <div className="flex items-center justify-between mb-4">
+      <div className="border-t border-sidebar-border p-4 bg-sidebar-accent/10 space-y-2">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center">
             <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm shadow-sm">
               AM
@@ -64,11 +89,42 @@ export function Sidebar() {
             </div>
           </div>
         </div>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => setResetOpen(true)}
+          data-testid="button-reset-sample-data"
+        >
+          <RotateCcw className="mr-2 h-4 w-4" />
+          Reset to sample data
+        </Button>
         <Button variant="outline" className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={logout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </Button>
       </div>
+
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset to sample data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This clears every saved change in this browser — properties, leases, beds, occupants,
+              and utilities — and reloads the original demo data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reset-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmReset}
+              data-testid="button-reset-confirm"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Reset data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

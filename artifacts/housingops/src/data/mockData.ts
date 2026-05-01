@@ -74,6 +74,96 @@ export function toMonthlyCharge(charge: number, freq: BillingFrequency): number 
   return charge;
 }
 
+// ── Lease renewal helpers ──────────────────────────────────────────────
+export type RenewalUrgency = "expired" | "critical" | "warning" | "soon" | "ok";
+
+export function daysUntil(dateStr: string): number {
+  // Parse YYYY-MM-DD as a local calendar date to avoid timezone drift.
+  // (`new Date("2025-12-31")` is parsed as UTC midnight, which can shift to
+  // a different local day depending on the user's timezone.)
+  const [yStr, mStr, dStr] = dateStr.split("-");
+  const target = new Date(Number(yStr), Number(mStr) - 1, Number(dStr));
+  target.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export interface RenewalInfo {
+  level: RenewalUrgency;
+  badgeClass: string;
+  dotClass: string;
+  rowAccentClass: string;
+  label: string;
+  shortLabel: string;
+  days: number;
+}
+
+export function getRenewalInfo(endDate: string): RenewalInfo {
+  const days = daysUntil(endDate);
+  const abs = Math.abs(days);
+  const dayWord = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+
+  if (days < 0) {
+    return {
+      level: "expired", days,
+      badgeClass: "bg-red-100 text-red-800 border-red-200 hover:bg-red-100",
+      dotClass: "bg-red-500",
+      rowAccentClass: "border-l-4 border-l-red-500",
+      label: `Expired ${dayWord(abs)} ago`,
+      shortLabel: `−${abs}d`,
+    };
+  }
+  if (days === 0) {
+    return {
+      level: "critical", days,
+      badgeClass: "bg-red-100 text-red-800 border-red-200 hover:bg-red-100",
+      dotClass: "bg-red-500",
+      rowAccentClass: "border-l-4 border-l-red-500",
+      label: "Expires today",
+      shortLabel: "Today",
+    };
+  }
+  if (days <= 30) {
+    return {
+      level: "critical", days,
+      badgeClass: "bg-red-100 text-red-800 border-red-200 hover:bg-red-100",
+      dotClass: "bg-red-500",
+      rowAccentClass: "border-l-4 border-l-red-500",
+      label: `${dayWord(days)} left`,
+      shortLabel: `${days}d`,
+    };
+  }
+  if (days <= 60) {
+    return {
+      level: "warning", days,
+      badgeClass: "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100",
+      dotClass: "bg-amber-500",
+      rowAccentClass: "border-l-4 border-l-amber-500",
+      label: `${dayWord(days)} left`,
+      shortLabel: `${days}d`,
+    };
+  }
+  if (days <= 90) {
+    return {
+      level: "soon", days,
+      badgeClass: "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100",
+      dotClass: "bg-yellow-500",
+      rowAccentClass: "border-l-4 border-l-yellow-500",
+      label: `${dayWord(days)} left`,
+      shortLabel: `${days}d`,
+    };
+  }
+  return {
+    level: "ok", days,
+    badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50",
+    dotClass: "bg-emerald-500",
+    rowAccentClass: "",
+    label: `${dayWord(days)} left`,
+    shortLabel: `${days}d`,
+  };
+}
+
 export const UTILITY_TYPES = ["Electric", "Gas", "Propane", "Water", "Garbage", "Internet", "Other"] as const;
 export type UtilityType = typeof UTILITY_TYPES[number];
 

@@ -2,18 +2,19 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { getRenewalInfo } from "@/data/mockData";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, ChevronRight } from "lucide-react";
+import { Search, Plus, ChevronRight, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const { properties, beds } = useData();
+  const { properties, beds, leases } = useData();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -81,13 +82,14 @@ export default function Properties() {
                   <TableHead className="text-center">Vacant</TableHead>
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead>Lease Renewal</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                       No properties found.
                     </TableCell>
                   </TableRow>
@@ -96,6 +98,9 @@ export default function Properties() {
                     const propBeds = beds.filter((b) => b.propertyId === property.id);
                     const occupied = propBeds.filter((b) => b.status === "Occupied").length;
                     const vacant = propBeds.length - occupied;
+                    const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
+                    const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
+                    const showRenewal = renewal && renewal.level !== "ok";
 
                     return (
                       <motion.tr
@@ -122,6 +127,16 @@ export default function Properties() {
                           <Badge variant={property.status === "Active" ? "default" : "secondary"}>
                             {property.status}
                           </Badge>
+                        </td>
+                        <td className="p-4">
+                          {showRenewal && renewal ? (
+                            <Badge variant="outline" className={`text-[11px] font-medium ${renewal.badgeClass}`}>
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              {renewal.label}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="p-4">
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />

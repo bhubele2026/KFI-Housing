@@ -19,7 +19,8 @@ import {
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge } from "@/data/mockData";
+import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo } from "@/data/mockData";
+import { AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -229,6 +230,16 @@ export default function PropertyDetail() {
             <Badge variant={property.status === "Active" ? "default" : "secondary"} className="ml-2">
               {property.status}
             </Badge>
+            {activeLease && (() => {
+              const renewal = getRenewalInfo(activeLease.endDate);
+              if (renewal.level === "ok") return null;
+              return (
+                <Badge variant="outline" className={`ml-1 text-xs font-medium ${renewal.badgeClass}`}>
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  Renewal: {renewal.label}
+                </Badge>
+              );
+            })()}
           </div>
         </div>
 

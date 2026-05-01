@@ -366,6 +366,25 @@ export default function PropertyDetail() {
             <Badge variant={property.status === "Active" ? "default" : "secondary"} className="ml-2">
               {property.status}
             </Badge>
+            {(() => {
+              const overall = computeOverallRating(property.ratings);
+              if (overall === null) return null;
+              return (
+                <div
+                  className="flex items-center gap-1.5 ml-1 rounded-md border bg-muted/40 px-2 py-1"
+                  data-testid="property-header-rating"
+                  title={`Overall rating ${overall.toFixed(1)} out of 5`}
+                >
+                  <StarRating value={overall} readOnly size="sm" ariaLabel="Overall rating" />
+                  <span
+                    className="text-xs font-semibold tabular-nums"
+                    data-testid="property-header-rating-value"
+                  >
+                    {overall.toFixed(1)}
+                  </span>
+                </div>
+              );
+            })()}
             {activeLease && (() => {
               const renewal = getRenewalInfo(activeLease.endDate);
               if (renewal.level === "ok") return null;

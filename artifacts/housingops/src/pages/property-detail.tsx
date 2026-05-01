@@ -233,6 +233,21 @@ function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: 
 function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | number; onSave: (v: string) => void; type?: string; prefix?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
+  const lastIncomingRef = useRef(String(value));
+
+  // Resync the local draft whenever the persisted value changes from the
+  // outside — e.g. an optimistic patch settles, or a save fails and the data
+  // store reverts. Without this, after a failed save the field would still
+  // display the typed value the next time the user opened the editor (the
+  // collapsed view already reads from `value`, so it reverts on its own).
+  // On a successful save the incoming value matches the draft, so this is a
+  // no-op and there is no flicker mid-save.
+  useEffect(() => {
+    const incoming = String(value);
+    if (incoming === lastIncomingRef.current) return;
+    lastIncomingRef.current = incoming;
+    setDraft(incoming);
+  }, [value]);
 
   const commit = () => { onSave(draft); setEditing(false); };
   const cancel = () => { setDraft(String(value)); setEditing(false); };

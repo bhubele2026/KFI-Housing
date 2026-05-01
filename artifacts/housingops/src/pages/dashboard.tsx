@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, KeyRound, Zap, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, Users, Briefcase } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
@@ -14,33 +14,55 @@ export default function Dashboard() {
   const { properties, beds, leases, utilities, customers } = useData();
   const [customerFilter, setCustomerFilter] = useState("All");
 
-  const totalProperties = properties.length;
-  const totalBeds = beds.length;
-  const occupiedBeds = beds.filter(b => b.status === "Occupied").length;
-  const vacantBeds = beds.filter(b => b.status === "Vacant").length;
-  const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
-
-  const totalMonthlyRevenue = properties.reduce((acc, p) => {
-    const occupied = beds.filter(b => b.propertyId === p.id && b.status === "Occupied");
-    return acc + (occupied.length * p.monthlyRent);
-  }, 0);
-
-  const totalMonthlyLeaseCosts = leases.filter(l => l.status === "Active").reduce((acc, l) => acc + l.monthlyRent, 0);
-  const currentMonthUtilities = utilities.reduce((acc, u) => acc + u.monthlyCost, 0);
-  const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
-  const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
-
   const scopedProperties = useMemo(() => {
     if (customerFilter === "All") return properties;
     return properties.filter((p) => p.customerId === customerFilter);
   }, [properties, customerFilter]);
 
+  const scopedPropertyIds = useMemo(
+    () => new Set(scopedProperties.map((p) => p.id)),
+    [scopedProperties],
+  );
+
+  const scopedBeds = useMemo(
+    () => beds.filter((b) => scopedPropertyIds.has(b.propertyId)),
+    [beds, scopedPropertyIds],
+  );
+
+  const scopedLeases = useMemo(
+    () => leases.filter((l) => scopedPropertyIds.has(l.propertyId)),
+    [leases, scopedPropertyIds],
+  );
+
+  const scopedUtilities = useMemo(
+    () => utilities.filter((u) => scopedPropertyIds.has(u.propertyId)),
+    [utilities, scopedPropertyIds],
+  );
+
+  const totalProperties = scopedProperties.length;
+  const totalBeds = scopedBeds.length;
+  const occupiedBeds = scopedBeds.filter((b) => b.status === "Occupied").length;
+  const vacantBeds = scopedBeds.filter((b) => b.status === "Vacant").length;
+  const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
+
+  const totalMonthlyRevenue = scopedProperties.reduce((acc, p) => {
+    const occupied = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied");
+    return acc + occupied.length * p.monthlyRent;
+  }, 0);
+
+  const totalMonthlyLeaseCosts = scopedLeases
+    .filter((l) => l.status === "Active")
+    .reduce((acc, l) => acc + l.monthlyRent, 0);
+  const currentMonthUtilities = scopedUtilities.reduce((acc, u) => acc + u.monthlyCost, 0);
+  const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
+  const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
+
   const chartData = useMemo(
     () =>
       scopedProperties.map((p) => {
-        const revenue = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
-        const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
-        const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
+        const revenue = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
+        const leaseCost = scopedLeases.find((l) => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
+        const utilCost = scopedUtilities.filter((u) => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
         return {
           name: p.name,
           Revenue: revenue,
@@ -48,7 +70,7 @@ export default function Dashboard() {
           Profit: revenue - (leaseCost + utilCost),
         };
       }),
-    [scopedProperties, beds, leases, utilities],
+    [scopedProperties, scopedBeds, scopedLeases, scopedUtilities],
   );
 
   const cards = [
@@ -66,11 +88,31 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Dashboard</h1>
             <p className="text-zinc-500 mt-1">Overview of your housing operations and financials.</p>
+            {activeCustomerName && (
+              <p
+                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                data-testid="text-dashboard-active-customer"
+              >
+                <Briefcase className="h-3 w-3" />
+                Showing only <span className="font-semibold">{activeCustomerName}</span>
+              </p>
+            )}
           </div>
+          <Select value={customerFilter} onValueChange={setCustomerFilter}>
+            <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
+              <SelectValue placeholder="Customer" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Customers</SelectItem>
+              {customers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -129,28 +171,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle>Property Performance</CardTitle>
-                  {activeCustomerName && (
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Briefcase className="h-3 w-3" />
-                      Showing only <span className="font-semibold">{activeCustomerName}</span>
-                    </p>
-                  )}
-                </div>
-                <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                  <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
-                    <SelectValue placeholder="Customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Customers</SelectItem>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <CardTitle>Property Performance</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -171,7 +192,7 @@ export default function Dashboard() {
                     </TableRow>
                   ) : (
                     chartData.map((data) => {
-                      const property = properties.find(p => p.name === data.name);
+                      const property = scopedProperties.find(p => p.name === data.name);
                       const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
                       return (
                         <TableRow key={data.name} data-testid={`row-perf-${property?.id ?? data.name}`}>
@@ -180,7 +201,7 @@ export default function Dashboard() {
                             {customer?.name ?? <span className="italic">—</span>}
                           </TableCell>
                           <TableCell>
-                            {Math.round((beds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
+                            {Math.round((scopedBeds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
                           </TableCell>
                           <TableCell className="text-right">
                             <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>

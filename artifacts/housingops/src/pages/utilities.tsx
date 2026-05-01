@@ -243,7 +243,22 @@ export default function Utilities() {
                           <td className="p-4 font-medium text-sm">{property?.name}</td>
                           {showCustomerColumn && (
                             <td className="p-4 text-sm text-muted-foreground" data-testid={`text-utility-customer-${u.id}`}>
-                              {customerName ?? "—"}
+                              {property?.customerId && customerName ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateCustomerFilter(property.customerId);
+                                  }}
+                                  className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                  data-testid={`button-filter-customer-${u.id}`}
+                                  aria-label={`Filter by customer ${customerName}`}
+                                >
+                                  {customerName}
+                                </button>
+                              ) : (
+                                "—"
+                              )}
                             </td>
                           )}
                           <td className="p-4">

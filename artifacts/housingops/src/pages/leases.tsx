@@ -253,7 +253,22 @@ export default function Leases() {
                       <TableRow key={lease.id} data-testid={`row-lease-${lease.id}`}>
                         <TableCell className="font-medium">{property?.name || "Unknown"}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {customer?.name ?? <span className="italic">—</span>}
+                          {customer ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateCustomerFilter(customer.id);
+                              }}
+                              className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              data-testid={`button-filter-customer-${lease.id}`}
+                              aria-label={`Filter by customer ${customer.name}`}
+                            >
+                              {customer.name}
+                            </button>
+                          ) : (
+                            <span className="italic">—</span>
+                          )}
                         </TableCell>
                         <TableCell>{lease.startDate}</TableCell>
                         <TableCell>{lease.endDate}</TableCell>

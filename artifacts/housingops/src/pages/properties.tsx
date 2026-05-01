@@ -456,12 +456,21 @@ export default function Properties() {
                         <td className="p-4 font-semibold">{property.name}</td>
                         <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`}>
                           {customer ? (
-                            <span className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateCustomerFilter(customer.id);
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              data-testid={`button-filter-customer-${property.id}`}
+                              aria-label={`Filter by customer ${customer.name}`}
+                            >
                               <Briefcase className="h-3 w-3 text-muted-foreground" />
                               {customer.name}
-                            </span>
+                            </button>
                           ) : (
-                            <span className="text-muted-foreground italic">Unassigned</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="p-4 text-sm text-muted-foreground">{property.address}</td>

@@ -64,6 +64,7 @@ export default function Finance() {
       id: p.id,
       name: p.name,
       shortName: p.name.split(" ")[0],
+      customerId: p.customerId,
       customerName,
       revenue,
       leaseCost,
@@ -227,7 +228,22 @@ export default function Finance() {
                         <td className="p-4 font-medium">{d.name}</td>
                         {showCustomerColumn && (
                           <td className="p-4 text-sm text-muted-foreground" data-testid={`text-finance-customer-${d.id}`}>
-                            {d.customerName ?? "—"}
+                            {d.customerId && d.customerName ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateCustomerFilter(d.customerId);
+                                }}
+                                className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                data-testid={`button-filter-customer-${d.id}`}
+                                aria-label={`Filter by customer ${d.customerName}`}
+                              >
+                                {d.customerName}
+                              </button>
+                            ) : (
+                              "—"
+                            )}
                           </td>
                         )}
                         <td className="p-4 text-center text-sm text-muted-foreground">

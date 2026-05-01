@@ -33,6 +33,44 @@ export const ExportPayloadSchema = z.object({
   }),
 });
 export type ExportPayload = z.infer<typeof ExportPayloadSchema>;
+export type ExportData = ExportPayload["data"];
+
+// ── v1 (pre-Customers) export support ───────────────────────────────────
+// v1 files have no `customers` array and properties have no `customerId`.
+// We accept them by auto-creating a single placeholder customer and
+// assigning every imported property to it.
+const LegacyPropertySchema = PropertySchema.omit({ customerId: true });
+const LegacyExportPayloadSchema = z.object({
+  format: z.literal("housingops-export"),
+  version: z.literal(1),
+  exportedAt: z.string(),
+  data: z.object({
+    properties: z.array(LegacyPropertySchema),
+    leases: z.array(LeaseSchema),
+    beds: z.array(BedSchema),
+    occupants: z.array(OccupantSchema),
+    utilities: z.array(UtilitySchema),
+  }),
+});
+
+export const LEGACY_CUSTOMER_ID = "legacy-customer";
+const LEGACY_CUSTOMER: Customer = {
+  id: LEGACY_CUSTOMER_ID,
+  name: "Legacy Properties",
+  contactName: "",
+  email: "",
+  phone: "",
+  notes:
+    "Auto-created during import of an older backup that did not include customers. " +
+    "Re-assign these properties to your real customers when you're ready.",
+};
+
+export class UnsupportedImportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedImportError";
+  }
+}
 
 export interface ImportSummary {
   customers: number;
@@ -41,6 +79,110 @@ export interface ImportSummary {
   beds: number;
   occupants: number;
   utilities: number;
+}
+
+export interface ImportPreview {
+  data: ExportData;
+  summary: ImportSummary;
+  /** True when the file was a v1 backup and we auto-created a Legacy customer. */
+  migratedFromV1: boolean;
+}
+
+// Strict shape check: only treat a value as a pre-validated ImportPreview when
+// every documented field is present with the right type. This prevents arbitrary
+// objects from bypassing schema validation in importData.
+function isImportPreview(value: unknown): value is ImportPreview {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.migratedFromV1 !== "boolean") return false;
+  const summary = v.summary;
+  if (typeof summary !== "object" || summary === null) return false;
+  const s = summary as Record<string, unknown>;
+  for (const k of ["customers", "properties", "leases", "beds", "occupants", "utilities"]) {
+    if (typeof s[k] !== "number") return false;
+  }
+  const data = v.data;
+  if (typeof data !== "object" || data === null) return false;
+  const d = data as Record<string, unknown>;
+  for (const k of ["customers", "properties", "leases", "beds", "occupants", "utilities"]) {
+    if (!Array.isArray(d[k])) return false;
+  }
+  return true;
+}
+
+/**
+ * Validate a parsed JSON payload, optionally migrating an older v1 backup.
+ * Throws {@link UnsupportedImportError} with a user-friendly message if the
+ * file is unrecognized or from an unsupported future version.
+ */
+export function inspectImportPayload(payload: unknown): ImportPreview {
+  // Try the current (v2) format first.
+  const v2 = ExportPayloadSchema.safeParse(payload);
+  if (v2.success) {
+    const d = v2.data.data;
+    return {
+      data: d,
+      migratedFromV1: false,
+      summary: {
+        customers: d.customers.length,
+        properties: d.properties.length,
+        leases: d.leases.length,
+        beds: d.beds.length,
+        occupants: d.occupants.length,
+        utilities: d.utilities.length,
+      },
+    };
+  }
+
+  // Fall back to the v1 (pre-Customers) format and migrate it.
+  const v1 = LegacyExportPayloadSchema.safeParse(payload);
+  if (v1.success) {
+    const old = v1.data.data;
+    const migratedProperties: Property[] = old.properties.map((p) => ({
+      ...p,
+      customerId: LEGACY_CUSTOMER_ID,
+    }));
+    const data: ExportData = {
+      customers: [LEGACY_CUSTOMER],
+      properties: migratedProperties,
+      leases: old.leases,
+      beds: old.beds,
+      occupants: old.occupants,
+      utilities: old.utilities,
+    };
+    return {
+      data,
+      migratedFromV1: true,
+      summary: {
+        customers: 1,
+        properties: data.properties.length,
+        leases: data.leases.length,
+        beds: data.beds.length,
+        occupants: data.occupants.length,
+        utilities: data.utilities.length,
+      },
+    };
+  }
+
+  // Couldn't parse as either version — produce a tailored message.
+  const obj =
+    payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const format = obj?.format;
+  const version = obj?.version;
+  if (format !== "housingops-export") {
+    throw new UnsupportedImportError(
+      "That file doesn't look like a HousingOps export. No changes were made.",
+    );
+  }
+  if (typeof version === "number" && version > EXPORT_FORMAT_VERSION) {
+    throw new UnsupportedImportError(
+      `This backup uses a newer format (v${version}) than this app supports ` +
+        `(v${EXPORT_FORMAT_VERSION}). Please update HousingOps and try again.`,
+    );
+  }
+  throw new UnsupportedImportError(
+    "This HousingOps backup is missing required fields and can't be imported.",
+  );
 }
 
 export class CustomerInUseError extends Error {
@@ -77,7 +219,7 @@ interface DataStore {
   deleteUtility: (id: string) => void;
   resetToSampleData: () => void;
   exportData: () => ExportPayload;
-  importData: (payload: unknown) => ImportSummary;
+  importData: (input: unknown | ImportPreview) => ImportSummary;
 }
 
 const DataContext = createContext<DataStore | undefined>(undefined);
@@ -382,9 +524,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     data: { customers, properties, leases, beds, occupants, utilities },
   });
 
-  const importData = (payload: unknown): ImportSummary => {
-    const parsed = ExportPayloadSchema.parse(payload);
-    const { data } = parsed;
+  // Accepts either a raw parsed JSON payload (which we'll inspect ourselves)
+  // or a pre-validated ImportPreview (so callers that already inspected the
+  // file — e.g. to show a tailored confirmation dialog — don't pay to parse
+  // it twice). Throws UnsupportedImportError for unrecognized payloads.
+  const importData = (input: unknown): ImportSummary => {
+    const preview =
+      isImportPreview(input) ? input : inspectImportPayload(input);
+    const { data } = preview;
 
     // Optimistically populate caches so the UI reflects the import immediately.
     queryClient.setQueryData<Customer[]>(customersKey, data.customers);
@@ -403,14 +550,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
     );
 
-    return {
-      customers: data.customers.length,
-      properties: data.properties.length,
-      leases: data.leases.length,
-      beds: data.beds.length,
-      occupants: data.occupants.length,
-      utilities: data.utilities.length,
-    };
+    return preview.summary;
   };
 
   return (

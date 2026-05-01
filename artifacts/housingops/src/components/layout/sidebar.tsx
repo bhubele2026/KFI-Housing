@@ -3,7 +3,13 @@ import { Link, useLocation } from "wouter";
 import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { useData, type ImportSummary } from "@/context/data-store";
+import {
+  useData,
+  inspectImportPayload,
+  UnsupportedImportError,
+  type ImportSummary,
+  type ImportPreview,
+} from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +41,7 @@ export function Sidebar() {
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [pendingImport, setPendingImport] = useState<{ payload: unknown; fileName: string } | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ preview: ImportPreview; fileName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleConfirmReset = () => {
@@ -82,15 +88,30 @@ export function Sidebar() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    let parsed: unknown;
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);
-      setPendingImport({ payload: parsed, fileName: file.name });
-      setImportOpen(true);
+      parsed = JSON.parse(text);
     } catch {
       toast({
         title: "Could not read file",
         description: "That file is not valid JSON. Please choose a HousingOps export file.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const preview = inspectImportPayload(parsed);
+      setPendingImport({ preview, fileName: file.name });
+      setImportOpen(true);
+    } catch (err) {
+      const description =
+        err instanceof UnsupportedImportError
+          ? err.message
+          : "That file doesn't look like a HousingOps export. No changes were made.";
+      toast({
+        title: "Can't import this file",
+        description,
         variant: "destructive",
       });
     }
@@ -98,13 +119,18 @@ export function Sidebar() {
 
   const handleConfirmImport = () => {
     if (!pendingImport) return;
+    const { preview, fileName } = pendingImport;
     let summary: ImportSummary;
     try {
-      summary = importData(pendingImport.payload);
-    } catch {
+      summary = importData(preview);
+    } catch (err) {
+      const description =
+        err instanceof UnsupportedImportError
+          ? err.message
+          : "Something went wrong while importing. No changes were made.";
       toast({
         title: "Import failed",
-        description: "That file doesn't look like a HousingOps export. No changes were made.",
+        description,
         variant: "destructive",
       });
       setImportOpen(false);
@@ -113,9 +139,12 @@ export function Sidebar() {
     }
     setImportOpen(false);
     setPendingImport(null);
+    const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities`;
     toast({
-      title: "Data imported",
-      description: `Loaded ${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities.`,
+      title: preview.migratedFromV1 ? "Older backup imported" : "Data imported",
+      description: preview.migratedFromV1
+        ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer and assigned all ${summary.properties} imported properties to it. Loaded ${counts}.`
+        : `Loaded ${counts}.`,
     });
   };
 
@@ -242,12 +271,32 @@ export function Sidebar() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace current data with import?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span> will
-              replace every customer, property, lease, bed, occupant, and utility in this browser with
-              the contents of the file. Your current data will be lost. Consider exporting first if you
-              want a backup.
+            <AlertDialogTitle>
+              {pendingImport?.preview.migratedFromV1
+                ? "Import older backup?"
+                : "Replace current data with import?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span> will
+                  replace every customer, property, lease, bed, occupant, and utility in this browser with
+                  the contents of the file. Your current data will be lost. Consider exporting first if you
+                  want a backup.
+                </p>
+                {pendingImport?.preview.migratedFromV1 ? (
+                  <p
+                    className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    data-testid="text-import-legacy-warning"
+                  >
+                    This backup was made before Customers existed. We&apos;ll create a single
+                    &quot;Legacy Properties&quot; customer and assign all{" "}
+                    {pendingImport.preview.summary.properties} imported{" "}
+                    {pendingImport.preview.summary.properties === 1 ? "property" : "properties"} to it.
+                    You can re-assign them on the Properties page afterwards.
+                  </p>
+                ) : null}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -259,7 +308,7 @@ export function Sidebar() {
               data-testid="button-import-confirm"
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Replace data
+              {pendingImport?.preview.migratedFromV1 ? "Import and migrate" : "Replace data"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

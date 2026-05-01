@@ -48,6 +48,9 @@ export const BedSchema = z.object({
 });
 export type Bed = z.infer<typeof BedSchema>;
 
+export const BILLING_FREQUENCIES = ["Weekly", "Biweekly", "Monthly"] as const;
+export type BillingFrequency = typeof BILLING_FREQUENCIES[number];
+
 export const OccupantSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -59,10 +62,17 @@ export const OccupantSchema = z.object({
   moveOutDate: z.string().nullable(),
   status: z.enum(["Active", "Former"]),
   chargePerBed: z.number(),
+  billingFrequency: z.enum(BILLING_FREQUENCIES).default("Monthly"),
   employeeId: z.string(),
   company: z.string(),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
+
+export function toMonthlyCharge(charge: number, freq: BillingFrequency): number {
+  if (freq === "Weekly")   return Math.round(charge * (52 / 12) * 100) / 100;
+  if (freq === "Biweekly") return Math.round(charge * (26 / 12) * 100) / 100;
+  return charge;
+}
 
 export const UTILITY_TYPES = ["Electric", "Gas", "Propane", "Water", "Garbage", "Internet", "Other"] as const;
 export type UtilityType = typeof UTILITY_TYPES[number];
@@ -239,6 +249,7 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
       moveOutDate: null,
       status: "Active" as const,
       chargePerBed: prop.chargePerBed,
+      billingFrequency: "Monthly" as BillingFrequency,
       employeeId: `EMP-${String(1000 + nameIdx).slice(-4)}`,
       company: companies[nameIdx % companies.length],
     };

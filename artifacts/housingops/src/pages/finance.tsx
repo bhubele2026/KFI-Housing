@@ -1,5 +1,6 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { toMonthlyCharge } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,7 @@ export default function Finance() {
 
   const financialData = properties.map(p => {
     const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
-    const revenue = propOccupants.reduce((s, o) => s + o.chargePerBed, 0);
+    const revenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
     const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent ?? 0;
     const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((s, u) => s + u.monthlyCost, 0);
     const totalCost = leaseCost + utilCost;

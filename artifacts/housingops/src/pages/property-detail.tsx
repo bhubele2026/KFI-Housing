@@ -19,7 +19,7 @@ import {
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Bed, Occupant, Utility, UTILITY_TYPES } from "@/data/mockData";
+import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge } from "@/data/mockData";
 import { motion } from "framer-motion";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -196,7 +196,7 @@ export default function PropertyDetail() {
 
   const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;
   const vacantBeds = propBeds.length - occupiedBeds;
-  const monthlyRevenue = propOccupants.reduce((s, o) => s + o.chargePerBed, 0);
+  const monthlyRevenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
   const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
   const monthlyLeaseCost = activeLease?.monthlyRent ?? 0;
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
@@ -450,7 +450,7 @@ export default function PropertyDetail() {
               <div className="flex gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{occupiedBeds} occupied</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{vacantBeds} vacant</span>
-                <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + o.chargePerBed, 0).toLocaleString()}/mo revenue</span>
+                <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0).toLocaleString()}/mo revenue</span>
               </div>
             </div>
             <Card>
@@ -465,14 +465,15 @@ export default function PropertyDetail() {
                       <TableHead>Employee ID</TableHead>
                       <TableHead>Company</TableHead>
                       <TableHead>Move-in</TableHead>
-                      <TableHead className="text-right">Charge / Bed</TableHead>
+                      <TableHead className="text-right">Charge</TableHead>
+                      <TableHead>Billing</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Phone</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {propBeds.length === 0 ? (
-                      <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No beds added yet. Use the + button above.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={11} className="h-24 text-center text-muted-foreground">No beds added yet. Use the + button above.</TableCell></TableRow>
                     ) : propBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
                       const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
                       const isOccupied = bed.status === "Occupied";
@@ -508,12 +509,20 @@ export default function PropertyDetail() {
                               <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
                               <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
                               <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
+                              <TableCell>
+                                <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as any })}>
+                                  <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
                               <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
                               <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
                             </>
                           ) : (
                             <>
-                              <TableCell colSpan={6}>
+                              <TableCell colSpan={7}>
                                 <AssignOccupantDialog
                                   bedId={bed.id}
                                   propertyId={id}
@@ -611,8 +620,8 @@ export default function PropertyDetail() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Revenue</p>
                 {propOccupants.map(occ => (
                   <div key={occ.id} className="flex justify-between text-sm py-1 border-b border-dashed border-border/40">
-                    <span className="text-muted-foreground">{occ.name} (Bed charge)</span>
-                    <span className="font-medium text-green-600">+${occ.chargePerBed.toLocaleString()}</span>
+                    <span className="text-muted-foreground">{occ.name} (Bed charge · {occ.billingFrequency ?? "Monthly"})</span>
+                    <span className="font-medium text-green-600">+${toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly").toLocaleString()}/mo</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
@@ -713,7 +722,7 @@ function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
   onAssign: (o: Occupant) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", email: "", phone: "" });
+  const [form, setForm] = useState({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", billingFrequency: "Monthly" as typeof BILLING_FREQUENCIES[number], email: "", phone: "" });
 
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -730,11 +739,12 @@ function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
       moveOutDate: null,
       status: "Active",
       chargePerBed: parseFloat(form.chargePerBed) || 0,
+      billingFrequency: form.billingFrequency,
       email: form.email,
       phone: form.phone,
     });
     setOpen(false);
-    setForm({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", email: "", phone: "" });
+    setForm({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", billingFrequency: "Monthly", email: "", phone: "" });
   };
 
   return (
@@ -753,6 +763,15 @@ function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
             <div><Label>Company</Label><Input value={form.company} onChange={f("company")} placeholder="Acme Corp" /></div>
             <div><Label>Move-in Date</Label><Input type="date" value={form.moveInDate} onChange={f("moveInDate")} /></div>
             <div><Label>Charge / Bed ($)</Label><Input type="number" value={form.chargePerBed} onChange={f("chargePerBed")} placeholder="0.00" /></div>
+            <div>
+              <Label>Billing Frequency</Label>
+              <Select value={form.billingFrequency} onValueChange={v => setForm(p => ({ ...p, billingFrequency: v as typeof BILLING_FREQUENCIES[number] }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BILLING_FREQUENCIES.map(fr => <SelectItem key={fr} value={fr}>{fr}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             <div><Label>Email</Label><Input value={form.email} onChange={f("email")} placeholder="jane@company.com" /></div>
             <div><Label>Phone</Label><Input value={form.phone} onChange={f("phone")} placeholder="555-000-0000" /></div>
           </div>

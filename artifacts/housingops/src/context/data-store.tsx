@@ -14,6 +14,7 @@ import {
   PropertySchema, LeaseSchema, BedSchema, OccupantSchema, UtilitySchema,
   type Property, type Lease, type Bed, type Occupant, type Utility,
 } from "@/data/mockData";
+import { useToast } from "@/hooks/use-toast";
 
 export const EXPORT_FORMAT_VERSION = 1;
 
@@ -69,6 +70,15 @@ const EMPTY: never[] = [];
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const notifySaveError = (action: string) => {
+    toast({
+      title: "Save failed",
+      description: `Couldn't ${action}. Your change was reverted. Please check your connection and try again.`,
+      variant: "destructive",
+    });
+  };
 
   const propertiesQuery = useListProperties();
   const leasesQuery = useListLeases();
@@ -142,7 +152,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Property>(propertiesKey, id, updates);
     updatePropertyMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: propertiesKey }) },
+      {
+        onError: () => notifySaveError("save your property changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: propertiesKey }),
+      },
     );
   };
 
@@ -150,21 +163,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Lease>(leasesKey, id, updates);
     updateLeaseMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+      {
+        onError: () => notifySaveError("save your lease changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
+      },
     );
   };
   const addLease = (lease: Lease) => {
     pushToList<Lease>(leasesKey, lease);
     createLeaseMut.mutate(
       { data: lease },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+      {
+        onError: () => notifySaveError("add the new lease"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
+      },
     );
   };
   const deleteLease = (id: string) => {
     removeFromList<Lease>(leasesKey, id);
     deleteLeaseMut.mutate(
       { id },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+      {
+        onError: () => notifySaveError("delete the lease"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
+      },
     );
   };
 
@@ -172,21 +194,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     pushToList<Bed>(bedsKey, bed);
     createBedMut.mutate(
       { data: bed },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+      {
+        onError: () => notifySaveError("add the new bed"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
+      },
     );
   };
   const deleteBed = (id: string) => {
     removeFromList<Bed>(bedsKey, id);
     deleteBedMut.mutate(
       { id },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+      {
+        onError: () => notifySaveError("delete the bed"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
+      },
     );
   };
   const updateBed = (id: string, updates: Partial<Bed>) => {
     patchInList<Bed>(bedsKey, id, updates);
     updateBedMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+      {
+        onError: () => notifySaveError("save your bed changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
+      },
     );
   };
 
@@ -194,14 +225,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Occupant>(occupantsKey, id, updates);
     updateOccupantMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }) },
+      {
+        onError: () => notifySaveError("save your occupant changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }),
+      },
     );
   };
   const addOccupant = (occupant: Occupant) => {
     pushToList<Occupant>(occupantsKey, occupant);
     createOccupantMut.mutate(
       { data: occupant },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }) },
+      {
+        onError: () => notifySaveError("add the new occupant"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }),
+      },
     );
   };
 
@@ -209,26 +246,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Utility>(utilitiesKey, id, updates);
     updateUtilityMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+      {
+        onError: () => notifySaveError("save your utility changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
+      },
     );
   };
   const addUtility = (utility: Utility) => {
     pushToList<Utility>(utilitiesKey, utility);
     createUtilityMut.mutate(
       { data: utility },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+      {
+        onError: () => notifySaveError("add the new utility"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
+      },
     );
   };
   const deleteUtility = (id: string) => {
     removeFromList<Utility>(utilitiesKey, id);
     deleteUtilityMut.mutate(
       { id },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+      {
+        onError: () => notifySaveError("delete the utility"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
+      },
     );
   };
 
   const resetToSampleData = () => {
-    resetMut.mutate(undefined, { onSettled: invalidateAll });
+    resetMut.mutate(undefined, {
+      onError: () => notifySaveError("reset to sample data"),
+      onSettled: invalidateAll,
+    });
   };
 
   const exportData = (): ExportPayload => ({
@@ -250,7 +299,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData<Utility[]>(utilitiesKey, data.utilities);
 
     // Persist atomically on the server, then re-fetch to confirm.
-    importMut.mutate({ data }, { onSettled: invalidateAll });
+    importMut.mutate(
+      { data },
+      {
+        onError: () => notifySaveError("save the imported data"),
+        onSettled: invalidateAll,
+      },
+    );
 
     return {
       properties: data.properties.length,

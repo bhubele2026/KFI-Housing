@@ -6,12 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Bed } from "./bed";
+import type { Customer } from "./customer";
 import type { Lease } from "./lease";
 import type { Occupant } from "./occupant";
 import type { Property } from "./property";
 import type { Utility } from "./utility";
 
 export interface ImportPayload {
+  customers: Customer[];
   properties: Property[];
   leases: Lease[];
   beds: Bed[];

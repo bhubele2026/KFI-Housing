@@ -9,6 +9,23 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  notes: string;
+}
+
+export interface CustomerUpdate {
+  name?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+}
+
 export type PropertyStatus =
   (typeof PropertyStatus)[keyof typeof PropertyStatus];
 
@@ -52,6 +69,7 @@ export interface Property {
   portalUrl: string;
   notes: string;
   furnishings: string[];
+  customerId: string;
 }
 
 export type PropertyUpdateStatus =
@@ -96,6 +114,7 @@ export interface PropertyUpdate {
   portalUrl?: string;
   notes?: string;
   furnishings?: string[];
+  customerId?: string;
 }
 
 export type LeaseStatus = (typeof LeaseStatus)[keyof typeof LeaseStatus];
@@ -286,9 +305,14 @@ export interface UtilityUpdate {
 }
 
 export interface ImportPayload {
+  customers: Customer[];
   properties: Property[];
   leases: Lease[];
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
 }
+
+export type DeleteCustomer409 = {
+  error: string;
+};

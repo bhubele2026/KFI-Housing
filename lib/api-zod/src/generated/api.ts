@@ -26,6 +26,16 @@ export const ResetToSampleDataResponse = zod.object({
  * @summary Wipe all data and replace with the supplied dataset
  */
 export const ImportDataBody = zod.object({
+  customers: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      contactName: zod.string(),
+      email: zod.string(),
+      phone: zod.string(),
+      notes: zod.string(),
+    }),
+  ),
   properties: zod.array(
     zod.object({
       id: zod.string(),
@@ -57,6 +67,7 @@ export const ImportDataBody = zod.object({
       portalUrl: zod.string(),
       notes: zod.string(),
       furnishings: zod.array(zod.string()),
+      customerId: zod.string(),
     }),
   ),
   leases: zod.array(
@@ -124,6 +135,63 @@ export const ImportDataResponse = zod.object({
 });
 
 /**
+ * @summary List all customers
+ */
+export const ListCustomersResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  contactName: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  notes: zod.string(),
+});
+export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
+
+/**
+ * @summary Create a customer
+ */
+export const CreateCustomerBody = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  contactName: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Update a customer
+ */
+export const UpdateCustomerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCustomerBody = zod.object({
+  name: zod.string().optional(),
+  contactName: zod.string().optional(),
+  email: zod.string().optional(),
+  phone: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateCustomerResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  contactName: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * Fails with 409 if any properties reference this customer.
+ * @summary Delete a customer
+ */
+export const DeleteCustomerParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List all properties
  */
 export const ListPropertiesResponseItem = zod.object({
@@ -156,8 +224,45 @@ export const ListPropertiesResponseItem = zod.object({
   portalUrl: zod.string(),
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
+  customerId: zod.string(),
 });
 export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
+
+/**
+ * @summary Create a property
+ */
+export const CreatePropertyBody = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  totalBeds: zod.number(),
+  monthlyRent: zod.number(),
+  chargePerBed: zod.number(),
+  status: zod.enum(["Active", "Inactive"]),
+  landlordName: zod.string(),
+  landlordEmail: zod.string(),
+  landlordPhone: zod.string(),
+  paymentMethod: zod.enum([
+    "ACH",
+    "Check",
+    "Wire",
+    "Online Portal",
+    "Money Order",
+  ]),
+  paymentRecipient: zod.string(),
+  paymentDueDay: zod.number(),
+  paymentNotes: zod.string(),
+  bankName: zod.string(),
+  bankRouting: zod.string(),
+  bankAccount: zod.string(),
+  portalUrl: zod.string(),
+  notes: zod.string(),
+  furnishings: zod.array(zod.string()),
+  customerId: zod.string(),
+});
 
 /**
  * @summary Update a property
@@ -191,6 +296,7 @@ export const UpdatePropertyBody = zod.object({
   portalUrl: zod.string().optional(),
   notes: zod.string().optional(),
   furnishings: zod.array(zod.string()).optional(),
+  customerId: zod.string().optional(),
 });
 
 export const UpdatePropertyResponse = zod.object({
@@ -223,6 +329,14 @@ export const UpdatePropertyResponse = zod.object({
   portalUrl: zod.string(),
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
+  customerId: zod.string(),
+});
+
+/**
+ * @summary Delete a property
+ */
+export const DeletePropertyParams = zod.object({
+  id: zod.coerce.string(),
 });
 
 /**

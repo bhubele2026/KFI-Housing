@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: customers
+    description: Customer records
   - name: properties
     description: Property records
   - name: leases
@@ -64,6 +66,78 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/HealthStatus" }
 
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Customer" }
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Customer" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+  /customers/{id}:
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      description: Fails with 409 if any properties reference this customer.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Conflict — customer still has properties
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+
   /properties:
     get:
       operationId: listProperties
@@ -77,6 +151,21 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/Property" }
+    post:
+      operationId: createProperty
+      tags: [properties]
+      summary: Create a property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Property" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Property" }
   /properties/{id}:
     patch:
       operationId: updateProperty
@@ -98,6 +187,18 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Property" }
+    delete:
+      operationId: deleteProperty
+      tags: [properties]
+      summary: Delete a property
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
 
   /leases:
     get:
@@ -343,6 +444,25 @@ components:
       properties:
         status: { type: string }
 
+    Customer:
+      type: object
+      required: [id, name, contactName, email, phone, notes]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        contactName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        notes: { type: string }
+    CustomerUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        contactName: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        notes: { type: string }
+
     Property:
       type: object
       required:
@@ -369,6 +489,7 @@ components:
         - portalUrl
         - notes
         - furnishings
+        - customerId
       properties:
         id: { type: string }
         name: { type: string }
@@ -397,6 +518,7 @@ components:
         furnishings:
           type: array
           items: { type: string }
+        customerId: { type: string }
     PropertyUpdate:
       type: object
       properties:
@@ -426,6 +548,7 @@ components:
         furnishings:
           type: array
           items: { type: string }
+        customerId: { type: string }
 
     Lease:
       type: object
@@ -550,8 +673,11 @@ components:
 
     ImportPayload:
       type: object
-      required: [properties, leases, beds, occupants, utilities]
+      required: [customers, properties, leases, beds, occupants, utilities]
       properties:
+        customers:
+          type: array
+          items: { $ref: "#/components/schemas/Customer" }
         properties:
           type: array
           items: { $ref: "#/components/schemas/Property" }

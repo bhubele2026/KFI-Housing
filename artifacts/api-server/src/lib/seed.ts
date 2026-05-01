@@ -1,10 +1,12 @@
 import { db } from "@workspace/db";
 import {
+  customersTable,
   propertiesTable,
   leasesTable,
   bedsTable,
   occupantsTable,
   utilitiesTable,
+  type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
   type InsertBedRow,
@@ -13,9 +15,37 @@ import {
 } from "@workspace/db";
 import { logger } from "./logger";
 
+const SEED_CUSTOMERS: InsertCustomerRow[] = [
+  {
+    id: "c1",
+    name: "Acme Energy",
+    contactName: "Dana Rivera",
+    email: "dana.rivera@acme-energy.com",
+    phone: "512-555-1100",
+    notes: "Long-term oilfield crews. Net-15 invoicing.",
+  },
+  {
+    id: "c2",
+    name: "Frontier Tech",
+    contactName: "Marcus Lee",
+    email: "marcus.lee@frontiertech.io",
+    phone: "214-555-1200",
+    notes: "Rotating consultants and engineers. Prefers monthly billing.",
+  },
+  {
+    id: "c3",
+    name: "Sunrise Logistics",
+    contactName: "Hannah Park",
+    email: "hannah.park@sunriselogistics.com",
+    phone: "713-555-1300",
+    notes: "Seasonal warehouse staff. Flexible occupancy needed.",
+  },
+];
+
 const SEED_PROPERTIES: InsertPropertyRow[] = [
   {
     id: "p1",
+    customerId: "c1",
     name: "Oakwood Estates",
     address: "100 Oak Way",
     city: "Austin",
@@ -56,6 +86,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
   },
   {
     id: "p2",
+    customerId: "c2",
     name: "Maple Lofts",
     address: "200 Maple Dr",
     city: "Austin",
@@ -95,6 +126,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
   },
   {
     id: "p3",
+    customerId: "c3",
     name: "Pine View",
     address: "300 Pine St",
     city: "Dallas",
@@ -134,6 +166,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
   },
   {
     id: "p4",
+    customerId: "c2",
     name: "Cedar Ridge",
     address: "400 Cedar Ln",
     city: "Dallas",
@@ -174,6 +207,7 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
   },
   {
     id: "p5",
+    customerId: "c3",
     name: "Elm Court",
     address: "500 Elm Rd",
     city: "Houston",
@@ -312,6 +346,7 @@ const SEED_UTILITIES: InsertUtilityRow[] = [
 ];
 
 interface DataBundle {
+  customers: InsertCustomerRow[];
   properties: InsertPropertyRow[];
   leases: InsertLeaseRow[];
   beds: InsertBedRow[];
@@ -326,11 +361,13 @@ async function wipeAll(): Promise<void> {
     await tx.delete(leasesTable);
     await tx.delete(utilitiesTable);
     await tx.delete(propertiesTable);
+    await tx.delete(customersTable);
   });
 }
 
 async function insertBundle(bundle: DataBundle): Promise<void> {
   await db.transaction(async (tx) => {
+    if (bundle.customers.length > 0) await tx.insert(customersTable).values(bundle.customers);
     if (bundle.properties.length > 0) await tx.insert(propertiesTable).values(bundle.properties);
     if (bundle.leases.length > 0) await tx.insert(leasesTable).values(bundle.leases);
     if (bundle.occupants.length > 0) await tx.insert(occupantsTable).values(bundle.occupants);
@@ -342,6 +379,7 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
 function buildSeedBundle(): DataBundle {
   const { beds, occupants } = buildBedsAndOccupants();
   return {
+    customers: SEED_CUSTOMERS,
     properties: SEED_PROPERTIES,
     leases: SEED_LEASES,
     beds,
@@ -362,6 +400,7 @@ export async function seedIfEmpty(): Promise<void> {
   await insertBundle(bundle);
   logger.info(
     {
+      customers: bundle.customers.length,
       properties: bundle.properties.length,
       leases: bundle.leases.length,
       beds: bundle.beds.length,
@@ -383,6 +422,7 @@ export async function resetToSampleData(): Promise<void> {
 export async function replaceAllData(bundle: DataBundle): Promise<void> {
   logger.info(
     {
+      customers: bundle.customers.length,
       properties: bundle.properties.length,
       leases: bundle.leases.length,
       beds: bundle.beds.length,

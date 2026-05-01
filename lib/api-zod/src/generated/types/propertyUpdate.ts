@@ -31,4 +31,5 @@ export interface PropertyUpdate {
   portalUrl?: string;
   notes?: string;
   furnishings?: string[];
+  customerId?: string;
 }

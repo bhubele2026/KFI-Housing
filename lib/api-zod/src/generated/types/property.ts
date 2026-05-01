@@ -32,4 +32,5 @@ export interface Property {
   portalUrl: string;
   notes: string;
   furnishings: string[];
+  customerId: string;
 }

@@ -15,7 +15,7 @@ import { RenewLeasePopover } from "@/components/renew-lease-popover";
 export default function Leases() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState("All");
-  const { leases, properties, updateLease } = useData();
+  const { leases, properties, customers, updateLease } = useData();
 
   const filteredLeases = leases.filter((l) => {
     return statusFilter === "All" || l.status === statusFilter;
@@ -60,6 +60,7 @@ export default function Leases() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {renewalAlerts.map(({ lease, info }) => {
                     const property = properties.find((p) => p.id === lease.propertyId);
+                    const customer = property ? customers.find((c) => c.id === property.customerId) : undefined;
                     return (
                       <motion.div
                         key={lease.id}
@@ -78,6 +79,9 @@ export default function Leases() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="font-semibold text-sm truncate">{property?.name ?? "Unknown property"}</p>
+                            {customer && (
+                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">{customer.name}</p>
+                            )}
                             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Calendar className="h-3 w-3" />
                               ends {lease.endDate}
@@ -144,6 +148,7 @@ export default function Leases() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
+                  <TableHead>Customer</TableHead>
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead>Time Left</TableHead>
@@ -154,17 +159,21 @@ export default function Leases() {
               <TableBody>
                 {filteredLeases.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       No leases found.
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredLeases.map((lease) => {
                     const property = properties.find(p => p.id === lease.propertyId);
+                    const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
                     const info = getRenewalInfo(lease.endDate);
                     return (
                       <TableRow key={lease.id}>
                         <TableCell className="font-medium">{property?.name || "Unknown"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {customer?.name ?? <span className="italic">—</span>}
+                        </TableCell>
                         <TableCell>{lease.startDate}</TableCell>
                         <TableCell>{lease.endDate}</TableCell>
                         <TableCell>

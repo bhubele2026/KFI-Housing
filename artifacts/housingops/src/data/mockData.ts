@@ -40,8 +40,19 @@ export function computeOverallRating(ratings?: Ratings | null): number | null {
   return Math.round((sum / values.length) * 10) / 10;
 }
 
+export const CustomerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contactName: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  notes: z.string(),
+});
+export type Customer = z.infer<typeof CustomerSchema>;
+
 export const PropertySchema = z.object({
   id: z.string(),
+  customerId: z.string(),
   name: z.string(),
   address: z.string(),
   city: z.string(),
@@ -335,9 +346,16 @@ export const UtilitySchema = z.object({
 });
 export type Utility = z.infer<typeof UtilitySchema>;
 
+export const MOCK_CUSTOMERS: Customer[] = [
+  { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing." },
+  { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing." },
+  { id: "c3", name: "Sunrise Logistics",  contactName: "Hannah Park",  email: "hannah.park@sunriselogistics.com",  phone: "713-555-1300", notes: "Seasonal warehouse staff. Flexible occupancy needed." },
+];
+
 export const MOCK_PROPERTIES: Property[] = [
   {
     id: "p1",
+    customerId: "c1",
     name: "Oakwood Estates",
     address: "100 Oak Way",
     city: "Austin",
@@ -377,6 +395,7 @@ export const MOCK_PROPERTIES: Property[] = [
   },
   {
     id: "p2",
+    customerId: "c2",
     name: "Maple Lofts",
     address: "200 Maple Dr",
     city: "Austin",
@@ -417,6 +436,7 @@ export const MOCK_PROPERTIES: Property[] = [
   },
   {
     id: "p3",
+    customerId: "c3",
     name: "Pine View",
     address: "300 Pine St",
     city: "Dallas",
@@ -455,6 +475,7 @@ export const MOCK_PROPERTIES: Property[] = [
   },
   {
     id: "p4",
+    customerId: "c2",
     name: "Cedar Ridge",
     address: "400 Cedar Ln",
     city: "Dallas",
@@ -496,6 +517,7 @@ export const MOCK_PROPERTIES: Property[] = [
   },
   {
     id: "p5",
+    customerId: "c3",
     name: "Elm Court",
     address: "500 Elm Rd",
     city: "Houston",

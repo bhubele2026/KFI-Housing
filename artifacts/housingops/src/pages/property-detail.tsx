@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,7 +18,7 @@ import {
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
-  ShieldCheck, Trees, Sparkles, CheckCircle2, Star,
+  ShieldCheck, Trees, Sparkles, CheckCircle2, Star, Briefcase,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -263,7 +263,8 @@ function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | 
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
-  const { properties, leases, beds, occupants, utilities, isLoading, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const [, navigate] = useLocation();
+  const { properties, leases, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
 
   if (isLoading) {
     return (
@@ -427,6 +428,40 @@ export default function PropertyDetail() {
                       <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as any)} />
                     </div>
                   ))}
+                  <div className="flex items-start justify-between py-1 border-b border-dashed border-border/50 gap-2">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0 pt-1">
+                      <Briefcase className="h-3.5 w-3.5" />Customer
+                    </div>
+                    <div className="flex-1 flex flex-col items-end gap-1.5" data-testid="property-customer-row">
+                      {(() => {
+                        const currentCustomer = customers.find((c) => c.id === property.customerId);
+                        return currentCustomer ? (
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/customers#customer-${currentCustomer.id}`)}
+                            className="text-sm font-semibold text-primary hover:underline inline-flex items-center gap-1"
+                            data-testid="link-property-customer"
+                            title="Open this customer on the Customers page"
+                          >
+                            {currentCustomer.name}
+                            <ChevronLeft className="h-3 w-3 rotate-180" />
+                          </button>
+                        ) : (
+                          <span className="text-sm italic text-muted-foreground">Unassigned</span>
+                        );
+                      })()}
+                      <Select value={property.customerId} onValueChange={v => updateProperty(id, { customerId: v })}>
+                        <SelectTrigger className="h-7 text-xs w-56" data-testid="select-property-customer">
+                          <SelectValue placeholder="Choose a customer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customers.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                     <span className="text-sm text-muted-foreground w-36 shrink-0">Status</span>
                     <Select value={property.status} onValueChange={v => updateProperty(id, { status: v as "Active" | "Inactive" })}>

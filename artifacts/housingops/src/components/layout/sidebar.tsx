@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload } from "lucide-react";
+import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useData, type ImportSummary } from "@/context/data-store";
@@ -19,6 +19,7 @@ import {
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/customers", label: "Customers", icon: Briefcase },
   { href: "/properties", label: "Properties", icon: Home },
   { href: "/leases", label: "Leases", icon: KeyRound },
   { href: "/beds", label: "Beds", icon: BedDouble },
@@ -62,7 +63,7 @@ export function Sidebar() {
       URL.revokeObjectURL(url);
       toast({
         title: "Data exported",
-        description: `Saved ${a.download} with ${payload.data.properties.length} properties, ${payload.data.leases.length} leases, ${payload.data.beds.length} beds, ${payload.data.occupants.length} occupants, ${payload.data.utilities.length} utilities.`,
+        description: `Saved ${a.download} with ${payload.data.customers.length} customers, ${payload.data.properties.length} properties, ${payload.data.leases.length} leases, ${payload.data.beds.length} beds, ${payload.data.occupants.length} occupants, ${payload.data.utilities.length} utilities.`,
       });
     } catch {
       toast({
@@ -114,7 +115,7 @@ export function Sidebar() {
     setPendingImport(null);
     toast({
       title: "Data imported",
-      description: `Loaded ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities.`,
+      description: `Loaded ${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities.`,
     });
   };
 
@@ -215,8 +216,8 @@ export function Sidebar() {
           <AlertDialogHeader>
             <AlertDialogTitle>Reset to sample data?</AlertDialogTitle>
             <AlertDialogDescription>
-              This clears every saved change in this browser — properties, leases, beds, occupants,
-              and utilities — and reloads the original demo data. This action cannot be undone.
+              This clears every saved change in this browser — customers, properties, leases, beds,
+              occupants, and utilities — and reloads the original demo data. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -244,8 +245,9 @@ export function Sidebar() {
             <AlertDialogTitle>Replace current data with import?</AlertDialogTitle>
             <AlertDialogDescription>
               Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span> will
-              replace every property, lease, bed, occupant, and utility in this browser with the contents
-              of the file. Your current data will be lost. Consider exporting first if you want a backup.
+              replace every customer, property, lease, bed, occupant, and utility in this browser with
+              the contents of the file. Your current data will be lost. Consider exporting first if you
+              want a backup.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

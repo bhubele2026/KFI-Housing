@@ -28,8 +28,8 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ## Artifacts
 
-- **artifacts/api-server** — Express API server. Owns CRUD endpoints for HousingOps (`/api/properties`, `/api/leases`, `/api/beds`, `/api/occupants`, `/api/utilities`) plus `/api/healthz`. Seeds Postgres with sample housing data on first start (`src/lib/seed.ts`).
-- **artifacts/housingops** — React + Vite app. Reads/writes housing data via the API using react-query hooks generated from `lib/api-spec/openapi.yaml`. The shared data store (`src/context/data-store.tsx`) wraps the generated hooks and applies optimistic cache updates so UI stays snappy.
+- **artifacts/api-server** — Express API server. Owns CRUD endpoints for HousingOps (`/api/customers`, `/api/properties`, `/api/leases`, `/api/beds`, `/api/occupants`, `/api/utilities`) plus `/api/healthz`. `DELETE /api/customers/:id` returns 409 if any property still references the customer. Seeds Postgres with sample housing data on first start (`src/lib/seed.ts`) — 3 customers each owning 1–2 of the 5 sample properties.
+- **artifacts/housingops** — React + Vite app. Reads/writes housing data via the API using react-query hooks generated from `lib/api-spec/openapi.yaml`. The shared data store (`src/context/data-store.tsx`) wraps the generated hooks and applies optimistic cache updates so UI stays snappy. Customers are first-class: dedicated `/customers` page, every property requires a `customerId`, and Properties / Leases / Property Detail / Dashboard all surface the owning customer (Properties supports `?customer=<id>` URL filter and a sortable Customer column).
 - **artifacts/mockup-sandbox** — Design canvas for component previews.
 
 Data persistence: HousingOps used to persist via browser localStorage. It now uses the api-server + Postgres so edits are shared across devices/browsers.

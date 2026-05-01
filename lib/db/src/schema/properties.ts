@@ -24,6 +24,7 @@ export const propertiesTable = pgTable("properties", {
   portalUrl: text("portal_url").notNull().default(""),
   notes: text("notes").notNull().default(""),
   furnishings: text("furnishings").array().notNull().default([]),
+  customerId: text("customer_id").notNull().default(""),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

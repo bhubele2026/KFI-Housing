@@ -8,6 +8,7 @@ import { DataProvider } from "@/context/data-store";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
+import Customers from "@/pages/customers";
 import Properties from "@/pages/properties";
 import PropertyDetail from "@/pages/property-detail";
 import Leases from "@/pages/leases";
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route path="/login" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/customers" component={Customers} />
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />

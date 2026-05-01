@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities } = useData();
+  const { properties, beds, leases, utilities, customers } = useData();
 
   const totalProperties = properties.length;
   const totalBeds = beds.length;
@@ -121,24 +121,32 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Property</TableHead>
+                    <TableHead>Customer</TableHead>
                     <TableHead>Occupancy</TableHead>
                     <TableHead className="text-right">Profit/Loss</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {chartData.map((data) => (
-                    <TableRow key={data.name}>
-                      <TableCell className="font-medium">{data.name}</TableCell>
-                      <TableCell>
-                        {Math.round((beds.filter(b => b.propertyId === properties.find(p => p.name === data.name)?.id && b.status === "Occupied").length / (properties.find(p => p.name === data.name)?.totalBeds || 1)) * 100)}%
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                          ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {chartData.map((data) => {
+                    const property = properties.find(p => p.name === data.name);
+                    const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
+                    return (
+                      <TableRow key={data.name}>
+                        <TableCell className="font-medium">{data.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {customer?.name ?? <span className="italic">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          {Math.round((beds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
+                            ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

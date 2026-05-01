@@ -3,11 +3,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
+import { DataProvider } from "@/context/data-store";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Properties from "@/pages/properties";
+import PropertyDetail from "@/pages/property-detail";
 import Leases from "@/pages/leases";
 import Beds from "@/pages/beds";
 import Occupants from "@/pages/occupants";
@@ -23,6 +25,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/properties" component={Properties} />
+      <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
       <Route path="/beds" component={Beds} />
       <Route path="/occupants" component={Occupants} />
@@ -38,9 +41,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
+          <DataProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+          </DataProvider>
         </AuthProvider>
         <Toaster />
       </TooltipProvider>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
-import { MOCK_OCCUPANTS, MOCK_PROPERTIES, MOCK_BEDS } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Search, UserPlus } from "lucide-react";
 
 export default function Occupants() {
+  const { occupants, properties, beds } = useData();
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const filteredOccupants = MOCK_OCCUPANTS.filter((o) => {
+  const filteredOccupants = occupants.filter((o) => {
     const matchesSearch = o.name.toLowerCase().includes(search.toLowerCase());
     const matchesProperty = propertyFilter === "All" || o.propertyId === propertyFilter;
     const matchesStatus = statusFilter === "All" || o.status === statusFilter;
@@ -53,7 +54,7 @@ export default function Occupants() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Properties</SelectItem>
-                  {MOCK_PROPERTIES.map(p => (
+                  {properties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -90,8 +91,8 @@ export default function Occupants() {
                   </TableRow>
                 ) : (
                   filteredOccupants.map((occupant) => {
-                    const property = occupant.propertyId ? MOCK_PROPERTIES.find(p => p.id === occupant.propertyId) : null;
-                    const bed = occupant.bedId ? MOCK_BEDS.find(b => b.id === occupant.bedId) : null;
+                    const property = occupant.propertyId ? properties.find(p => p.id === occupant.propertyId) : null;
+                    const bed = occupant.bedId ? beds.find(b => b.id === occupant.bedId) : null;
                     
                     return (
                       <TableRow key={occupant.id}>

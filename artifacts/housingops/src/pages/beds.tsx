@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
-import { MOCK_BEDS, MOCK_PROPERTIES, MOCK_OCCUPANTS } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,17 +8,18 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
 export default function Beds() {
+  const { beds, properties, occupants } = useData();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const filteredBeds = MOCK_BEDS.filter((b) => {
+  const filteredBeds = beds.filter((b) => {
     const matchesProperty = propertyFilter === "All" || b.propertyId === propertyFilter;
     const matchesStatus = statusFilter === "All" || b.status === statusFilter;
     return matchesProperty && matchesStatus;
   });
 
-  const occupiedCount = MOCK_BEDS.filter(b => b.status === "Occupied").length;
-  const occupancyRate = (occupiedCount / MOCK_BEDS.length) * 100;
+  const occupiedCount = beds.filter(b => b.status === "Occupied").length;
+  const occupancyRate = beds.length > 0 ? (occupiedCount / beds.length) * 100 : 0;
 
   return (
     <MainLayout>
@@ -35,7 +36,7 @@ export default function Beds() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">Total Occupancy</span>
-                <span className="text-muted-foreground">{occupiedCount} of {MOCK_BEDS.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
+                <span className="text-muted-foreground">{occupiedCount} of {beds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
               </div>
               <Progress value={occupancyRate} className="h-3" />
             </div>
@@ -51,7 +52,7 @@ export default function Beds() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Properties</SelectItem>
-                  {MOCK_PROPERTIES.map(p => (
+                  {properties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -87,8 +88,8 @@ export default function Beds() {
                   </TableRow>
                 ) : (
                   filteredBeds.map((bed) => {
-                    const property = MOCK_PROPERTIES.find(p => p.id === bed.propertyId);
-                    const occupant = bed.occupantId ? MOCK_OCCUPANTS.find(o => o.id === bed.occupantId) : null;
+                    const property = properties.find(p => p.id === bed.propertyId);
+                    const occupant = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
                     
                     return (
                       <TableRow key={bed.id}>

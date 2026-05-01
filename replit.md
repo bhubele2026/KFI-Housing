@@ -25,3 +25,11 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Artifacts
+
+- **artifacts/api-server** — Express API server. Owns CRUD endpoints for HousingOps (`/api/properties`, `/api/leases`, `/api/beds`, `/api/occupants`, `/api/utilities`) plus `/api/healthz`. Seeds Postgres with sample housing data on first start (`src/lib/seed.ts`).
+- **artifacts/housingops** — React + Vite app. Reads/writes housing data via the API using react-query hooks generated from `lib/api-spec/openapi.yaml`. The shared data store (`src/context/data-store.tsx`) wraps the generated hooks and applies optimistic cache updates so UI stays snappy.
+- **artifacts/mockup-sandbox** — Design canvas for component previews.
+
+Data persistence: HousingOps used to persist via browser localStorage. It now uses the api-server + Postgres so edits are shared across devices/browsers.

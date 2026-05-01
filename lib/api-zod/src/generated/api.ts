@@ -14,3 +14,504 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Wipe all data and re-seed with sample data
+ */
+export const ResetToSampleDataResponse = zod.object({
+  status: zod.string(),
+});
+
+/**
+ * @summary Wipe all data and replace with the supplied dataset
+ */
+export const ImportDataBody = zod.object({
+  properties: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      address: zod.string(),
+      city: zod.string(),
+      state: zod.string(),
+      zip: zod.string(),
+      totalBeds: zod.number(),
+      monthlyRent: zod.number(),
+      chargePerBed: zod.number(),
+      status: zod.enum(["Active", "Inactive"]),
+      landlordName: zod.string(),
+      landlordEmail: zod.string(),
+      landlordPhone: zod.string(),
+      paymentMethod: zod.enum([
+        "ACH",
+        "Check",
+        "Wire",
+        "Online Portal",
+        "Money Order",
+      ]),
+      paymentRecipient: zod.string(),
+      paymentDueDay: zod.number(),
+      paymentNotes: zod.string(),
+      bankName: zod.string(),
+      bankRouting: zod.string(),
+      bankAccount: zod.string(),
+      portalUrl: zod.string(),
+      notes: zod.string(),
+      furnishings: zod.array(zod.string()),
+    }),
+  ),
+  leases: zod.array(
+    zod.object({
+      id: zod.string(),
+      propertyId: zod.string(),
+      startDate: zod.string(),
+      endDate: zod.string(),
+      monthlyRent: zod.number(),
+      securityDeposit: zod.number(),
+      status: zod.enum(["Active", "Expired", "Upcoming"]),
+      notes: zod.string(),
+    }),
+  ),
+  beds: zod.array(
+    zod.object({
+      id: zod.string(),
+      propertyId: zod.string(),
+      bedNumber: zod.number(),
+      room: zod.string(),
+      status: zod.enum(["Occupied", "Vacant"]),
+      occupantId: zod.string().nullable(),
+    }),
+  ),
+  occupants: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      email: zod.string(),
+      phone: zod.string(),
+      bedId: zod.string().nullable(),
+      propertyId: zod.string().nullable(),
+      moveInDate: zod.string(),
+      moveOutDate: zod.string().nullable(),
+      status: zod.enum(["Active", "Former"]),
+      chargePerBed: zod.number(),
+      billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
+      employeeId: zod.string(),
+      company: zod.string(),
+    }),
+  ),
+  utilities: zod.array(
+    zod.object({
+      id: zod.string(),
+      propertyId: zod.string(),
+      type: zod.enum([
+        "Electric",
+        "Gas",
+        "Propane",
+        "Water",
+        "Garbage",
+        "Internet",
+        "Other",
+      ]),
+      company: zod.string(),
+      monthlyCost: zod.number(),
+      accountNumber: zod.string(),
+      notes: zod.string(),
+    }),
+  ),
+});
+
+export const ImportDataResponse = zod.object({
+  status: zod.string(),
+});
+
+/**
+ * @summary List all properties
+ */
+export const ListPropertiesResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  totalBeds: zod.number(),
+  monthlyRent: zod.number(),
+  chargePerBed: zod.number(),
+  status: zod.enum(["Active", "Inactive"]),
+  landlordName: zod.string(),
+  landlordEmail: zod.string(),
+  landlordPhone: zod.string(),
+  paymentMethod: zod.enum([
+    "ACH",
+    "Check",
+    "Wire",
+    "Online Portal",
+    "Money Order",
+  ]),
+  paymentRecipient: zod.string(),
+  paymentDueDay: zod.number(),
+  paymentNotes: zod.string(),
+  bankName: zod.string(),
+  bankRouting: zod.string(),
+  bankAccount: zod.string(),
+  portalUrl: zod.string(),
+  notes: zod.string(),
+  furnishings: zod.array(zod.string()),
+});
+export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
+
+/**
+ * @summary Update a property
+ */
+export const UpdatePropertyParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdatePropertyBody = zod.object({
+  name: zod.string().optional(),
+  address: zod.string().optional(),
+  city: zod.string().optional(),
+  state: zod.string().optional(),
+  zip: zod.string().optional(),
+  totalBeds: zod.number().optional(),
+  monthlyRent: zod.number().optional(),
+  chargePerBed: zod.number().optional(),
+  status: zod.enum(["Active", "Inactive"]).optional(),
+  landlordName: zod.string().optional(),
+  landlordEmail: zod.string().optional(),
+  landlordPhone: zod.string().optional(),
+  paymentMethod: zod
+    .enum(["ACH", "Check", "Wire", "Online Portal", "Money Order"])
+    .optional(),
+  paymentRecipient: zod.string().optional(),
+  paymentDueDay: zod.number().optional(),
+  paymentNotes: zod.string().optional(),
+  bankName: zod.string().optional(),
+  bankRouting: zod.string().optional(),
+  bankAccount: zod.string().optional(),
+  portalUrl: zod.string().optional(),
+  notes: zod.string().optional(),
+  furnishings: zod.array(zod.string()).optional(),
+});
+
+export const UpdatePropertyResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  totalBeds: zod.number(),
+  monthlyRent: zod.number(),
+  chargePerBed: zod.number(),
+  status: zod.enum(["Active", "Inactive"]),
+  landlordName: zod.string(),
+  landlordEmail: zod.string(),
+  landlordPhone: zod.string(),
+  paymentMethod: zod.enum([
+    "ACH",
+    "Check",
+    "Wire",
+    "Online Portal",
+    "Money Order",
+  ]),
+  paymentRecipient: zod.string(),
+  paymentDueDay: zod.number(),
+  paymentNotes: zod.string(),
+  bankName: zod.string(),
+  bankRouting: zod.string(),
+  bankAccount: zod.string(),
+  portalUrl: zod.string(),
+  notes: zod.string(),
+  furnishings: zod.array(zod.string()),
+});
+
+/**
+ * @summary List all leases
+ */
+export const ListLeasesResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  monthlyRent: zod.number(),
+  securityDeposit: zod.number(),
+  status: zod.enum(["Active", "Expired", "Upcoming"]),
+  notes: zod.string(),
+});
+export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
+
+/**
+ * @summary Create a lease
+ */
+export const CreateLeaseBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  monthlyRent: zod.number(),
+  securityDeposit: zod.number(),
+  status: zod.enum(["Active", "Expired", "Upcoming"]),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Update a lease
+ */
+export const UpdateLeaseParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateLeaseBody = zod.object({
+  propertyId: zod.string().optional(),
+  startDate: zod.string().optional(),
+  endDate: zod.string().optional(),
+  monthlyRent: zod.number().optional(),
+  securityDeposit: zod.number().optional(),
+  status: zod.enum(["Active", "Expired", "Upcoming"]).optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateLeaseResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  startDate: zod.string(),
+  endDate: zod.string(),
+  monthlyRent: zod.number(),
+  securityDeposit: zod.number(),
+  status: zod.enum(["Active", "Expired", "Upcoming"]),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Delete a lease
+ */
+export const DeleteLeaseParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List all beds
+ */
+export const ListBedsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  bedNumber: zod.number(),
+  room: zod.string(),
+  status: zod.enum(["Occupied", "Vacant"]),
+  occupantId: zod.string().nullable(),
+});
+export const ListBedsResponse = zod.array(ListBedsResponseItem);
+
+/**
+ * @summary Create a bed
+ */
+export const CreateBedBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  bedNumber: zod.number(),
+  room: zod.string(),
+  status: zod.enum(["Occupied", "Vacant"]),
+  occupantId: zod.string().nullable(),
+});
+
+/**
+ * @summary Update a bed
+ */
+export const UpdateBedParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateBedBody = zod.object({
+  propertyId: zod.string().optional(),
+  bedNumber: zod.number().optional(),
+  room: zod.string().optional(),
+  status: zod.enum(["Occupied", "Vacant"]).optional(),
+  occupantId: zod.string().nullish(),
+});
+
+export const UpdateBedResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  bedNumber: zod.number(),
+  room: zod.string(),
+  status: zod.enum(["Occupied", "Vacant"]),
+  occupantId: zod.string().nullable(),
+});
+
+/**
+ * @summary Delete a bed
+ */
+export const DeleteBedParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List all occupants
+ */
+export const ListOccupantsResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  bedId: zod.string().nullable(),
+  propertyId: zod.string().nullable(),
+  moveInDate: zod.string(),
+  moveOutDate: zod.string().nullable(),
+  status: zod.enum(["Active", "Former"]),
+  chargePerBed: zod.number(),
+  billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
+  employeeId: zod.string(),
+  company: zod.string(),
+});
+export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
+
+/**
+ * @summary Create an occupant
+ */
+export const CreateOccupantBody = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  bedId: zod.string().nullable(),
+  propertyId: zod.string().nullable(),
+  moveInDate: zod.string(),
+  moveOutDate: zod.string().nullable(),
+  status: zod.enum(["Active", "Former"]),
+  chargePerBed: zod.number(),
+  billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
+  employeeId: zod.string(),
+  company: zod.string(),
+});
+
+/**
+ * @summary Update an occupant
+ */
+export const UpdateOccupantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateOccupantBody = zod.object({
+  name: zod.string().optional(),
+  email: zod.string().optional(),
+  phone: zod.string().optional(),
+  bedId: zod.string().nullish(),
+  propertyId: zod.string().nullish(),
+  moveInDate: zod.string().optional(),
+  moveOutDate: zod.string().nullish(),
+  status: zod.enum(["Active", "Former"]).optional(),
+  chargePerBed: zod.number().optional(),
+  billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]).optional(),
+  employeeId: zod.string().optional(),
+  company: zod.string().optional(),
+});
+
+export const UpdateOccupantResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  email: zod.string(),
+  phone: zod.string(),
+  bedId: zod.string().nullable(),
+  propertyId: zod.string().nullable(),
+  moveInDate: zod.string(),
+  moveOutDate: zod.string().nullable(),
+  status: zod.enum(["Active", "Former"]),
+  chargePerBed: zod.number(),
+  billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
+  employeeId: zod.string(),
+  company: zod.string(),
+});
+
+/**
+ * @summary List all utilities
+ */
+export const ListUtilitiesResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  type: zod.enum([
+    "Electric",
+    "Gas",
+    "Propane",
+    "Water",
+    "Garbage",
+    "Internet",
+    "Other",
+  ]),
+  company: zod.string(),
+  monthlyCost: zod.number(),
+  accountNumber: zod.string(),
+  notes: zod.string(),
+});
+export const ListUtilitiesResponse = zod.array(ListUtilitiesResponseItem);
+
+/**
+ * @summary Create a utility
+ */
+export const CreateUtilityBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  type: zod.enum([
+    "Electric",
+    "Gas",
+    "Propane",
+    "Water",
+    "Garbage",
+    "Internet",
+    "Other",
+  ]),
+  company: zod.string(),
+  monthlyCost: zod.number(),
+  accountNumber: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Update a utility
+ */
+export const UpdateUtilityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateUtilityBody = zod.object({
+  propertyId: zod.string().optional(),
+  type: zod
+    .enum([
+      "Electric",
+      "Gas",
+      "Propane",
+      "Water",
+      "Garbage",
+      "Internet",
+      "Other",
+    ])
+    .optional(),
+  company: zod.string().optional(),
+  monthlyCost: zod.number().optional(),
+  accountNumber: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateUtilityResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  type: zod.enum([
+    "Electric",
+    "Gas",
+    "Propane",
+    "Water",
+    "Garbage",
+    "Internet",
+    "Other",
+  ]),
+  company: zod.string(),
+  monthlyCost: zod.number(),
+  accountNumber: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Delete a utility
+ */
+export const DeleteUtilityParams = zod.object({
+  id: zod.coerce.string(),
+});

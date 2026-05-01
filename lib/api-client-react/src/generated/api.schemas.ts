@@ -8,3 +8,287 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type PropertyStatus =
+  (typeof PropertyStatus)[keyof typeof PropertyStatus];
+
+export const PropertyStatus = {
+  Active: "Active",
+  Inactive: "Inactive",
+} as const;
+
+export type PropertyPaymentMethod =
+  (typeof PropertyPaymentMethod)[keyof typeof PropertyPaymentMethod];
+
+export const PropertyPaymentMethod = {
+  ACH: "ACH",
+  Check: "Check",
+  Wire: "Wire",
+  Online_Portal: "Online Portal",
+  Money_Order: "Money Order",
+} as const;
+
+export interface Property {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  totalBeds: number;
+  monthlyRent: number;
+  chargePerBed: number;
+  status: PropertyStatus;
+  landlordName: string;
+  landlordEmail: string;
+  landlordPhone: string;
+  paymentMethod: PropertyPaymentMethod;
+  paymentRecipient: string;
+  paymentDueDay: number;
+  paymentNotes: string;
+  bankName: string;
+  bankRouting: string;
+  bankAccount: string;
+  portalUrl: string;
+  notes: string;
+  furnishings: string[];
+}
+
+export type PropertyUpdateStatus =
+  (typeof PropertyUpdateStatus)[keyof typeof PropertyUpdateStatus];
+
+export const PropertyUpdateStatus = {
+  Active: "Active",
+  Inactive: "Inactive",
+} as const;
+
+export type PropertyUpdatePaymentMethod =
+  (typeof PropertyUpdatePaymentMethod)[keyof typeof PropertyUpdatePaymentMethod];
+
+export const PropertyUpdatePaymentMethod = {
+  ACH: "ACH",
+  Check: "Check",
+  Wire: "Wire",
+  Online_Portal: "Online Portal",
+  Money_Order: "Money Order",
+} as const;
+
+export interface PropertyUpdate {
+  name?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  totalBeds?: number;
+  monthlyRent?: number;
+  chargePerBed?: number;
+  status?: PropertyUpdateStatus;
+  landlordName?: string;
+  landlordEmail?: string;
+  landlordPhone?: string;
+  paymentMethod?: PropertyUpdatePaymentMethod;
+  paymentRecipient?: string;
+  paymentDueDay?: number;
+  paymentNotes?: string;
+  bankName?: string;
+  bankRouting?: string;
+  bankAccount?: string;
+  portalUrl?: string;
+  notes?: string;
+  furnishings?: string[];
+}
+
+export type LeaseStatus = (typeof LeaseStatus)[keyof typeof LeaseStatus];
+
+export const LeaseStatus = {
+  Active: "Active",
+  Expired: "Expired",
+  Upcoming: "Upcoming",
+} as const;
+
+export interface Lease {
+  id: string;
+  propertyId: string;
+  startDate: string;
+  endDate: string;
+  monthlyRent: number;
+  securityDeposit: number;
+  status: LeaseStatus;
+  notes: string;
+}
+
+export type LeaseUpdateStatus =
+  (typeof LeaseUpdateStatus)[keyof typeof LeaseUpdateStatus];
+
+export const LeaseUpdateStatus = {
+  Active: "Active",
+  Expired: "Expired",
+  Upcoming: "Upcoming",
+} as const;
+
+export interface LeaseUpdate {
+  propertyId?: string;
+  startDate?: string;
+  endDate?: string;
+  monthlyRent?: number;
+  securityDeposit?: number;
+  status?: LeaseUpdateStatus;
+  notes?: string;
+}
+
+export type BedStatus = (typeof BedStatus)[keyof typeof BedStatus];
+
+export const BedStatus = {
+  Occupied: "Occupied",
+  Vacant: "Vacant",
+} as const;
+
+export interface Bed {
+  id: string;
+  propertyId: string;
+  bedNumber: number;
+  room: string;
+  status: BedStatus;
+  /** @nullable */
+  occupantId: string | null;
+}
+
+export type BedUpdateStatus =
+  (typeof BedUpdateStatus)[keyof typeof BedUpdateStatus];
+
+export const BedUpdateStatus = {
+  Occupied: "Occupied",
+  Vacant: "Vacant",
+} as const;
+
+export interface BedUpdate {
+  propertyId?: string;
+  bedNumber?: number;
+  room?: string;
+  status?: BedUpdateStatus;
+  /** @nullable */
+  occupantId?: string | null;
+}
+
+export type OccupantStatus =
+  (typeof OccupantStatus)[keyof typeof OccupantStatus];
+
+export const OccupantStatus = {
+  Active: "Active",
+  Former: "Former",
+} as const;
+
+export type OccupantBillingFrequency =
+  (typeof OccupantBillingFrequency)[keyof typeof OccupantBillingFrequency];
+
+export const OccupantBillingFrequency = {
+  Weekly: "Weekly",
+  Biweekly: "Biweekly",
+  Monthly: "Monthly",
+} as const;
+
+export interface Occupant {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** @nullable */
+  bedId: string | null;
+  /** @nullable */
+  propertyId: string | null;
+  moveInDate: string;
+  /** @nullable */
+  moveOutDate: string | null;
+  status: OccupantStatus;
+  chargePerBed: number;
+  billingFrequency: OccupantBillingFrequency;
+  employeeId: string;
+  company: string;
+}
+
+export type OccupantUpdateStatus =
+  (typeof OccupantUpdateStatus)[keyof typeof OccupantUpdateStatus];
+
+export const OccupantUpdateStatus = {
+  Active: "Active",
+  Former: "Former",
+} as const;
+
+export type OccupantUpdateBillingFrequency =
+  (typeof OccupantUpdateBillingFrequency)[keyof typeof OccupantUpdateBillingFrequency];
+
+export const OccupantUpdateBillingFrequency = {
+  Weekly: "Weekly",
+  Biweekly: "Biweekly",
+  Monthly: "Monthly",
+} as const;
+
+export interface OccupantUpdate {
+  name?: string;
+  email?: string;
+  phone?: string;
+  /** @nullable */
+  bedId?: string | null;
+  /** @nullable */
+  propertyId?: string | null;
+  moveInDate?: string;
+  /** @nullable */
+  moveOutDate?: string | null;
+  status?: OccupantUpdateStatus;
+  chargePerBed?: number;
+  billingFrequency?: OccupantUpdateBillingFrequency;
+  employeeId?: string;
+  company?: string;
+}
+
+export type UtilityType = (typeof UtilityType)[keyof typeof UtilityType];
+
+export const UtilityType = {
+  Electric: "Electric",
+  Gas: "Gas",
+  Propane: "Propane",
+  Water: "Water",
+  Garbage: "Garbage",
+  Internet: "Internet",
+  Other: "Other",
+} as const;
+
+export interface Utility {
+  id: string;
+  propertyId: string;
+  type: UtilityType;
+  company: string;
+  monthlyCost: number;
+  accountNumber: string;
+  notes: string;
+}
+
+export type UtilityUpdateType =
+  (typeof UtilityUpdateType)[keyof typeof UtilityUpdateType];
+
+export const UtilityUpdateType = {
+  Electric: "Electric",
+  Gas: "Gas",
+  Propane: "Propane",
+  Water: "Water",
+  Garbage: "Garbage",
+  Internet: "Internet",
+  Other: "Other",
+} as const;
+
+export interface UtilityUpdate {
+  propertyId?: string;
+  type?: UtilityUpdateType;
+  company?: string;
+  monthlyCost?: number;
+  accountNumber?: string;
+  notes?: string;
+}
+
+export interface ImportPayload {
+  properties: Property[];
+  leases: Lease[];
+  beds: Bed[];
+  occupants: Occupant[];
+  utilities: Utility[];
+}

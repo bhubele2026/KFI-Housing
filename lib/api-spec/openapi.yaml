@@ -10,6 +10,16 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: properties
+    description: Property records
+  - name: leases
+    description: Lease records
+  - name: beds
+    description: Bed records
+  - name: occupants
+    description: Occupant records
+  - name: utilities
+    description: Utility records
 paths:
   /healthz:
     get:
@@ -24,13 +34,536 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /reset:
+    post:
+      operationId: resetToSampleData
+      tags: [health]
+      summary: Wipe all data and re-seed with sample data
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /import:
+    post:
+      operationId: importData
+      tags: [health]
+      summary: Wipe all data and replace with the supplied dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImportPayload" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+
+  /properties:
+    get:
+      operationId: listProperties
+      tags: [properties]
+      summary: List all properties
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Property" }
+  /properties/{id}:
+    patch:
+      operationId: updateProperty
+      tags: [properties]
+      summary: Update a property
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PropertyUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Property" }
+
+  /leases:
+    get:
+      operationId: listLeases
+      tags: [leases]
+      summary: List all leases
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Lease" }
+    post:
+      operationId: createLease
+      tags: [leases]
+      summary: Create a lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Lease" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lease" }
+  /leases/{id}:
+    patch:
+      operationId: updateLease
+      tags: [leases]
+      summary: Update a lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeaseUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lease" }
+    delete:
+      operationId: deleteLease
+      tags: [leases]
+      summary: Delete a lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /beds:
+    get:
+      operationId: listBeds
+      tags: [beds]
+      summary: List all beds
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Bed" }
+    post:
+      operationId: createBed
+      tags: [beds]
+      summary: Create a bed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Bed" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Bed" }
+  /beds/{id}:
+    patch:
+      operationId: updateBed
+      tags: [beds]
+      summary: Update a bed
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BedUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Bed" }
+    delete:
+      operationId: deleteBed
+      tags: [beds]
+      summary: Delete a bed
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /occupants:
+    get:
+      operationId: listOccupants
+      tags: [occupants]
+      summary: List all occupants
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Occupant" }
+    post:
+      operationId: createOccupant
+      tags: [occupants]
+      summary: Create an occupant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Occupant" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Occupant" }
+  /occupants/{id}:
+    patch:
+      operationId: updateOccupant
+      tags: [occupants]
+      summary: Update an occupant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OccupantUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Occupant" }
+
+  /utilities:
+    get:
+      operationId: listUtilities
+      tags: [utilities]
+      summary: List all utilities
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Utility" }
+    post:
+      operationId: createUtility
+      tags: [utilities]
+      summary: Create a utility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Utility" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Utility" }
+  /utilities/{id}:
+    patch:
+      operationId: updateUtility
+      tags: [utilities]
+      summary: Update a utility
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UtilityUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Utility" }
+    delete:
+      operationId: deleteUtility
+      tags: [utilities]
+      summary: Delete a utility
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
 
+    Property:
+      type: object
+      required:
+        - id
+        - name
+        - address
+        - city
+        - state
+        - zip
+        - totalBeds
+        - monthlyRent
+        - chargePerBed
+        - status
+        - landlordName
+        - landlordEmail
+        - landlordPhone
+        - paymentMethod
+        - paymentRecipient
+        - paymentDueDay
+        - paymentNotes
+        - bankName
+        - bankRouting
+        - bankAccount
+        - portalUrl
+        - notes
+        - furnishings
+      properties:
+        id: { type: string }
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        zip: { type: string }
+        totalBeds: { type: integer }
+        monthlyRent: { type: number }
+        chargePerBed: { type: number }
+        status: { type: string, enum: [Active, Inactive] }
+        landlordName: { type: string }
+        landlordEmail: { type: string }
+        landlordPhone: { type: string }
+        paymentMethod:
+          type: string
+          enum: [ACH, Check, Wire, Online Portal, Money Order]
+        paymentRecipient: { type: string }
+        paymentDueDay: { type: integer }
+        paymentNotes: { type: string }
+        bankName: { type: string }
+        bankRouting: { type: string }
+        bankAccount: { type: string }
+        portalUrl: { type: string }
+        notes: { type: string }
+        furnishings:
+          type: array
+          items: { type: string }
+    PropertyUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        zip: { type: string }
+        totalBeds: { type: integer }
+        monthlyRent: { type: number }
+        chargePerBed: { type: number }
+        status: { type: string, enum: [Active, Inactive] }
+        landlordName: { type: string }
+        landlordEmail: { type: string }
+        landlordPhone: { type: string }
+        paymentMethod:
+          type: string
+          enum: [ACH, Check, Wire, Online Portal, Money Order]
+        paymentRecipient: { type: string }
+        paymentDueDay: { type: integer }
+        paymentNotes: { type: string }
+        bankName: { type: string }
+        bankRouting: { type: string }
+        bankAccount: { type: string }
+        portalUrl: { type: string }
+        notes: { type: string }
+        furnishings:
+          type: array
+          items: { type: string }
+
+    Lease:
+      type: object
+      required: [id, propertyId, startDate, endDate, monthlyRent, securityDeposit, status, notes]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        startDate: { type: string }
+        endDate: { type: string }
+        monthlyRent: { type: number }
+        securityDeposit: { type: number }
+        status: { type: string, enum: [Active, Expired, Upcoming] }
+        notes: { type: string }
+    LeaseUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        startDate: { type: string }
+        endDate: { type: string }
+        monthlyRent: { type: number }
+        securityDeposit: { type: number }
+        status: { type: string, enum: [Active, Expired, Upcoming] }
+        notes: { type: string }
+
+    Bed:
+      type: object
+      required: [id, propertyId, bedNumber, room, status, occupantId]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        bedNumber: { type: integer }
+        room: { type: string }
+        status: { type: string, enum: [Occupied, Vacant] }
+        occupantId:
+          type: ["string", "null"]
+    BedUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        bedNumber: { type: integer }
+        room: { type: string }
+        status: { type: string, enum: [Occupied, Vacant] }
+        occupantId:
+          type: ["string", "null"]
+
+    Occupant:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - phone
+        - bedId
+        - propertyId
+        - moveInDate
+        - moveOutDate
+        - status
+        - chargePerBed
+        - billingFrequency
+        - employeeId
+        - company
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        bedId:
+          type: ["string", "null"]
+        propertyId:
+          type: ["string", "null"]
+        moveInDate: { type: string }
+        moveOutDate:
+          type: ["string", "null"]
+        status: { type: string, enum: [Active, Former] }
+        chargePerBed: { type: number }
+        billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
+        employeeId: { type: string }
+        company: { type: string }
+    OccupantUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        bedId:
+          type: ["string", "null"]
+        propertyId:
+          type: ["string", "null"]
+        moveInDate: { type: string }
+        moveOutDate:
+          type: ["string", "null"]
+        status: { type: string, enum: [Active, Former] }
+        chargePerBed: { type: number }
+        billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
+        employeeId: { type: string }
+        company: { type: string }
+
+    Utility:
+      type: object
+      required: [id, propertyId, type, company, monthlyCost, accountNumber, notes]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        type:
+          type: string
+          enum: [Electric, Gas, Propane, Water, Garbage, Internet, Other]
+        company: { type: string }
+        monthlyCost: { type: number }
+        accountNumber: { type: string }
+        notes: { type: string }
+    UtilityUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        type:
+          type: string
+          enum: [Electric, Gas, Propane, Water, Garbage, Internet, Other]
+        company: { type: string }
+        monthlyCost: { type: number }
+        accountNumber: { type: string }
+        notes: { type: string }
+
+    ImportPayload:
+      type: object
+      required: [properties, leases, beds, occupants, utilities]
+      properties:
+        properties:
+          type: array
+          items: { $ref: "#/components/schemas/Property" }
+        leases:
+          type: array
+          items: { $ref: "#/components/schemas/Lease" }
+        beds:
+          type: array
+          items: { $ref: "#/components/schemas/Bed" }
+        occupants:
+          type: array
+          items: { $ref: "#/components/schemas/Occupant" }
+        utilities:
+          type: array
+          items: { $ref: "#/components/schemas/Utility" }

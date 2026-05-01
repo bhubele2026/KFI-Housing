@@ -1,9 +1,18 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { z } from "zod";
 import {
-  MOCK_PROPERTIES, MOCK_LEASES, MOCK_BEDS, MOCK_OCCUPANTS, MOCK_UTILITIES,
-  Property, Lease, Bed, Occupant, Utility,
+  useListProperties, getListPropertiesQueryKey, useUpdateProperty,
+  useListLeases, getListLeasesQueryKey, useCreateLease, useUpdateLease, useDeleteLease,
+  useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
+  useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant,
+  useListUtilities, getListUtilitiesQueryKey, useCreateUtility, useUpdateUtility, useDeleteUtility,
+  useResetToSampleData,
+  useImportData,
+} from "@workspace/api-client-react";
+import {
   PropertySchema, LeaseSchema, BedSchema, OccupantSchema, UtilitySchema,
+  type Property, type Lease, type Bed, type Occupant, type Utility,
 } from "@/data/mockData";
 
 export const EXPORT_FORMAT_VERSION = 1;
@@ -36,6 +45,7 @@ interface DataStore {
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
+  isLoading: boolean;
   updateProperty: (id: string, updates: Partial<Property>) => void;
   updateLease: (id: string, updates: Partial<Lease>) => void;
   addLease: (lease: Lease) => void;
@@ -55,99 +65,170 @@ interface DataStore {
 
 const DataContext = createContext<DataStore | undefined>(undefined);
 
-const STORAGE_PREFIX = "housingops:v1:";
-const KEYS = {
-  properties: `${STORAGE_PREFIX}properties`,
-  leases: `${STORAGE_PREFIX}leases`,
-  beds: `${STORAGE_PREFIX}beds`,
-  occupants: `${STORAGE_PREFIX}occupants`,
-  utilities: `${STORAGE_PREFIX}utilities`,
-} as const;
-
-function loadFromStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveToStorage<T>(key: string, value: T) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Ignore quota / serialization errors so a single bad write doesn't crash the app.
-  }
-}
+const EMPTY: never[] = [];
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [properties, setProperties] = useState<Property[]>(() =>
-    loadFromStorage(KEYS.properties, MOCK_PROPERTIES),
-  );
-  const [leases, setLeases] = useState<Lease[]>(() =>
-    loadFromStorage(KEYS.leases, MOCK_LEASES),
-  );
-  const [beds, setBeds] = useState<Bed[]>(() =>
-    loadFromStorage(KEYS.beds, MOCK_BEDS),
-  );
-  const [occupants, setOccupants] = useState<Occupant[]>(() =>
-    loadFromStorage(KEYS.occupants, MOCK_OCCUPANTS),
-  );
-  const [utilities, setUtilities] = useState<Utility[]>(() =>
-    loadFromStorage(KEYS.utilities, MOCK_UTILITIES),
-  );
+  const queryClient = useQueryClient();
 
-  useEffect(() => saveToStorage(KEYS.properties, properties), [properties]);
-  useEffect(() => saveToStorage(KEYS.leases, leases), [leases]);
-  useEffect(() => saveToStorage(KEYS.beds, beds), [beds]);
-  useEffect(() => saveToStorage(KEYS.occupants, occupants), [occupants]);
-  useEffect(() => saveToStorage(KEYS.utilities, utilities), [utilities]);
+  const propertiesQuery = useListProperties();
+  const leasesQuery = useListLeases();
+  const bedsQuery = useListBeds();
+  const occupantsQuery = useListOccupants();
+  const utilitiesQuery = useListUtilities();
 
-  const updateProperty = (id: string, updates: Partial<Property>) =>
-    setProperties(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
+  const propertiesKey = getListPropertiesQueryKey();
+  const leasesKey = getListLeasesQueryKey();
+  const bedsKey = getListBedsQueryKey();
+  const occupantsKey = getListOccupantsQueryKey();
+  const utilitiesKey = getListUtilitiesQueryKey();
 
-  const updateLease = (id: string, updates: Partial<Lease>) =>
-    setLeases(prev => prev.map(l => (l.id === id ? { ...l, ...updates } : l)));
+  const updatePropertyMut = useUpdateProperty();
+  const createLeaseMut = useCreateLease();
+  const updateLeaseMut = useUpdateLease();
+  const deleteLeaseMut = useDeleteLease();
+  const createBedMut = useCreateBed();
+  const updateBedMut = useUpdateBed();
+  const deleteBedMut = useDeleteBed();
+  const createOccupantMut = useCreateOccupant();
+  const updateOccupantMut = useUpdateOccupant();
+  const createUtilityMut = useCreateUtility();
+  const updateUtilityMut = useUpdateUtility();
+  const deleteUtilityMut = useDeleteUtility();
+  const resetMut = useResetToSampleData();
+  const importMut = useImportData();
 
-  const addLease = (lease: Lease) => setLeases(prev => [...prev, lease]);
-  const deleteLease = (id: string) => setLeases(prev => prev.filter(l => l.id !== id));
+  const properties = (propertiesQuery.data as Property[] | undefined) ?? EMPTY;
+  const leases = (leasesQuery.data as Lease[] | undefined) ?? EMPTY;
+  const beds = (bedsQuery.data as Bed[] | undefined) ?? EMPTY;
+  const occupants = (occupantsQuery.data as Occupant[] | undefined) ?? EMPTY;
+  const utilities = (utilitiesQuery.data as Utility[] | undefined) ?? EMPTY;
 
-  const addBed = (bed: Bed) => setBeds(prev => [...prev, bed]);
-  const deleteBed = (id: string) => setBeds(prev => prev.filter(b => b.id !== id));
+  const isLoading =
+    propertiesQuery.isLoading ||
+    leasesQuery.isLoading ||
+    bedsQuery.isLoading ||
+    occupantsQuery.isLoading ||
+    utilitiesQuery.isLoading;
 
-  const updateBed = (id: string, updates: Partial<Bed>) =>
-    setBeds(prev => prev.map(b => (b.id === id ? { ...b, ...updates } : b)));
+  // ── Helpers for optimistic cache updates ────────────────────────────────
+  function patchInList<T extends { id: string }>(
+    key: QueryKey,
+    id: string,
+    updates: Partial<T>,
+  ) {
+    queryClient.setQueryData<T[]>(key, (prev) =>
+      prev ? prev.map((item) => (item.id === id ? { ...item, ...updates } : item)) : prev,
+    );
+  }
+  function pushToList<T>(key: QueryKey, item: T) {
+    queryClient.setQueryData<T[]>(key, (prev) => (prev ? [...prev, item] : [item]));
+  }
+  function removeFromList<T extends { id: string }>(key: QueryKey, id: string) {
+    queryClient.setQueryData<T[]>(key, (prev) =>
+      prev ? prev.filter((item) => item.id !== id) : prev,
+    );
+  }
 
-  const updateOccupant = (id: string, updates: Partial<Occupant>) =>
-    setOccupants(prev => prev.map(o => (o.id === id ? { ...o, ...updates } : o)));
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: propertiesKey });
+    queryClient.invalidateQueries({ queryKey: leasesKey });
+    queryClient.invalidateQueries({ queryKey: bedsKey });
+    queryClient.invalidateQueries({ queryKey: occupantsKey });
+    queryClient.invalidateQueries({ queryKey: utilitiesKey });
+  };
 
-  const addOccupant = (occupant: Occupant) => setOccupants(prev => [...prev, occupant]);
+  // ── Mutations (optimistic; refetch on settle) ───────────────────────────
+  const updateProperty = (id: string, updates: Partial<Property>) => {
+    patchInList<Property>(propertiesKey, id, updates);
+    updatePropertyMut.mutate(
+      { id, data: updates },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: propertiesKey }) },
+    );
+  };
 
-  const updateUtility = (id: string, updates: Partial<Utility>) =>
-    setUtilities(prev => prev.map(u => (u.id === id ? { ...u, ...updates } : u)));
+  const updateLease = (id: string, updates: Partial<Lease>) => {
+    patchInList<Lease>(leasesKey, id, updates);
+    updateLeaseMut.mutate(
+      { id, data: updates },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+    );
+  };
+  const addLease = (lease: Lease) => {
+    pushToList<Lease>(leasesKey, lease);
+    createLeaseMut.mutate(
+      { data: lease },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+    );
+  };
+  const deleteLease = (id: string) => {
+    removeFromList<Lease>(leasesKey, id);
+    deleteLeaseMut.mutate(
+      { id },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }) },
+    );
+  };
 
-  const addUtility = (utility: Utility) => setUtilities(prev => [...prev, utility]);
-  const deleteUtility = (id: string) => setUtilities(prev => prev.filter(u => u.id !== id));
+  const addBed = (bed: Bed) => {
+    pushToList<Bed>(bedsKey, bed);
+    createBedMut.mutate(
+      { data: bed },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+    );
+  };
+  const deleteBed = (id: string) => {
+    removeFromList<Bed>(bedsKey, id);
+    deleteBedMut.mutate(
+      { id },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+    );
+  };
+  const updateBed = (id: string, updates: Partial<Bed>) => {
+    patchInList<Bed>(bedsKey, id, updates);
+    updateBedMut.mutate(
+      { id, data: updates },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }) },
+    );
+  };
+
+  const updateOccupant = (id: string, updates: Partial<Occupant>) => {
+    patchInList<Occupant>(occupantsKey, id, updates);
+    updateOccupantMut.mutate(
+      { id, data: updates },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }) },
+    );
+  };
+  const addOccupant = (occupant: Occupant) => {
+    pushToList<Occupant>(occupantsKey, occupant);
+    createOccupantMut.mutate(
+      { data: occupant },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }) },
+    );
+  };
+
+  const updateUtility = (id: string, updates: Partial<Utility>) => {
+    patchInList<Utility>(utilitiesKey, id, updates);
+    updateUtilityMut.mutate(
+      { id, data: updates },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+    );
+  };
+  const addUtility = (utility: Utility) => {
+    pushToList<Utility>(utilitiesKey, utility);
+    createUtilityMut.mutate(
+      { data: utility },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+    );
+  };
+  const deleteUtility = (id: string) => {
+    removeFromList<Utility>(utilitiesKey, id);
+    deleteUtilityMut.mutate(
+      { id },
+      { onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }) },
+    );
+  };
 
   const resetToSampleData = () => {
-    if (typeof window !== "undefined") {
-      try {
-        for (const key of Object.values(KEYS)) {
-          window.localStorage.removeItem(key);
-        }
-      } catch {
-        // Ignore storage errors; in-memory state will still be reset below.
-      }
-    }
-    setProperties(MOCK_PROPERTIES);
-    setLeases(MOCK_LEASES);
-    setBeds(MOCK_BEDS);
-    setOccupants(MOCK_OCCUPANTS);
-    setUtilities(MOCK_UTILITIES);
+    resetMut.mutate(undefined, { onSettled: invalidateAll });
   };
 
   const exportData = (): ExportPayload => ({
@@ -160,11 +241,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const importData = (payload: unknown): ImportSummary => {
     const parsed = ExportPayloadSchema.parse(payload);
     const { data } = parsed;
-    setProperties(data.properties);
-    setLeases(data.leases);
-    setBeds(data.beds);
-    setOccupants(data.occupants);
-    setUtilities(data.utilities);
+
+    // Optimistically populate caches so the UI reflects the import immediately.
+    queryClient.setQueryData<Property[]>(propertiesKey, data.properties);
+    queryClient.setQueryData<Lease[]>(leasesKey, data.leases);
+    queryClient.setQueryData<Bed[]>(bedsKey, data.beds);
+    queryClient.setQueryData<Occupant[]>(occupantsKey, data.occupants);
+    queryClient.setQueryData<Utility[]>(utilitiesKey, data.utilities);
+
+    // Persist atomically on the server, then re-fetch to confirm.
+    importMut.mutate({ data }, { onSettled: invalidateAll });
+
     return {
       properties: data.properties.length,
       leases: data.leases.length,
@@ -176,7 +263,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      properties, leases, beds, occupants, utilities,
+      properties, leases, beds, occupants, utilities, isLoading,
       updateProperty, updateLease, addLease, deleteLease,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,

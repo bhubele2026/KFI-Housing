@@ -77,6 +77,11 @@ export default function Utilities() {
   const activeCustomerName =
     customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
 
+  // Hide the Customer column when a customer filter is active, since every
+  // row already belongs to that customer.
+  const showCustomerColumn = customerFilter === "All";
+  const columnCount = showCustomerColumn ? 8 : 7;
+
   // Restrict the property dropdown to properties owned by the active customer.
   const availableProperties = useMemo(() => {
     if (customerFilter === "All") return properties;
@@ -200,6 +205,7 @@ export default function Utilities() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
+                  {showCustomerColumn && <TableHead>Customer</TableHead>}
                   <TableHead>Type</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Account #</TableHead>
@@ -210,10 +216,10 @@ export default function Utilities() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={7} />
+                  <SkeletonRows rows={6} columns={columnCount} />
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
                       No utility services found.
                     </TableCell>
                   </TableRow>
@@ -221,6 +227,9 @@ export default function Utilities() {
                   <>
                     {filtered.map((u, i) => {
                       const property = propertyById.get(u.propertyId);
+                      const customerName = property?.customerId
+                        ? customerById.get(property.customerId)
+                        : undefined;
                       return (
                         <motion.tr
                           key={u.id}
@@ -232,6 +241,11 @@ export default function Utilities() {
                           data-testid={`row-utility-${u.id}`}
                         >
                           <td className="p-4 font-medium text-sm">{property?.name}</td>
+                          {showCustomerColumn && (
+                            <td className="p-4 text-sm text-muted-foreground" data-testid={`text-utility-customer-${u.id}`}>
+                              {customerName ?? "—"}
+                            </td>
+                          )}
                           <td className="p-4">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}>
                               <Zap className="h-3 w-3" />
@@ -249,7 +263,7 @@ export default function Utilities() {
                       );
                     })}
                     <tr className="bg-muted/40 border-t-2 border-border">
-                      <td colSpan={4} className="p-4 text-sm font-semibold text-right text-muted-foreground">
+                      <td colSpan={showCustomerColumn ? 5 : 4} className="p-4 text-sm font-semibold text-right text-muted-foreground">
                         {filtered.length} service{filtered.length !== 1 ? "s" : ""} total
                       </td>
                       <td className="p-4 text-right font-bold">${totalMonthly.toLocaleString()}/mo</td>

@@ -58,11 +58,13 @@ export default function Finance() {
     const totalCost = leaseCost + utilCost;
     const occupiedBeds = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length;
     const totalBeds = beds.filter(b => b.propertyId === p.id).length;
+    const customerName = p.customerId ? customerById.get(p.customerId) : undefined;
 
     return {
       id: p.id,
       name: p.name,
       shortName: p.name.split(" ")[0],
+      customerName,
       revenue,
       leaseCost,
       utilCost,
@@ -86,6 +88,11 @@ export default function Finance() {
 
   const activeCustomerName =
     customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
+
+  // Hide the Customer column when a customer filter is active, since every
+  // row already belongs to that customer.
+  const showCustomerColumn = customerFilter === "All";
+  const tableColCount = showCustomerColumn ? 8 : 7;
 
   return (
     <MainLayout>
@@ -191,6 +198,7 @@ export default function Finance() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Property</TableHead>
+                  {showCustomerColumn && <TableHead>Customer</TableHead>}
                   <TableHead className="text-center">Occupancy</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
                   <TableHead className="text-right">Lease Cost</TableHead>
@@ -202,7 +210,7 @@ export default function Finance() {
               <TableBody>
                 {financialData.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                    <td colSpan={tableColCount} className="h-24 text-center text-sm text-muted-foreground">
                       No properties match this filter.
                     </td>
                   </tr>
@@ -217,6 +225,11 @@ export default function Finance() {
                         className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
                       >
                         <td className="p-4 font-medium">{d.name}</td>
+                        {showCustomerColumn && (
+                          <td className="p-4 text-sm text-muted-foreground" data-testid={`text-finance-customer-${d.id}`}>
+                            {d.customerName ?? "—"}
+                          </td>
+                        )}
                         <td className="p-4 text-center text-sm text-muted-foreground">
                           {d.occupiedBeds}/{d.totalBeds}
                         </td>
@@ -236,6 +249,7 @@ export default function Finance() {
                     ))}
                     <tr className="bg-muted/50 border-t-2 border-border">
                       <td className="p-4 font-bold">{activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total"}</td>
+                      {showCustomerColumn && <td />}
                       <td />
                       <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
                       <td className="p-4 text-right font-bold">${totals.leaseCost.toLocaleString()}</td>

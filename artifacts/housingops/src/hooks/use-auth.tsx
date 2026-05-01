@@ -8,23 +8,36 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const AUTH_STORAGE_KEY = "housingops_auth";
+
+function readAuthFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(readAuthFromStorage);
 
   useEffect(() => {
-    const authStr = localStorage.getItem("housingops_auth");
-    if (authStr === "true") {
-      setIsAuthenticated(true);
-    }
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== AUTH_STORAGE_KEY && event.key !== null) return;
+      setIsAuthenticated(readAuthFromStorage());
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const login = () => {
-    localStorage.setItem("housingops_auth", "true");
+    localStorage.setItem(AUTH_STORAGE_KEY, "true");
     setIsAuthenticated(true);
   };
 
   const logout = () => {
-    localStorage.removeItem("housingops_auth");
+    localStorage.removeItem(AUTH_STORAGE_KEY);
     setIsAuthenticated(false);
   };
 

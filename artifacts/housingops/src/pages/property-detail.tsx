@@ -182,7 +182,7 @@ function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | 
 
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
-  const { properties, leases, beds, occupants, utilities, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, beds, occupants, utilities, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
 
   const property = properties.find(p => p.id === id);
   if (!property) {
@@ -199,7 +199,7 @@ export default function PropertyDetail() {
   const propBeds = beds.filter(b => b.propertyId === id);
   const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
   const propLeases = leases.filter(l => l.propertyId === id);
-  const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.year - b.year || a.month - b.month);
+  const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
   const activeLease = propLeases.find(l => l.status === "Active");
 
   const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;

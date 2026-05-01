@@ -22,14 +22,14 @@ export default function Dashboard() {
   }, 0);
 
   const totalMonthlyLeaseCosts = MOCK_LEASES.filter(l => l.status === "Active").reduce((acc, l) => acc + l.monthlyRent, 0);
-  const currentMonthUtilities = MOCK_UTILITIES.filter(u => u.month === 3 && u.year === 2024).reduce((acc, u) => acc + u.total, 0);
+  const currentMonthUtilities = MOCK_UTILITIES.reduce((acc, u) => acc + u.monthlyCost, 0);
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
 
   const chartData = MOCK_PROPERTIES.map(p => {
     const revenue = MOCK_BEDS.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
     const leaseCost = MOCK_LEASES.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
-    const utilCost = MOCK_UTILITIES.find(u => u.propertyId === p.id && u.month === 3)?.total || 0;
+    const utilCost = MOCK_UTILITIES.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
     return {
       name: p.name,
       Revenue: revenue,

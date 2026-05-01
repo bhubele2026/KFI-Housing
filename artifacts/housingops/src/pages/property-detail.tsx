@@ -140,12 +140,13 @@ export default function PropertyDetail() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
           <StatCard label="Monthly Revenue" value={`$${monthlyRevenue.toLocaleString()}`} icon={TrendingUp} color="text-green-600" />
-          <StatCard label="Monthly Cost" value={`$${totalCost.toLocaleString()}`} icon={TrendingDown} color="text-destructive" />
+          <StatCard label="Lease Rent" value={monthlyLeaseCost > 0 ? `$${monthlyLeaseCost.toLocaleString()}` : "—"} icon={KeyRound} color="text-destructive" sub="active lease" />
+          <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
 

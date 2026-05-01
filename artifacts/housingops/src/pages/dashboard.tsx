@@ -1,15 +1,18 @@
+import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, KeyRound, Zap, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, Users } from "lucide-react";
+import { Building2, BedDouble, KeyRound, Zap, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, Users, Briefcase } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Dashboard() {
   const { properties, beds, leases, utilities, customers } = useData();
+  const [customerFilter, setCustomerFilter] = useState("All");
 
   const totalProperties = properties.length;
   const totalBeds = beds.length;
@@ -27,17 +30,26 @@ export default function Dashboard() {
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
 
-  const chartData = properties.map(p => {
-    const revenue = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
-    const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
-    const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
-    return {
-      name: p.name,
-      Revenue: revenue,
-      Cost: leaseCost + utilCost,
-      Profit: revenue - (leaseCost + utilCost)
-    };
-  });
+  const scopedProperties = useMemo(() => {
+    if (customerFilter === "All") return properties;
+    return properties.filter((p) => p.customerId === customerFilter);
+  }, [properties, customerFilter]);
+
+  const chartData = useMemo(
+    () =>
+      scopedProperties.map((p) => {
+        const revenue = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
+        const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
+        const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
+        return {
+          name: p.name,
+          Revenue: revenue,
+          Cost: leaseCost + utilCost,
+          Profit: revenue - (leaseCost + utilCost),
+        };
+      }),
+    [scopedProperties, beds, leases, utilities],
+  );
 
   const cards = [
     { title: "Properties", value: totalProperties, icon: Building2, trend: "+2 this year" },
@@ -47,6 +59,9 @@ export default function Dashboard() {
     { title: "Monthly Costs", value: `$${totalMonthlyCosts.toLocaleString()}`, icon: DollarSign, trend: "Leases + Utilities" },
     { title: "Net Profit", value: `$${netProfit.toLocaleString()}`, icon: Zap, trend: netProfit >= 0 ? "+12% vs last month" : "Needs attention" },
   ];
+
+  const activeCustomerName =
+    customerFilter === "All" ? null : customers.find((c) => c.id === customerFilter)?.name ?? null;
 
   return (
     <MainLayout>
@@ -114,7 +129,28 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Property Performance</CardTitle>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Property Performance</CardTitle>
+                  {activeCustomerName && (
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Briefcase className="h-3 w-3" />
+                      Showing only <span className="font-semibold">{activeCustomerName}</span>
+                    </p>
+                  )}
+                </div>
+                <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                  <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
+                    <SelectValue placeholder="Customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Customers</SelectItem>
+                    {customers.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -127,26 +163,34 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {chartData.map((data) => {
-                    const property = properties.find(p => p.name === data.name);
-                    const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
-                    return (
-                      <TableRow key={data.name}>
-                        <TableCell className="font-medium">{data.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {customer?.name ?? <span className="italic">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {Math.round((beds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                            ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {chartData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        No properties match this customer.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    chartData.map((data) => {
+                      const property = properties.find(p => p.name === data.name);
+                      const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
+                      return (
+                        <TableRow key={data.name} data-testid={`row-perf-${property?.id ?? data.name}`}>
+                          <TableCell className="font-medium">{data.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {customer?.name ?? <span className="italic">—</span>}
+                          </TableCell>
+                          <TableCell>
+                            {Math.round((beds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
+                              ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

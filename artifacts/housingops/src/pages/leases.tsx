@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { getRenewalInfo } from "@/data/mockData";
 import { useData } from "@/context/data-store";
@@ -8,25 +8,72 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus } from "lucide-react";
+import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 
 export default function Leases() {
   const [, navigate] = useLocation();
+  const searchString = useSearch();
   const [statusFilter, setStatusFilter] = useState("All");
+  const [customerFilter, setCustomerFilter] = useState("All");
   const { leases, properties, customers, updateLease } = useData();
 
+  const customerById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of customers) map.set(c.id, c.name);
+    return map;
+  }, [customers]);
+
+  const propertyById = useMemo(() => {
+    const map = new Map(properties.map((p) => [p.id, p] as const));
+    return map;
+  }, [properties]);
+
+  // Sync ?customer=<id> URL parameter into the filter state.
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const param = params.get("customer");
+    if (param && customers.some((c) => c.id === param)) {
+      setCustomerFilter(param);
+    } else if (!param && customerFilter !== "All") {
+      setCustomerFilter("All");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString, customers]);
+
+  const updateCustomerFilter = (next: string) => {
+    setCustomerFilter(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "All") params.delete("customer");
+    else params.set("customer", next);
+    const qs = params.toString();
+    const base = window.location.pathname;
+    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+  };
+
   const filteredLeases = leases.filter((l) => {
-    return statusFilter === "All" || l.status === statusFilter;
+    const matchesStatus = statusFilter === "All" || l.status === statusFilter;
+    if (!matchesStatus) return false;
+    if (customerFilter === "All") return true;
+    const property = propertyById.get(l.propertyId);
+    return property?.customerId === customerFilter;
   });
 
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
   const renewalAlerts = leases
     .filter((l) => l.status === "Active" || l.status === "Upcoming")
+    .filter((l) => {
+      if (customerFilter === "All") return true;
+      const property = propertyById.get(l.propertyId);
+      return property?.customerId === customerFilter;
+    })
     .map((l) => ({ lease: l, info: getRenewalInfo(l.endDate) }))
     .filter(({ info }) => info.level !== "ok")
     .sort((a, b) => a.info.days - b.info.days);
+
+  const activeCustomerName =
+    customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
 
   return (
     <MainLayout>
@@ -41,6 +88,24 @@ export default function Leases() {
             Add Lease
           </Button>
         </div>
+
+        {activeCustomerName && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+              <Briefcase className="h-3 w-3" />
+              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              <button
+                type="button"
+                onClick={() => updateCustomerFilter("All")}
+                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                aria-label="Clear customer filter"
+                data-testid="button-clear-customer-filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </div>
+        )}
 
         {renewalAlerts.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
@@ -130,18 +195,34 @@ export default function Leases() {
 
         <Card>
           <CardContent className="p-0">
-            <div className="p-4 border-b flex items-center justify-between">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Expired">Expired</SelectItem>
-                  <SelectItem value="Upcoming">Upcoming</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="p-4 border-b flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+                  <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
+                    <SelectValue placeholder="Customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Customers</SelectItem>
+                    {customers.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Statuses</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Expired">Expired</SelectItem>
+                    <SelectItem value="Upcoming">Upcoming</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {filteredLeases.length} of {leases.length} lease{leases.length === 1 ? "" : "s"}
+              </span>
             </div>
 
             <Table>
@@ -169,7 +250,7 @@ export default function Leases() {
                     const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
                     const info = getRenewalInfo(lease.endDate);
                     return (
-                      <TableRow key={lease.id}>
+                      <TableRow key={lease.id} data-testid={`row-lease-${lease.id}`}>
                         <TableCell className="font-medium">{property?.name || "Unknown"}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {customer?.name ?? <span className="italic">—</span>}

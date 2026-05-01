@@ -19,8 +19,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const EMPTY_DRAFT: Customer = {
   id: "",
@@ -396,17 +399,37 @@ export default function Customers() {
                         </td>
                         <td className="p-4 text-center">
                           {count > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/properties?customer=${encodeURIComponent(c.id)}`)}
-                              className="inline-flex items-center"
-                              data-testid={`link-customer-properties-${c.id}`}
-                            >
-                              <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/70">
-                                {count}
-                                <ChevronRight className="h-3 w-3" />
-                              </Badge>
-                            </button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center"
+                                  data-testid={`link-customer-properties-${c.id}`}
+                                  aria-label={`View ${c.name}'s properties or leases`}
+                                >
+                                  <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/70">
+                                    {count}
+                                    <ChevronRight className="h-3 w-3" />
+                                  </Badge>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center" className="w-48">
+                                <DropdownMenuItem
+                                  onClick={() => navigate(`/properties?customer=${encodeURIComponent(c.id)}`)}
+                                  data-testid={`link-customer-goto-properties-${c.id}`}
+                                >
+                                  <Building2 className="mr-2 h-4 w-4" />
+                                  View properties
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => navigate(`/leases?customer=${encodeURIComponent(c.id)}`)}
+                                  data-testid={`link-customer-goto-leases-${c.id}`}
+                                >
+                                  <FileText className="mr-2 h-4 w-4" />
+                                  View leases
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           ) : (
                             <Badge variant="outline" className="text-muted-foreground">0</Badge>
                           )}

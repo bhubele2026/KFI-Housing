@@ -227,6 +227,11 @@ function makeFreshState(): State {
       baseProperty({ id: "p1", customerId: "c1", name: "Maple", address: "1 Maple Way" }),
       baseProperty({ id: "p2", customerId: "c1", name: "Oak",   address: "2 Oak Ln" }),
       baseProperty({ id: "p3", customerId: "c1", name: "Pine",  address: "3 Pine Rd" }),
+      // p4 hosts l2 below — a real lease row that has neither buyout nor
+      // clauses, used to exercise the Terms-column empty cell and the
+      // buyout filter's "Yes" path. Kept distinct from p2/p3 so the
+      // existing placeholder-count tests still see two empty properties.
+      baseProperty({ id: "p4", customerId: "c1", name: "Cedar", address: "4 Cedar St" }),
     ],
     leases: [
       {
@@ -238,6 +243,31 @@ function makeFreshState(): State {
         securityDeposit: 0,
         status: "Active",
         notes: "",
+        // Extended lease fields exercised by the Terms-column / buyout-filter
+        // tests below. l1 has buyout + clauses, l2 below has neither so the
+        // filter and badge render code paths are both covered.
+        clauses: "Tenant must give 30 days notice.",
+        includedItems: [],
+        buyoutAvailable: true,
+        buyoutCost: 5000,
+      },
+      {
+        // l2 belongs to p4 (Cedar) so p2 and p3 stay placeholder-only.
+        // Crucially, l2 has NO buyout and NO clauses so the buyout filter
+        // ("Yes" hides this row) and the Terms-column empty-state both
+        // have a target.
+        id: "l2",
+        propertyId: "p4",
+        startDate: "2025-02-01",
+        endDate: "2026-02-01",
+        monthlyRent: 2000,
+        securityDeposit: 0,
+        status: "Active",
+        notes: "",
+        clauses: "",
+        includedItems: [],
+        buyoutAvailable: false,
+        buyoutCost: null,
       },
     ],
     rooms: [],
@@ -473,5 +503,100 @@ describe("Leases page — placeholder rows for properties without a lease", () =
         p.propertyId !== "p2",
     );
     expect(otherLocked).toBeUndefined();
+  });
+
+  // ── Terms column: at-a-glance buyout/clauses signals (task #122) ─────
+  // The Terms column surfaces two extended lease fields without forcing the
+  // operator to open the lease detail page. l1 has both a buyout (with cost)
+  // and clauses; l2 has neither. The badge testids are stable so the cell
+  // can be asserted without coupling to copy.
+  it("renders the Buyout and Clauses badges in the Terms column for a lease that has them", async () => {
+    await renderPage();
+
+    const buyoutBadge = container.querySelector(
+      '[data-testid="badge-lease-buyout-l1"]',
+    );
+    const clausesBadge = container.querySelector(
+      '[data-testid="badge-lease-clauses-l1"]',
+    );
+
+    expect(buyoutBadge).not.toBeNull();
+    // The buyout badge embeds the formatted cost so operators can triage
+    // without opening the lease.
+    expect(buyoutBadge!.textContent).toContain("$5,000");
+
+    expect(clausesBadge).not.toBeNull();
+    expect(clausesBadge!.textContent).toContain("Clauses");
+  });
+
+  it("renders an em-dash placeholder in the Terms column for a lease with no buyout and no clauses", async () => {
+    // The empty-state matters because, without it, the column would
+    // silently collapse and the table layout would jitter row-to-row.
+    // l2 is the lease that intentionally has neither field set.
+    await renderPage();
+
+    expect(
+      container.querySelector('[data-testid="lease-terms-empty-l2"]'),
+    ).not.toBeNull();
+    // And it must NOT carry the badge testids — those would imply we
+    // surfaced data that isn't there.
+    expect(
+      container.querySelector('[data-testid="badge-lease-buyout-l2"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="badge-lease-clauses-l2"]'),
+    ).toBeNull();
+  });
+
+  // ── Buyout filter (task #122) ────────────────────────────────────────
+  // The dropdown lives next to Status; "Yes" / "No" map directly onto the
+  // lease's buyoutAvailable flag. Placeholder rows are hidden whenever a
+  // value-based filter is active because they have no lease state to test.
+  it("filtering by Buyout=Yes hides leases without a buyout AND hides placeholder rows", async () => {
+    await renderPage();
+
+    // Sanity: both real lease rows are rendered before filtering, and the
+    // placeholder rows for p2/p3 are present too.
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p2"]'),
+    ).not.toBeNull();
+
+    // Click the "Buyout available" option in our select-mock.
+    const yesOption = container.querySelector(
+      '[data-testid="select-buyout-filter"] [data-select-item="Yes"]',
+    ) as HTMLButtonElement | null;
+    expect(yesOption).not.toBeNull();
+    await act(async () => {
+      yesOption!.click();
+    });
+
+    // l1 has buyout → still visible. l2 doesn't → gone. Placeholders are
+    // suppressed while a value filter is active.
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p2"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p3"]'),
+    ).toBeNull();
+  });
+
+  it("filtering by Buyout=No hides leases that have a buyout", async () => {
+    await renderPage();
+
+    const noOption = container.querySelector(
+      '[data-testid="select-buyout-filter"] [data-select-item="No"]',
+    ) as HTMLButtonElement | null;
+    expect(noOption).not.toBeNull();
+    await act(async () => {
+      noOption!.click();
+    });
+
+    // l1 has buyout → hidden. l2 has none → still visible.
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
   });
 });

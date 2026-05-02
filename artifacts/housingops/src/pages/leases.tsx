@@ -18,10 +18,17 @@ import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { UploadLeasePdfDialog } from "@/components/upload-lease-pdf-dialog";
 import { useState } from "react";
 
+// Buyout filter values. "All" lets every lease through; "Yes" / "No" map
+// directly onto the lease's `buyoutAvailable` flag. Kept narrow so a
+// regression that introduces a new option also has to teach the filter
+// what to do with it.
+type BuyoutFilter = "All" | "Yes" | "No";
+
 export default function Leases() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("All");
+  const [buyoutFilter, setBuyoutFilter] = useState<BuyoutFilter>("All");
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
@@ -46,12 +53,20 @@ export default function Leases() {
         leases.filter((l) => {
           const matchesStatus = statusFilter === "All" || l.status === statusFilter;
           if (!matchesStatus) return false;
+          // Buyout filter is independent of status — operators triaging
+          // "which leases let the tenant exit early" should see hits across
+          // every status group at once.
+          if (buyoutFilter !== "All") {
+            const hasBuyout = l.buyoutAvailable ?? false;
+            if (buyoutFilter === "Yes" && !hasBuyout) return false;
+            if (buyoutFilter === "No" && hasBuyout) return false;
+          }
           if (customerFilter === ALL_CUSTOMERS) return true;
           const property = propertyById.get(l.propertyId);
           return property?.customerId === customerFilter;
         }),
       ),
-    [leases, statusFilter, customerFilter, propertyById],
+    [leases, statusFilter, buyoutFilter, customerFilter, propertyById],
   );
 
   // Placeholder rows: every property in the active customer scope that has no
@@ -68,7 +83,11 @@ export default function Leases() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [properties, leases, customerFilter]);
 
-  const showPlaceholders = statusFilter === "All";
+  // Placeholders represent "properties without a lease", so any active
+  // value-based filter (status, buyout) should hide them — there is no
+  // lease to evaluate against the filter, and showing them anyway would
+  // make the filtered count misleading.
+  const showPlaceholders = statusFilter === "All" && buyoutFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
   // The placeholder row's "Create lease" CTA opens this controlled dialog
@@ -296,6 +315,22 @@ export default function Leases() {
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Expired">Expired</SelectItem>
                     <SelectItem value="Upcoming">Upcoming</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={buyoutFilter}
+                  onValueChange={(v) => setBuyoutFilter(v as BuyoutFilter)}
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-48"
+                    data-testid="select-buyout-filter"
+                  >
+                    <SelectValue placeholder="Buyout" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">Any Buyout</SelectItem>
+                    <SelectItem value="Yes">Buyout available</SelectItem>
+                    <SelectItem value="No">No buyout</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, ExternalLink, DollarSign, FileText } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
 import { InlineEdit, NotesEditor } from "@/pages/property-detail";
@@ -120,9 +120,11 @@ export function LeasesTable({
       navigate(leaseHref(leaseId));
     };
 
-  // Property + Customer + 5 always-on columns + (open + delete) action columns.
+  // Property + Customer + 6 always-on columns (Start, End, Rent, Deposit,
+  // Status, Terms, Notes — Terms surfaces buyout availability/cost and
+  // clauses presence at a glance) + (open + delete) action columns.
   const columnCount =
-    (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 5 + 2;
+    (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 6 + 2;
 
   const hasAnyRows = leases.length > 0 || placeholderProperties.length > 0;
 
@@ -137,6 +139,7 @@ export function LeasesTable({
           <TableHead className="text-right">Monthly Rent</TableHead>
           <TableHead className="text-right">Security Deposit</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Terms</TableHead>
           <TableHead>Notes</TableHead>
           <TableHead className="w-10" />
           <TableHead className="w-10" />
@@ -270,6 +273,9 @@ export function LeasesTable({
                       </Select>
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <LeaseTermsBadges lease={lease} />
+                  </TableCell>
                   <TableCell className="max-w-[260px] min-w-[180px]">
                     <NotesEditor
                       value={lease.notes}
@@ -358,6 +364,10 @@ export function LeasesTable({
                       No lease yet
                     </Badge>
                   </TableCell>
+                  {/* Placeholder rows have no lease record yet, so there are
+                      no terms to surface — render an em-dash so the column
+                      stays aligned with real lease rows. */}
+                  <TableCell className="text-sm text-muted-foreground">—</TableCell>
                   <TableCell className="text-sm text-muted-foreground">—</TableCell>
                   <TableCell>
                     <Button
@@ -382,5 +392,66 @@ export function LeasesTable({
         )}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * Compact at-a-glance signals for two extended lease fields that otherwise
+ * only show up after opening the lease detail page:
+ *   • Buyout availability (with the cost when set) — operators triaging
+ *     "can this tenant exit early and for how much?" need this without
+ *     drilling in.
+ *   • Clauses present — a non-empty free-form clauses field gets a small
+ *     "Clauses" pill so reviewers know there is custom legalese to read.
+ *
+ * Renders an em-dash when neither signal applies so the cell stays
+ * vertically aligned with peers in the column.
+ */
+function LeaseTermsBadges({ lease }: { lease: Lease }) {
+  const hasBuyout = lease.buyoutAvailable ?? false;
+  const hasClauses = (lease.clauses ?? "").trim().length > 0;
+
+  if (!hasBuyout && !hasClauses) {
+    return (
+      <span
+        className="text-sm text-muted-foreground"
+        data-testid={`lease-terms-empty-${lease.id}`}
+      >
+        —
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {hasBuyout && (
+        <Badge
+          variant="secondary"
+          className="gap-1 text-[11px] font-medium"
+          data-testid={`badge-lease-buyout-${lease.id}`}
+        >
+          <DollarSign className="h-3 w-3" />
+          {lease.buyoutCost == null
+            ? "Buyout"
+            : `Buyout: $${lease.buyoutCost.toLocaleString()}`}
+        </Badge>
+      )}
+      {hasClauses && (
+        // Title attribute gives a native browser preview of the clauses
+        // text on hover, without coupling this cell to the Tooltip
+        // provider that lives at the App root (and is absent from
+        // unit-test harnesses). Operators who need to read the full
+        // text still click through to the lease detail page.
+        <Badge
+          variant="outline"
+          className="gap-1 text-[11px] font-medium"
+          title={lease.clauses}
+          data-testid={`badge-lease-clauses-${lease.id}`}
+        >
+          <FileText className="h-3 w-3" />
+          Clauses
+        </Badge>
+      )}
+    </div>
   );
 }

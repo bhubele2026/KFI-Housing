@@ -5,7 +5,12 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    // The orval-generated multipart body schemas reference DOM types
+    // (Blob/File). We don't actually use those at runtime in this package,
+    // but they need to resolve at type-check time. Adding `dom` here is
+    // safer than augmenting global types or post-processing generated code.
+    "lib": ["es2022", "dom"]
   },
   "include": ["src"]
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { getRenewalInfo } from "@/data/mockData";
@@ -7,13 +7,16 @@ import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download } from "lucide-react";
+import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
+import { LeasesTable } from "@/components/leases-table";
+import { AddLeaseDialog } from "@/components/add-lease-dialog";
+import { UploadLeasePdfDialog } from "@/components/upload-lease-pdf-dialog";
+import { useState } from "react";
 
 export default function Leases() {
   const [, navigate] = useLocation();
@@ -21,7 +24,10 @@ export default function Leases() {
   const [statusFilter, setStatusFilter] = useState("All");
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
-  const { leases, properties, customers, updateLease } = useData();
+  const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
+  // When the PDF import fails (parse/AI error), we hand off to the manual
+  // Add Lease dialog so the user can keep going without re-clicking.
+  const [pdfFallbackOpen, setPdfFallbackOpen] = useState(false);
 
   const customerById = useMemo(() => {
     const map = new Map<string, string>();
@@ -87,7 +93,7 @@ export default function Leases() {
             <h1 className="text-3xl font-bold tracking-tight">Leases</h1>
             <p className="text-muted-foreground mt-1">Manage master lease agreements</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               onClick={handleDownloadCsv}
@@ -97,10 +103,38 @@ export default function Leases() {
               <Download className="mr-2 h-4 w-4" />
               Download CSV
             </Button>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Lease
-            </Button>
+            <UploadLeasePdfDialog onPdfImportFailed={() => setPdfFallbackOpen(true)} />
+            <AddLeaseDialog
+              properties={properties}
+              customers={customers}
+              onAdd={(lease) => {
+                addLease(lease);
+                const property = propertyById.get(lease.propertyId);
+                toast({
+                  title: "Lease added",
+                  description: property
+                    ? `Added a new lease for ${property.name}.`
+                    : "New lease created.",
+                });
+              }}
+            />
+            {/* Controlled-open instance used as a fallback when the PDF import flow fails. */}
+            <AddLeaseDialog
+              properties={properties}
+              customers={customers}
+              open={pdfFallbackOpen}
+              onOpenChange={setPdfFallbackOpen}
+              onAdd={(lease) => {
+                addLease(lease);
+                const property = propertyById.get(lease.propertyId);
+                toast({
+                  title: "Lease added",
+                  description: property
+                    ? `Added a new lease for ${property.name}.`
+                    : "New lease created.",
+                });
+              }}
+            />
           </div>
         </div>
 
@@ -241,71 +275,22 @@ export default function Leases() {
               </span>
             </div>
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Property</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead>Time Left</TableHead>
-                  <TableHead className="text-right">Monthly Rent</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredLeases.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center">
-                      No leases found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredLeases.map((lease) => {
-                    const property = properties.find(p => p.id === lease.propertyId);
-                    const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
-                    const info = getRenewalInfo(lease.endDate);
-                    return (
-                      <TableRow key={lease.id} data-testid={`row-lease-${lease.id}`}>
-                        <TableCell className="font-medium">{property?.name || "Unknown"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {customer ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateCustomerFilter(customer.id);
-                              }}
-                              className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              data-testid={`button-filter-customer-${lease.id}`}
-                              aria-label={`Filter by customer ${customer.name}`}
-                            >
-                              {customer.name}
-                            </button>
-                          ) : (
-                            <span className="italic">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>{lease.startDate}</TableCell>
-                        <TableCell>{lease.endDate}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={`text-xs font-medium ${info.badgeClass}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${info.dotClass} mr-1.5 inline-block`} />
-                            {info.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">${lease.monthlyRent.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={lease.status === "Active" ? "default" : lease.status === "Expired" ? "destructive" : "secondary"}>
-                            {lease.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+            {/*
+              Columns mirror the per-property Leases tab exactly (Property,
+              Start, End, Monthly Rent, Security Deposit, Status, Notes) so
+              the two surfaces stay in lockstep. Customer-level filtering is
+              still available via the dropdown above and the "Filtered by
+              customer" badge — no separate Customer column is needed here.
+            */}
+            <LeasesTable
+              leases={filteredLeases}
+              properties={properties}
+              customers={customers}
+              showProperty
+              onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
+              onUpdate={updateLease}
+              onDelete={deleteLease}
+            />
           </CardContent>
         </Card>
       </div>

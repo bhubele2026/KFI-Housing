@@ -387,6 +387,60 @@ export interface UtilityUpdate {
   notes?: string;
 }
 
+export type LeasePdfExtractedConfidence =
+  (typeof LeasePdfExtractedConfidence)[keyof typeof LeasePdfExtractedConfidence];
+
+export const LeasePdfExtractedConfidence = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
+/**
+ * Lease fields parsed from the uploaded PDF. Any field the LLM could not
+identify with reasonable certainty is returned as `null` (or `""` for
+notes) so the user can fill it in during the review step.
+
+ */
+export interface LeasePdfExtracted {
+  propertyName: string | null;
+  propertyAddress: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  landlordName: string | null;
+  /** ISO 8601 date */
+  startDate: string | null;
+  /** ISO 8601 date */
+  endDate: string | null;
+  monthlyRent: number | null;
+  securityDeposit: number | null;
+  notes: string;
+  confidence: LeasePdfExtractedConfidence;
+}
+
+export interface LeasePdfPropertyCandidate {
+  propertyId: string;
+  propertyName: string;
+  address: string;
+  city: string;
+  state: string;
+  customerName: string;
+  /** 0..1 match score, higher is better. */
+  score: number;
+}
+
+export interface LeasePdfImportResult {
+  extracted: LeasePdfExtracted;
+  /** Best candidate when its score is comfortably above the noise floor; otherwise `null`. */
+  topMatch: LeasePdfPropertyCandidate | null;
+  /**
+   * Top candidates sorted by score desc; may be empty.
+   * @maxItems 5
+   */
+  candidates: LeasePdfPropertyCandidate[];
+}
+
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];
@@ -399,6 +453,11 @@ export interface ImportPayload {
 
 export type DeleteCustomer409 = {
   error: string;
+};
+
+export type ImportLeasePdfBody = {
+  /** A single lease PDF (`application/pdf`, max 10 MB). */
+  file: Blob;
 };
 
 export type DeleteRoom409 = {

@@ -29,6 +29,12 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // pdf-parse uses CJS dynamic require + ships its own canvas/font
+      // assets; bundling it with esbuild breaks at runtime. Keep it
+      // external so node resolves it from node_modules at startup.
+      "pdf-parse",
+      "pdfjs-dist",
+      "@napi-rs/canvas",
       "drizzle-kit",
       "drizzle-kit/api",
       "@electric-sql/pglite",

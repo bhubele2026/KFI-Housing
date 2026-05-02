@@ -650,6 +650,80 @@ export const CreateLeaseBody = zod.object({
 });
 
 /**
+ * Accepts a single text-based lease PDF (max 10 MB), extracts the lease
+fields with an LLM, and returns the extracted data plus the best
+matching property in the user's portfolio (if any) along with up to
+five candidates ranked by score.
+
+The PDF itself is **not** persisted — only the extracted fields are
+returned. Image-only / scanned PDFs are not supported.
+
+NOTE: The frontend invokes this endpoint via a hand-written
+`fetch(FormData)` client (`artifacts/housingops/src/lib/lease-pdf-import.ts`),
+not via the orval-generated react-query hook, because orval's
+multipart `File` typing requires a DOM lib that the shared
+`api-zod` package doesn't depend on.
+
+ * @summary Extract lease fields from a single uploaded lease PDF
+ */
+export const ImportLeasePdfBody = zod.object({
+  file: zod
+    .instanceof(File)
+    .describe("A single lease PDF (`application\/pdf`, max 10 MB)."),
+});
+
+export const importLeasePdfResponseCandidatesMax = 5;
+
+export const ImportLeasePdfResponse = zod.object({
+  extracted: zod
+    .object({
+      propertyName: zod.string().nullable(),
+      propertyAddress: zod.string().nullable(),
+      city: zod.string().nullable(),
+      state: zod.string().nullable(),
+      zip: zod.string().nullable(),
+      landlordName: zod.string().nullable(),
+      startDate: zod.string().nullable().describe("ISO 8601 date"),
+      endDate: zod.string().nullable().describe("ISO 8601 date"),
+      monthlyRent: zod.number().nullable(),
+      securityDeposit: zod.number().nullable(),
+      notes: zod.string(),
+      confidence: zod.enum(["high", "medium", "low"]),
+    })
+    .describe(
+      'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` for\nnotes) so the user can fill it in during the review step.\n',
+    ),
+  topMatch: zod
+    .object({
+      propertyId: zod.string(),
+      propertyName: zod.string(),
+      address: zod.string(),
+      city: zod.string(),
+      state: zod.string(),
+      customerName: zod.string(),
+      score: zod.number().describe("0..1 match score, higher is better."),
+    })
+    .nullable()
+    .describe(
+      "Best candidate when its score is comfortably above the noise floor; otherwise `null`.",
+    ),
+  candidates: zod
+    .array(
+      zod.object({
+        propertyId: zod.string(),
+        propertyName: zod.string(),
+        address: zod.string(),
+        city: zod.string(),
+        state: zod.string(),
+        customerName: zod.string(),
+        score: zod.number().describe("0..1 match score, higher is better."),
+      }),
+    )
+    .max(importLeasePdfResponseCandidatesMax)
+    .describe("Top candidates sorted by score desc; may be empty."),
+});
+
+/**
  * @summary Update a lease
  */
 export const UpdateLeaseParams = zod.object({

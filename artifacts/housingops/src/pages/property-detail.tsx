@@ -29,6 +29,8 @@ import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { StarRating } from "@/components/star-rating";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { LeasesTable } from "@/components/leases-table";
+import { AddLeaseDialog } from "@/components/add-lease-dialog";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -903,54 +905,22 @@ export default function PropertyDetail() {
           {/* ── LEASES TAB ── */}
           <TabsContent value="leases" className="space-y-4">
             <div className="flex justify-between items-center">
-              <p className="text-sm text-muted-foreground">{propLeases.length} lease{propLeases.length !== 1 ? "s" : ""} for this property</p>
+              <p className="text-sm text-muted-foreground">
+                {propLeases.length} lease{propLeases.length !== 1 ? "s" : ""} for this property
+              </p>
               <AddLeaseDialog propertyId={id} onAdd={addLease} />
             </div>
             <Card>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Start Date</TableHead>
-                      <TableHead>End Date</TableHead>
-                      <TableHead className="text-right">Monthly Rent</TableHead>
-                      <TableHead className="text-right">Security Deposit</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Notes</TableHead>
-                      <TableHead className="w-10" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {propLeases.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No leases found.</TableCell></TableRow>
-                    ) : propLeases.map(lease => (
-                      <TableRow key={lease.id}>
-                        <TableCell><InlineEdit value={lease.startDate} onSave={v => updateLease(lease.id, { startDate: v })} /></TableCell>
-                        <TableCell><InlineEdit value={lease.endDate} onSave={v => updateLease(lease.id, { endDate: v })} /></TableCell>
-                        <TableCell className="text-right"><InlineEdit value={lease.monthlyRent} prefix="$" type="number" onSave={v => updateLease(lease.id, { monthlyRent: parseFloat(v) })} /></TableCell>
-                        <TableCell className="text-right"><InlineEdit value={lease.securityDeposit} prefix="$" type="number" onSave={v => updateLease(lease.id, { securityDeposit: parseFloat(v) })} /></TableCell>
-                        <TableCell>
-                          <Select value={lease.status} onValueChange={v => updateLease(lease.id, { status: v as any })}>
-                            <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Active">Active</SelectItem>
-                              <SelectItem value="Expired">Expired</SelectItem>
-                              <SelectItem value="Upcoming">Upcoming</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="max-w-[200px]">
-                          <InlineEdit value={lease.notes} onSave={v => updateLease(lease.id, { notes: v })} />
-                        </TableCell>
-                        <TableCell>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteLease(lease.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <LeasesTable
+                  leases={propLeases}
+                  properties={properties}
+                  showProperty={false}
+                  showCustomer={false}
+                  onUpdate={updateLease}
+                  onDelete={deleteLease}
+                  emptyMessage="No leases found."
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -1454,61 +1424,9 @@ export default function PropertyDetail() {
   );
 }
 
-function AddLeaseDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (l: Lease) => void }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ startDate: "", endDate: "", monthlyRent: "", securityDeposit: "", status: "Active" as Lease["status"], notes: "" });
-
-  const submit = () => {
-    if (!form.startDate || !form.endDate || !form.monthlyRent) return;
-    onAdd({
-      id: `l-${Date.now()}`,
-      propertyId,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      monthlyRent: parseFloat(form.monthlyRent),
-      securityDeposit: parseFloat(form.securityDeposit) || 0,
-      status: form.status,
-      notes: form.notes,
-    });
-    setOpen(false);
-    setForm({ startDate: "", endDate: "", monthlyRent: "", securityDeposit: "", status: "Active", notes: "" });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Lease</Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Add Lease</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div><Label>Start Date</Label><Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} /></div>
-            <div><Label>End Date</Label><Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} /></div>
-            <div><Label>Monthly Rent ($)</Label><Input type="number" value={form.monthlyRent} onChange={e => setForm(f => ({ ...f, monthlyRent: e.target.value }))} /></div>
-            <div><Label>Security Deposit ($)</Label><Input type="number" value={form.securityDeposit} onChange={e => setForm(f => ({ ...f, securityDeposit: e.target.value }))} /></div>
-          </div>
-          <div>
-            <Label>Status</Label>
-            <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v as any }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-                <SelectItem value="Upcoming">Upcoming</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={submit}>Add Lease</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// AddLeaseDialog moved to @/components/add-lease-dialog so the same dialog
+// can be used on both the per-property tab (with propertyId pre-bound) and
+// the global Leases page (with a property picker).
 
 function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
   bedId: string;

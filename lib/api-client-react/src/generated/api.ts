@@ -24,8 +24,10 @@ import type {
   DeleteCustomer409,
   DeleteRoom409,
   HealthStatus,
+  ImportLeasePdfBody,
   ImportPayload,
   Lease,
+  LeasePdfImportResult,
   LeaseUpdate,
   Occupant,
   OccupantUpdate,
@@ -1111,6 +1113,108 @@ export const useCreateLease = <
   TContext
 > => {
   return useMutation(getCreateLeaseMutationOptions(options));
+};
+
+/**
+ * Accepts a single text-based lease PDF (max 10 MB), extracts the lease
+fields with an LLM, and returns the extracted data plus the best
+matching property in the user's portfolio (if any) along with up to
+five candidates ranked by score.
+
+The PDF itself is **not** persisted — only the extracted fields are
+returned. Image-only / scanned PDFs are not supported.
+
+NOTE: The frontend invokes this endpoint via a hand-written
+`fetch(FormData)` client (`artifacts/housingops/src/lib/lease-pdf-import.ts`),
+not via the orval-generated react-query hook, because orval's
+multipart `File` typing requires a DOM lib that the shared
+`api-zod` package doesn't depend on.
+
+ * @summary Extract lease fields from a single uploaded lease PDF
+ */
+export const getImportLeasePdfUrl = () => {
+  return `/api/leases/import-pdf`;
+};
+
+export const importLeasePdf = async (
+  importLeasePdfBody: ImportLeasePdfBody,
+  options?: RequestInit,
+): Promise<LeasePdfImportResult> => {
+  const formData = new FormData();
+  formData.append(`file`, importLeasePdfBody.file);
+
+  return customFetch<LeasePdfImportResult>(getImportLeasePdfUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getImportLeasePdfMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importLeasePdf>>,
+    TError,
+    { data: BodyType<ImportLeasePdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importLeasePdf>>,
+  TError,
+  { data: BodyType<ImportLeasePdfBody> },
+  TContext
+> => {
+  const mutationKey = ["importLeasePdf"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importLeasePdf>>,
+    { data: BodyType<ImportLeasePdfBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importLeasePdf(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportLeasePdfMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importLeasePdf>>
+>;
+export type ImportLeasePdfMutationBody = BodyType<ImportLeasePdfBody>;
+export type ImportLeasePdfMutationError = ErrorType<void>;
+
+/**
+ * @summary Extract lease fields from a single uploaded lease PDF
+ */
+export const useImportLeasePdf = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importLeasePdf>>,
+    TError,
+    { data: BodyType<ImportLeasePdfBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importLeasePdf>>,
+  TError,
+  { data: BodyType<ImportLeasePdfBody> },
+  TContext
+> => {
+  return useMutation(getImportLeasePdfMutationOptions(options));
 };
 
 /**

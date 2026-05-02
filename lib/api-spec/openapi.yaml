@@ -228,6 +228,52 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Lease" }
+  /leases/import-pdf:
+    post:
+      operationId: importLeasePdf
+      tags: [leases]
+      summary: Extract lease fields from a single uploaded lease PDF
+      description: |
+        Accepts a single text-based lease PDF (max 10 MB), extracts the lease
+        fields with an LLM, and returns the extracted data plus the best
+        matching property in the user's portfolio (if any) along with up to
+        five candidates ranked by score.
+
+        The PDF itself is **not** persisted — only the extracted fields are
+        returned. Image-only / scanned PDFs are not supported.
+
+        NOTE: The frontend invokes this endpoint via a hand-written
+        `fetch(FormData)` client (`artifacts/housingops/src/lib/lease-pdf-import.ts`),
+        not via the orval-generated react-query hook, because orval's
+        multipart `File` typing requires a DOM lib that the shared
+        `api-zod` package doesn't depend on.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: A single lease PDF (`application/pdf`, max 10 MB).
+      responses:
+        "200":
+          description: Lease fields extracted and matched against the portfolio.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeasePdfImportResult" }
+        "400":
+          description: No file provided in the request.
+        "413":
+          description: The uploaded PDF is larger than 10 MB.
+        "415":
+          description: The uploaded file is not `application/pdf`.
+        "422":
+          description: The PDF could not be parsed (e.g. scanned / image-only) or extraction failed.
+
   /leases/{id}:
     patch:
       operationId: updateLease
@@ -799,6 +845,58 @@ components:
         monthlyCost: { type: number }
         accountNumber: { type: string }
         notes: { type: string }
+
+    LeasePdfExtracted:
+      type: object
+      required: [propertyName, propertyAddress, city, state, zip, landlordName, startDate, endDate, monthlyRent, securityDeposit, notes, confidence]
+      description: |
+        Lease fields parsed from the uploaded PDF. Any field the LLM could not
+        identify with reasonable certainty is returned as `null` (or `""` for
+        notes) so the user can fill it in during the review step.
+      properties:
+        propertyName: { type: string, nullable: true }
+        propertyAddress: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true }
+        zip: { type: string, nullable: true }
+        landlordName: { type: string, nullable: true }
+        startDate: { type: string, nullable: true, description: "ISO 8601 date" }
+        endDate: { type: string, nullable: true, description: "ISO 8601 date" }
+        monthlyRent: { type: number, nullable: true }
+        securityDeposit: { type: number, nullable: true }
+        notes: { type: string }
+        confidence:
+          type: string
+          enum: [high, medium, low]
+
+    LeasePdfPropertyCandidate:
+      type: object
+      required: [propertyId, propertyName, address, city, state, customerName, score]
+      properties:
+        propertyId: { type: string }
+        propertyName: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        customerName: { type: string }
+        score:
+          type: number
+          description: 0..1 match score, higher is better.
+
+    LeasePdfImportResult:
+      type: object
+      required: [extracted, topMatch, candidates]
+      properties:
+        extracted: { $ref: "#/components/schemas/LeasePdfExtracted" }
+        topMatch:
+          allOf: [{ $ref: "#/components/schemas/LeasePdfPropertyCandidate" }]
+          nullable: true
+          description: Best candidate when its score is comfortably above the noise floor; otherwise `null`.
+        candidates:
+          type: array
+          maxItems: 5
+          description: Top candidates sorted by score desc; may be empty.
+          items: { $ref: "#/components/schemas/LeasePdfPropertyCandidate" }
 
     ImportPayload:
       type: object

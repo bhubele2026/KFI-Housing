@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { getRenewalInfo, computeOverallRating, RATING_CATEGORIES, type Property, type Customer } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,9 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
@@ -24,6 +27,23 @@ import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating";
 type MinRating = "any" | "3" | "4" | "5";
+type RatingSortKey = "overall" | RatingCategoryKey;
+
+const RATING_SORT_OPTIONS: { key: RatingSortKey; label: string }[] = [
+  { key: "overall", label: "Overall" },
+  ...RATING_CATEGORIES.map((c) => ({ key: c.key, label: c.label })),
+];
+
+/**
+ * Returns the property's value for the given rating dimension, or null when
+ * unrated so the caller can sort unrated properties to the end. Per-category
+ * values of 0 mean "not yet rated" and are treated as null.
+ */
+function getRatingValueFor(p: Property, key: RatingSortKey): number | null {
+  if (key === "overall") return computeOverallRating(p.ratings);
+  const v = p.ratings?.[key] ?? 0;
+  return v > 0 ? v : null;
+}
 
 interface PropertyDraft {
   name: string;
@@ -70,6 +90,7 @@ export default function Properties() {
   const [minRating, setMinRating] = useState<MinRating>("any");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [ratingSortCategory, setRatingSortCategory] = useState<RatingSortKey>("overall");
 
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(EMPTY_PROPERTY_DRAFT);
@@ -137,8 +158,8 @@ export default function Properties() {
         });
       } else if (sortKey === "rating") {
         list.sort((a, b) => {
-          const ar = computeOverallRating(a.ratings);
-          const br = computeOverallRating(b.ratings);
+          const ar = getRatingValueFor(a, ratingSortCategory);
+          const br = getRatingValueFor(b, ratingSortCategory);
           // Unrated properties always sort to the end, regardless of direction.
           if (ar === null && br === null) return 0;
           if (ar === null) return 1;
@@ -149,7 +170,7 @@ export default function Properties() {
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, customerById]);
+  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -169,10 +190,35 @@ export default function Properties() {
   };
 
   const toggleCustomerSort = () => cycleSort("customer");
-  const toggleRatingSort = () => cycleSort("rating");
+
+  /**
+   * Cycle through the rating sort for the chosen category. Picking a different
+   * category from the active one resets to ascending. Same category cycles
+   * asc → desc → off, matching the column-header sort behavior elsewhere.
+   */
+  const cycleRatingSort = (category: RatingSortKey) => {
+    if (sortKey !== "rating" || ratingSortCategory !== category) {
+      setSortKey("rating");
+      setRatingSortCategory(category);
+      setSortDir("asc");
+      return;
+    }
+    if (sortDir === "asc") {
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+    } else {
+      setSortDir("asc");
+    }
+  };
 
   const customerSortDir: SortDir = sortKey === "customer" ? sortDir : null;
   const ratingSortDir: SortDir = sortKey === "rating" ? sortDir : null;
+  const activeRatingSortLabel =
+    sortKey === "rating"
+      ? RATING_SORT_OPTIONS.find((o) => o.key === ratingSortCategory)?.label ?? "Rating"
+      : "Rating";
 
   const openAdd = () => {
     setDraft(EMPTY_PROPERTY_DRAFT);
@@ -453,21 +499,56 @@ export default function Properties() {
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead>
-                    <button
-                      type="button"
-                      onClick={toggleRatingSort}
-                      className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                      data-testid="button-sort-rating"
-                    >
-                      Rating
-                      {ratingSortDir === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5" />
-                      ) : ratingSortDir === "desc" ? (
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      ) : (
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
-                      )}
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+                          data-testid="button-sort-rating"
+                          aria-label={`Sort by rating (currently ${
+                            ratingSortDir
+                              ? `${activeRatingSortLabel} ${ratingSortDir === "asc" ? "ascending" : "descending"}`
+                              : "unsorted"
+                          })`}
+                        >
+                          {activeRatingSortLabel}
+                          {ratingSortDir === "asc" ? (
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          ) : ratingSortDir === "desc" ? (
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-52">
+                        <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Sort by rating
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {RATING_SORT_OPTIONS.map((opt) => {
+                          const isActive = sortKey === "rating" && ratingSortCategory === opt.key;
+                          const dir: SortDir = isActive ? sortDir : null;
+                          return (
+                            <DropdownMenuItem
+                              key={opt.key}
+                              onClick={() => cycleRatingSort(opt.key)}
+                              className="justify-between gap-3"
+                              data-testid={`menu-item-sort-rating-${opt.key}`}
+                            >
+                              <span className={isActive ? "font-semibold" : ""}>{opt.label}</span>
+                              {dir === "asc" ? (
+                                <ArrowUp className="h-3.5 w-3.5" />
+                              ) : dir === "desc" ? (
+                                <ArrowDown className="h-3.5 w-3.5" />
+                              ) : (
+                                <ArrowUpDown className="h-3.5 w-3.5 opacity-30" />
+                              )}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableHead>
                   <TableHead>Lease Renewal</TableHead>
                   <TableHead className="w-8" />

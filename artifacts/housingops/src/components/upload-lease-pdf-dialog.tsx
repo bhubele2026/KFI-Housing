@@ -22,10 +22,12 @@ import {
   FileUp,
   Loader2,
   Plus,
+  RotateCcw,
   Sparkles,
   Building2,
-  XCircle,
   Upload,
+  X,
+  XCircle,
 } from "lucide-react";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +38,12 @@ import {
   type ExtractedLeaseFromPdf,
   type PropertyMatchCandidate,
 } from "@/lib/lease-pdf-import";
+import {
+  recordLeaseUpload,
+  clearLeaseUpload,
+  useRecentLeaseUploads,
+  type RecentLeaseUpload,
+} from "@/lib/recent-lease-uploads";
 import type { Lease, Property } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 
@@ -202,6 +210,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
   const [saving, setSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recentUploads = useRecentLeaseUploads();
 
   // Reset everything whenever the dialog closes so reopening starts fresh.
   useEffect(() => {
@@ -227,6 +236,10 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
   /**
    * Run uploads with a small concurrency cap. We re-read the latest queue via
    * setQueue's functional updater so per-item state changes don't race.
+   *
+   * Each per-file outcome is also mirrored into the session-scoped
+   * "recent uploads" store so the user can see what happened across dialog
+   * open/close, and (for failures) retry without re-picking the file.
    */
   const runUploads = async (items: QueueItem[]) => {
     let cursor = 0;
@@ -252,6 +265,12 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
             selectedPropertyId: result.topMatch ? result.topMatch.propertyId : "",
             propertyDraft: null,
           });
+          recordLeaseUpload({
+            id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            fileName: item.fileName,
+            status: "parsed",
+            timestamp: Date.now(),
+          });
         } catch (err) {
           const message =
             err instanceof LeasePdfImportError
@@ -260,6 +279,16 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
           updateQueueItem(item.id, {
             status: "failed",
             errorMessage: message,
+          });
+          // Hold on to the original File so the recent-uploads list can offer
+          // a one-click Retry without making the user re-pick it.
+          recordLeaseUpload({
+            id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            fileName: item.fileName,
+            status: "failed",
+            errorMessage: message,
+            file: item.file,
+            timestamp: Date.now(),
           });
         }
       }
@@ -273,11 +302,19 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
    * Take a list of File objects (from picker or drop), validate them, enqueue
    * the valid ones, then kick off uploads. Invalid files surface a single
    * combined toast so the user knows what was skipped.
+   *
+   * If `replacingId` is provided (i.e. this is a retry of a previously failed
+   * entry from the recent-uploads list), that entry is cleared first to keep
+   * the history tidy — the fresh outcome will be re-recorded by `runUploads`.
    */
-  const handleFilesChosen = (files: FileList | File[] | null) => {
+  const handleFilesChosen = (
+    files: FileList | File[] | null,
+    replacingId?: string,
+  ) => {
     if (!files) return;
     const list = Array.from(files);
     if (list.length === 0) return;
+    if (replacingId) clearLeaseUpload(replacingId);
 
     const accepted: QueueItem[] = [];
     const rejected: string[] = [];
@@ -393,6 +430,14 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
   const handleBackToQueue = () => {
     setReviewingId(null);
     setStage("queue");
+  };
+
+  const handleRetryUpload = (entry: RecentLeaseUpload) => {
+    if (!entry.file) return;
+    // Re-enqueue the saved File through the same batch path as a normal pick;
+    // `replacingId` clears the stale failed entry so we don't end up with
+    // duplicate Retry rows.
+    handleFilesChosen([entry.file], entry.id);
   };
 
   const handleSelectProperty = (value: string) => {
@@ -649,6 +694,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
               onChange={(e) => handleFilesChosen(e.target.files)}
               data-testid="input-lease-pdf-file"
             />
+            {recentUploads.length > 0 && (
+              <RecentUploadsList
+                uploads={recentUploads}
+                onRetry={handleRetryUpload}
+                onDismiss={(id) => clearLeaseUpload(id)}
+              />
+            )}
           </div>
         )}
 
@@ -1001,6 +1053,91 @@ function QueueRow({
         >
           Review
         </Button>
+      )}
+    </div>
+  );
+}
+
+function RecentUploadsList({
+  uploads,
+  onRetry,
+  onDismiss,
+}: {
+  uploads: RecentLeaseUpload[];
+  onRetry: (upload: RecentLeaseUpload) => void;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div
+      className="rounded-md border bg-muted/20 p-3 space-y-2"
+      data-testid="recent-lease-uploads"
+    >
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Recent uploads (this session)
+      </p>
+      <ul className="space-y-1.5">
+        {uploads.map((entry) => {
+          const isFailed = entry.status === "failed";
+          const canRetry = isFailed && !!entry.file;
+          return (
+            <li
+              key={entry.id}
+              className="flex items-start justify-between gap-2 rounded-md bg-background border px-2.5 py-1.5"
+              data-testid={`recent-lease-upload-${entry.id}`}
+            >
+              <div className="flex items-start gap-2 min-w-0">
+                {isFailed ? (
+                  <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate" title={entry.fileName}>
+                    {entry.fileName}
+                  </p>
+                  <p
+                    className={`text-xs truncate ${
+                      isFailed ? "text-destructive" : "text-muted-foreground"
+                    }`}
+                  >
+                    {isFailed
+                      ? entry.errorMessage ?? "Upload failed."
+                      : "Parsed — ready to review."}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {canRetry && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={() => onRetry(entry)}
+                    data-testid={`button-retry-upload-${entry.id}`}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Retry
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDismiss(entry.id)}
+                  className="rounded-sm p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={`Dismiss ${entry.fileName}`}
+                  data-testid={`button-dismiss-upload-${entry.id}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {uploads.some((u) => u.status === "failed" && !u.file) && (
+        <p className="text-[11px] text-muted-foreground">
+          Some failed uploads can't be retried automatically — re-pick the PDF above.
+        </p>
       )}
     </div>
   );

@@ -590,26 +590,17 @@ describe("LeaseDetail — origin-aware back link", () => {
     dataState.properties = [buildProperty({ id: "prop-1", name: "Sunset House" })];
     dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
 
-    // useOriginFromSearch reads window.location.search directly, so set
-    // it on the JSDOM window before mounting.
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...window.location, search: "?from=%2Fproperties%2Fprop-1" },
-    });
-    try {
-      mountAt("/leases/lease-1");
+    // useOriginFromSearch reads the live query string via wouter's
+    // `useSearch`. With `memoryLocation` the search portion is parsed
+    // straight off the path passed to mountAt, so embedding `?from=…`
+    // here is the right way to exercise the back-link logic.
+    mountAt("/leases/lease-1?from=%2Fproperties%2Fprop-1");
 
-      const back = container.querySelector(
-        '[data-testid="button-back-leases"]',
-      );
-      expect(back).not.toBeNull();
-      expect(back!.textContent).toContain("Back to Sunset House");
-    } finally {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        value: { ...window.location, search: "" },
-      });
-    }
+    const back = container.querySelector(
+      '[data-testid="button-back-leases"]',
+    );
+    expect(back).not.toBeNull();
+    expect(back!.textContent).toContain("Back to Sunset House");
   });
 });
 
@@ -947,6 +938,52 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
 
     expect(addLeaseMock).not.toHaveBeenCalled();
     expect(bypassNextNavigationMock).not.toHaveBeenCalled();
+  });
+
+  it("follows live `?propertyId=` changes while staying on /leases/new (locked panel + saved draft both update)", () => {
+    // Regression guard for the failure mode the page used to silently hit:
+    // the draft was seeded once at mount, so any future navigation that
+    // changed only the query string (no path change) left the draft
+    // pinned to the original property even as the locked panel re-rendered
+    // against the new one. With `useSearch` driving requestedPropertyId
+    // and the sync effect propagating it into draft, both the rendered
+    // panel AND the addLease payload should reflect the *current* query.
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+      buildProperty({ id: "prop-2", name: "Lakeside Cabin" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    const memory = mountAt("/leases/new?propertyId=prop-1");
+
+    // Sanity: mounted with prop-1 locked.
+    expect(
+      container.querySelector('[data-testid="lease-property-locked"]')?.textContent,
+    ).toContain("Sunset House");
+
+    // Same-route, query-only navigation — the kind the old useMemo would
+    // have ignored.
+    act(() => {
+      memory.navigate("/leases/new?propertyId=prop-2");
+    });
+
+    // Locked panel + header should both flip to prop-2.
+    expect(
+      container.querySelector('[data-testid="lease-property-locked"]')?.textContent,
+    ).toContain("Lakeside Cabin");
+    expect(
+      container.querySelector('[data-testid="lease-detail-title"]')?.textContent,
+    ).toContain("Lakeside Cabin");
+
+    // And the saved draft must carry the live id, not the mount-time one.
+    addLeaseMock.mockClear();
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    act(() => save.click());
+    expect(addLeaseMock).toHaveBeenCalledTimes(1);
+    const [createdLease] = addLeaseMock.mock.calls[0] as [Record<string, unknown>];
+    expect(createdLease.propertyId).toBe("prop-2");
   });
 
   it("validates the property is set before saving — toast + no addLease when missing", () => {

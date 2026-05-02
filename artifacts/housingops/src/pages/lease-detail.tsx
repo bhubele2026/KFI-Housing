@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useUnsavedChangesPrompt } from "@/hooks/use-unsaved-changes-prompt";
 import { motion } from "framer-motion";
 import {
@@ -45,10 +45,12 @@ function useOriginFromSearch(): {
   pathname: string;
   isPropertyOrigin: boolean;
 } {
-  // wouter's location string drops the search portion, so we read from
-  // window.location directly. This is safe at render time because the
-  // browser's location is the source of truth.
-  const search = typeof window !== "undefined" ? window.location.search : "";
+  // wouter's `useLocation` drops the search portion, so we use `useSearch`
+  // which subscribes to the live query string via the browser history
+  // events (popstate / push / replace). Reading `window.location.search`
+  // directly would only sample once per render and miss client-side
+  // navigations that change *only* the query string (no path change).
+  const search = useSearch();
   const fromRaw = new URLSearchParams(search).get("from");
   const path = fromRaw && fromRaw.startsWith("/") ? fromRaw : "/leases";
   // The `from` value may include its own query string — e.g.
@@ -294,12 +296,15 @@ export default function LeaseDetail() {
   // ?propertyId= locks the create form to a single property. Used when the
   // user lands here from a placeholder row on a Property's Leases tab —
   // re-picking the property would be confusing and risky in that flow.
-  // Read once at mount: the user can't change query strings without a
-  // re-render that would re-run the effect chain anyway.
-  const requestedPropertyId = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return new URLSearchParams(window.location.search).get("propertyId") ?? "";
-  }, []);
+  // Subscribe to the live query string via wouter's `useSearch` so that
+  // any client-side navigation that changes the query (without changing
+  // the path) is reflected here — including a future "switch property"
+  // link on this same page.
+  const search = useSearch();
+  const requestedPropertyId = useMemo(
+    () => new URLSearchParams(search).get("propertyId") ?? "",
+    [search],
+  );
 
   // Pending property re-attachment requires explicit confirm. We hold the
   // candidate id here while the AlertDialog is open and clear it on close.
@@ -371,6 +376,28 @@ export default function LeaseDetail() {
     if (draft.propertyId !== requestedPropertyId) return;
     setDraft((d) => ({ ...d, propertyId: "" }));
   }, [isCreateMode, isLoading, requestedPropertyId, lockedPropertyId, draft.propertyId]);
+
+  // Keep the draft's propertyId in sync with the *live* locked property.
+  // The draft is seeded once at mount from `?propertyId=`, but `useSearch`
+  // makes `requestedPropertyId` (and therefore `lockedPropertyId`) re-derive
+  // whenever the query string changes — e.g. a future "switch property"
+  // link on this page that updates the URL while staying on /leases/new.
+  // Without this effect the locked panel and the header would re-render
+  // against the new property while `draft.propertyId` (and the eventual
+  // saved lease) silently kept the original id.
+  //
+  // We only sync when the lock actually resolves to a real property
+  // (lockedPropertyId is non-empty); when the lock falls through, the
+  // scrub-effect above takes over instead so the picker can show. We also
+  // don't touch draft.propertyId when there's no lock at all, so any
+  // selection the operator made from the picker (after a bogus-id
+  // fallback, or with no `?propertyId=` in the URL) is preserved.
+  useEffect(() => {
+    if (!isCreateMode) return;
+    if (!lockedPropertyId) return;
+    if (draft.propertyId === lockedPropertyId) return;
+    setDraft((d) => ({ ...d, propertyId: lockedPropertyId }));
+  }, [isCreateMode, lockedPropertyId, draft.propertyId]);
 
   const property = useMemo(
     () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   computeOverallRating,
+  computePricePerSqft,
   computeRoomTotals,
   daysUntil,
   EMPTY_RATINGS,
@@ -85,6 +86,28 @@ describe("computeOverallRating", () => {
 
   it("returns null for undefined input", () => {
     expect(computeOverallRating(undefined)).toBeNull();
+  });
+});
+
+describe("computePricePerSqft", () => {
+  it("returns rent / sqft rounded to cents", () => {
+    // 4500 / 1800 = 2.5 exactly
+    expect(computePricePerSqft(4500, 1800)).toBe(2.5);
+    // 5400 / 960 = 5.625 → rounded to 5.63
+    expect(computePricePerSqft(5400, 960)).toBe(5.63);
+  });
+
+  it("returns null when total rent is zero", () => {
+    expect(computePricePerSqft(0, 1800)).toBeNull();
+  });
+
+  it("returns null when total sqft is zero", () => {
+    // Avoids Infinity for properties with rent but no sqft entered yet.
+    expect(computePricePerSqft(4500, 0)).toBeNull();
+  });
+
+  it("returns null when both are zero", () => {
+    expect(computePricePerSqft(0, 0)).toBeNull();
   });
 });
 

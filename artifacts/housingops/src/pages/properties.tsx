@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRoomTotals, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRoomTotals, computePricePerSqft, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -469,6 +469,7 @@ export default function Properties() {
       { header: "Occupied",        value: (r) => r.occupied },
       { header: "Vacant",          value: (r) => r.vacant },
       { header: "Total Sqft",      value: (r) => r.roomTotals.totalSqft },
+      { header: "$ / Sqft",        value: (r) => computePricePerSqft(r.roomTotals.totalMonthlyRent, r.roomTotals.totalSqft) ?? "" },
       { header: "Charge per Bed",  value: (r) => r.property.chargePerBed },
       { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
       { header: "Status",          value: (r) => r.property.status },
@@ -688,7 +689,9 @@ export default function Properties() {
                     const overallRating = computeOverallRating(property.ratings);
                     const customer = customerById.get(property.customerId);
                     const propRooms = rooms.filter((r) => r.propertyId === property.id);
-                    const totalSqft = computeRoomTotals(propRooms).totalSqft;
+                    const propTotals = computeRoomTotals(propRooms);
+                    const totalSqft = propTotals.totalSqft;
+                    const pricePerSqft = computePricePerSqft(propTotals.totalMonthlyRent, totalSqft);
 
                     return (
                       <motion.tr
@@ -734,10 +737,62 @@ export default function Properties() {
                           data-testid={`cell-total-sqft-${property.id}`}
                         >
                           {totalSqft > 0 ? (
-                            <>
-                              {totalSqft.toLocaleString()}
-                              <span className="text-xs text-muted-foreground"> sqft</span>
-                            </>
+                            pricePerSqft !== null ? (
+                              // Both sqft and rent are non-zero → surface the
+                              // derived $/sqft via hover so customers can
+                              // compare pricing across properties without
+                              // adding a whole new column.
+                              <HoverCard openDelay={120} closeDelay={80}>
+                                <HoverCardTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    aria-label={`${property.name} total square footage and price per square foot`}
+                                    data-testid={`price-per-sqft-trigger-${property.id}`}
+                                  >
+                                    {totalSqft.toLocaleString()}
+                                    <span className="text-xs text-muted-foreground"> sqft</span>
+                                    <span
+                                      className="block text-xs text-muted-foreground tabular-nums"
+                                      data-testid={`cell-price-per-sqft-${property.id}`}
+                                    >
+                                      ${pricePerSqft.toFixed(2)}/sqft
+                                    </span>
+                                  </button>
+                                </HoverCardTrigger>
+                                <HoverCardContent
+                                  align="end"
+                                  sideOffset={6}
+                                  className="w-56 p-3 text-xs"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`price-per-sqft-breakdown-${property.id}`}
+                                >
+                                  <p className="font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                                    Price per sqft
+                                  </p>
+                                  <dl className="space-y-1">
+                                    <div className="flex justify-between gap-2">
+                                      <dt className="text-muted-foreground">Room rent</dt>
+                                      <dd className="font-medium tabular-nums">${propTotals.totalMonthlyRent.toLocaleString()}/mo</dd>
+                                    </div>
+                                    <div className="flex justify-between gap-2">
+                                      <dt className="text-muted-foreground">Total sqft</dt>
+                                      <dd className="font-medium tabular-nums">{totalSqft.toLocaleString()}</dd>
+                                    </div>
+                                    <div className="flex justify-between gap-2 border-t pt-1 mt-1">
+                                      <dt className="font-semibold">$ / sqft</dt>
+                                      <dd className="font-semibold tabular-nums">${pricePerSqft.toFixed(2)}</dd>
+                                    </div>
+                                  </dl>
+                                </HoverCardContent>
+                              </HoverCard>
+                            ) : (
+                              <>
+                                {totalSqft.toLocaleString()}
+                                <span className="text-xs text-muted-foreground"> sqft</span>
+                              </>
+                            )
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}

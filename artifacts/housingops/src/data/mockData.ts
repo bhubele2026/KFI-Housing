@@ -239,6 +239,19 @@ export function computeRoomTotals(rooms: Room[]): RoomTotals {
   );
 }
 
+/**
+ * Derived price-per-square-foot for a property's rooms. Returns `null` when
+ * either the rent or the sqft total is zero so callers can omit the metric
+ * rather than display a misleading `0` or `Infinity`. Rounded to cents.
+ */
+export function computePricePerSqft(
+  totalMonthlyRent: number,
+  totalSqft: number,
+): number | null {
+  if (!totalMonthlyRent || !totalSqft) return null;
+  return Math.round((totalMonthlyRent / totalSqft) * 100) / 100;
+}
+
 export const BedSchema = z.object({
   id: z.string(),
   propertyId: z.string(),

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, type Ratings } from "@/data/mockData";
+import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, type Ratings } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -378,6 +378,7 @@ export default function PropertyDetail() {
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
   const roomTotals = computeRoomTotals(propRooms);
+  const pricePerSqft = computePricePerSqft(roomTotals.totalMonthlyRent, roomTotals.totalSqft);
   // Difference between the sum of per-room expected rent and the actual lease
   // rent. Positive = rooms add up to more than the lease costs (good for the
   // operator); negative = rooms underprice the lease. We only show the delta
@@ -511,7 +512,7 @@ export default function PropertyDetail() {
                     No rooms yet. Add rooms on the <span className="font-medium text-foreground">Beds</span> tab to see totals here.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     <div data-testid="room-totals-rooms">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rooms</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">{roomTotals.roomCount}</p>
@@ -551,6 +552,21 @@ export default function PropertyDetail() {
                         </p>
                       )}
                     </div>
+                    {/* Derived $/sqft helps compare pricing across properties.
+                        Hidden when either side is zero (computePricePerSqft
+                        returns null) so we don't render a misleading metric. */}
+                    {pricePerSqft !== null && (
+                      <div data-testid="room-totals-price-per-sqft">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">$ / Sqft</p>
+                        <p className="text-2xl font-bold mt-1 tabular-nums">
+                          ${pricePerSqft.toFixed(2)}
+                          <span className="text-sm font-normal text-muted-foreground">/sqft</span>
+                        </p>
+                        <p className="text-xs mt-0.5 text-muted-foreground">
+                          Rent ÷ sqft
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>

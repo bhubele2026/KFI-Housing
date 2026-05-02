@@ -583,6 +583,58 @@ describe("Property detail — Room Totals card on Overview", () => {
     expect(delta!.className).not.toContain("text-green-600");
   });
 
+  it("renders the $/sqft tile with the formatted value when rooms have both rent and sqft", async () => {
+    // Two rooms: 1500/mo over 600 sqft → 2.50 $/sqft. Picked so the
+    // formatted output is "$2.50/sqft" — a regression that dropped
+    // `.toFixed(2)` would render "$2.5" and fail this assertion. The
+    // tile MUST be present (it's the only place the customer sees this
+    // derived metric on the Overview tab).
+    state.rooms = [
+      { id: "r1", propertyId: "p1", name: "A", sqft: 400, bathrooms: 1, monthlyRent: 1000 },
+      { id: "r2", propertyId: "p1", name: "B", sqft: 200, bathrooms: 1, monthlyRent: 500 },
+    ];
+    await renderPage();
+
+    const tile = getMetric("room-totals-price-per-sqft");
+    expect(tile).not.toBeNull();
+    expect(tile!.textContent).toContain("$2.50");
+    expect(tile!.textContent).toContain("/sqft");
+    // Defend against a regression that dropped the cents (toFixed(2)).
+    expect(tile!.textContent).not.toMatch(/\$2\.5(?!\d)/);
+  });
+
+  it("hides the $/sqft tile when rooms have rent but zero total sqft", async () => {
+    // Rent > 0 but sqft = 0 → computePricePerSqft returns null →
+    // dividing by zero would render `Infinity` or `NaN`, so the tile
+    // must be omitted entirely. The other four tiles still render.
+    state.rooms = [
+      { id: "r1", propertyId: "p1", name: "A", sqft: 0, bathrooms: 1, monthlyRent: 1000 },
+    ];
+    await renderPage();
+
+    expect(getMetric("room-totals-price-per-sqft")).toBeNull();
+    // Sanity-check: the surrounding metrics grid still renders so we
+    // know we're not just looking at an empty card.
+    expect(getMetric("room-totals-rooms")?.textContent).toContain("1");
+    expect(getMetric("room-totals-expected-rent")?.textContent).toContain("$1,000");
+  });
+
+  it("hides the $/sqft tile when rooms have sqft but zero total rent", async () => {
+    // Sqft > 0 but rent = 0 → computePricePerSqft returns null →
+    // tile must be omitted (otherwise it would always render "$0.00",
+    // which reads like a real price for unpriced rooms).
+    state.rooms = [
+      { id: "r1", propertyId: "p1", name: "A", sqft: 200, bathrooms: 1, monthlyRent: 0 },
+      { id: "r2", propertyId: "p1", name: "B", sqft: 150, bathrooms: 1, monthlyRent: 0 },
+    ];
+    await renderPage();
+
+    expect(getMetric("room-totals-price-per-sqft")).toBeNull();
+    // Sanity-check: the surrounding metrics grid still renders.
+    expect(getMetric("room-totals-rooms")?.textContent).toContain("2");
+    expect(getMetric("room-totals-sqft")?.textContent).toContain("350");
+  });
+
   it("ignores Expired and Upcoming leases when computing the vs-lease delta (only Active counts)", async () => {
     // An Expired lease for $5,000 should NOT swing the delta — only the
     // currently Active lease's rent feeds the comparison. The page picks

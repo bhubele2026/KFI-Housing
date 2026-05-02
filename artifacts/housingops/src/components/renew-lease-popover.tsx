@@ -6,6 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { CalendarPlus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import type { Lease } from "@/data/mockData";
+
+type LeaseStatus = Lease["status"];
 
 function addMonthsToYMD(dateStr: string, months: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -25,13 +29,14 @@ function formatPretty(dateStr: string): string {
 
 interface RenewLeasePopoverProps {
   currentEndDate: string;
+  currentStatus: LeaseStatus;
   propertyName?: string;
-  onRenew: (newEndDate: string) => void;
+  onRenew: (newEndDate: string, newStatus: LeaseStatus) => void;
   trigger: React.ReactNode;
   align?: "start" | "center" | "end";
 }
 
-export function RenewLeasePopover({ currentEndDate, propertyName, onRenew, trigger, align = "end" }: RenewLeasePopoverProps) {
+export function RenewLeasePopover({ currentEndDate, currentStatus, propertyName, onRenew, trigger, align = "end" }: RenewLeasePopoverProps) {
   const [open, setOpen] = useState(false);
   const [customDate, setCustomDate] = useState(addMonthsToYMD(currentEndDate, 12));
   const { toast } = useToast();
@@ -48,11 +53,30 @@ export function RenewLeasePopover({ currentEndDate, propertyName, onRenew, trigg
       });
       return;
     }
-    onRenew(newEndDate);
+    const previousEndDate = currentEndDate;
+    const previousStatus = currentStatus;
+    const newStatus: LeaseStatus = currentStatus === "Expired" ? "Active" : currentStatus;
+    onRenew(newEndDate, newStatus);
     setOpen(false);
     toast({
       title: "Lease renewed",
       description: `${propertyName ? propertyName + " — " : ""}new end date ${formatPretty(newEndDate)}.`,
+      duration: 12000,
+      action: (
+        <ToastAction
+          altText="Undo lease renewal"
+          onClick={() => {
+            onRenew(previousEndDate, previousStatus);
+            toast({
+              title: "Renewal undone",
+              description: `${propertyName ? propertyName + " — " : ""}end date restored to ${formatPretty(previousEndDate)}.`,
+              duration: 6000,
+            });
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
     });
   };
 

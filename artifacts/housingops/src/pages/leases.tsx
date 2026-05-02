@@ -199,11 +199,12 @@ export default function Leases() {
                             <span className="text-xs font-medium text-muted-foreground">${lease.monthlyRent.toLocaleString()}/mo</span>
                             <RenewLeasePopover
                               currentEndDate={lease.endDate}
+                              currentStatus={lease.status}
                               propertyName={property?.name}
-                              onRenew={(newEndDate) =>
+                              onRenew={(newEndDate, newStatus) =>
                                 updateLease(lease.id, {
                                   endDate: newEndDate,
-                                  status: lease.status === "Expired" ? "Active" : lease.status,
+                                  status: newStatus,
                                 })
                               }
                               trigger={

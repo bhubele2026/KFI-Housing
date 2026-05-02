@@ -396,11 +396,12 @@ export default function PropertyDetail() {
                   </Badge>
                   <RenewLeasePopover
                     currentEndDate={activeLease.endDate}
+                    currentStatus={activeLease.status}
                     propertyName={property.name}
-                    onRenew={(newEndDate) =>
+                    onRenew={(newEndDate, newStatus) =>
                       updateLease(activeLease.id, {
                         endDate: newEndDate,
-                        status: activeLease.status === "Expired" ? "Active" : activeLease.status,
+                        status: newStatus,
                       })
                     }
                     trigger={

@@ -620,9 +620,7 @@ export default function Properties() {
                           </Badge>
                         </td>
                         <td className="p-4" data-testid={`cell-rating-${property.id}`}>
-                          {overallRating === null ? (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          ) : (
+                          {overallRating === null ? null : (
                             <HoverCard openDelay={120} closeDelay={80}>
                               <HoverCardTrigger asChild>
                                 <button

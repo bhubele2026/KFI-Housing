@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import Customers from "@/pages/customers";
+import CustomerDetail from "@/pages/customer-detail";
 import Properties from "@/pages/properties";
 import PropertyDetail from "@/pages/property-detail";
 import Leases from "@/pages/leases";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/customers" component={Customers} />
+      <Route path="/customers/:id" component={CustomerDetail} />
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />

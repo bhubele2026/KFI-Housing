@@ -19,7 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -367,10 +367,10 @@ export default function Customers() {
                             </div>
                             <button
                               type="button"
-                              onClick={() => navigate(`/properties?customer=${encodeURIComponent(c.id)}`)}
+                              onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}
                               className="font-semibold text-left hover:underline hover:text-primary transition-colors"
                               data-testid={`link-customer-name-${c.id}`}
-                              title="View this customer's properties"
+                              title={`Open ${c.name}`}
                             >
                               {c.name}
                             </button>
@@ -464,6 +464,16 @@ export default function Customers() {
                         </td>
                         <td className="p-4">
                           <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}
+                              aria-label={`View ${c.name}`}
+                              data-testid={`button-view-customer-${c.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"

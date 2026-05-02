@@ -7,19 +7,10 @@ import { Separator } from "@/components/ui/separator";
 import { CalendarPlus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { addMonthsToYMD } from "@/lib/lease-dates";
 import type { Lease } from "@/data/mockData";
 
 type LeaseStatus = Lease["status"];
-
-function addMonthsToYMD(dateStr: string, months: number): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const targetMonthAbs = m - 1 + months;
-  const targetYear = y + Math.floor(targetMonthAbs / 12);
-  const normalizedMonth = ((targetMonthAbs % 12) + 12) % 12;
-  const lastDayOfTargetMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-  const day = Math.min(d, lastDayOfTargetMonth);
-  return `${targetYear}-${String(normalizedMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
 
 function formatPretty(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);

@@ -64,14 +64,25 @@ vi.mock("@/components/ui/tabs", () => {
   });
   const Tabs = ({
     defaultValue,
+    value: controlledValue,
+    onValueChange,
     children,
     className,
   }: {
     defaultValue?: string;
+    value?: string;
+    onValueChange?: (v: string) => void;
     children?: ReactNode;
     className?: string;
   }) => {
-    const [value, setValue] = React.useState<string>(defaultValue ?? "");
+    const [internalValue, setInternalValue] = React.useState<string>(
+      controlledValue ?? defaultValue ?? "",
+    );
+    const value = controlledValue ?? internalValue;
+    const setValue = (v: string) => {
+      if (controlledValue === undefined) setInternalValue(v);
+      onValueChange?.(v);
+    };
     return (
       <TabsCtx.Provider value={{ value, setValue }}>
         <div className={className}>{children}</div>

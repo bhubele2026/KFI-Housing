@@ -121,13 +121,14 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: 
   );
 }
 
-function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed }: {
+function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onBedClick }: {
   beds: Bed[];
   occupants: Occupant[];
   rooms: Room[];
   propertyId: string;
   onAddBed: (bed: Bed) => void;
   onDeleteBed: (id: string) => void;
+  onBedClick?: (bedId: string) => void;
 }) {
   const occupied = beds.filter(b => b.status === "Occupied").length;
   const pct = beds.length > 0 ? Math.round((occupied / beds.length) * 100) : 0;
@@ -192,11 +193,15 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed }: {
             return (
               <Tooltip key={bed.id} delayDuration={100}>
                 <TooltipTrigger asChild>
-                  <motion.div
+                  <motion.button
+                    type="button"
                     initial={{ opacity: 0, scale: 0.6 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: i * 0.03, type: "spring", stiffness: 300, damping: 20 }}
-                    className={`flex flex-col items-center justify-center rounded-lg border-2 cursor-default select-none transition-all hover:scale-110
+                    onClick={() => onBedClick?.(bed.id)}
+                    data-testid={`bedmap-tile-${bed.id}`}
+                    aria-label={`Bed ${bed.bedNumber} — ${isOccupied && occ ? occ.name : "Vacant"}. Open in Beds tab.`}
+                    className={`flex flex-col items-center justify-center rounded-lg border-2 cursor-pointer select-none transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1
                       ${isOccupied
                         ? "bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-600"
                         : "bg-rose-50 border-rose-300 text-rose-500 dark:bg-rose-950 dark:border-rose-700"
@@ -205,7 +210,7 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed }: {
                   >
                     <BedDouble className="h-5 w-5" />
                     <span className="text-[10px] font-bold leading-none mt-0.5">#{bed.bedNumber}</span>
-                  </motion.div>
+                  </motion.button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
                   <p className="font-semibold">Bed {bed.bedNumber}{roomNameById.get(bed.roomId) ? ` · ${roomNameById.get(bed.roomId)}` : ""}</p>
@@ -391,6 +396,30 @@ export default function PropertyDetail() {
     writePersistedBedsSort(bedsSort);
   }, [bedsSort]);
 
+  // Controlled tab state so clicking a tile in the Bed Map can jump
+  // straight to the Beds tab and scroll the matching row into view.
+  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [highlightedBedId, setHighlightedBedId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
+  const focusBed = (bedId: string) => {
+    setActiveTab("beds");
+    setHighlightedBedId(bedId);
+    // Wait for the Beds tab content to mount before scrolling.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`bed-row-${bedId}`);
+        if (el && typeof el.scrollIntoView === "function") {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      });
+    });
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedBedId(null), 2000);
+  };
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -550,10 +579,18 @@ export default function PropertyDetail() {
         </div>
 
         {/* Bed Map */}
-        <BedMap beds={propBeds} occupants={propOccupants} rooms={propRooms} propertyId={id} onAddBed={addBed} onDeleteBed={deleteBed} />
+        <BedMap
+          beds={propBeds}
+          occupants={propOccupants}
+          rooms={propRooms}
+          propertyId={id}
+          onAddBed={addBed}
+          onDeleteBed={deleteBed}
+          onBedClick={focusBed}
+        />
 
         {/* Tabs */}
-        <Tabs defaultValue="overview" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid grid-cols-6 w-full max-w-3xl">
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
@@ -1113,8 +1150,14 @@ export default function PropertyDetail() {
                                       }
                                     };
 
+                                    const isHighlighted = highlightedBedId === bed.id;
                                     return (
-                                      <TableRow key={bed.id} className={isOccupied ? "" : "bg-muted/20"}>
+                                      <TableRow
+                                        key={bed.id}
+                                        id={`bed-row-${bed.id}`}
+                                        data-testid={`bed-row-${bed.id}`}
+                                        className={`${isOccupied ? "" : "bg-muted/20"} ${isHighlighted ? "ring-2 ring-primary ring-offset-1 transition-shadow duration-300" : "transition-shadow duration-300"}`}
+                                      >
                                         <TableCell className="font-bold text-center">{bed.bedNumber}</TableCell>
                                         <TableCell>
                                           <Select value={bed.status} onValueChange={handleStatusChange}>

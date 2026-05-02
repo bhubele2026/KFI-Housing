@@ -4,6 +4,7 @@ import {
   daysUntil,
   EMPTY_RATINGS,
   getRenewalInfo,
+  toMonthlyCharge,
 } from "./mockData";
 
 describe("computeOverallRating", () => {
@@ -230,5 +231,66 @@ describe("getRenewalInfo", () => {
     expect(info.level).toBe("critical");
     expect(info.label).toBe("1 day left");
     expect(info.shortLabel).toBe("1d");
+  });
+});
+
+describe("toMonthlyCharge", () => {
+  describe("Monthly", () => {
+    it("returns the input unchanged for whole-dollar amounts", () => {
+      expect(toMonthlyCharge(1500, "Monthly")).toBe(1500);
+    });
+
+    it("returns the input unchanged for amounts with cents", () => {
+      // Guards against accidental rounding for the Monthly branch — the
+      // value should be returned exactly as-is, including fractional cents.
+      expect(toMonthlyCharge(1234.567, "Monthly")).toBe(1234.567);
+      expect(toMonthlyCharge(99.99, "Monthly")).toBe(99.99);
+    });
+  });
+
+  describe("Weekly", () => {
+    it("applies the 52/12 factor", () => {
+      // 300 * 52 / 12 = 1300 exactly
+      expect(toMonthlyCharge(300, "Weekly")).toBe(1300);
+    });
+
+    it("rounds to two decimal places", () => {
+      // 100 * 52 / 12 = 433.3333… → 433.33
+      expect(toMonthlyCharge(100, "Weekly")).toBe(433.33);
+      // 250 * 52 / 12 = 1083.3333… → 1083.33
+      expect(toMonthlyCharge(250, "Weekly")).toBe(1083.33);
+      // 175.50 * 52 / 12 = 760.5 exactly
+      expect(toMonthlyCharge(175.5, "Weekly")).toBe(760.5);
+    });
+  });
+
+  describe("Biweekly", () => {
+    it("applies the 26/12 factor", () => {
+      // 600 * 26 / 12 = 1300 exactly
+      expect(toMonthlyCharge(600, "Biweekly")).toBe(1300);
+    });
+
+    it("rounds to two decimal places", () => {
+      // 100 * 26 / 12 = 216.6666… → 216.67
+      expect(toMonthlyCharge(100, "Biweekly")).toBe(216.67);
+      // 500 * 26 / 12 = 1083.3333… → 1083.33
+      expect(toMonthlyCharge(500, "Biweekly")).toBe(1083.33);
+      // 351 * 26 / 12 = 760.5 exactly
+      expect(toMonthlyCharge(351, "Biweekly")).toBe(760.5);
+    });
+  });
+
+  describe("zero charge", () => {
+    it("returns 0 for Monthly", () => {
+      expect(toMonthlyCharge(0, "Monthly")).toBe(0);
+    });
+
+    it("returns 0 for Weekly", () => {
+      expect(toMonthlyCharge(0, "Weekly")).toBe(0);
+    });
+
+    it("returns 0 for Biweekly", () => {
+      expect(toMonthlyCharge(0, "Biweekly")).toBe(0);
+    });
   });
 });

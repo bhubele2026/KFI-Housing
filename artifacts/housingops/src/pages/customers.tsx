@@ -19,11 +19,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+type SortDir = "asc" | "desc" | null;
+type SortKey = "properties" | "occupancy" | "revenue";
 
 const EMPTY_DRAFT: Customer = {
   id: "",
@@ -43,6 +46,8 @@ export default function Customers() {
   const [draft, setDraft] = useState<Customer>(EMPTY_DRAFT);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
 
   // Per-customer roll-ups: property count, total/occupied beds, occupancy %, and
   // monthly revenue (summed from each occupant's normalized monthly charge).
@@ -143,14 +148,67 @@ export default function Customers() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return customers;
-    return customers.filter((c) =>
-      c.name.toLowerCase().includes(q) ||
-      c.contactName.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.phone.toLowerCase().includes(q),
+    const list = q
+      ? customers.filter((c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.contactName.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.phone.toLowerCase().includes(q),
+        )
+      : customers.slice();
+
+    if (sortKey && sortDir) {
+      // Pull the metric for a customer based on the current sort column.
+      // Customers with no beds have no real occupancy %, so we treat them as
+      // "missing" and always push them to the bottom regardless of direction.
+      const valueOf = (id: string): number | null => {
+        const s = statsByCustomer.get(id);
+        if (!s) return null;
+        if (sortKey === "properties") return s.propertyCount;
+        if (sortKey === "revenue") return s.monthlyRevenue;
+        // occupancy
+        return s.totalBeds > 0 ? s.occupancyPct : null;
+      };
+      list.sort((a, b) => {
+        const av = valueOf(a.id);
+        const bv = valueOf(b.id);
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        const cmp = av - bv;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+    return list;
+  }, [customers, search, sortKey, sortDir, statsByCustomer]);
+
+  // Tri-state cycle: unsorted -> asc -> desc -> unsorted. Switching to a new
+  // column always restarts at ascending, matching the Properties page UX.
+  const cycleSort = (key: SortKey) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortDir("asc");
+      return;
+    }
+    if (sortDir === "asc") {
+      setSortDir("desc");
+    } else if (sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+    } else {
+      setSortDir("asc");
+    }
+  };
+
+  const dirFor = (key: SortKey): SortDir => (sortKey === key ? sortDir : null);
+  const sortIcon = (dir: SortDir) =>
+    dir === "asc" ? (
+      <ArrowUp className="h-3.5 w-3.5" />
+    ) : dir === "desc" ? (
+      <ArrowDown className="h-3.5 w-3.5" />
+    ) : (
+      <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
     );
-  }, [customers, search]);
 
   const openAdd = () => {
     setEditing(null);
@@ -324,9 +382,60 @@ export default function Customers() {
                   <TableHead>Primary Contact</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead className="text-center">Properties</TableHead>
-                  <TableHead className="text-center">Beds</TableHead>
-                  <TableHead className="text-right">Revenue / mo</TableHead>
+                  <TableHead className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => cycleSort("properties")}
+                      className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-properties"
+                      aria-label={`Sort by properties${
+                        dirFor("properties") === "asc"
+                          ? " (currently ascending)"
+                          : dirFor("properties") === "desc"
+                            ? " (currently descending)"
+                            : ""
+                      }`}
+                    >
+                      Properties
+                      {sortIcon(dirFor("properties"))}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => cycleSort("occupancy")}
+                      className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-occupancy"
+                      aria-label={`Sort by occupancy${
+                        dirFor("occupancy") === "asc"
+                          ? " (currently ascending)"
+                          : dirFor("occupancy") === "desc"
+                            ? " (currently descending)"
+                            : ""
+                      }`}
+                    >
+                      Beds
+                      {sortIcon(dirFor("occupancy"))}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => cycleSort("revenue")}
+                      className="inline-flex items-center gap-1 ml-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-revenue"
+                      aria-label={`Sort by revenue${
+                        dirFor("revenue") === "asc"
+                          ? " (currently ascending)"
+                          : dirFor("revenue") === "desc"
+                            ? " (currently descending)"
+                            : ""
+                      }`}
+                    >
+                      Revenue / mo
+                      {sortIcon(dirFor("revenue"))}
+                    </button>
+                  </TableHead>
                   <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>

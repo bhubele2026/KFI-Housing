@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRoomTotals, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -181,7 +181,7 @@ const NEW_CUSTOMER_VALUE = "__new__";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const { properties, beds, leases, customers, addProperty, addCustomer, isLoading } = useData();
+  const { properties, beds, leases, rooms, customers, addProperty, addCustomer, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -454,7 +454,9 @@ export default function Properties() {
       const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
       const overallRating = computeOverallRating(property.ratings);
       const customer = customerById.get(property.customerId);
-      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating };
+      const propRooms = rooms.filter((r) => r.propertyId === property.id);
+      const roomTotals = computeRoomTotals(propRooms);
+      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating, roomTotals };
     });
     const csv = toCsv(rows, [
       { header: "Property",        value: (r) => r.property.name },
@@ -466,6 +468,7 @@ export default function Properties() {
       { header: "Total Beds",      value: (r) => r.propBeds.length },
       { header: "Occupied",        value: (r) => r.occupied },
       { header: "Vacant",          value: (r) => r.vacant },
+      { header: "Total Sqft",      value: (r) => r.roomTotals.totalSqft },
       { header: "Charge per Bed",  value: (r) => r.property.chargePerBed },
       { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
       { header: "Status",          value: (r) => r.property.status },
@@ -606,6 +609,7 @@ export default function Properties() {
                   <TableHead className="text-center">Total Beds</TableHead>
                   <TableHead className="text-center">Occupied</TableHead>
                   <TableHead className="text-center">Vacant</TableHead>
+                  <TableHead className="text-right">Total Sqft</TableHead>
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead>
@@ -666,10 +670,10 @@ export default function Properties() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={11} />
+                  <SkeletonRows rows={6} columns={13} />
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
                       No properties found.
                     </TableCell>
                   </TableRow>
@@ -683,6 +687,8 @@ export default function Properties() {
                     const showRenewal = renewal && renewal.level !== "ok";
                     const overallRating = computeOverallRating(property.ratings);
                     const customer = customerById.get(property.customerId);
+                    const propRooms = rooms.filter((r) => r.propertyId === property.id);
+                    const totalSqft = computeRoomTotals(propRooms).totalSqft;
 
                     return (
                       <motion.tr
@@ -722,6 +728,19 @@ export default function Properties() {
                         </td>
                         <td className="p-4 text-center">
                           <span className={`text-sm font-medium ${vacant > 0 ? "text-amber-500" : "text-muted-foreground"}`}>{vacant}</span>
+                        </td>
+                        <td
+                          className="p-4 text-right text-sm tabular-nums"
+                          data-testid={`cell-total-sqft-${property.id}`}
+                        >
+                          {totalSqft > 0 ? (
+                            <>
+                              {totalSqft.toLocaleString()}
+                              <span className="text-xs text-muted-foreground"> sqft</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="p-4 text-right text-sm font-medium">${property.chargePerBed.toLocaleString()}</td>
                         <td className="p-4 text-center">

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, type Ratings } from "@/data/mockData";
+import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, type Ratings } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -377,6 +377,15 @@ export default function PropertyDetail() {
   const monthlyLeaseCost = activeLease?.monthlyRent ?? 0;
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
+  const roomTotals = computeRoomTotals(propRooms);
+  // Difference between the sum of per-room expected rent and the actual lease
+  // rent. Positive = rooms add up to more than the lease costs (good for the
+  // operator); negative = rooms underprice the lease. We only show the delta
+  // when both sides are non-zero to avoid noisy "vs $0" comparisons.
+  const expectedVsLeaseDelta =
+    roomTotals.totalMonthlyRent > 0 && monthlyLeaseCost > 0
+      ? roomTotals.totalMonthlyRent - monthlyLeaseCost
+      : null;
 
   return (
     <MainLayout>
@@ -483,6 +492,70 @@ export default function PropertyDetail() {
 
           {/* ── OVERVIEW TAB ── */}
           <TabsContent value="overview" className="space-y-4">
+            {/* Room totals — rolls up the per-room sqft / bath / rent that
+                are edited on the Beds tab so customers can see them at a
+                glance without leaving Overview. */}
+            <Card data-testid="room-totals-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Home className="h-4 w-4" />
+                  Room Totals
+                  <span className="text-xs font-normal text-muted-foreground">
+                    Rolled up from {roomTotals.roomCount} room{roomTotals.roomCount === 1 ? "" : "s"}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {roomTotals.roomCount === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No rooms yet. Add rooms on the <span className="font-medium text-foreground">Beds</span> tab to see totals here.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div data-testid="room-totals-rooms">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rooms</p>
+                      <p className="text-2xl font-bold mt-1 tabular-nums">{roomTotals.roomCount}</p>
+                    </div>
+                    <div data-testid="room-totals-sqft">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Sqft</p>
+                      <p className="text-2xl font-bold mt-1 tabular-nums">
+                        {roomTotals.totalSqft.toLocaleString()}
+                        <span className="text-sm font-normal text-muted-foreground"> sqft</span>
+                      </p>
+                    </div>
+                    <div data-testid="room-totals-bathrooms">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Bathrooms</p>
+                      <p className="text-2xl font-bold mt-1 tabular-nums">
+                        {Number.isInteger(roomTotals.totalBathrooms)
+                          ? roomTotals.totalBathrooms
+                          : roomTotals.totalBathrooms.toFixed(1)}
+                      </p>
+                    </div>
+                    <div data-testid="room-totals-expected-rent">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expected Rent</p>
+                      <p className="text-2xl font-bold mt-1 tabular-nums">
+                        ${roomTotals.totalMonthlyRent.toLocaleString()}
+                        <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                      </p>
+                      {expectedVsLeaseDelta !== null && (
+                        <p
+                          className={`text-xs mt-0.5 ${expectedVsLeaseDelta >= 0 ? "text-green-600" : "text-destructive"}`}
+                          data-testid="room-totals-vs-lease"
+                        >
+                          {expectedVsLeaseDelta >= 0 ? "+" : "−"}${Math.abs(expectedVsLeaseDelta).toLocaleString()} vs lease rent
+                        </p>
+                      )}
+                      {expectedVsLeaseDelta === null && monthlyLeaseCost > 0 && (
+                        <p className="text-xs mt-0.5 text-muted-foreground">
+                          Lease rent ${monthlyLeaseCost.toLocaleString()}/mo
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Property Details */}
               <Card>

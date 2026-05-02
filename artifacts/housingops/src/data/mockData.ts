@@ -216,6 +216,29 @@ export const RoomSchema = z.object({
 });
 export type Room = z.infer<typeof RoomSchema>;
 
+/**
+ * Aggregate room metrics for a property. Returns zeros for an empty list so
+ * callers can render placeholders without a separate empty check.
+ */
+export interface RoomTotals {
+  roomCount: number;
+  totalSqft: number;
+  totalBathrooms: number;
+  totalMonthlyRent: number;
+}
+
+export function computeRoomTotals(rooms: Room[]): RoomTotals {
+  return rooms.reduce<RoomTotals>(
+    (acc, r) => ({
+      roomCount: acc.roomCount + 1,
+      totalSqft: acc.totalSqft + (r.sqft || 0),
+      totalBathrooms: acc.totalBathrooms + (r.bathrooms || 0),
+      totalMonthlyRent: acc.totalMonthlyRent + (r.monthlyRent || 0),
+    }),
+    { roomCount: 0, totalSqft: 0, totalBathrooms: 0, totalMonthlyRent: 0 },
+  );
+}
+
 export const BedSchema = z.object({
   id: z.string(),
   propertyId: z.string(),

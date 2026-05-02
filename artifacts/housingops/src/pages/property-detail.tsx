@@ -22,13 +22,20 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, type Ratings } from "@/data/mockData";
+import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, type Ratings, type RentFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { StarRating } from "@/components/star-rating";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+
+const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
+const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
+  Weekly: 12 / 52,
+  "Bi-Weekly": 12 / 26,
+  Monthly: 1,
+};
 
 const FURNISHING_ICONS: Record<string, LucideIcon> = {
   BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
@@ -816,8 +823,47 @@ export default function PropertyDetail() {
                       <InlineEdit value={property.paymentDueDay} type="number" onSave={v => updateProperty(id, { paymentDueDay: parseInt(v) })} />
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                      <span className="text-sm text-muted-foreground w-40 shrink-0">Monthly Rent (Lease)</span>
-                      <InlineEdit value={activeLease?.monthlyRent ?? 0} prefix="$" type="number" onSave={v => activeLease && updateLease(activeLease.id, { monthlyRent: parseFloat(v) })} />
+                      <div className="flex items-center gap-2 w-40 shrink-0">
+                        <Select
+                          value={activeLease?.rentFrequency ?? "Monthly"}
+                          onValueChange={v => activeLease && updateLease(activeLease.id, { rentFrequency: v as RentFrequency })}
+                          disabled={!activeLease}
+                        >
+                          <SelectTrigger
+                            className="h-7 text-sm w-[110px]"
+                            data-testid="rent-frequency-select"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RENT_FREQUENCIES.map(f => (
+                              <SelectItem key={f} value={f}>{f}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-muted-foreground">Rent</span>
+                      </div>
+                      {(() => {
+                        const freq: RentFrequency = activeLease?.rentFrequency ?? "Monthly";
+                        const factor = RENT_FREQUENCY_FACTOR[freq];
+                        const monthly = activeLease?.monthlyRent ?? 0;
+                        const displayAmount = Math.round(monthly * factor * 100) / 100;
+                        return (
+                          <InlineEdit
+                            value={displayAmount}
+                            prefix="$"
+                            type="number"
+                            testId="rent-amount-inline-edit"
+                            onSave={v => {
+                              if (!activeLease) return;
+                              const entered = parseFloat(v);
+                              if (Number.isNaN(entered)) return;
+                              const newMonthly = entered / factor;
+                              updateLease(activeLease.id, { monthlyRent: newMonthly });
+                            }}
+                          />
+                        );
+                      })()}
                     </div>
                     {property.paymentMethod !== "Online Portal" && (
                       <>

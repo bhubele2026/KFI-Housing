@@ -194,12 +194,16 @@ export const ALL_FURNISHINGS_COUNT = FURNISHING_CATEGORIES.reduce(
   0,
 );
 
+export const RentFrequencySchema = z.enum(["Weekly", "Bi-Weekly", "Monthly"]);
+export type RentFrequency = z.infer<typeof RentFrequencySchema>;
+
 export const LeaseSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
   startDate: z.string(),
   endDate: z.string(),
   monthlyRent: z.number(),
+  rentFrequency: RentFrequencySchema.optional(),
   securityDeposit: z.number(),
   status: z.enum(["Active", "Expired", "Upcoming"]),
   notes: z.string(),

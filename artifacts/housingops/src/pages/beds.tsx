@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,16 +10,40 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
-import { Briefcase, Download } from "lucide-react";
+import { Briefcase, Download, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
+  const [, navigate] = useLocation();
+  const searchString = useSearch();
   const { beds, properties, occupants, customers, isLoading } = useData();
   const { toast } = useToast();
   const [customerFilter, setCustomerFilter] = useState("All");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+
+  // Sync ?customer=<id> URL parameter into the filter state.
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const param = params.get("customer");
+    if (param && customers.some((c) => c.id === param)) {
+      setCustomerFilter(param);
+    } else if (!param && customerFilter !== "All") {
+      setCustomerFilter("All");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchString, customers]);
+
+  const updateCustomerFilter = (next: string) => {
+    handleCustomerChange(next);
+    const params = new URLSearchParams(window.location.search);
+    if (next === "All") params.delete("customer");
+    else params.set("customer", next);
+    const qs = params.toString();
+    const base = window.location.pathname;
+    navigate(qs ? `${base}?${qs}` : base, { replace: true });
+  };
 
   const scopedPropertyIds = useMemo(() => {
     if (customerFilter === "All") return null;
@@ -114,7 +139,7 @@ export default function Beds() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Select value={customerFilter} onValueChange={handleCustomerChange}>
+            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-beds-customer-filter">
                 <SelectValue placeholder="Customer" />
               </SelectTrigger>
@@ -136,6 +161,24 @@ export default function Beds() {
             </Button>
           </div>
         </div>
+
+        {activeCustomerName && (
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+              <Briefcase className="h-3 w-3" />
+              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              <button
+                type="button"
+                onClick={() => updateCustomerFilter("All")}
+                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                aria-label="Clear customer filter"
+                data-testid="button-clear-customer-filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </div>
+        )}
 
         <Card>
           <CardContent className="p-6">
@@ -218,7 +261,22 @@ export default function Beds() {
                         <TableCell className="font-medium">{property?.name}</TableCell>
                         {showCustomerColumn && (
                           <TableCell className="text-muted-foreground" data-testid={`text-bed-customer-${bed.id}`}>
-                            {customerName ?? "—"}
+                            {property?.customerId && customerName ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateCustomerFilter(property.customerId);
+                                }}
+                                className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                data-testid={`button-filter-customer-${bed.id}`}
+                                aria-label={`Filter by customer ${customerName}`}
+                              >
+                                {customerName}
+                              </button>
+                            ) : (
+                              "—"
+                            )}
                           </TableCell>
                         )}
                         <TableCell>Bed {bed.bedNumber}</TableCell>

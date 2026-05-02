@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { getRenewalInfo, computeOverallRating, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -180,19 +181,20 @@ const NEW_CUSTOMER_VALUE = "__new__";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const searchString = useSearch();
   const { properties, beds, leases, customers, addProperty, addCustomer, isLoading } = useData();
+  const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
+    useCustomerScope();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   // Hydrate persisted toolbar prefs once on mount so the user's last
   // sort/filter choices survive refresh and return navigation. Search
   // and customer filter are intentionally excluded — see notes above
-  // PROPERTIES_PREFS_STORAGE_KEY.
+  // PROPERTIES_PREFS_STORAGE_KEY. The customer filter is owned by the
+  // shared CustomerScopeProvider, not local state.
   const [initialPrefs] = useState<PersistedPrefs>(() => readPersistedPrefs());
   const [statusFilter, setStatusFilter] = useState<string>(
     () => initialPrefs.statusFilter ?? "All",
   );
-  const [customerFilter, setCustomerFilter] = useState("All");
   const [minRating, setMinRating] = useState<MinRating>(
     () => initialPrefs.minRating ?? "any",
   );
@@ -231,29 +233,6 @@ export default function Properties() {
     return map;
   }, [customers]);
 
-  // Sync ?customer=... URL parameter into the filter state.
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const param = params.get("customer");
-    if (param && customers.some((c) => c.id === param)) {
-      setCustomerFilter(param);
-    } else if (!param && customerFilter !== "All") {
-      setCustomerFilter("All");
-    }
-    // We intentionally only react to URL changes and the customer list shape.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchString, customers]);
-
-  const updateCustomerFilter = (next: string) => {
-    setCustomerFilter(next);
-    const params = new URLSearchParams(window.location.search);
-    if (next === "All") params.delete("customer");
-    else params.set("customer", next);
-    const qs = params.toString();
-    const base = window.location.pathname;
-    navigate(qs ? `${base}?${qs}` : base, { replace: true });
-  };
-
   const filtered = useMemo(() => {
     const minRatingValue = minRating === "any" ? null : Number(minRating);
 
@@ -266,7 +245,8 @@ export default function Properties() {
         p.city.toLowerCase().includes(q) ||
         customerName.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "All" || p.status === statusFilter;
-      const matchesCustomer = customerFilter === "All" || p.customerId === customerFilter;
+      const matchesCustomer =
+        customerFilter === ALL_CUSTOMERS || p.customerId === customerFilter;
       let matchesRating = true;
       if (minRatingValue !== null) {
         const overall = computeOverallRating(p.ratings);
@@ -461,7 +441,9 @@ export default function Properties() {
   };
 
   const activeCustomerName =
-    customerFilter === "All" ? null : customerById.get(customerFilter)?.name ?? null;
+    customerFilter === ALL_CUSTOMERS
+      ? null
+      : customerById.get(customerFilter)?.name ?? null;
 
   const handleDownloadCsv = () => {
     const rows = filtered.map((property) => {
@@ -538,7 +520,7 @@ export default function Properties() {
               Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
-                onClick={() => updateCustomerFilter("All")}
+                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
                 aria-label="Clear customer filter"
                 data-testid="button-clear-customer-filter"
@@ -568,7 +550,7 @@ export default function Properties() {
                     <SelectValue placeholder="Customer" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Customers</SelectItem>
+                    <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
                     {customers.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}

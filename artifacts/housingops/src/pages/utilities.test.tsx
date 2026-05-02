@@ -163,10 +163,19 @@ vi.mock("@/context/data-store", () => ({
 }));
 
 import Utilities from "./utilities";
+import { CustomerScopeProvider } from "@/context/customer-scope";
 
 const CUSTOMER_FILTER = "select-utilities-customer-filter";
 const PROPERTY_FILTER = "select-utilities-property-filter";
 const HINT_TESTID = "text-utilities-active-customer";
+
+function UtilitiesUnderTest() {
+  return (
+    <CustomerScopeProvider>
+      <Utilities />
+    </CustomerScopeProvider>
+  );
+}
 
 describe("Utilities customer filter", () => {
   let container: HTMLDivElement;
@@ -174,6 +183,7 @@ describe("Utilities customer filter", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/utilities");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -193,7 +203,7 @@ describe("Utilities customer filter", () => {
   async function renderPage() {
     await act(async () => {
       root = createRoot(container);
-      root.render(<Utilities />);
+      root.render(<UtilitiesUnderTest />);
     });
   }
 
@@ -312,6 +322,7 @@ describe("Utilities customer filter URL persistence", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/utilities");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -332,7 +343,7 @@ describe("Utilities customer filter URL persistence", () => {
     window.history.replaceState({}, "", url);
     await act(async () => {
       root = createRoot(container);
-      root.render(<Utilities />);
+      root.render(<UtilitiesUnderTest />);
     });
   }
 

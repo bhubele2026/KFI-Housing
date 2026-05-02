@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,12 +28,12 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default function Utilities() {
   const [, navigate] = useLocation();
-  const searchString = useSearch();
   const { utilities, properties, customers, isLoading } = useData();
   const { toast } = useToast();
+  const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
+    useCustomerScope();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
-  const [customerFilter, setCustomerFilter] = useState("All");
 
   const customerById = useMemo(() => {
     const map = new Map<string, string>();
@@ -45,33 +46,11 @@ export default function Utilities() {
     return map;
   }, [properties]);
 
-  // Sync ?customer=<id> URL parameter into the filter state.
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const param = params.get("customer");
-    if (param && customers.some((c) => c.id === param)) {
-      setCustomerFilter(param);
-    } else if (!param && customerFilter !== "All") {
-      setCustomerFilter("All");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchString, customers]);
-
-  const updateCustomerFilter = (next: string) => {
-    setCustomerFilter(next);
-    const params = new URLSearchParams(window.location.search);
-    if (next === "All") params.delete("customer");
-    else params.set("customer", next);
-    const qs = params.toString();
-    const base = window.location.pathname;
-    navigate(qs ? `${base}?${qs}` : base, { replace: true });
-  };
-
   const filtered = utilities.filter(u => {
     const matchesProp = propertyFilter === "All" || u.propertyId === propertyFilter;
     const matchesType = typeFilter === "All" || u.type === typeFilter;
     if (!matchesProp || !matchesType) return false;
-    if (customerFilter === "All") return true;
+    if (customerFilter === ALL_CUSTOMERS) return true;
     const property = propertyById.get(u.propertyId);
     return property?.customerId === customerFilter;
   });
@@ -99,16 +78,16 @@ export default function Utilities() {
   };
 
   const activeCustomerName =
-    customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
+    customerFilter === ALL_CUSTOMERS ? null : customerById.get(customerFilter) ?? null;
 
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
-  const showCustomerColumn = customerFilter === "All";
+  const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
   const columnCount = showCustomerColumn ? 8 : 7;
 
   // Restrict the property dropdown to properties owned by the active customer.
   const availableProperties = useMemo(() => {
-    if (customerFilter === "All") return properties;
+    if (customerFilter === ALL_CUSTOMERS) return properties;
     return properties.filter((p) => p.customerId === customerFilter);
   }, [properties, customerFilter]);
 
@@ -150,7 +129,7 @@ export default function Utilities() {
                 <SelectValue placeholder="Customer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -183,7 +162,7 @@ export default function Utilities() {
               Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
-                onClick={() => updateCustomerFilter("All")}
+                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
                 aria-label="Clear customer filter"
                 data-testid="button-clear-customer-filter"

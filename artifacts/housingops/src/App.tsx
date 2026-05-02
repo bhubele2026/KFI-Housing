@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
+import { CustomerScopeProvider } from "@/context/customer-scope";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -47,7 +48,9 @@ function App() {
         <AuthProvider>
           <DataProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
+              <CustomerScopeProvider>
+                <Router />
+              </CustomerScopeProvider>
             </WouterRouter>
           </DataProvider>
         </AuthProvider>

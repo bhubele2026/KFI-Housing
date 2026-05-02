@@ -192,9 +192,18 @@ vi.mock("@/context/data-store", () => ({
 }));
 
 import Finance from "./finance";
+import { CustomerScopeProvider } from "@/context/customer-scope";
 
 const CUSTOMER_FILTER = "select-finance-customer-filter";
 const HINT_TESTID = "text-finance-active-customer";
+
+function FinanceUnderTest() {
+  return (
+    <CustomerScopeProvider>
+      <Finance />
+    </CustomerScopeProvider>
+  );
+}
 
 describe("Finance customer filter", () => {
   let container: HTMLDivElement;
@@ -202,6 +211,7 @@ describe("Finance customer filter", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/finance");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -221,7 +231,7 @@ describe("Finance customer filter", () => {
   async function renderPage() {
     await act(async () => {
       root = createRoot(container);
-      root.render(<Finance />);
+      root.render(<FinanceUnderTest />);
     });
   }
 
@@ -325,6 +335,7 @@ describe("Finance customer filter URL persistence", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/finance");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -345,7 +356,7 @@ describe("Finance customer filter URL persistence", () => {
     window.history.replaceState({}, "", url);
     await act(async () => {
       root = createRoot(container);
-      root.render(<Finance />);
+      root.render(<FinanceUnderTest />);
     });
   }
 

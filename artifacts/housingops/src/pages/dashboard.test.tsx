@@ -116,8 +116,17 @@ vi.mock("@/context/data-store", () => ({
 }));
 
 import Dashboard from "./dashboard";
+import { CustomerScopeProvider } from "@/context/customer-scope";
 
 const FILTER_TESTID = "select-dashboard-customer-filter";
+
+function DashboardUnderTest() {
+  return (
+    <CustomerScopeProvider>
+      <Dashboard />
+    </CustomerScopeProvider>
+  );
+}
 
 describe("Dashboard customer filter URL persistence", () => {
   let container: HTMLDivElement;
@@ -126,6 +135,7 @@ describe("Dashboard customer filter URL persistence", () => {
   beforeEach(() => {
     selectHandlers.clear();
     mockData.isLoading = false;
+    window.sessionStorage.clear();
     window.history.replaceState({}, "", "/dashboard");
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -146,7 +156,7 @@ describe("Dashboard customer filter URL persistence", () => {
     window.history.replaceState({}, "", url);
     await act(async () => {
       root = createRoot(container);
-      root.render(<Dashboard />);
+      root.render(<DashboardUnderTest />);
     });
   }
 
@@ -238,6 +248,7 @@ describe("Dashboard customer filter back/forward navigation", () => {
   beforeEach(() => {
     selectHandlers.clear();
     mockData.isLoading = false;
+    window.sessionStorage.clear();
     // jsdom's history persists across tests; push a sentinel marker we
     // can walk back to so each test has a clean, known baseline regardless
     // of where prior tests left the history pointer.
@@ -273,7 +284,7 @@ describe("Dashboard customer filter back/forward navigation", () => {
     window.history.replaceState({}, "", url);
     await act(async () => {
       root = createRoot(container);
-      root.render(<Dashboard />);
+      root.render(<DashboardUnderTest />);
     });
   }
 

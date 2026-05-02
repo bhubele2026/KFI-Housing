@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { toMonthlyCharge } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,10 +12,9 @@ import { motion } from "framer-motion";
 import { Briefcase, X } from "lucide-react";
 
 export default function Finance() {
-  const [, navigate] = useLocation();
-  const searchString = useSearch();
   const { properties, beds, leases, utilities, occupants, customers } = useData();
-  const [customerFilter, setCustomerFilter] = useState("All");
+  const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
+    useCustomerScope();
 
   const customerById = useMemo(() => {
     const map = new Map<string, string>();
@@ -23,30 +22,8 @@ export default function Finance() {
     return map;
   }, [customers]);
 
-  // Sync ?customer=<id> URL parameter into the filter state.
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const param = params.get("customer");
-    if (param && customers.some((c) => c.id === param)) {
-      setCustomerFilter(param);
-    } else if (!param && customerFilter !== "All") {
-      setCustomerFilter("All");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchString, customers]);
-
-  const updateCustomerFilter = (next: string) => {
-    setCustomerFilter(next);
-    const params = new URLSearchParams(window.location.search);
-    if (next === "All") params.delete("customer");
-    else params.set("customer", next);
-    const qs = params.toString();
-    const base = window.location.pathname;
-    navigate(qs ? `${base}?${qs}` : base, { replace: true });
-  };
-
   const visibleProperties = useMemo(() => {
-    if (customerFilter === "All") return properties;
+    if (customerFilter === ALL_CUSTOMERS) return properties;
     return properties.filter((p) => p.customerId === customerFilter);
   }, [properties, customerFilter]);
 
@@ -88,11 +65,11 @@ export default function Finance() {
   );
 
   const activeCustomerName =
-    customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
+    customerFilter === ALL_CUSTOMERS ? null : customerById.get(customerFilter) ?? null;
 
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
-  const showCustomerColumn = customerFilter === "All";
+  const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
   const tableColCount = showCustomerColumn ? 8 : 7;
 
   return (
@@ -123,7 +100,7 @@ export default function Finance() {
                 <SelectValue placeholder="Customer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -155,7 +132,7 @@ export default function Finance() {
               Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
-                onClick={() => updateCustomerFilter("All")}
+                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
                 aria-label="Clear customer filter"
                 data-testid="button-clear-customer-filter"

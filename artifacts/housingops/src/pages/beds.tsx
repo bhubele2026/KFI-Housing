@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,38 +15,15 @@ import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
-  const [, navigate] = useLocation();
-  const searchString = useSearch();
   const { beds, properties, occupants, customers, isLoading } = useData();
   const { toast } = useToast();
-  const [customerFilter, setCustomerFilter] = useState("All");
+  const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
+    useCustomerScope();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  // Sync ?customer=<id> URL parameter into the filter state.
-  useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const param = params.get("customer");
-    if (param && customers.some((c) => c.id === param)) {
-      setCustomerFilter(param);
-    } else if (!param && customerFilter !== "All") {
-      setCustomerFilter("All");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchString, customers]);
-
-  const updateCustomerFilter = (next: string) => {
-    handleCustomerChange(next);
-    const params = new URLSearchParams(window.location.search);
-    if (next === "All") params.delete("customer");
-    else params.set("customer", next);
-    const qs = params.toString();
-    const base = window.location.pathname;
-    navigate(qs ? `${base}?${qs}` : base, { replace: true });
-  };
-
   const scopedPropertyIds = useMemo(() => {
-    if (customerFilter === "All") return null;
+    if (customerFilter === ALL_CUSTOMERS) return null;
     return new Set(
       properties.filter((p) => p.customerId === customerFilter).map((p) => p.id),
     );
@@ -65,7 +42,7 @@ export default function Beds() {
 
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
-  const showCustomerColumn = customerFilter === "All";
+  const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
   const columnCount = showCustomerColumn ? 5 : 4;
 
   const propertiesForFilter = useMemo(() => {
@@ -78,6 +55,19 @@ export default function Beds() {
     return beds.filter((b) => scopedPropertyIds.has(b.propertyId));
   }, [beds, scopedPropertyIds]);
 
+  // If the active customer scope changes (locally or because we arrived
+  // here with the scope already set on another page), drop a stale
+  // property selection back to "All" so the table isn't stuck empty for
+  // a property the user can no longer see.
+  useEffect(() => {
+    if (propertyFilter === "All") return;
+    if (customerFilter === ALL_CUSTOMERS) return;
+    const stillVisible = properties.some(
+      (p) => p.id === propertyFilter && p.customerId === customerFilter,
+    );
+    if (!stillVisible) setPropertyFilter("All");
+  }, [customerFilter, propertyFilter, properties]);
+
   const filteredBeds = scopedBeds.filter((b) => {
     const matchesProperty = propertyFilter === "All" || b.propertyId === propertyFilter;
     const matchesStatus = statusFilter === "All" || b.status === statusFilter;
@@ -88,7 +78,9 @@ export default function Beds() {
   const occupancyRate = scopedBeds.length > 0 ? (occupiedCount / scopedBeds.length) * 100 : 0;
 
   const activeCustomerName =
-    customerFilter === "All" ? null : customers.find((c) => c.id === customerFilter)?.name ?? null;
+    customerFilter === ALL_CUSTOMERS
+      ? null
+      : customers.find((c) => c.id === customerFilter)?.name ?? null;
 
   const handleDownloadCsv = () => {
     const csv = toCsv(filteredBeds, [
@@ -107,18 +99,6 @@ export default function Beds() {
       title: "Beds exported",
       description: `Downloaded ${filteredBeds.length} ${filteredBeds.length === 1 ? "bed" : "beds"} as CSV.`,
     });
-  };
-
-  const handleCustomerChange = (next: string) => {
-    setCustomerFilter(next);
-    // If the previously selected property no longer belongs to the new
-    // customer scope, drop it back to "All" so the table isn't stuck empty.
-    if (next !== "All" && propertyFilter !== "All") {
-      const stillVisible = properties.some(
-        (p) => p.id === propertyFilter && p.customerId === next,
-      );
-      if (!stillVisible) setPropertyFilter("All");
-    }
   };
 
   return (
@@ -144,7 +124,7 @@ export default function Beds() {
                 <SelectValue placeholder="Customer" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -169,7 +149,7 @@ export default function Beds() {
               Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
-                onClick={() => updateCustomerFilter("All")}
+                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
                 aria-label="Clear customer filter"
                 data-testid="button-clear-customer-filter"

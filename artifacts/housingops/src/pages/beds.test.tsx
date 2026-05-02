@@ -149,10 +149,19 @@ vi.mock("@/context/data-store", () => ({
 }));
 
 import Beds from "./beds";
+import { CustomerScopeProvider } from "@/context/customer-scope";
 
 const CUSTOMER_FILTER = "select-beds-customer-filter";
 const PROPERTY_FILTER = "select-beds-property-filter";
 const HINT_TESTID = "text-beds-active-customer";
+
+function BedsUnderTest() {
+  return (
+    <CustomerScopeProvider>
+      <Beds />
+    </CustomerScopeProvider>
+  );
+}
 
 describe("Beds customer filter", () => {
   let container: HTMLDivElement;
@@ -160,6 +169,8 @@ describe("Beds customer filter", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/beds");
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -178,7 +189,7 @@ describe("Beds customer filter", () => {
   async function renderPage() {
     await act(async () => {
       root = createRoot(container);
-      root.render(<Beds />);
+      root.render(<BedsUnderTest />);
     });
   }
 

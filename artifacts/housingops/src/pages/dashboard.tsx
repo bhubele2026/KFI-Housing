@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
 import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
@@ -17,70 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers, isLoading } = useData();
-  const [, navigate] = useLocation();
-  const searchString = useSearch();
+  const { properties, beds, leases, utilities, customers } = useData();
+  const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
+    useCustomerScope();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
 
-  // Derive the filter directly from the URL + known customers so the
-  // URL is the single source of truth. Unknown ids fall back to "All",
-  // but while customer data is still loading we keep the URL value so
-  // /dashboard?customer=<id> on a hard refresh pre-selects correctly
-  // once the data arrives.
-  const customerFilter = useMemo(() => {
-    const param = new URLSearchParams(searchString).get("customer");
-    if (!param) return "All";
-    if (isLoading) return param;
-    if (customers.some((c) => c.id === param)) return param;
-    return "All";
-  }, [searchString, customers, isLoading]);
-
-  // Once customers have loaded, if the URL still carries an unknown
-  // customer id, normalize it out so the visible state and the URL
-  // stay in sync (and shareable).
-  useEffect(() => {
-    if (isLoading) return;
-    const params = new URLSearchParams(searchString);
-    const param = params.get("customer");
-    if (param && !customers.some((c) => c.id === param)) {
-      params.delete("customer");
-      const qs = params.toString();
-      const base = window.location.pathname;
-      navigate(qs ? `${base}?${qs}` : base, { replace: true });
-    }
-  }, [searchString, customers, isLoading, navigate]);
-
-  // Push a new history entry when the user picks a filter so the browser
-  // Back button can undo it. Collapse rapid follow-up changes (within
-  // HISTORY_DEBOUNCE_MS) into the same entry to avoid flooding history
-  // when the user quickly cycles through options.
-  const lastFilterChangeAtRef = useRef<number>(0);
-  const HISTORY_DEBOUNCE_MS = 500;
-
-  const updateCustomerFilter = (next: string) => {
-    const params = new URLSearchParams(window.location.search);
-    if (next === "All") params.delete("customer");
-    else params.set("customer", next);
-    const qs = params.toString();
-    const base = window.location.pathname;
-    const target = qs ? `${base}?${qs}` : base;
-
-    // Don't add a no-op history entry if the user re-picked the current
-    // value (target URL is unchanged).
-    const current = `${window.location.pathname}${window.location.search}`;
-    if (target === current) return;
-
-    const now = Date.now();
-    const isRapidChange =
-      lastFilterChangeAtRef.current !== 0 &&
-      now - lastFilterChangeAtRef.current < HISTORY_DEBOUNCE_MS;
-    lastFilterChangeAtRef.current = now;
-
-    navigate(target, { replace: isRapidChange });
-  };
-
   const scopedProperties = useMemo(() => {
-    if (customerFilter === "All") return properties;
+    if (customerFilter === ALL_CUSTOMERS) return properties;
     return properties.filter((p) => p.customerId === customerFilter);
   }, [properties, customerFilter]);
 
@@ -166,7 +109,9 @@ export default function Dashboard() {
   ];
 
   const activeCustomerName =
-    customerFilter === "All" ? null : customers.find((c) => c.id === customerFilter)?.name ?? null;
+    customerFilter === ALL_CUSTOMERS
+      ? null
+      : customers.find((c) => c.id === customerFilter)?.name ?? null;
 
   return (
     <MainLayout>
@@ -190,7 +135,7 @@ export default function Dashboard() {
               <SelectValue placeholder="Customer" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All">All Customers</SelectItem>
+              <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
               {customers.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}

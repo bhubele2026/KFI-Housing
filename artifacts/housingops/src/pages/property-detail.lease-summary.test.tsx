@@ -454,4 +454,127 @@ describe("Property detail — Lease Rent header sums every active lease", () => 
     expect(getMultiBadge()).toBeNull();
     expect(getStatCard().textContent).toContain("—");
   });
+
+  // Per-lease rent breakdown card. Lives on the Overview tab (which is the
+  // default), NOT the Leases tab — operators audit lease composition from
+  // the same surface that shows the combined Lease Rent stat card, so they
+  // never have to leave Overview to understand "where does the $X come
+  // from?". The card is gated on `propLeases.length >= 2` so it appears
+  // whenever a property has more than one lease attached, regardless of
+  // status (Active/Expired/Upcoming all need to be visible for an audit
+  // to be useful). The "Combined" footer still sums Active rent only —
+  // that's the figure the header card displays and the two must agree.
+  describe("Per-lease rent breakdown card on Overview", () => {
+    it("renders a row for every lease (Active + Expired + Upcoming) plus a combined-active total when there are 2+ leases", async () => {
+      state.leases = [
+        makeLease({ id: "l1", monthlyRent: 1500, status: "Active",   endDate: "2026-01-01" }),
+        makeLease({ id: "l2", monthlyRent: 800,  status: "Active",   endDate: "2026-06-01" }),
+        // Expired and Upcoming leases must ALSO show up — operators
+        // need the full timeline of attachments at a glance, even
+        // though only Active rent counts toward the combined figure.
+        makeLease({ id: "l3", monthlyRent: 999,  status: "Expired",  endDate: "2024-01-01" }),
+        makeLease({ id: "l4", monthlyRent: 1200, status: "Upcoming", endDate: "2027-01-01" }),
+      ];
+      await renderPage();
+
+      // No tab click — Overview is the default.
+      const card = container.querySelector(
+        '[data-testid="card-active-leases-breakdown"]',
+      );
+      expect(card).not.toBeNull();
+
+      // One row per lease, no matter the status.
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l1"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l2"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l3"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l4"]')).not.toBeNull();
+
+      // Each non-Active row carries a status badge so the operator can
+      // spot at a glance which leases are dragging the rent down.
+      expect(
+        container.querySelector('[data-testid="badge-breakdown-status-l3"]')?.textContent,
+      ).toContain("Expired");
+      expect(
+        container.querySelector('[data-testid="badge-breakdown-status-l4"]')?.textContent,
+      ).toContain("Upcoming");
+
+      // Combined footer = Active rent only (1500 + 800 = 2,300). The
+      // expired/upcoming rents (999 + 1200) MUST NOT bleed into the
+      // total — that would let dead leases inflate the property's
+      // displayed lease cost.
+      const total = container.querySelector('[data-testid="row-active-lease-rent-total"]');
+      expect(total?.textContent).toContain("$2,300");
+      expect(total?.textContent).not.toContain("$999");
+      expect(total?.textContent).not.toContain("$1,200");
+    });
+
+    it("does NOT render the breakdown card when there is only one lease total", async () => {
+      // Single-lease properties are the common case — surfacing a
+      // breakdown card on every property would just be noise.
+      state.leases = [
+        makeLease({ id: "l1", monthlyRent: 1500, status: "Active", endDate: "2026-01-01" }),
+      ];
+      await renderPage();
+
+      expect(
+        container.querySelector('[data-testid="card-active-leases-breakdown"]'),
+      ).toBeNull();
+    });
+
+    it("activates the Leases tab on mount when the URL carries `?tab=leases` (so a `Back to <Property>` round-trip from a lease lands on the same tab the operator opened the lease from)", async () => {
+      // Lease detail's `Back to <Property>` link points back to
+      // `/properties/<id>?tab=leases` — without this initializer, the
+      // round trip would dump the operator on the Overview tab and
+      // they'd have to click into Leases again to keep editing. Lock
+      // the behaviour in here so we don't silently regress it.
+      state.leases = [
+        makeLease({ id: "l1", monthlyRent: 1500, status: "Active", endDate: "2026-01-01" }),
+      ];
+
+      const originalLocation = window.location;
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: { ...originalLocation, search: "?tab=leases" },
+      });
+      try {
+        await renderPage();
+
+        // The Leases tab content is mounted (the row for l1 only
+        // renders inside the Leases TabsContent — Overview shows the
+        // breakdown card instead). Asserting on the lease row inside
+        // the leases-table is a clean proxy for "Leases tab is active".
+        expect(
+          container.querySelector('[data-testid="row-lease-l1"]'),
+        ).not.toBeNull();
+      } finally {
+        Object.defineProperty(window, "location", {
+          configurable: true,
+          value: originalLocation,
+        });
+      }
+    });
+
+    it("DOES render the breakdown when 2 leases exist even if neither is Active (e.g. Expired + Upcoming)", async () => {
+      // Audit case: a property between tenants (one expired lease + one
+      // upcoming) has 0 active leases but 2 attachments overall. The
+      // breakdown still needs to surface so the operator sees the
+      // history; the combined-active footer collapses to $0 — that's
+      // fine, the rows themselves carry the value.
+      state.leases = [
+        makeLease({ id: "l1", monthlyRent: 1500, status: "Expired",  endDate: "2024-01-01" }),
+        makeLease({ id: "l2", monthlyRent: 1800, status: "Upcoming", endDate: "2027-01-01" }),
+      ];
+      await renderPage();
+
+      expect(
+        container.querySelector('[data-testid="card-active-leases-breakdown"]'),
+      ).not.toBeNull();
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l1"]')).not.toBeNull();
+      expect(container.querySelector('[data-testid="row-active-lease-rent-l2"]')).not.toBeNull();
+
+      // Combined active rent is $0 because neither lease is Active.
+      const total = container.querySelector('[data-testid="row-active-lease-rent-total"]');
+      expect(total?.textContent).toContain("$0");
+    });
+  });
 });

@@ -6,6 +6,7 @@ import {
   daysUntil,
   EMPTY_RATINGS,
   getRenewalInfo,
+  LeaseSchema,
   toMonthlyCharge,
   type Room,
 } from "./mockData";
@@ -468,5 +469,59 @@ describe("toMonthlyCharge", () => {
     it("returns 0 for Biweekly", () => {
       expect(toMonthlyCharge(0, "Biweekly")).toBe(0);
     });
+  });
+});
+
+describe("LeaseSchema backward compatibility", () => {
+  // The four extended lease fields (clauses, includedItems, buyoutAvailable,
+  // buyoutCost) were added in task #120. Backups exported BEFORE this version
+  // do not contain those keys, and the import path on the data store calls
+  // `LeaseSchema.parse` on every row. If the schema rejected payloads
+  // missing the new keys, every legacy backup would fail to import — which
+  // is exactly the regression these tests guard against.
+  const legacyLease = {
+    id: "l-legacy",
+    propertyId: "p1",
+    startDate: "2024-01-01",
+    endDate: "2025-12-31",
+    monthlyRent: 1200,
+    securityDeposit: 2400,
+    status: "Active" as const,
+    notes: "Imported from legacy backup",
+  };
+
+  it("parses a v1/v2/v3 payload with no extended fields and fills sensible defaults", () => {
+    const parsed = LeaseSchema.parse(legacyLease);
+    expect(parsed.clauses).toBe("");
+    expect(parsed.includedItems).toEqual([]);
+    expect(parsed.buyoutAvailable).toBe(false);
+    expect(parsed.buyoutCost).toBeNull();
+    // Original fields should round-trip untouched.
+    expect(parsed.id).toBe("l-legacy");
+    expect(parsed.monthlyRent).toBe(1200);
+  });
+
+  it("preserves explicit values for the extended fields when they're present", () => {
+    const parsed = LeaseSchema.parse({
+      ...legacyLease,
+      clauses: "Pet deposit $500.",
+      includedItems: ["Water", "Garbage"],
+      buyoutAvailable: true,
+      buyoutCost: 5000,
+    });
+    expect(parsed.clauses).toBe("Pet deposit $500.");
+    expect(parsed.includedItems).toEqual(["Water", "Garbage"]);
+    expect(parsed.buyoutAvailable).toBe(true);
+    expect(parsed.buyoutCost).toBe(5000);
+  });
+
+  it("accepts buyoutCost: null even when buyoutAvailable is true", () => {
+    const parsed = LeaseSchema.parse({
+      ...legacyLease,
+      buyoutAvailable: true,
+      buyoutCost: null,
+    });
+    expect(parsed.buyoutAvailable).toBe(true);
+    expect(parsed.buyoutCost).toBeNull();
   });
 });

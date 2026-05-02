@@ -198,6 +198,28 @@ export const ALL_FURNISHINGS_COUNT = FURNISHING_CATEGORIES.reduce(
 export const RentFrequencySchema = z.enum(["Weekly", "Bi-Weekly", "Monthly"]);
 export type RentFrequency = z.infer<typeof RentFrequencySchema>;
 
+// Suggested defaults for the lease "Included items" checklist. Operators
+// can also type free-form items, but having a single canonical list of
+// common inclusions on every lease keeps the data importable / filterable
+// (e.g. "show me every lease where Lawn care is included") and matches the
+// quick-pick experience the property's furnishings tab already provides.
+export const INCLUDED_ITEM_SUGGESTIONS: readonly string[] = [
+  "Water",
+  "Electric",
+  "Gas",
+  "Internet",
+  "Cable / TV",
+  "Garbage",
+  "Lawn care",
+  "Snow removal",
+  "Pest control",
+  "Parking",
+  "Furnishings",
+  "Pool access",
+  "Gym access",
+  "Storage",
+] as const;
+
 export const LeaseSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
@@ -207,6 +229,15 @@ export const LeaseSchema = z.object({
   securityDeposit: z.number(),
   status: z.enum(["Active", "Expired", "Upcoming"]),
   notes: z.string(),
+  // Extended lease fields (task #120). Each is `.optional().default(...)` so
+  // backups exported BEFORE this version still parse cleanly: zod fills in
+  // the default when the key is absent. The API always returns these fields
+  // (the DB columns have defaults), so on the read path the defaults are a
+  // no-op — they only matter for legacy import.
+  clauses: z.string().optional().default(""),
+  includedItems: z.array(z.string()).optional().default([]),
+  buyoutAvailable: z.boolean().optional().default(false),
+  buyoutCost: z.number().nullable().optional().default(null),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 
@@ -751,13 +782,25 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// Defaults for the four extended lease fields. Spread into every mock lease
+// so the literals stay short while still satisfying the (now wider) Lease
+// type. Real seed data with richer values lives in `api-server/src/lib/seed.ts`
+// — this in-memory mock is only used by tests and storybook surfaces that
+// don't talk to the API.
+const LEASE_EXTENDED_DEFAULTS = {
+  clauses: "",
+  includedItems: [] as string[],
+  buyoutAvailable: false,
+  buyoutCost: null as number | null,
+};
+
 export const MOCK_LEASES: Lease[] = [
-  { id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 4800, securityDeposit: 9600, status: "Active", notes: "2-year term. Auto-renews with 60-day notice." },
-  { id: "l2", propertyId: "p2", startDate: "2024-06-01", endDate: "2025-05-31", monthlyRent: 5400, securityDeposit: 10800, status: "Active", notes: "Utilities included except internet." },
-  { id: "l3", propertyId: "p3", startDate: "2022-01-01", endDate: "2023-12-31", monthlyRent: 3600, securityDeposit: 7200, status: "Expired", notes: "Expired. In renegotiation for renewal." },
-  { id: "l4", propertyId: "p3", startDate: "2024-03-01", endDate: "2026-02-28", monthlyRent: 3800, securityDeposit: 7600, status: "Active", notes: "Renewed at slightly higher rate." },
-  { id: "l5", propertyId: "p4", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 7500, securityDeposit: 15000, status: "Active", notes: "Best rate secured. Locked in 2 years." },
-  { id: "l6", propertyId: "p5", startDate: "2025-09-01", endDate: "2026-08-31", monthlyRent: 3000, securityDeposit: 6000, status: "Upcoming", notes: "Lease signed for reopening post-renovation." },
+  { id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 4800, securityDeposit: 9600, status: "Active", notes: "2-year term. Auto-renews with 60-day notice.", ...LEASE_EXTENDED_DEFAULTS },
+  { id: "l2", propertyId: "p2", startDate: "2024-06-01", endDate: "2025-05-31", monthlyRent: 5400, securityDeposit: 10800, status: "Active", notes: "Utilities included except internet.", ...LEASE_EXTENDED_DEFAULTS },
+  { id: "l3", propertyId: "p3", startDate: "2022-01-01", endDate: "2023-12-31", monthlyRent: 3600, securityDeposit: 7200, status: "Expired", notes: "Expired. In renegotiation for renewal.", ...LEASE_EXTENDED_DEFAULTS },
+  { id: "l4", propertyId: "p3", startDate: "2024-03-01", endDate: "2026-02-28", monthlyRent: 3800, securityDeposit: 7600, status: "Active", notes: "Renewed at slightly higher rate.", ...LEASE_EXTENDED_DEFAULTS },
+  { id: "l5", propertyId: "p4", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 7500, securityDeposit: 15000, status: "Active", notes: "Best rate secured. Locked in 2 years.", ...LEASE_EXTENDED_DEFAULTS },
+  { id: "l6", propertyId: "p5", startDate: "2025-09-01", endDate: "2026-08-31", monthlyRent: 3000, securityDeposit: 6000, status: "Upcoming", notes: "Lease signed for reopening post-renovation.", ...LEASE_EXTENDED_DEFAULTS },
 ];
 
 export const MOCK_UTILITIES: Utility[] = [

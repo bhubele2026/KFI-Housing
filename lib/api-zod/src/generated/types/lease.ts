@@ -17,4 +17,15 @@ export interface Lease {
   securityDeposit: number;
   status: LeaseStatus;
   notes: string;
+  /** Free-form clause text (additional terms / addenda). */
+  clauses?: string;
+  /** Items included in the lease (e.g. utilities, parking). */
+  includedItems?: string[];
+  /** Whether the lease has a buyout option. */
+  buyoutAvailable?: boolean;
+  /**
+   * Cost of the buyout option, or null when unknown / N/A.
+   * @nullable
+   */
+  buyoutCost?: number | null;
 }

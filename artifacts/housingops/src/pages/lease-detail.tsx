@@ -1,0 +1,786 @@
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link, useLocation } from "wouter";
+import { motion } from "framer-motion";
+import {
+  ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
+  Building2, FileText, ListChecks, CalendarPlus, DollarSign, Trash2,
+  CheckCircle2, Plus,
+} from "lucide-react";
+
+import { MainLayout } from "@/components/layout/main-layout";
+import { useData } from "@/context/data-store";
+import {
+  getRenewalInfo,
+  INCLUDED_ITEM_SUGGESTIONS,
+  type RentFrequency,
+} from "@/data/mockData";
+
+// Same conversion factors used by the property-detail Payment Details card
+// so the lease page and property page can never disagree about how many
+// weekly payments make up a month.
+const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
+  Weekly: 12 / 52,
+  "Bi-Weekly": 12 / 26,
+  Monthly: 1,
+};
+const RENT_FREQUENCY_SHORT: Record<RentFrequency, string> = {
+  Weekly: "wk",
+  "Bi-Weekly": "2-wk",
+  Monthly: "mo",
+};
+
+/**
+ * Read the `?from=` query string used by the leases-table to remember where
+ * the user came from. We use this for the breadcrumb / back-link so a
+ * lease opened from a Property's Leases tab returns to that property,
+ * while a lease opened from the global Leases page returns to /leases.
+ *
+ * Falls back to "/leases" when no `from` is present (direct nav, refresh,
+ * or pasted link).
+ */
+function useOriginFromSearch(): {
+  path: string;
+  pathname: string;
+  isPropertyOrigin: boolean;
+} {
+  // wouter's location string drops the search portion, so we read from
+  // window.location directly. This is safe at render time because the
+  // browser's location is the source of truth.
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const fromRaw = new URLSearchParams(search).get("from");
+  const path = fromRaw && fromRaw.startsWith("/") ? fromRaw : "/leases";
+  // The `from` value may include its own query string — e.g.
+  // `/properties/p1?tab=leases` so the property page reopens on the
+  // Leases tab. Split that off so the property-id match below isn't
+  // confused by the trailing `?tab=...`. The full `path` is still used
+  // verbatim as the back-link href so the tab info survives the round
+  // trip.
+  const queryIdx = path.indexOf("?");
+  const pathname = queryIdx === -1 ? path : path.slice(0, queryIdx);
+  return {
+    path,
+    pathname,
+    isPropertyOrigin: pathname.startsWith("/properties/"),
+  };
+}
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import { RenewLeasePopover } from "@/components/renew-lease-popover";
+
+// We deliberately reuse the inline editors from the Property Detail page so
+// every lease field on this page commits with the same save-on-blur +
+// optimistic-update pattern that operators are already used to.
+import { InlineEdit, NotesEditor } from "@/pages/property-detail";
+
+// ── Included-items editor ──────────────────────────────────────────────
+// Hybrid checklist + free-form. The checklist surfaces the curated
+// `INCLUDED_ITEM_SUGGESTIONS` (Water, Electric, Lawn care, …) so the most
+// common cases are one click; anything not on the canonical list can still
+// be typed in via the free-form input below — those custom items render in
+// their own "Custom" row so they're easy to spot and remove.
+//
+// Both paths funnel into a single `onChange(string[])` so the caller wires
+// straight into the optimistic `updateLease` helper exactly once per edit.
+function IncludedItemsEditor({
+  value,
+  onChange,
+}: {
+  value: readonly string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  // Case-insensitive set of selected items so toggle/dedupe checks don't
+  // care about how the operator typed something originally.
+  const selectedSet = useMemo(
+    () => new Set(value.map((v) => v.toLowerCase())),
+    [value],
+  );
+  const suggestionSet = useMemo(
+    () => new Set(INCLUDED_ITEM_SUGGESTIONS.map((s) => s.toLowerCase())),
+    [],
+  );
+  // Custom items = anything in `value` that isn't part of the canonical
+  // suggestion list. Preserves the operator's original casing so display
+  // matches what they typed.
+  const customItems = useMemo(
+    () => value.filter((v) => !suggestionSet.has(v.toLowerCase())),
+    [value, suggestionSet],
+  );
+
+  const toggleSuggestion = (item: string) => {
+    if (selectedSet.has(item.toLowerCase())) {
+      onChange(value.filter((v) => v.toLowerCase() !== item.toLowerCase()));
+    } else {
+      onChange([...value, item]);
+    }
+  };
+
+  const remove = (item: string) => {
+    onChange(value.filter((v) => v !== item));
+  };
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    // Avoid duplicates (case-insensitive) so the same item can't be added
+    // twice via the free-form input or stomp on a checklist toggle.
+    if (!selectedSet.has(trimmed.toLowerCase())) {
+      onChange([...value, trimmed]);
+    }
+    setDraft("");
+  };
+
+  return (
+    <div className="space-y-3" data-testid="included-items-editor">
+      {/* Checklist: curated suggestions render as toggleable chips, mirroring
+          the property's furnishings tab so the interaction model is familiar. */}
+      <div className="flex flex-wrap gap-1.5" data-testid="included-items-checklist">
+        {INCLUDED_ITEM_SUGGESTIONS.map((item) => {
+          const isOn = selectedSet.has(item.toLowerCase());
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => toggleSuggestion(item)}
+              data-testid={`included-suggestion-${item}`}
+              data-checked={isOn ? "true" : "false"}
+              aria-pressed={isOn}
+              className={
+                "px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1 " +
+                (isOn
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                  : "bg-white text-muted-foreground border-border hover:bg-muted hover:text-foreground")
+              }
+            >
+              {isOn ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : (
+                <Plus className="h-3 w-3 opacity-60" />
+              )}
+              {item}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Free-form additions, separated visually so operators can tell the
+          difference between curated picks and one-off entries. */}
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted-foreground">
+          Anything else? Add a custom item below.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+            }}
+            placeholder="e.g. Boat slip, EV charger…"
+            className="h-8 text-sm"
+            data-testid="input-add-included-item"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={commit}
+            disabled={draft.trim().length === 0}
+            data-testid="button-add-included-item"
+          >
+            Add
+          </Button>
+        </div>
+        {customItems.length > 0 && (
+          <div
+            className="flex flex-wrap gap-1.5 pt-1.5"
+            data-testid="included-items-custom"
+          >
+            {customItems.map((item) => (
+              <Badge
+                key={item}
+                variant="secondary"
+                className="gap-1.5 pl-2 pr-1"
+                data-testid={`chip-included-${item}`}
+              >
+                {item}
+                <button
+                  type="button"
+                  aria-label={`Remove ${item}`}
+                  onClick={() => remove(item)}
+                  className="rounded-full p-0.5 hover:bg-background/60"
+                  data-testid={`button-remove-included-${item}`}
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function LeaseDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const {
+    leases, properties, customers, isLoading,
+    updateLease, deleteLease,
+  } = useData();
+
+  // Pending property re-attachment requires explicit confirm. We hold the
+  // candidate id here while the AlertDialog is open and clear it on close.
+  const [pendingPropertyId, setPendingPropertyId] = useState<string | null>(null);
+
+  const lease = useMemo(() => leases.find((l) => l.id === id), [leases, id]);
+  const property = useMemo(
+    () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),
+    [lease, properties],
+  );
+  const customer = useMemo(
+    () => (property ? customers.find((c) => c.id === property.customerId) : undefined),
+    [property, customers],
+  );
+
+  // Derived monthly buyout cost / renewal info. Recomputed each render off
+  // `lease`, so as soon as an optimistic update settles into the cache the
+  // header re-renders with the new numbers.
+  const renewal = lease ? getRenewalInfo(lease.endDate) : null;
+
+  // Resolve the back-link target from the `?from=` query string written by
+  // leases-table when the lease was opened. A lease opened from a
+  // property's Leases tab returns to that property; a lease opened from
+  // the global Leases page returns to /leases. Falls back to /leases on
+  // direct nav.
+  const origin = useOriginFromSearch();
+  const originProperty = origin.isPropertyOrigin
+    ? properties.find((p) => `/properties/${p.id}` === origin.pathname)
+    : undefined;
+  const backLabel = origin.isPropertyOrigin
+    ? originProperty
+      ? `Back to ${originProperty.name}`
+      : "Back to property"
+    : "Back to Leases";
+
+  // Property's billing frequency (Weekly / Bi-Weekly / Monthly). The lease
+  // always stores rent as a monthly amount, but operators expect to see the
+  // figure in the same cadence as the rest of the property — otherwise the
+  // number on this page won't match the number on the property page.
+  const propertyFrequency: RentFrequency =
+    (property?.rentFrequency as RentFrequency | undefined) ?? "Monthly";
+  const frequencyFactor = RENT_FREQUENCY_FACTOR[propertyFrequency];
+  const monthlyRent = lease?.monthlyRent ?? 0;
+  const rentInPropertyFrequency =
+    Math.round(monthlyRent * frequencyFactor * 100) / 100;
+
+  // Reset the pending-confirm state if the user navigates between leases
+  // while a dialog is open — guards against confirming a re-attach against
+  // the wrong lease.
+  useEffect(() => {
+    setPendingPropertyId(null);
+  }, [id]);
+
+  if (isLoading && !lease) {
+    return (
+      <MainLayout>
+        <div className="p-8 max-w-5xl mx-auto space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!lease) {
+    return (
+      <MainLayout>
+        <div className="p-8 max-w-5xl mx-auto">
+          <Card>
+            <CardContent className="p-12 text-center space-y-3">
+              <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto" />
+              <h2 className="text-lg font-semibold">Lease not found</h2>
+              <p className="text-sm text-muted-foreground">
+                This lease may have been deleted. Head back to the Leases page
+                to see what's available.
+              </p>
+              <Link href={origin.path}>
+                <Button variant="outline" data-testid="button-back-to-leases">
+                  <ChevronLeft className="h-4 w-4 mr-1.5" />
+                  {backLabel}
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const confirmReattach = () => {
+    if (!pendingPropertyId) return;
+    const targetProperty = properties.find((p) => p.id === pendingPropertyId);
+    updateLease(lease.id, { propertyId: pendingPropertyId });
+    setPendingPropertyId(null);
+    toast({
+      title: "Lease moved",
+      description: targetProperty
+        ? `Now attached to ${targetProperty.name}.`
+        : "Property re-attached.",
+    });
+  };
+
+  return (
+    <MainLayout>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
+        className="p-8 max-w-5xl mx-auto space-y-6"
+      >
+        {/* Breadcrumb — first crumb adapts to where the user came from. */}
+        <div className="flex items-center gap-3 text-sm">
+          <Link href={origin.path}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-muted-foreground hover:text-foreground"
+              data-testid="button-back-leases"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              {backLabel}
+            </Button>
+          </Link>
+          <span className="text-muted-foreground">/</span>
+          {property ? (
+            <Link href={`/properties/${property.id}`}>
+              <button
+                type="button"
+                className="font-medium hover:underline"
+                data-testid="link-lease-property"
+              >
+                {property.name}
+              </button>
+            </Link>
+          ) : (
+            <span className="italic text-muted-foreground">Unattached</span>
+          )}
+          <span className="text-muted-foreground">/</span>
+          <span className="font-medium">Lease</span>
+        </div>
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <KeyRound className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight" data-testid="lease-detail-title">
+                Lease — {property ? property.name : "Unattached"}
+              </h1>
+              <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                <Calendar className="h-3.5 w-3.5" />
+                {lease.startDate || "—"} → {lease.endDate || "—"}
+              </p>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <Badge
+                  variant={
+                    lease.status === "Active"
+                      ? "default"
+                      : lease.status === "Expired"
+                      ? "destructive"
+                      : "secondary"
+                  }
+                  data-testid="badge-lease-status"
+                >
+                  {lease.status}
+                </Badge>
+                {renewal && renewal.level !== "ok" && (
+                  <Badge
+                    variant="outline"
+                    className={`text-xs font-medium ${renewal.badgeClass}`}
+                    data-testid="badge-lease-renewal"
+                  >
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {renewal.label}
+                  </Badge>
+                )}
+                {customer && (
+                  <Badge variant="outline" className="text-xs gap-1">
+                    <Briefcase className="h-3 w-3" />
+                    {customer.name}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <RenewLeasePopover
+              currentEndDate={lease.endDate}
+              currentStatus={lease.status}
+              propertyName={property?.name}
+              onRenew={(newEndDate, newStatus) =>
+                updateLease(lease.id, { endDate: newEndDate, status: newStatus })
+              }
+              trigger={
+                <Button size="sm" variant="outline" className="gap-1" data-testid="button-renew-lease">
+                  <CalendarPlus className="h-3.5 w-3.5" />
+                  Renew
+                </Button>
+              }
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              data-testid="button-delete-lease-detail"
+              onClick={() => {
+                deleteLease(lease.id);
+                toast({ title: "Lease deleted" });
+                navigate("/leases");
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete
+            </Button>
+          </div>
+        </div>
+
+        {/* Two-column form layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ── Lease Terms ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Lease Terms
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">Start Date</span>
+                <InlineEdit
+                  value={lease.startDate}
+                  type="date"
+                  onSave={(v) => updateLease(lease.id, { startDate: v })}
+                  testId="inline-lease-start"
+                />
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">End Date</span>
+                <InlineEdit
+                  value={lease.endDate}
+                  type="date"
+                  onSave={(v) => updateLease(lease.id, { endDate: v })}
+                  testId="inline-lease-end"
+                />
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">Rent (monthly)</span>
+                <div className="flex items-center gap-2">
+                  <InlineEdit
+                    value={lease.monthlyRent}
+                    prefix="$"
+                    type="number"
+                    onSave={(v) =>
+                      updateLease(lease.id, { monthlyRent: parseFloat(v) || 0 })
+                    }
+                    testId="inline-lease-rent"
+                  />
+                  {/*
+                    Property's billing cadence — show the equivalent amount
+                    when the property is billed Weekly / Bi-Weekly so the
+                    figure here matches what the operator sees on the
+                    property page (which displays in the property's
+                    frequency). Hidden for Monthly properties since the two
+                    numbers are identical.
+                  */}
+                  {propertyFrequency !== "Monthly" && (
+                    <span
+                      className="text-xs text-muted-foreground tabular-nums"
+                      data-testid="lease-rent-frequency-equivalent"
+                      title={`Property bills ${propertyFrequency.toLowerCase()}`}
+                    >
+                      ≈ ${rentInPropertyFrequency.toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}
+                      /{RENT_FREQUENCY_SHORT[propertyFrequency]}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">Security Deposit</span>
+                <InlineEdit
+                  value={lease.securityDeposit}
+                  prefix="$"
+                  type="number"
+                  onSave={(v) => updateLease(lease.id, { securityDeposit: parseFloat(v) || 0 })}
+                  testId="inline-lease-deposit"
+                />
+              </div>
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">Status</span>
+                <Select
+                  value={lease.status}
+                  onValueChange={(v) =>
+                    updateLease(lease.id, { status: v as typeof lease.status })
+                  }
+                >
+                  <SelectTrigger className="h-7 text-sm w-36" data-testid="select-lease-status-detail">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Expired">Expired</SelectItem>
+                    <SelectItem value="Upcoming">Upcoming</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="py-1">
+                <span className="text-sm text-muted-foreground block mb-1">Notes</span>
+                <NotesEditor
+                  value={lease.notes}
+                  className="text-sm min-h-[72px]"
+                  onSave={(v) => updateLease(lease.id, { notes: v })}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Property Attachment ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Property
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3" data-testid="lease-property-card">
+              <p className="text-xs text-muted-foreground">
+                Choose the property this lease covers. Re-attaching always asks
+                you to confirm — the rent / deposit on the lease come along
+                with it, but bed assignments stay on the original property.
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Attached property</Label>
+                <Select
+                  value={lease.propertyId}
+                  onValueChange={(v) => {
+                    if (v === lease.propertyId) return;
+                    setPendingPropertyId(v);
+                  }}
+                >
+                  <SelectTrigger
+                    className="text-sm"
+                    data-testid="select-lease-property"
+                  >
+                    <SelectValue placeholder="Choose a property" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {properties.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No properties yet.
+                      </div>
+                    ) : (
+                      properties.map((p) => {
+                        const owner = customers.find((c) => c.id === p.customerId);
+                        // Show name + address + customer so operators can
+                        // disambiguate two units at the same complex (same
+                        // owner) — and two units with the same name across
+                        // different owners. The address is the most
+                        // discriminating field, so it sits between the two
+                        // human-readable names.
+                        const parts = [p.name];
+                        if (p.address) parts.push(p.address);
+                        if (owner) parts.push(owner.name);
+                        const label = parts.join(" — ");
+                        return (
+                          <SelectItem key={p.id} value={p.id}>
+                            {label}
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {property && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    {property.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {property.address}, {property.city}, {property.state} {property.zip}
+                  </div>
+                  {customer && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Briefcase className="h-3 w-3" />
+                      {customer.name}
+                    </div>
+                  )}
+                  <Link href={`/properties/${property.id}`}>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline mt-1"
+                      data-testid="link-open-property"
+                    >
+                      Open property →
+                    </button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Clauses (free-form text) ── */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Clauses
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <NotesEditor
+                value={lease.clauses ?? ""}
+                className="text-sm min-h-[120px] font-mono"
+                onSave={(v) => updateLease(lease.id, { clauses: v })}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ── Included Items ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ListChecks className="h-4 w-4" />
+                Included Items
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <IncludedItemsEditor
+                value={lease.includedItems ?? []}
+                onChange={(next) => updateLease(lease.id, { includedItems: next })}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ── Buyout ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <DollarSign className="h-4 w-4" />
+                Buyout Option
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <Label htmlFor="buyout-available" className="text-sm">
+                    Buyout available
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    Tenant can exit early by paying a fixed fee.
+                  </span>
+                </div>
+                <Switch
+                  id="buyout-available"
+                  checked={lease.buyoutAvailable ?? false}
+                  onCheckedChange={(checked) => {
+                    // Clearing the buyout cost when the toggle goes off keeps
+                    // the data tidy (no orphan cost on a non-buyout lease).
+                    updateLease(lease.id, {
+                      buyoutAvailable: checked,
+                      buyoutCost: checked ? lease.buyoutCost ?? null : null,
+                    });
+                  }}
+                  data-testid="switch-buyout-available"
+                />
+              </div>
+              {(lease.buyoutAvailable ?? false) && (
+                <div className="flex items-center justify-between py-1 border-t border-dashed border-border/50 pt-3">
+                  <span className="text-sm text-muted-foreground w-40 shrink-0">Buyout Cost</span>
+                  <InlineEdit
+                    value={
+                      lease.buyoutCost == null ? "" : String(lease.buyoutCost)
+                    }
+                    prefix="$"
+                    type="number"
+                    placeholder="Set buyout cost"
+                    onSave={(v) => {
+                      const trimmed = v.trim();
+                      const next = trimmed === "" ? null : parseFloat(trimmed);
+                      updateLease(lease.id, {
+                        buyoutCost: Number.isFinite(next as number) ? (next as number) : null,
+                      });
+                    }}
+                    testId="inline-buyout-cost"
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </motion.div>
+
+      {/* Re-attachment confirm */}
+      <AlertDialog
+        open={pendingPropertyId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPropertyId(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-reattach">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move this lease to another property?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const target = properties.find((p) => p.id === pendingPropertyId);
+                const targetName = target?.name ?? "the new property";
+                return (
+                  <>
+                    The lease's rent, dates, and other terms will follow it to{" "}
+                    <span className="font-semibold">{targetName}</span>. Bed
+                    assignments stay on the original property.
+                  </>
+                );
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-reattach">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmReattach}
+              data-testid="button-confirm-reattach"
+            >
+              Move lease
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </MainLayout>
+  );
+}

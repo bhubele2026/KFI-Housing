@@ -99,6 +99,12 @@ export function AddLeaseDialog({
       securityDeposit: parseFloat(form.securityDeposit) || 0,
       status: form.status,
       notes: form.notes,
+      // Extended fields default empty here — operators fill them in from the
+      // dedicated lease detail page after creation.
+      clauses: "",
+      includedItems: [],
+      buyoutAvailable: false,
+      buyoutCost: null,
     });
     setOpen(false);
   };

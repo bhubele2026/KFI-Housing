@@ -1,4 +1,5 @@
-import { pgTable, text, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, doublePrecision, boolean } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const leasesTable = pgTable("leases", {
   id: text("id").primaryKey(),
@@ -9,6 +10,17 @@ export const leasesTable = pgTable("leases", {
   securityDeposit: doublePrecision("security_deposit").notNull().default(0),
   status: text("status").notNull().default("Active"),
   notes: text("notes").notNull().default(""),
+  // Extended lease fields (added with task #120). All four are optional in
+  // import payloads (see openapi.yaml `Lease`) so older backups still load —
+  // the column-level defaults below fill in sensible values for fresh rows
+  // and for legacy rows after migration.
+  clauses: text("clauses").notNull().default(""),
+  includedItems: text("included_items")
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
+  buyoutAvailable: boolean("buyout_available").notNull().default(false),
+  buyoutCost: doublePrecision("buyout_cost"),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -352,7 +352,14 @@ export function InlineEdit({
   if (!editing) {
     const isEmpty = String(value).length === 0;
     return (
+      // role="button" so callers wrapping the InlineEdit in a clickable
+      // row (see leases-table) can treat it as an interactive element and
+      // bail out of row-level navigation when the operator clicks here to
+      // edit. Without this the parent row's onClick would steal the click
+      // and navigate away instead of opening the editor.
       <span
+        role="button"
+        tabIndex={0}
         className="group flex items-center gap-1 cursor-pointer"
         onClick={() => setEditing(true)}
         data-testid={testId}
@@ -407,7 +414,22 @@ export default function PropertyDetail() {
 
   // Controlled tab state so clicking a tile in the Bed Map can jump
   // straight to the Beds tab and scroll the matching row into view.
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  // Initial value is read from the URL (`?tab=...`) so a "Back to
+  // <Property>" navigation from the lease detail page lands the user
+  // on the same tab they came from (typically Leases) instead of
+  // bouncing them to Overview. Wouter's location string drops the
+  // search portion, so we read window.location directly. This is safe
+  // at first render because the browser's location is the source of
+  // truth.
+  const PROPERTY_TABS = useMemo(
+    () => new Set(["overview", "leases", "beds", "furnishings", "utilities", "finance"]),
+    [],
+  );
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window === "undefined") return "overview";
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
+  });
   // Controlled-open state for the AddLeaseDialog opened by the Leases
   // tab's placeholder row CTA. Kept here so the dialog instance can live
   // outside the LeasesTable component tree (which is also re-used by the
@@ -648,6 +670,88 @@ export default function PropertyDetail() {
 
           {/* ── OVERVIEW TAB ── */}
           <TabsContent value="overview" className="space-y-4">
+            {/*
+              Per-lease rent breakdown. Renders here on Overview (not the
+              Leases tab) because it answers a header-level question — "what
+              is the combined Lease Rent in the stat card made up of?" — and
+              the operator shouldn't have to leave Overview to audit it.
+
+              Gated on `propLeases.length >= 2` (every lease, regardless of
+              status) so historical/upcoming context is visible whenever
+              there's more than one lease attached. The "Combined" footer
+              still sums *active* rent only — that's the figure the header
+              card displays, and we want the two numbers to agree.
+            */}
+            {propLeases.length >= 2 && (
+              <Card data-testid="card-active-leases-breakdown">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    Per-lease rent breakdown
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {propLeases.length} leases on this property
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5 pt-0">
+                  {[...propLeases]
+                    .sort((a, b) => a.endDate.localeCompare(b.endDate))
+                    .map((l) => (
+                      <div
+                        key={l.id}
+                        className="flex items-center justify-between text-sm py-1 border-b border-dashed last:border-b-0"
+                        data-testid={`row-active-lease-rent-${l.id}`}
+                      >
+                        <Link href={`/leases/${l.id}?from=${encodeURIComponent(`/properties/${id}`)}`}>
+                          <button
+                            type="button"
+                            className="text-left hover:underline flex items-center gap-2"
+                            data-testid={`link-active-lease-${l.id}`}
+                          >
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span>
+                              {l.startDate || "—"} → {l.endDate || "—"}
+                            </span>
+                            <Badge
+                              variant={
+                                l.status === "Active"
+                                  ? "default"
+                                  : l.status === "Expired"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-[10px] px-1.5 py-0"
+                              data-testid={`badge-breakdown-status-${l.id}`}
+                            >
+                              {l.status}
+                            </Badge>
+                          </button>
+                        </Link>
+                        <span
+                          className={
+                            "font-medium tabular-nums " +
+                            (l.status === "Active"
+                              ? ""
+                              : "text-muted-foreground line-through decoration-muted")
+                          }
+                        >
+                          ${(l.monthlyRent || 0).toLocaleString()}/mo
+                        </span>
+                      </div>
+                    ))}
+                  <div
+                    className="flex items-center justify-between text-sm pt-2 border-t font-semibold"
+                    data-testid="row-active-lease-rent-total"
+                  >
+                    <span>Combined active rent</span>
+                    <span className="tabular-nums">
+                      ${monthlyLeaseCost.toLocaleString()}/mo
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Room totals — rolls up the per-room sqft / bath / rent that
                 are edited on the Beds tab so customers can see them at a
                 glance without leaving Overview. */}
@@ -991,6 +1095,12 @@ export default function PropertyDetail() {
                   // operator gets the same "Create lease" CTA in either view.
                   placeholderProperties={propLeases.length === 0 ? [property] : []}
                   onCreateLeaseForProperty={() => setLeasesTabCreateOpen(true)}
+                  // Threaded so opening a lease here and clicking "Back"
+                  // returns the user to *this* property's Leases tab,
+                  // not the global Leases page. The `?tab=leases` is
+                  // read by PropertyDetail's activeTab initializer so
+                  // the round trip lands on the same tab.
+                  originPath={`/properties/${id}?tab=leases`}
                 />
               </CardContent>
             </Card>

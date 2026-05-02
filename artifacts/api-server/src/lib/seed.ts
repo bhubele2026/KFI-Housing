@@ -396,12 +396,62 @@ function buildRoomsBedsAndOccupants(): {
 }
 
 const SEED_LEASES: InsertLeaseRow[] = [
-  { id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 4800, securityDeposit: 9600, status: "Active",   notes: "2-year term. Auto-renews with 60-day notice." },
-  { id: "l2", propertyId: "p2", startDate: "2024-06-01", endDate: "2025-05-31", monthlyRent: 5400, securityDeposit: 10800, status: "Active",  notes: "Utilities included except internet." },
-  { id: "l3", propertyId: "p3", startDate: "2022-01-01", endDate: "2023-12-31", monthlyRent: 3600, securityDeposit: 7200, status: "Expired",  notes: "Expired. In renegotiation for renewal." },
-  { id: "l4", propertyId: "p3", startDate: "2024-03-01", endDate: "2026-02-28", monthlyRent: 3800, securityDeposit: 7600, status: "Active",   notes: "Renewed at slightly higher rate." },
-  { id: "l5", propertyId: "p4", startDate: "2024-01-01", endDate: "2025-12-31", monthlyRent: 7500, securityDeposit: 15000, status: "Active",  notes: "Best rate secured. Locked in 2 years." },
-  { id: "l6", propertyId: "p5", startDate: "2025-09-01", endDate: "2026-08-31", monthlyRent: 3000, securityDeposit: 6000, status: "Upcoming", notes: "Lease signed for reopening post-renovation." },
+  {
+    id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-12-31",
+    monthlyRent: 4800, securityDeposit: 9600, status: "Active",
+    notes: "2-year term. Auto-renews with 60-day notice.",
+    clauses:
+      "Tenant responsible for lawn care. No smoking inside. Pet deposit $500 per pet.",
+    includedItems: ["Water", "Garbage", "Lawn care", "Parking"],
+    buyoutAvailable: true,
+    buyoutCost: 9600,
+  },
+  {
+    id: "l2", propertyId: "p2", startDate: "2024-06-01", endDate: "2025-05-31",
+    monthlyRent: 5400, securityDeposit: 10800, status: "Active",
+    notes: "Utilities included except internet.",
+    clauses: "All utilities except internet are included. Quiet hours after 10pm.",
+    includedItems: ["Electric", "Gas", "Water", "Garbage", "Furnishings"],
+    buyoutAvailable: false,
+    buyoutCost: null,
+  },
+  {
+    id: "l3", propertyId: "p3", startDate: "2022-01-01", endDate: "2023-12-31",
+    monthlyRent: 3600, securityDeposit: 7200, status: "Expired",
+    notes: "Expired. In renegotiation for renewal.",
+    clauses: "",
+    includedItems: [],
+    buyoutAvailable: false,
+    buyoutCost: null,
+  },
+  {
+    id: "l4", propertyId: "p3", startDate: "2024-03-01", endDate: "2026-02-28",
+    monthlyRent: 3800, securityDeposit: 7600, status: "Active",
+    notes: "Renewed at slightly higher rate.",
+    clauses: "Annual rent escalator capped at 3%. 30-day move-out notice.",
+    includedItems: ["Water", "Garbage"],
+    buyoutAvailable: true,
+    buyoutCost: 7600,
+  },
+  {
+    id: "l5", propertyId: "p4", startDate: "2024-01-01", endDate: "2025-12-31",
+    monthlyRent: 7500, securityDeposit: 15000, status: "Active",
+    notes: "Best rate secured. Locked in 2 years.",
+    clauses:
+      "Two-year lock; right of first refusal on adjacent unit. Landlord covers HVAC service.",
+    includedItems: ["Parking", "Garage", "Furnishings", "Internet"],
+    buyoutAvailable: false,
+    buyoutCost: null,
+  },
+  {
+    id: "l6", propertyId: "p5", startDate: "2025-09-01", endDate: "2026-08-31",
+    monthlyRent: 3000, securityDeposit: 6000, status: "Upcoming",
+    notes: "Lease signed for reopening post-renovation.",
+    clauses: "Effective on certificate-of-occupancy issuance.",
+    includedItems: ["Water"],
+    buyoutAvailable: true,
+    buyoutCost: 4500,
+  },
 ];
 
 const SEED_UTILITIES: InsertUtilityRow[] = [

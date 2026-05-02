@@ -327,6 +327,69 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     });
   }
 
+  // We also need a page renderer that exposes the memoryLocation handle so
+  // navigation-based tests below can read the recorded history and check
+  // that clicking a row actually pushed onto the router.
+  async function renderPageWithMemory() {
+    const memory = memoryLocation({ path: "/leases", record: true });
+    function Harness() {
+      return (
+        <CustomerScopeProvider>
+          <Router hook={memory.hook}>
+            <Switch>
+              <Route path="/leases" component={Leases} />
+            </Switch>
+          </Router>
+        </CustomerScopeProvider>
+      );
+    }
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+    return memory;
+  }
+
+  it("clicking a lease row navigates to the lease detail page with `?from=/leases` (so the back link can return here)", async () => {
+    // Row-level navigation is the primary way to open a lease — the
+    // explicit ExternalLink button is a fallback for mouse-only users.
+    // The query param is what lets the lease detail page know to
+    // restore "Back to Leases" on the breadcrumb.
+    const memory = await renderPageWithMemory();
+
+    const row = container.querySelector(
+      '[data-testid="row-lease-l1"]',
+    ) as HTMLTableRowElement;
+    expect(row).not.toBeNull();
+
+    await act(async () => row.click());
+
+    // memoryLocation.history records the path string after each navigate().
+    // The most recent entry should be the lease detail URL with the from
+    // origin attached.
+    const last = memory.history[memory.history.length - 1];
+    expect(last).toBe(`/leases/l1?from=${encodeURIComponent("/leases")}`);
+  });
+
+  it("clicking inside an inline editor on a row does NOT trigger row navigation (preserves inline edit)", async () => {
+    // The row-level click handler bails out when the click target lives
+    // inside an interactive element. Without that guard, clicking the
+    // monthly-rent input to edit it would navigate the user away —
+    // catastrophic for inline editing.
+    const memory = await renderPageWithMemory();
+
+    const initialHistoryLen = memory.history.length;
+    const inlineRent = container.querySelector(
+      '[data-testid="inline-lease-rent-l1"]',
+    ) as HTMLElement;
+    expect(inlineRent).not.toBeNull();
+
+    await act(async () => inlineRent.click());
+
+    // No new history entry — we stayed on /leases.
+    expect(memory.history.length).toBe(initialHistoryLen);
+  });
+
   it("renders one placeholder row for every property that has no lease, alongside the real lease rows", async () => {
     // Three properties total: one with a real lease (p1) and two without
     // (p2, p3). The page should show one row of each kind in the table —

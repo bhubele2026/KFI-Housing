@@ -14,6 +14,7 @@ import CustomerDetail from "@/pages/customer-detail";
 import Properties from "@/pages/properties";
 import PropertyDetail from "@/pages/property-detail";
 import Leases from "@/pages/leases";
+import LeaseDetail from "@/pages/lease-detail";
 import Beds from "@/pages/beds";
 import Occupants from "@/pages/occupants";
 import Utilities from "@/pages/utilities";
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
+      <Route path="/leases/:id" component={LeaseDetail} />
       <Route path="/beds" component={Beds} />
       <Route path="/occupants" component={Occupants} />
       <Route path="/utilities" component={Utilities} />

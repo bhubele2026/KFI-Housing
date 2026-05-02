@@ -137,6 +137,22 @@ export const ImportDataBody = zod.object({
       securityDeposit: zod.number(),
       status: zod.enum(["Active", "Expired", "Upcoming"]),
       notes: zod.string(),
+      clauses: zod
+        .string()
+        .optional()
+        .describe("Free-form clause text (additional terms \/ addenda)."),
+      includedItems: zod
+        .array(zod.string())
+        .optional()
+        .describe("Items included in the lease (e.g. utilities, parking)."),
+      buyoutAvailable: zod
+        .boolean()
+        .optional()
+        .describe("Whether the lease has a buyout option."),
+      buyoutCost: zod
+        .number()
+        .nullish()
+        .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
     }),
   ),
   rooms: zod.array(
@@ -625,6 +641,22 @@ export const ListLeasesResponseItem = zod.object({
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),
   notes: zod.string(),
+  clauses: zod
+    .string()
+    .optional()
+    .describe("Free-form clause text (additional terms \/ addenda)."),
+  includedItems: zod
+    .array(zod.string())
+    .optional()
+    .describe("Items included in the lease (e.g. utilities, parking)."),
+  buyoutAvailable: zod
+    .boolean()
+    .optional()
+    .describe("Whether the lease has a buyout option."),
+  buyoutCost: zod
+    .number()
+    .nullish()
+    .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -647,6 +679,22 @@ export const CreateLeaseBody = zod.object({
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),
   notes: zod.string(),
+  clauses: zod
+    .string()
+    .optional()
+    .describe("Free-form clause text (additional terms \/ addenda)."),
+  includedItems: zod
+    .array(zod.string())
+    .optional()
+    .describe("Items included in the lease (e.g. utilities, parking)."),
+  buyoutAvailable: zod
+    .boolean()
+    .optional()
+    .describe("Whether the lease has a buyout option."),
+  buyoutCost: zod
+    .number()
+    .nullish()
+    .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
 });
 
 /**
@@ -745,6 +793,10 @@ export const UpdateLeaseBody = zod.object({
   securityDeposit: zod.number().optional(),
   status: zod.enum(["Active", "Expired", "Upcoming"]).optional(),
   notes: zod.string().optional(),
+  clauses: zod.string().optional(),
+  includedItems: zod.array(zod.string()).optional(),
+  buyoutAvailable: zod.boolean().optional(),
+  buyoutCost: zod.number().nullish(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -763,6 +815,22 @@ export const UpdateLeaseResponse = zod.object({
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),
   notes: zod.string(),
+  clauses: zod
+    .string()
+    .optional()
+    .describe("Free-form clause text (additional terms \/ addenda)."),
+  includedItems: zod
+    .array(zod.string())
+    .optional()
+    .describe("Items included in the lease (e.g. utilities, parking)."),
+  buyoutAvailable: zod
+    .boolean()
+    .optional()
+    .describe("Whether the lease has a buyout option."),
+  buyoutCost: zod
+    .number()
+    .nullish()
+    .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
 });
 
 /**

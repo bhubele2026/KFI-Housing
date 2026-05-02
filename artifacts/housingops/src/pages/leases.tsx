@@ -329,6 +329,9 @@ export default function Leases() {
               onCreateLeaseForProperty={(propertyId) =>
                 setPlaceholderCreateForId(propertyId)
               }
+              // Threaded so the lease detail back-link returns to /leases
+              // (with our customer/status filters preserved by the URL).
+              originPath="/leases"
             />
           </CardContent>
         </Card>

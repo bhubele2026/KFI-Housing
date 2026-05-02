@@ -2,7 +2,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ExternalLink } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
 import { InlineEdit, NotesEditor } from "@/pages/property-detail";
 
@@ -37,7 +38,25 @@ export interface LeasesTableProps {
    * property preselected and locked.
    */
   onCreateLeaseForProperty?: (propertyId: string) => void;
+  /**
+   * Page path (no leading hash) the user is currently on. Threaded through
+   * to the lease detail page via the `?from=` query string so the back
+   * link there can return to the *exact* surface the user came from
+   * (global Leases page vs. a specific Property's Leases tab) instead of
+   * defaulting to /leases. Examples: `/leases`, `/properties/p1`.
+   */
+  originPath?: string;
 }
+
+/**
+ * CSS selector that identifies "interactive" cell elements. Used by the
+ * row-level click handler so that clicks landing on inline editors,
+ * dropdowns, or per-row buttons go to those controls instead of triggering
+ * row navigation. Kept loose on purpose — anything *anyone* could
+ * reasonably want to click without leaving the table belongs here.
+ */
+const INTERACTIVE_SELECTOR =
+  'button, input, select, textarea, a, [role="button"], [role="combobox"], [contenteditable="true"]';
 
 /**
  * A single source of truth for editing leases. Used both on the global
@@ -68,13 +87,42 @@ export function LeasesTable({
   emptyMessage = "No leases found.",
   placeholderProperties = [],
   onCreateLeaseForProperty,
+  originPath,
 }: LeasesTableProps) {
   const propertyById = new Map(properties.map((p) => [p.id, p] as const));
   const customerById = new Map((customers ?? []).map((c) => [c.id, c] as const));
+  const [, navigate] = useLocation();
 
-  // Property + Customer + 5 always-on columns + delete action column.
+  // Build the lease detail href with the `?from=` origin attached so the
+  // detail page's back-link returns the user to the surface they came
+  // from (global Leases vs. a specific Property's Leases tab).
+  const leaseHref = (leaseId: string) =>
+    originPath
+      ? `/leases/${leaseId}?from=${encodeURIComponent(originPath)}`
+      : `/leases/${leaseId}`;
+
+  // Row-level click → navigate to lease detail. We bail out when the click
+  // target is itself (or lives inside) an interactive element so the
+  // existing inline editors / dropdowns / per-row buttons keep their
+  // native click behaviour. This gives us a big, forgiving click target
+  // for navigation without breaking inline edit.
+  const handleRowClick =
+    (leaseId: string) =>
+    (e: React.MouseEvent<HTMLTableRowElement>) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest(INTERACTIVE_SELECTOR)) return;
+      // Ignore non-primary clicks (middle/right) and modified clicks so
+      // operators retain "open in new tab" behaviour via the explicit
+      // open-lease link in the action column.
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+        return;
+      }
+      navigate(leaseHref(leaseId));
+    };
+
+  // Property + Customer + 5 always-on columns + (open + delete) action columns.
   const columnCount =
-    (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 5 + 1;
+    (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 5 + 2;
 
   const hasAnyRows = leases.length > 0 || placeholderProperties.length > 0;
 
@@ -91,6 +139,7 @@ export function LeasesTable({
           <TableHead>Status</TableHead>
           <TableHead>Notes</TableHead>
           <TableHead className="w-10" />
+          <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -106,7 +155,12 @@ export function LeasesTable({
               const property = propertyById.get(lease.propertyId);
               const customer = property ? customerById.get(property.customerId) : undefined;
               return (
-                <TableRow key={lease.id} data-testid={`row-lease-${lease.id}`}>
+                <TableRow
+                  key={lease.id}
+                  data-testid={`row-lease-${lease.id}`}
+                  onClick={handleRowClick(lease.id)}
+                  className="cursor-pointer hover:bg-muted/40"
+                >
                   {showProperty && (
                     <TableCell className="font-medium">
                       {property ? (
@@ -224,6 +278,25 @@ export function LeasesTable({
                     />
                   </TableCell>
                   <TableCell>
+                    {/*
+                      Linking via wouter <Link> (not the parent's
+                      onPropertyClick callback) keeps this column self-
+                      contained — it works on every surface that mounts the
+                      table without needing extra wiring from the parent.
+                    */}
+                    <Link href={leaseHref(lease.id)}>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        data-testid={`button-open-lease-${lease.id}`}
+                        aria-label="Open lease"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  </TableCell>
+                  <TableCell>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -299,6 +372,9 @@ export function LeasesTable({
                       Create lease
                     </Button>
                   </TableCell>
+                  {/* Placeholder rows have no underlying lease to open, so
+                      we render an empty cell instead of an Open button. */}
+                  <TableCell />
                 </TableRow>
               );
             })}

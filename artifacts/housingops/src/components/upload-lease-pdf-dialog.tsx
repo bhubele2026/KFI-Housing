@@ -570,6 +570,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         securityDeposit: parseFloat(reviewingItem.leaseDraft.securityDeposit) || 0,
         status: reviewingItem.leaseDraft.status,
         notes: reviewingItem.leaseDraft.notes,
+        // The PDF importer doesn't extract clauses/included-items/buyout
+        // metadata yet, so we default them and let the operator fill in
+        // details on the lease detail page after import.
+        clauses: "",
+        includedItems: [],
+        buyoutAvailable: false,
+        buyoutCost: null,
       };
       addLease(newLease);
 

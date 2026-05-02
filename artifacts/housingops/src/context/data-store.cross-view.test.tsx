@@ -195,6 +195,10 @@ function GlobalLeasesConsumer() {
             securityDeposit: 7777,
             status: "Upcoming",
             notes: "added from global page",
+            clauses: "",
+            includedItems: [],
+            buyoutAvailable: false,
+            buyoutCost: null,
           })
         }
       >

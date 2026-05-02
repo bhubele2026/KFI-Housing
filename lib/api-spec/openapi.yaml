@@ -708,6 +708,11 @@ components:
       example: "2026-05-31"
     Lease:
       type: object
+      # The four extended fields (clauses, includedItems, buyoutAvailable,
+      # buyoutCost) are intentionally NOT required so older import payloads
+      # and pre-extension API clients keep parsing. They are always present
+      # in fresh API responses (the DB columns have defaults) but consumers
+      # that round-trip them must tolerate their absence on the way IN.
       required: [id, propertyId, startDate, endDate, monthlyRent, securityDeposit, status, notes]
       properties:
         id: { type: string }
@@ -718,6 +723,19 @@ components:
         securityDeposit: { type: number }
         status: { type: string, enum: [Active, Expired, Upcoming] }
         notes: { type: string }
+        clauses:
+          type: string
+          description: "Free-form clause text (additional terms / addenda)."
+        includedItems:
+          type: array
+          items: { type: string }
+          description: "Items included in the lease (e.g. utilities, parking)."
+        buyoutAvailable:
+          type: boolean
+          description: "Whether the lease has a buyout option."
+        buyoutCost:
+          type: ["number", "null"]
+          description: "Cost of the buyout option, or null when unknown / N/A."
     LeaseUpdate:
       type: object
       properties:
@@ -728,6 +746,13 @@ components:
         securityDeposit: { type: number }
         status: { type: string, enum: [Active, Expired, Upcoming] }
         notes: { type: string }
+        clauses: { type: string }
+        includedItems:
+          type: array
+          items: { type: string }
+        buyoutAvailable: { type: boolean }
+        buyoutCost:
+          type: ["number", "null"]
 
     Room:
       type: object

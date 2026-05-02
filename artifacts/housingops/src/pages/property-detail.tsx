@@ -35,6 +35,65 @@ const FURNISHING_ICONS: Record<string, LucideIcon> = {
   Thermometer, Tv, ShieldCheck, Trees, Building2, Sparkles,
 };
 
+// Sort options for the per-room cards on the Beds tab. "default" preserves
+// the natural (creation/seed) order so users can opt out of sorting.
+type BedsSortKey =
+  | "default"
+  | "ppsf-desc"
+  | "ppsf-asc"
+  | "rent-desc"
+  | "rent-asc"
+  | "sqft-desc"
+  | "sqft-asc";
+
+const BEDS_SORT_OPTIONS: { value: BedsSortKey; label: string }[] = [
+  { value: "default",   label: "Default" },
+  { value: "ppsf-desc", label: "$/sqft (high → low)" },
+  { value: "ppsf-asc",  label: "$/sqft (low → high)" },
+  { value: "rent-desc", label: "Rent (high → low)" },
+  { value: "rent-asc",  label: "Rent (low → high)" },
+  { value: "sqft-desc", label: "Sqft (high → low)" },
+  { value: "sqft-asc",  label: "Sqft (low → high)" },
+];
+
+const VALID_BEDS_SORT_KEYS = new Set<BedsSortKey>(
+  BEDS_SORT_OPTIONS.map((o) => o.value),
+);
+
+// Persist the user's last Beds-tab sort choice across refreshes and across
+// navigation between properties — same approach the Properties list uses
+// for its own toolbar prefs (see PROPERTIES_PREFS_STORAGE_KEY there).
+const BEDS_SORT_STORAGE_KEY = "housingops:property-beds:sort";
+
+function readPersistedBedsSort(): BedsSortKey {
+  if (typeof window === "undefined") return "default";
+  try {
+    const raw = window.localStorage.getItem(BEDS_SORT_STORAGE_KEY);
+    if (raw && VALID_BEDS_SORT_KEYS.has(raw as BedsSortKey)) {
+      return raw as BedsSortKey;
+    }
+    return "default";
+  } catch {
+    return "default";
+  }
+}
+
+function writePersistedBedsSort(sort: BedsSortKey): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (sort === "default") {
+      // Drop the key entirely once the user is back to the default so
+      // storage doesn't accumulate stale state.
+      window.localStorage.removeItem(BEDS_SORT_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(BEDS_SORT_STORAGE_KEY, sort);
+    }
+  } catch {
+    // Quota / disabled storage / private mode — silently ignore;
+    // this is a UX nicety, not a correctness requirement.
+  }
+}
+
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
   Gas:      "bg-orange-100 text-orange-800",
@@ -318,6 +377,19 @@ export default function PropertyDetail() {
   const [, navigate] = useLocation();
   const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
   const { toast } = useToast();
+
+  // Beds-tab sort selection. Hydrated once from localStorage so the
+  // user's last choice survives refresh AND navigation between
+  // properties — same persistence approach as the Properties list's
+  // toolbar prefs. Persisted on change in the effect below. Declared
+  // ahead of the loading/not-found early returns so the hook order
+  // is stable across renders.
+  const [bedsSort, setBedsSort] = useState<BedsSortKey>(
+    () => readPersistedBedsSort(),
+  );
+  useEffect(() => {
+    writePersistedBedsSort(bedsSort);
+  }, [bedsSort]);
 
   if (isLoading) {
     return (
@@ -810,27 +882,49 @@ export default function PropertyDetail() {
                 <span>{propRooms.length} room{propRooms.length !== 1 ? "s" : ""}</span>
                 <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0).toLocaleString()}/mo revenue</span>
               </div>
-              <Button
-                size="sm"
-                data-testid="button-add-room"
-                onClick={async () => {
-                  const nextNum = propRooms.length + 1;
-                  try {
-                    await addRoom({
-                      id: `room-${Date.now()}`,
-                      propertyId: id,
-                      name: `Room ${nextNum}`,
-                      sqft: 0,
-                      bathrooms: 0,
-                      monthlyRent: 0,
-                    });
-                  } catch {
-                    /* toast already shown by data-store */
-                  }
-                }}
-              >
-                <Plus className="h-4 w-4 mr-1.5" />Add Room
-              </Button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Label htmlFor="beds-sort" className="text-xs text-muted-foreground">Sort</Label>
+                <Select
+                  value={bedsSort}
+                  onValueChange={(v) => setBedsSort(v as BedsSortKey)}
+                >
+                  <SelectTrigger
+                    id="beds-sort"
+                    className="h-8 text-xs w-48"
+                    data-testid="select-beds-sort"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BEDS_SORT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  data-testid="button-add-room"
+                  onClick={async () => {
+                    const nextNum = propRooms.length + 1;
+                    try {
+                      await addRoom({
+                        id: `room-${Date.now()}`,
+                        propertyId: id,
+                        name: `Room ${nextNum}`,
+                        sqft: 0,
+                        bathrooms: 0,
+                        monthlyRent: 0,
+                      });
+                    } catch {
+                      /* toast already shown by data-store */
+                    }
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />Add Room
+                </Button>
+              </div>
             </div>
 
             {propRooms.length === 0 && propBeds.length === 0 ? (
@@ -856,9 +950,45 @@ export default function PropertyDetail() {
                   }
                   const groups = propRooms.map((r) => ({ room: r, beds: bedsByRoomId.get(r.id) ?? [] }));
 
+                  // Apply the user's sort to the room cards. Rooms with a
+                  // missing sort value (e.g. $/sqft is null because rent or
+                  // sqft is 0) always sort to the bottom in either
+                  // direction so the comparable rows stay clustered at the
+                  // top — matching the Properties-list sort behavior.
+                  const sortedGroups = (() => {
+                    if (bedsSort === "default") return groups;
+                    const valueFor = (
+                      g: { room: Room; beds: Bed[] },
+                    ): number | null => {
+                      switch (bedsSort) {
+                        case "ppsf-desc":
+                        case "ppsf-asc":
+                          return computePricePerSqft(g.room.monthlyRent, g.room.sqft);
+                        case "rent-desc":
+                        case "rent-asc":
+                          return g.room.monthlyRent > 0 ? g.room.monthlyRent : null;
+                        case "sqft-desc":
+                        case "sqft-asc":
+                          return g.room.sqft > 0 ? g.room.sqft : null;
+                        default:
+                          return null;
+                      }
+                    };
+                    const isAsc = bedsSort.endsWith("-asc");
+                    return [...groups].sort((a, b) => {
+                      const av = valueFor(a);
+                      const bv = valueFor(b);
+                      if (av === null && bv === null) return 0;
+                      if (av === null) return 1;
+                      if (bv === null) return -1;
+                      const cmp = av - bv;
+                      return isAsc ? cmp : -cmp;
+                    });
+                  })();
+
                   return (
                     <>
-                      {groups.map(({ room, beds: roomBeds }) => {
+                      {sortedGroups.map(({ room, beds: roomBeds }) => {
                         const roomOccupied = roomBeds.filter(b => b.status === "Occupied").length;
                         const handleAddBedToRoom = () => {
                           const nextNum = propBeds.length > 0 ? Math.max(...propBeds.map(b => b.bedNumber)) + 1 : 1;

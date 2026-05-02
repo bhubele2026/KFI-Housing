@@ -45,6 +45,105 @@ function getRatingValueFor(p: Property, key: RatingSortKey): number | null {
   return v > 0 ? v : null;
 }
 
+// Persisted toolbar preferences for the Properties list. Stored in
+// localStorage so the user's last sort/filter choices survive a refresh
+// AND a return navigation (URL params alone wouldn't survive navigating
+// away to another page and back).
+//
+// The customer filter is intentionally NOT persisted here — it already
+// has its own ?customer= URL contract that other pages rely on for
+// deep-linking.
+const PROPERTIES_PREFS_STORAGE_KEY = "housingops:properties:prefs";
+const VALID_STATUS_FILTERS = new Set<string>(["All", "Active", "Inactive"]);
+const VALID_MIN_RATINGS = new Set<MinRating>(["any", "3", "4", "5"]);
+const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating"]);
+const VALID_SORT_DIRS = new Set<Exclude<SortDir, null>>(["asc", "desc"]);
+const VALID_RATING_SORT_KEYS = new Set<RatingSortKey>(
+  RATING_SORT_OPTIONS.map((o) => o.key),
+);
+
+interface PersistedPrefs {
+  statusFilter?: string;
+  minRating?: MinRating;
+  sortKey?: SortKey;
+  sortDir?: Exclude<SortDir, null>;
+  ratingSortCategory?: RatingSortKey;
+}
+
+function readPersistedPrefs(): PersistedPrefs {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(PROPERTIES_PREFS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: PersistedPrefs = {};
+    if (typeof parsed.statusFilter === "string" && VALID_STATUS_FILTERS.has(parsed.statusFilter)) {
+      out.statusFilter = parsed.statusFilter;
+    }
+    if (typeof parsed.minRating === "string" && VALID_MIN_RATINGS.has(parsed.minRating as MinRating)) {
+      out.minRating = parsed.minRating as MinRating;
+    }
+    // Sort key + direction must agree: persisting one without the other
+    // would render meaningless state.
+    if (
+      typeof parsed.sortKey === "string" &&
+      VALID_SORT_KEYS.has(parsed.sortKey as SortKey) &&
+      typeof parsed.sortDir === "string" &&
+      VALID_SORT_DIRS.has(parsed.sortDir as Exclude<SortDir, null>)
+    ) {
+      out.sortKey = parsed.sortKey as SortKey;
+      out.sortDir = parsed.sortDir as Exclude<SortDir, null>;
+    }
+    if (
+      typeof parsed.ratingSortCategory === "string" &&
+      VALID_RATING_SORT_KEYS.has(parsed.ratingSortCategory as RatingSortKey)
+    ) {
+      out.ratingSortCategory = parsed.ratingSortCategory as RatingSortKey;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedPrefs(prefs: {
+  statusFilter: string;
+  minRating: MinRating;
+  sortKey: SortKey | null;
+  sortDir: SortDir;
+  ratingSortCategory: RatingSortKey;
+}): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Only persist non-default values so storage doesn't accumulate
+    // stale state — when the user clears everything we drop the key.
+    const cleaned: PersistedPrefs = {};
+    if (prefs.statusFilter !== "All") cleaned.statusFilter = prefs.statusFilter;
+    if (prefs.minRating !== "any") cleaned.minRating = prefs.minRating;
+    if (prefs.sortKey && prefs.sortDir) {
+      cleaned.sortKey = prefs.sortKey;
+      cleaned.sortDir = prefs.sortDir;
+    }
+    // Only persist the rating sort category when it's actually being used
+    // (i.e. the user is sorting by rating) and is non-default.
+    if (
+      prefs.sortKey === "rating" &&
+      prefs.sortDir &&
+      prefs.ratingSortCategory !== "overall"
+    ) {
+      cleaned.ratingSortCategory = prefs.ratingSortCategory;
+    }
+    if (Object.keys(cleaned).length === 0) {
+      window.localStorage.removeItem(PROPERTIES_PREFS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(PROPERTIES_PREFS_STORAGE_KEY, JSON.stringify(cleaned));
+    }
+  } catch {
+    // Quota errors / disabled storage / private mode — silently ignore;
+    // this is a UX nicety, not a correctness requirement.
+  }
+}
+
 interface PropertyDraft {
   name: string;
   customerId: string;
@@ -85,12 +184,41 @@ export default function Properties() {
   const { properties, beds, leases, customers, addProperty, addCustomer, isLoading } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  // Hydrate persisted toolbar prefs once on mount so the user's last
+  // sort/filter choices survive refresh and return navigation. Search
+  // and customer filter are intentionally excluded — see notes above
+  // PROPERTIES_PREFS_STORAGE_KEY.
+  const [initialPrefs] = useState<PersistedPrefs>(() => readPersistedPrefs());
+  const [statusFilter, setStatusFilter] = useState<string>(
+    () => initialPrefs.statusFilter ?? "All",
+  );
   const [customerFilter, setCustomerFilter] = useState("All");
-  const [minRating, setMinRating] = useState<MinRating>("any");
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [ratingSortCategory, setRatingSortCategory] = useState<RatingSortKey>("overall");
+  const [minRating, setMinRating] = useState<MinRating>(
+    () => initialPrefs.minRating ?? "any",
+  );
+  const [sortKey, setSortKey] = useState<SortKey | null>(
+    () => initialPrefs.sortKey ?? null,
+  );
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => initialPrefs.sortDir ?? null,
+  );
+  const [ratingSortCategory, setRatingSortCategory] = useState<RatingSortKey>(
+    () => initialPrefs.ratingSortCategory ?? "overall",
+  );
+
+  // Persist toolbar prefs whenever they change. writePersistedPrefs
+  // strips defaults and removes the storage key entirely when the user
+  // is back to a fully-default toolbar, so storage doesn't accumulate
+  // stale state.
+  useEffect(() => {
+    writePersistedPrefs({
+      statusFilter,
+      minRating,
+      sortKey,
+      sortDir,
+      ratingSortCategory,
+    });
+  }, [statusFilter, minRating, sortKey, sortDir, ratingSortCategory]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(EMPTY_PROPERTY_DRAFT);

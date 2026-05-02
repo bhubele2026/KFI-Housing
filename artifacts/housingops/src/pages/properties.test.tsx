@@ -283,10 +283,12 @@ describe("Properties listing — Total Sqft column", () => {
     // header (e.g. swaps it for "Square footage"), the per-row tests
     // below would still pass via testid but the user-facing label would
     // have silently changed. This guards the visible header text too.
+    // The header now doubles as the $/sqft sort trigger, so its
+    // visible label is "Total Sqft / $/sqft".
     await renderPage();
     const headerCells = Array.from(container.querySelectorAll("thead th"));
     const labels = headerCells.map((c) => c.textContent?.trim() ?? "");
-    expect(labels).toContain("Total Sqft");
+    expect(labels).toContain("Total Sqft / $/sqft");
   });
 
   it("sums sqft across every room of a property (multi-room row)", async () => {

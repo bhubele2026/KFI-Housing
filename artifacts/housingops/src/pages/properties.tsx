@@ -26,7 +26,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 type SortDir = "asc" | "desc" | null;
-type SortKey = "customer" | "rating";
+type SortKey = "customer" | "rating" | "sqft";
 type MinRating = "any" | "3" | "4" | "5";
 type RatingSortKey = "overall" | RatingCategoryKey;
 
@@ -57,7 +57,7 @@ function getRatingValueFor(p: Property, key: RatingSortKey): number | null {
 const PROPERTIES_PREFS_STORAGE_KEY = "housingops:properties:prefs";
 const VALID_STATUS_FILTERS = new Set<string>(["All", "Active", "Inactive"]);
 const VALID_MIN_RATINGS = new Set<MinRating>(["any", "3", "4", "5"]);
-const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating"]);
+const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating", "sqft"]);
 const VALID_SORT_DIRS = new Set<Exclude<SortDir, null>>(["asc", "desc"]);
 const VALID_RATING_SORT_KEYS = new Set<RatingSortKey>(
   RATING_SORT_OPTIONS.map((o) => o.key),
@@ -233,6 +233,25 @@ export default function Properties() {
     return map;
   }, [customers]);
 
+  // Pre-compute $/sqft for every property so the sort comparator stays O(n log n)
+  // instead of re-filtering `rooms` for every comparison. `null` when the
+  // property has no rent or no sqft — those rows always sort to the end.
+  const pricePerSqftByPropertyId = useMemo(() => {
+    const totalsByProperty = new Map<string, { totalSqft: number; totalMonthlyRent: number }>();
+    for (const r of rooms) {
+      const cur = totalsByProperty.get(r.propertyId) ?? { totalSqft: 0, totalMonthlyRent: 0 };
+      cur.totalSqft += r.sqft || 0;
+      cur.totalMonthlyRent += r.monthlyRent || 0;
+      totalsByProperty.set(r.propertyId, cur);
+    }
+    const map = new Map<string, number | null>();
+    for (const p of properties) {
+      const t = totalsByProperty.get(p.id);
+      map.set(p.id, t ? computePricePerSqft(t.totalMonthlyRent, t.totalSqft) : null);
+    }
+    return map;
+  }, [properties, rooms]);
+
   const filtered = useMemo(() => {
     const minRatingValue = minRating === "any" ? null : Number(minRating);
 
@@ -275,10 +294,22 @@ export default function Properties() {
           const cmp = ar - br;
           return sortDir === "asc" ? cmp : -cmp;
         });
+      } else if (sortKey === "sqft") {
+        list.sort((a, b) => {
+          const ap = pricePerSqftByPropertyId.get(a.id) ?? null;
+          const bp = pricePerSqftByPropertyId.get(b.id) ?? null;
+          // Properties without a $/sqft (no rent or no sqft) always sort
+          // to the end so the active list shows comparable rows first.
+          if (ap === null && bp === null) return 0;
+          if (ap === null) return 1;
+          if (bp === null) return -1;
+          const cmp = ap - bp;
+          return sortDir === "asc" ? cmp : -cmp;
+        });
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById]);
+  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -298,6 +329,7 @@ export default function Properties() {
   };
 
   const toggleCustomerSort = () => cycleSort("customer");
+  const toggleSqftSort = () => cycleSort("sqft");
 
   /**
    * Cycle through the rating sort for the chosen category. Picking a different
@@ -323,6 +355,7 @@ export default function Properties() {
 
   const customerSortDir: SortDir = sortKey === "customer" ? sortDir : null;
   const ratingSortDir: SortDir = sortKey === "rating" ? sortDir : null;
+  const sqftSortDir: SortDir = sortKey === "sqft" ? sortDir : null;
   const activeRatingSortLabel =
     sortKey === "rating"
       ? RATING_SORT_OPTIONS.find((o) => o.key === ratingSortCategory)?.label ?? "Rating"
@@ -610,7 +643,30 @@ export default function Properties() {
                   <TableHead className="text-center">Total Beds</TableHead>
                   <TableHead className="text-center">Occupied</TableHead>
                   <TableHead className="text-center">Vacant</TableHead>
-                  <TableHead className="text-right">Total Sqft</TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      onClick={toggleSqftSort}
+                      className="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
+                      data-testid="button-sort-sqft"
+                      aria-label={`Sort by price per square foot (currently ${
+                        sqftSortDir
+                          ? sqftSortDir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "unsorted"
+                      })`}
+                    >
+                      Total Sqft / $/sqft
+                      {sqftSortDir === "asc" ? (
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      ) : sqftSortDir === "desc" ? (
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">Charge / Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead>

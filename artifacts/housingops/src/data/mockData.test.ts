@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   computeOverallRating,
+  computeRoomTotals,
   daysUntil,
   EMPTY_RATINGS,
   getRenewalInfo,
   toMonthlyCharge,
+  type Room,
 } from "./mockData";
 
 describe("computeOverallRating", () => {
@@ -259,6 +261,125 @@ describe("getRenewalInfo", () => {
     expect(info.level).toBe("critical");
     expect(info.label).toBe("1 day left");
     expect(info.shortLabel).toBe("1d");
+  });
+});
+
+describe("computeRoomTotals", () => {
+  // Build a Room with sane defaults so each test only has to spell out
+  // the field(s) it cares about. The propertyId / id / name don't affect
+  // the totals — they only matter at the page level.
+  function makeRoom(overrides: Partial<Room> = {}): Room {
+    return {
+      id: overrides.id ?? "r-test",
+      propertyId: overrides.propertyId ?? "p1",
+      name: overrides.name ?? "Room",
+      sqft: overrides.sqft ?? 0,
+      bathrooms: overrides.bathrooms ?? 0,
+      monthlyRent: overrides.monthlyRent ?? 0,
+    };
+  }
+
+  it("returns all-zero totals for an empty list (callers can render placeholders without an extra empty check)", () => {
+    expect(computeRoomTotals([])).toEqual({
+      roomCount: 0,
+      totalSqft: 0,
+      totalBathrooms: 0,
+      totalMonthlyRent: 0,
+    });
+  });
+
+  it("returns the room's own values when given a single room", () => {
+    expect(
+      computeRoomTotals([
+        makeRoom({ sqft: 250, bathrooms: 1, monthlyRent: 1500 }),
+      ]),
+    ).toEqual({
+      roomCount: 1,
+      totalSqft: 250,
+      totalBathrooms: 1,
+      totalMonthlyRent: 1500,
+    });
+  });
+
+  it("sums every field across multiple rooms", () => {
+    // Numbers picked so each total is unique (no field equals another)
+    // — that way an off-by-one mapping bug (e.g. summing sqft into
+    // totalBathrooms) would fail loudly instead of silently lining up.
+    const rooms = [
+      makeRoom({ id: "r1", sqft: 200, bathrooms: 1, monthlyRent: 1000 }),
+      makeRoom({ id: "r2", sqft: 150, bathrooms: 0.5, monthlyRent: 800 }),
+      makeRoom({ id: "r3", sqft: 320, bathrooms: 1.5, monthlyRent: 1200 }),
+    ];
+    expect(computeRoomTotals(rooms)).toEqual({
+      roomCount: 3,
+      totalSqft: 670,
+      totalBathrooms: 3,
+      totalMonthlyRent: 3000,
+    });
+  });
+
+  it("treats explicit zero sqft / bathrooms / rent as 0 contribution", () => {
+    // A freshly-added room (the Beds tab seeds new rooms with all-zero
+    // numerics) must not crash or NaN-poison the totals — it should
+    // just count toward roomCount and add 0 elsewhere.
+    expect(
+      computeRoomTotals([
+        makeRoom({ sqft: 100, bathrooms: 1, monthlyRent: 500 }),
+        makeRoom({ id: "r-new", sqft: 0, bathrooms: 0, monthlyRent: 0 }),
+      ]),
+    ).toEqual({
+      roomCount: 2,
+      totalSqft: 100,
+      totalBathrooms: 1,
+      totalMonthlyRent: 500,
+    });
+  });
+
+  it("treats missing (undefined) sqft / bathrooms / rent as 0", () => {
+    // Imported / legacy rows can arrive with undefined numerics. The
+    // `r.field || 0` fallback in the implementation must keep totals
+    // numeric — otherwise `undefined + 100` would render as "NaN sqft"
+    // on the property overview.
+    const partialRoom = {
+      id: "r-partial",
+      propertyId: "p1",
+      name: "Partial",
+      sqft: undefined,
+      bathrooms: undefined,
+      monthlyRent: undefined,
+    } as unknown as Room;
+
+    expect(
+      computeRoomTotals([
+        makeRoom({ sqft: 200, bathrooms: 1, monthlyRent: 1000 }),
+        partialRoom,
+      ]),
+    ).toEqual({
+      roomCount: 2,
+      totalSqft: 200,
+      totalBathrooms: 1,
+      totalMonthlyRent: 1000,
+    });
+  });
+
+  it("treats null sqft / bathrooms / rent as 0", () => {
+    // Same defensive contract as the undefined case, but for the
+    // null-shaped variants some serializers produce.
+    const nullishRoom = {
+      id: "r-null",
+      propertyId: "p1",
+      name: "Nullish",
+      sqft: null,
+      bathrooms: null,
+      monthlyRent: null,
+    } as unknown as Room;
+
+    expect(computeRoomTotals([nullishRoom])).toEqual({
+      roomCount: 1,
+      totalSqft: 0,
+      totalBathrooms: 0,
+      totalMonthlyRent: 0,
+    });
   });
 });
 

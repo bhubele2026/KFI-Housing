@@ -28,6 +28,14 @@ vi.mock("@/components/layout/main-layout", () => ({
 
 // framer-motion's `motion.<tag>` becomes a plain element of the same tag,
 // stripping animation-only props. This keeps DOM semantics intact.
+//
+// IMPORTANT: components are cached per tag. A naive Proxy that synthesizes
+// a fresh function component on every `motion.div` access returns a NEW
+// component type each render — which makes React unmount the entire
+// subtree under <motion.div> on every re-render of the parent (e.g. when
+// the Beds-tab sort dropdown calls setBedsSort). That, in turn, blows
+// away the Tabs mock's internal useState and silently flips the page
+// back to the default "overview" tab mid-test.
 vi.mock("framer-motion", () => {
   const motionPropKeys = new Set([
     "initial", "animate", "exit", "transition",
@@ -35,8 +43,11 @@ vi.mock("framer-motion", () => {
     "variants", "layout", "layoutId", "drag", "dragConstraints",
     "onAnimationStart", "onAnimationComplete", "onUpdate", "viewport",
   ]);
+  const cache = new Map<string, React.ComponentType<Record<string, unknown> & { children?: ReactNode }>>();
   const motion = new Proxy({} as Record<string, unknown>, {
     get: (_t, tag: string) => {
+      const cached = cache.get(tag);
+      if (cached) return cached;
       const Component = ({ children, ...rest }: Record<string, unknown> & { children?: ReactNode }) => {
         const dom: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(rest)) {
@@ -44,6 +55,7 @@ vi.mock("framer-motion", () => {
         }
         return React.createElement(tag, dom, children);
       };
+      cache.set(tag, Component);
       return Component;
     },
   });
@@ -748,5 +760,258 @@ describe("Property detail — orphan beds card", () => {
     state = makeFreshState();
     await renderBedsTab();
     expect(container.querySelector('[data-testid="orphan-beds-card"]')).toBeNull();
+  });
+});
+
+// ── Tests: Beds tab room sort ───────────────────────────────────────────
+// Lock down the Beds-tab room sort dropdown so neither the comparator
+// (e.g. flipping null-handling so unrated rooms float to the top) nor the
+// localStorage persistence wrapper can regress silently. Mirrors the
+// matching Properties / Customers sort test follow-ups.
+const BEDS_SORT_STORAGE_KEY = "housingops:property-beds:sort";
+
+describe("Property detail — Beds tab room sort", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  // Five rooms chosen so each sort produces a distinct, easy-to-assert
+  // ordering AND so the comparator's null bucket has at least one
+  // representative for both the $/sqft sort (which goes through
+  // computePricePerSqft and treats rent=0 OR sqft=0 as null) and the
+  // single-axis rent / sqft sorts (which treat their own zero as null).
+  //   r-A: sqft 100, rent 500  → ppsf 5.00
+  //   r-B: sqft 200, rent 600  → ppsf 3.00
+  //   r-C: sqft  50, rent 1000 → ppsf 20.00
+  //   r-D: sqft   0, rent 800  → ppsf null (sqft=0); sqft sort → null
+  //   r-E: sqft 150, rent   0  → ppsf null (rent=0); rent sort → null
+  // Default order (insertion order in rooms[]) is A, B, C, D, E.
+  function makeSortFixture(): State {
+    return {
+      customers: [
+        { id: "c1", name: "Acme Co", contactName: "", email: "", phone: "", notes: "" },
+      ],
+      properties: [
+        {
+          id: "p1",
+          customerId: "c1",
+          name: "Maple",
+          address: "1 Main St",
+          city: "Austin",
+          state: "TX",
+          zip: "78701",
+          totalBeds: 0,
+          monthlyRent: 0,
+          chargePerBed: 0,
+          status: "Active",
+          landlordName: "",
+          landlordEmail: "",
+          landlordPhone: "",
+          paymentMethod: "ACH",
+          paymentRecipient: "",
+          paymentDueDay: 1,
+          paymentNotes: "",
+          bankName: "",
+          bankRouting: "",
+          bankAccount: "",
+          portalUrl: "",
+          notes: "",
+          furnishings: [],
+        },
+      ],
+      leases: [],
+      rooms: [
+        { id: "r-A", propertyId: "p1", name: "Alpha",   sqft: 100, bathrooms: 1, monthlyRent: 500 },
+        { id: "r-B", propertyId: "p1", name: "Bravo",   sqft: 200, bathrooms: 1, monthlyRent: 600 },
+        { id: "r-C", propertyId: "p1", name: "Charlie", sqft:  50, bathrooms: 1, monthlyRent: 1000 },
+        { id: "r-D", propertyId: "p1", name: "Delta",   sqft:   0, bathrooms: 1, monthlyRent: 800 },
+        { id: "r-E", propertyId: "p1", name: "Echo",    sqft: 150, bathrooms: 1, monthlyRent: 0 },
+      ],
+      // Empty so every room card has its trash button enabled and so the
+      // sortedGroups list under test is the only visible variable.
+      beds: [],
+      occupants: [],
+      utilities: [],
+    };
+  }
+
+  beforeEach(() => {
+    state = makeSortFixture();
+    Object.values(mocks).forEach((m) => m.mockReset());
+    toastMock.mockReset();
+    // Critical: the sort key is read from localStorage on first render
+    // and written on every change. Tests downstream of one that wrote a
+    // non-default key would otherwise hydrate with that stale value.
+    window.localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    window.localStorage.clear();
+  });
+
+  async function renderBedsTab() {
+    const { Harness } = makeHarness("/properties/p1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+    const trigger = container.querySelector(
+      '[data-testid="tab-trigger-beds"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) throw new Error("Could not find Beds tab trigger");
+    await act(async () => {
+      trigger.click();
+    });
+  }
+
+  // Read the on-screen room order by walking room-card-* test ids in
+  // document order. This is what the user actually sees, regardless of
+  // how the comparator is implemented internally.
+  function getRoomOrder(): string[] {
+    return Array.from(
+      container.querySelectorAll('[data-testid^="room-card-"]'),
+    ).map((el) => {
+      const id = el.getAttribute("data-testid") ?? "";
+      return id.replace(/^room-card-/, "");
+    });
+  }
+
+  // Click a sort option in the mocked Select. The mock renders each
+  // SelectItem as a real <button data-select-item="<value>"> inside the
+  // select-beds-sort wrapper, so this is exactly how a user would pick.
+  async function pickSort(value: string) {
+    const wrapper = container.querySelector(
+      '[data-testid="select-beds-sort"]',
+    ) as HTMLElement | null;
+    if (!wrapper) throw new Error("select-beds-sort wrapper missing");
+    const btn = wrapper.querySelector(
+      `[data-select-item="${value}"]`,
+    ) as HTMLButtonElement | null;
+    if (!btn) throw new Error(`sort option ${value} missing`);
+    await act(async () => {
+      btn.click();
+    });
+    await flushPromises();
+  }
+
+  it("defaults to insertion order when no sort has been picked", async () => {
+    await renderBedsTab();
+    expect(getRoomOrder()).toEqual(["r-A", "r-B", "r-C", "r-D", "r-E"]);
+  });
+
+  it("sorts $/sqft high → low with null-ppsf rooms (rent or sqft = 0) at the bottom", async () => {
+    await renderBedsTab();
+    await pickSort("ppsf-desc");
+    // ppsf: C=20, A=5, B=3 (sorted desc), then D & E (null) — D before E
+    // because Array.prototype.sort is stable in V8 / modern engines and
+    // their valueFor(...) is equal (both null), so original order is
+    // preserved.
+    expect(getRoomOrder()).toEqual(["r-C", "r-A", "r-B", "r-D", "r-E"]);
+  });
+
+  it("sorts $/sqft low → high with null-ppsf rooms still at the bottom (not flipped to the top)", async () => {
+    // The regression this guards: a future refactor that flips null
+    // handling so unrated rooms sort to the top in -asc would push the
+    // best-value rooms below garbage rows and silently break the page.
+    await renderBedsTab();
+    await pickSort("ppsf-asc");
+    // ppsf: B=3, A=5, C=20 (sorted asc), then D & E (null) at the bottom.
+    expect(getRoomOrder()).toEqual(["r-B", "r-A", "r-C", "r-D", "r-E"]);
+  });
+
+  it("sorts Rent high → low with rent=0 rooms at the bottom", async () => {
+    await renderBedsTab();
+    await pickSort("rent-desc");
+    // rent: C=1000, D=800, B=600, A=500, then E (rent=0 → null).
+    expect(getRoomOrder()).toEqual(["r-C", "r-D", "r-B", "r-A", "r-E"]);
+  });
+
+  it("sorts Rent low → high with rent=0 rooms still at the bottom", async () => {
+    await renderBedsTab();
+    await pickSort("rent-asc");
+    // rent: A=500, B=600, D=800, C=1000, then E (rent=0 → null).
+    expect(getRoomOrder()).toEqual(["r-A", "r-B", "r-D", "r-C", "r-E"]);
+  });
+
+  it("sorts Sqft high → low with sqft=0 rooms at the bottom", async () => {
+    await renderBedsTab();
+    await pickSort("sqft-desc");
+    // sqft: B=200, E=150, A=100, C=50, then D (sqft=0 → null).
+    expect(getRoomOrder()).toEqual(["r-B", "r-E", "r-A", "r-C", "r-D"]);
+  });
+
+  it("sorts Sqft low → high with sqft=0 rooms still at the bottom", async () => {
+    await renderBedsTab();
+    await pickSort("sqft-asc");
+    // sqft: C=50, A=100, E=150, B=200, then D (sqft=0 → null).
+    expect(getRoomOrder()).toEqual(["r-C", "r-A", "r-E", "r-B", "r-D"]);
+  });
+
+  it("picking a non-default sort persists that choice to localStorage", async () => {
+    await renderBedsTab();
+    expect(window.localStorage.getItem(BEDS_SORT_STORAGE_KEY)).toBeNull();
+
+    await pickSort("rent-desc");
+    expect(window.localStorage.getItem(BEDS_SORT_STORAGE_KEY)).toBe("rent-desc");
+
+    // Switching to a different non-default sort overwrites the key
+    // rather than accumulating stale values.
+    await pickSort("sqft-asc");
+    expect(window.localStorage.getItem(BEDS_SORT_STORAGE_KEY)).toBe("sqft-asc");
+  });
+
+  it("picking 'Default' again removes the localStorage key entirely (doesn't leave 'default' behind)", async () => {
+    await renderBedsTab();
+    await pickSort("ppsf-desc");
+    expect(window.localStorage.getItem(BEDS_SORT_STORAGE_KEY)).toBe("ppsf-desc");
+
+    await pickSort("default");
+    // The wrapper deliberately removes the key when the user is back to
+    // default so storage doesn't accumulate "default" sentinels.
+    expect(window.localStorage.getItem(BEDS_SORT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("hydrates from a pre-set localStorage value on first render", async () => {
+    // Simulate a returning user whose previous session left "rent-desc"
+    // in storage. The page must apply it before the first paint of the
+    // room cards — not on a follow-up effect — so the user never sees
+    // their cards reflow.
+    window.localStorage.setItem(BEDS_SORT_STORAGE_KEY, "rent-desc");
+
+    await renderBedsTab();
+
+    expect(getRoomOrder()).toEqual(["r-C", "r-D", "r-B", "r-A", "r-E"]);
+    // The Select also reflects the hydrated value via its data-current
+    // attribute (the mock wires `value` → data-current).
+    const wrapper = container.querySelector(
+      '[data-testid="select-beds-sort"]',
+    ) as HTMLElement | null;
+    expect(wrapper?.getAttribute("data-current")).toBe("rent-desc");
+  });
+
+  it("ignores an unknown / corrupted localStorage value and falls back to default", async () => {
+    // A regression that widened the validation to accept any string
+    // would let a stale or hand-edited value crash the comparator
+    // (switch falls through to `null` for every room → all-null bucket
+    // → sort is a no-op, but the Select would still display garbage).
+    // The page's readPersistedBedsSort must reject unknowns.
+    window.localStorage.setItem(BEDS_SORT_STORAGE_KEY, "not-a-real-sort");
+
+    await renderBedsTab();
+
+    expect(getRoomOrder()).toEqual(["r-A", "r-B", "r-C", "r-D", "r-E"]);
+    const wrapper = container.querySelector(
+      '[data-testid="select-beds-sort"]',
+    ) as HTMLElement | null;
+    expect(wrapper?.getAttribute("data-current")).toBe("default");
   });
 });

@@ -336,6 +336,20 @@ export default function LeaseDetail() {
   // identical.
   const lease = isCreateMode ? draft : realLease;
 
+  // If the lock falls through because the requested property doesn't
+  // exist, scrub the stale value out of the draft so the Select picker
+  // renders with no selection (rather than displaying a phantom value
+  // it has no option for) and the operator is forced to pick a real
+  // property before Save can succeed.
+  useEffect(() => {
+    if (!isCreateMode) return;
+    if (isLoading) return;
+    if (!requestedPropertyId) return;
+    if (lockedPropertyId) return;
+    if (!draft.propertyId) return;
+    setDraft((d) => ({ ...d, propertyId: "" }));
+  }, [isCreateMode, isLoading, requestedPropertyId, lockedPropertyId, draft.propertyId]);
+
   const property = useMemo(
     () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),
     [lease, properties],
@@ -456,7 +470,18 @@ export default function LeaseDetail() {
   // `?from=` origin through so "Back" still returns to the surface the
   // operator came from.
   const saveCreate = () => {
-    if (!draft.propertyId) {
+    // Two failure modes both surface the same toast: an empty draft
+    // (operator never picked a property) and a stale draft (the
+    // ?propertyId= the page mounted with no longer matches anything in
+    // the data store — e.g. hand-edited URL or a property deleted in
+    // another tab). The lock fallback drops the picker in front of the
+    // operator in that case but the draft still carries the original
+    // bogus id, so we *must* re-check at save time to avoid persisting
+    // an orphaned lease that nothing in the rest of the app can render.
+    const propertyExists =
+      !!draft.propertyId &&
+      properties.some((p) => p.id === draft.propertyId);
+    if (!propertyExists) {
       toast({
         title: "Pick a property first",
         description: "Choose which property this lease covers before saving.",

@@ -746,6 +746,37 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
     expect(last).toContain(`from=${encodeURIComponent(fromValue)}`);
   });
 
+  it("blocks Save when the draft's propertyId is stale (does not exist in the data store)", async () => {
+    // Defense-in-depth on top of the picker fallback: even if some flow
+    // leaves the draft holding a propertyId that no longer points to a
+    // real property, hitting Save must NOT addLease — that would
+    // persist an orphaned lease that no surface in the app can render.
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=ghost-id" },
+    });
+
+    mountAt("/leases/new?propertyId=ghost-id");
+
+    // The hardening effect should have scrubbed the stale id out of the
+    // draft on first render — Save should now toast the "pick a
+    // property" guidance instead of calling addLease.
+    addLeaseMock.mockClear();
+    const saveBtn = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    expect(saveBtn).not.toBeNull();
+    await act(async () => {
+      saveBtn.click();
+    });
+    expect(addLeaseMock).not.toHaveBeenCalled();
+  });
+
   it("falls back to the picker (and does NOT lock) when `?propertyId=` references a property that doesn't exist", () => {
     // Defensive guard against hand-edited URLs and stale links: if the
     // requested property has been deleted (or never existed), we must not

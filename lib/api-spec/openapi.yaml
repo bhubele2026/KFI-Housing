@@ -641,14 +641,27 @@ components:
         location:      { type: integer, minimum: 0, maximum: 5 }
         valueForMoney: { type: integer, minimum: 0, maximum: 5 }
 
+    # Plain calendar date stored as `YYYY-MM-DD`. We deliberately do NOT use
+    # OpenAPI's `format: date` here because that maps to `z.date()` (via
+    # orval's `useDates: true`), which would coerce values to JS Date objects
+    # at the API boundary. The downstream renewal calculator on the frontend
+    # splits the raw string on `-` to compute renewal windows, so we keep
+    # these as strings and enforce the canonical shape with a regex. This
+    # rejects values like `"2026-05-31 00:00:00"` or
+    # `"2026-05-31T00:00:00.000Z"` at the API boundary so they cannot reach
+    # the database.
+    LeaseDate:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: "2026-05-31"
     Lease:
       type: object
       required: [id, propertyId, startDate, endDate, monthlyRent, securityDeposit, status, notes]
       properties:
         id: { type: string }
         propertyId: { type: string }
-        startDate: { type: string }
-        endDate: { type: string }
+        startDate: { $ref: "#/components/schemas/LeaseDate" }
+        endDate: { $ref: "#/components/schemas/LeaseDate" }
         monthlyRent: { type: number }
         securityDeposit: { type: number }
         status: { type: string, enum: [Active, Expired, Upcoming] }
@@ -657,8 +670,8 @@ components:
       type: object
       properties:
         propertyId: { type: string }
-        startDate: { type: string }
-        endDate: { type: string }
+        startDate: { $ref: "#/components/schemas/LeaseDate" }
+        endDate: { $ref: "#/components/schemas/LeaseDate" }
         monthlyRent: { type: number }
         securityDeposit: { type: number }
         status: { type: string, enum: [Active, Expired, Upcoming] }

@@ -5,12 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { LeaseDate } from "./leaseDate";
 import type { LeaseUpdateStatus } from "./leaseUpdateStatus";
 
 export interface LeaseUpdate {
   propertyId?: string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: LeaseDate;
+  endDate?: LeaseDate;
   monthlyRent?: number;
   securityDeposit?: number;
   status?: LeaseUpdateStatus;

@@ -457,9 +457,13 @@ async function wipeAll(): Promise<void> {
 }
 
 async function insertBundle(bundle: DataBundle): Promise<void> {
-  // Defensive normalization: any imported / seeded lease may carry a stray
-  // time component on its dates (e.g. "2026-05-31 00:00:00"). Strip it here
-  // so the renewal calculator on the frontend never sees a malformed value.
+  // Defensive normalization (no-op on the happy path): the API boundary now
+  // enforces a strict `^\d{4}-\d{2}-\d{2}$` regex on lease `startDate` /
+  // `endDate` (see `lib/api-spec/openapi.yaml` -> `LeaseDate`), and the
+  // hard-coded SEED_LEASES below already use that format. We keep this call
+  // as belt-and-suspenders so a future caller that bypasses the API zod
+  // (e.g. a one-off script reusing `replaceAllData`) still cannot poison
+  // the renewal calculator with a stray time suffix.
   const normalizedLeases = bundle.leases.map((lease) =>
     normalizeLeaseDates(lease),
   );

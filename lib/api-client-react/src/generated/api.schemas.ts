@@ -158,6 +158,11 @@ export interface PropertyUpdate {
   ratings?: Ratings;
 }
 
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+export type LeaseDate = string;
+
 export type LeaseStatus = (typeof LeaseStatus)[keyof typeof LeaseStatus];
 
 export const LeaseStatus = {
@@ -169,8 +174,8 @@ export const LeaseStatus = {
 export interface Lease {
   id: string;
   propertyId: string;
-  startDate: string;
-  endDate: string;
+  startDate: LeaseDate;
+  endDate: LeaseDate;
   monthlyRent: number;
   securityDeposit: number;
   status: LeaseStatus;
@@ -188,8 +193,8 @@ export const LeaseUpdateStatus = {
 
 export interface LeaseUpdate {
   propertyId?: string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: LeaseDate;
+  endDate?: LeaseDate;
   monthlyRent?: number;
   securityDeposit?: number;
   status?: LeaseUpdateStatus;

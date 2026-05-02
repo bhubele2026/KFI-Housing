@@ -43,6 +43,13 @@ export const importDataBodyPropertiesItemRatingsLocationMax = 5;
 export const importDataBodyPropertiesItemRatingsValueForMoneyMin = 0;
 export const importDataBodyPropertiesItemRatingsValueForMoneyMax = 5;
 
+export const importDataBodyLeasesItemStartDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const ImportDataBody = zod.object({
   customers: zod.array(
     zod.object({
@@ -123,8 +130,8 @@ export const ImportDataBody = zod.object({
     zod.object({
       id: zod.string(),
       propertyId: zod.string(),
-      startDate: zod.string(),
-      endDate: zod.string(),
+      startDate: zod.string().regex(importDataBodyLeasesItemStartDateRegExp),
+      endDate: zod.string().regex(importDataBodyLeasesItemEndDateRegExp),
       monthlyRent: zod.number(),
       securityDeposit: zod.number(),
       status: zod.enum(["Active", "Expired", "Upcoming"]),
@@ -597,11 +604,18 @@ export const DeletePropertyParams = zod.object({
 /**
  * @summary List all leases
  */
+export const listLeasesResponseStartDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const listLeasesResponseEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const ListLeasesResponseItem = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
-  startDate: zod.string(),
-  endDate: zod.string(),
+  startDate: zod.string().regex(listLeasesResponseStartDateRegExp),
+  endDate: zod.string().regex(listLeasesResponseEndDateRegExp),
   monthlyRent: zod.number(),
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),
@@ -612,11 +626,18 @@ export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 /**
  * @summary Create a lease
  */
+export const createLeaseBodyStartDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const createLeaseBodyEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const CreateLeaseBody = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
-  startDate: zod.string(),
-  endDate: zod.string(),
+  startDate: zod.string().regex(createLeaseBodyStartDateRegExp),
+  endDate: zod.string().regex(createLeaseBodyEndDateRegExp),
   monthlyRent: zod.number(),
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),
@@ -630,21 +651,35 @@ export const UpdateLeaseParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateLeaseBodyStartDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const updateLeaseBodyEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const UpdateLeaseBody = zod.object({
   propertyId: zod.string().optional(),
-  startDate: zod.string().optional(),
-  endDate: zod.string().optional(),
+  startDate: zod.string().regex(updateLeaseBodyStartDateRegExp).optional(),
+  endDate: zod.string().regex(updateLeaseBodyEndDateRegExp).optional(),
   monthlyRent: zod.number().optional(),
   securityDeposit: zod.number().optional(),
   status: zod.enum(["Active", "Expired", "Upcoming"]).optional(),
   notes: zod.string().optional(),
 });
 
+export const updateLeaseResponseStartDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const updateLeaseResponseEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const UpdateLeaseResponse = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
-  startDate: zod.string(),
-  endDate: zod.string(),
+  startDate: zod.string().regex(updateLeaseResponseStartDateRegExp),
+  endDate: zod.string().regex(updateLeaseResponseEndDateRegExp),
   monthlyRent: zod.number(),
   securityDeposit: zod.number(),
   status: zod.enum(["Active", "Expired", "Upcoming"]),

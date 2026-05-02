@@ -17,6 +17,7 @@ export * from "./deleteRoom409";
 export * from "./healthStatus";
 export * from "./importPayload";
 export * from "./lease";
+export * from "./leaseDate";
 export * from "./leaseStatus";
 export * from "./leaseUpdate";
 export * from "./leaseUpdateStatus";

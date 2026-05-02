@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useLocation } from "wouter";
+import { useUnsavedChangesPrompt } from "@/hooks/use-unsaved-changes-prompt";
 import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
@@ -310,6 +311,21 @@ export default function LeaseDetail() {
   // ?propertyId= query value so a placeholder click pre-fills the form.
   const [draft, setDraft] = useState<Lease>(() => makeCreateDraft(requestedPropertyId));
 
+  // Tracks whether the operator has touched ANY field on the create form.
+  // Flipped to `true` from `applyUpdate` (the single funnel every field
+  // editor writes through) so we don't have to instrument each editor
+  // individually. The stale-propertyId scrub effect below deliberately
+  // bypasses this — that mutation is system-driven, not user-driven, and
+  // shouldn't arm the unsaved-changes guard.
+  const [isDirty, setIsDirty] = useState(false);
+
+  // One-shot bypass for the post-save replace navigation. Set to true from
+  // `saveCreate` immediately before `navigate(...)` so the unsaved-changes
+  // prompt doesn't fire on the redirect from /leases/new → /leases/<newId>.
+  const { bypassNextNavigation } = useUnsavedChangesPrompt(
+    isCreateMode && isDirty,
+  );
+
   // Resolve the locked property only if `?propertyId=` actually refers to a
   // known property. If the operator hand-edits the URL with a bogus id we
   // want to *fall back* to the picker so they can't save an orphaned lease
@@ -399,9 +415,13 @@ export default function LeaseDetail() {
   // Field-update helper. ONE branch between create and edit lives here so
   // every field editor below stays mode-agnostic: just call
   // `applyUpdate({ field: value })` and the right thing happens.
+  //
+  // In create mode this is also where the dirty flag flips on, so the
+  // unsaved-changes guard arms as soon as the operator touches anything.
   const applyUpdate = (updates: Partial<Lease>) => {
     if (isCreateMode) {
       setDraft((d) => ({ ...d, ...updates }));
+      setIsDirty(true);
     } else if (realLease) {
       updateLease(realLease.id, updates);
     }
@@ -514,6 +534,12 @@ export default function LeaseDetail() {
     const fromQs = origin.path && origin.path !== "/leases"
       ? `?from=${encodeURIComponent(origin.path)}`
       : "";
+    // Skip the unsaved-changes prompt for THIS navigation only — the
+    // operator just hit Save, the draft is now persisted, and the
+    // "discard?" dialog would be a confusing false positive on the
+    // success path. The bypass is one-shot, so any subsequent
+    // navigation in a different flow is still guarded.
+    bypassNextNavigation();
     navigate(`/leases/${newId}${fromQs}`, { replace: true });
   };
 

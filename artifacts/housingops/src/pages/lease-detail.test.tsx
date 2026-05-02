@@ -37,6 +37,20 @@ vi.mock("@/components/renew-lease-popover", () => ({
   RenewLeasePopover: ({ trigger }: { trigger?: ReactNode }) => <>{trigger}</>,
 }));
 
+// Capture every call into the unsaved-changes hook so the create-mode tests
+// can assert on the `when` value over the lifetime of the form (clean →
+// touched → saved). The hook itself owns the global history-patching; here
+// we only need to verify the *integration* — that the page passes the
+// right flag at the right time and trips bypassNextNavigation around Save.
+const useUnsavedChangesPromptCalls: boolean[] = [];
+const bypassNextNavigationMock = vi.fn();
+vi.mock("@/hooks/use-unsaved-changes-prompt", () => ({
+  useUnsavedChangesPrompt: (when: boolean) => {
+    useUnsavedChangesPromptCalls.push(when);
+    return { bypassNextNavigation: bypassNextNavigationMock };
+  },
+}));
+
 vi.mock("@/components/ui/popover", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
   return { Popover: Pass, PopoverTrigger: Pass, PopoverContent: () => null };
@@ -333,6 +347,8 @@ beforeEach(() => {
   deleteLeaseMock.mockReset();
   addLeaseMock.mockReset();
   toastMock.mockReset();
+  bypassNextNavigationMock.mockReset();
+  useUnsavedChangesPromptCalls.length = 0;
   dataState.leases = [];
   dataState.properties = [];
   dataState.customers = [];
@@ -832,6 +848,105 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
     expect(
       container.querySelector('[data-testid="lease-property-missing-notice"]'),
     ).toBeNull();
+  });
+
+  it("arms the unsaved-changes guard only AFTER the operator touches a field", () => {
+    // Untouched draft = no risk of data loss = no prompt. Arming on every
+    // mount would friction-block a click-into-the-page-then-back-out flow
+    // that didn't change anything.
+    dataState.properties = [buildProperty({ id: "prop-1", name: "Sunset House" })];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=prop-1" },
+    });
+
+    mountAt("/leases/new?propertyId=prop-1");
+
+    // Before any field is touched, every render so far passed `when=false`.
+    expect(useUnsavedChangesPromptCalls.length).toBeGreaterThan(0);
+    expect(useUnsavedChangesPromptCalls.every((v) => v === false)).toBe(true);
+
+    // Toggle a curated included-item suggestion — that's a single click
+    // that funnels through `applyUpdate`, the same path every other field
+    // editor on this page uses to commit changes. applyUpdate flips
+    // isDirty, which re-renders the page with `when=true`.
+    const waterBtn = container.querySelector(
+      '[data-testid="included-suggestion-Water"]',
+    ) as HTMLButtonElement;
+    expect(waterBtn).not.toBeNull();
+    act(() => waterBtn.click());
+
+    // The guard must now be armed — at least one render reported `when=true`.
+    expect(useUnsavedChangesPromptCalls.some((v) => v === true)).toBe(true);
+  });
+
+  it("does NOT arm the guard for an existing (edit-mode) lease, regardless of edits", () => {
+    // Edit mode uses optimistic save-on-blur, so there's nothing to "lose"
+    // by navigating away. Arming the prompt here would be pure friction.
+    dataState.leases = [buildLease()];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    expect(useUnsavedChangesPromptCalls.length).toBeGreaterThan(0);
+    expect(useUnsavedChangesPromptCalls.every((v) => v === false)).toBe(true);
+
+    // Even after toggling buyout (a real applyUpdate call) the create-only
+    // dirty flag stays untouched — edit mode persists immediately, so no
+    // arming.
+    const switchBtn = container.querySelector(
+      '[data-testid="switch-buyout-available"]',
+    ) as HTMLButtonElement;
+    act(() => switchBtn.click());
+
+    expect(useUnsavedChangesPromptCalls.every((v) => v === false)).toBe(true);
+  });
+
+  it("calls bypassNextNavigation immediately before the post-save navigate", () => {
+    // The post-save replace from /leases/new → /leases/<newId> would
+    // otherwise trip the "discard?" prompt — which is a confusing
+    // false-positive on the success path. Save must one-shot the bypass
+    // before navigating.
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=prop-1" },
+    });
+
+    mountAt("/leases/new?propertyId=prop-1");
+
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    act(() => save.click());
+
+    expect(bypassNextNavigationMock).toHaveBeenCalledTimes(1);
+    expect(addLeaseMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call bypassNextNavigation when Save is blocked by validation", () => {
+    // No property set → Save toasts and returns early. The bypass must NOT
+    // fire (otherwise a later, genuine, unsaved navigation would slip
+    // through silently).
+    dataState.properties = [];
+    dataState.customers = [];
+
+    mountAt("/leases/new");
+
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    act(() => save.click());
+
+    expect(addLeaseMock).not.toHaveBeenCalled();
+    expect(bypassNextNavigationMock).not.toHaveBeenCalled();
   });
 
   it("validates the property is set before saving — toast + no addLease when missing", () => {

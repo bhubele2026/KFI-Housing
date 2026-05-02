@@ -413,6 +413,19 @@ describe("Finance customer filter URL persistence", () => {
     await renderAt("/finance?customer=does-not-exist");
 
     expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    // The unknown id should be stripped from the URL so the visible
+    // state and the URL stay in sync.
+    expect(window.location.pathname).toBe("/finance");
+    expect(window.location.search).toBe("");
+  });
+
+  it("strips an unknown customer id but preserves other query params", async () => {
+    await renderAt("/finance?customer=does-not-exist&other=keep");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("customer")).toBeNull();
+    expect(params.get("other")).toBe("keep");
   });
 
   it("preserves other unrelated query params when toggling the filter", async () => {

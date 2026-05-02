@@ -825,9 +825,8 @@ export default function PropertyDetail() {
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                       <div className="flex items-center gap-2 w-40 shrink-0">
                         <Select
-                          value={activeLease?.rentFrequency ?? "Monthly"}
-                          onValueChange={v => activeLease && updateLease(activeLease.id, { rentFrequency: v as RentFrequency })}
-                          disabled={!activeLease}
+                          value={property.rentFrequency ?? "Monthly"}
+                          onValueChange={v => updateProperty(id, { rentFrequency: v as RentFrequency })}
                         >
                           <SelectTrigger
                             className="h-7 text-sm w-[110px]"
@@ -844,7 +843,7 @@ export default function PropertyDetail() {
                         <span className="text-sm text-muted-foreground">Rent</span>
                       </div>
                       {(() => {
-                        const freq: RentFrequency = activeLease?.rentFrequency ?? "Monthly";
+                        const freq: RentFrequency = property.rentFrequency ?? "Monthly";
                         const factor = RENT_FREQUENCY_FACTOR[freq];
                         const monthly = activeLease?.monthlyRent ?? 0;
                         const displayAmount = Math.round(monthly * factor * 100) / 100;

@@ -93,8 +93,12 @@ describe("computePricePerSqft", () => {
   it("returns rent / sqft rounded to cents", () => {
     // 4500 / 1800 = 2.5 exactly
     expect(computePricePerSqft(4500, 1800)).toBe(2.5);
-    // 5400 / 960 = 5.625 → rounded to 5.63
+    // 5400 / 960 = 5.625 → rounded UP to 5.63
     expect(computePricePerSqft(5400, 960)).toBe(5.63);
+    // 1234 / 1000 = 1.234 → rounded DOWN to 1.23. Pairs with the
+    // round-up case above so a regression that swapped Math.round for
+    // Math.ceil/Math.floor would be caught in either direction.
+    expect(computePricePerSqft(1234, 1000)).toBe(1.23);
   });
 
   it("returns null when total rent is zero", () => {

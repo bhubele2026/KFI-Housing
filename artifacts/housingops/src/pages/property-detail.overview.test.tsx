@@ -493,6 +493,28 @@ describe("Property detail — Room Totals card on Overview", () => {
     expect(getCard().textContent).toContain("Lease rent $1,500");
   });
 
+  it("hides the vs-lease delta when BOTH the expected rent and the lease rent are zero (no rooms priced and no active lease)", async () => {
+    // Both sides of the comparison are 0: rooms exist but none have any
+    // expected monthly rent set, AND there is no active lease either.
+    // The implementation guards with `expected > 0 && lease > 0`, so the
+    // delta must be hidden — surfacing "+$0 vs $0" or "−$0 vs lease rent"
+    // would read as a real comparison and confuse the operator.
+    state.rooms = [
+      { id: "r1", propertyId: "p1", name: "A", sqft: 200, bathrooms: 1, monthlyRent: 0 },
+      { id: "r2", propertyId: "p1", name: "B", sqft: 150, bathrooms: 0, monthlyRent: 0 },
+    ];
+    state.leases = [];
+    await renderPage();
+
+    // Rooms grid still renders (we DO have rooms, just unpriced ones).
+    expect(getMetric("room-totals-rooms")?.textContent).toContain("2");
+    // Expected rent tile shows $0/mo — but no delta and no fallback line
+    // (the fallback only appears when monthlyLeaseCost > 0).
+    expect(getMetric("room-totals-expected-rent")?.textContent).toContain("$0");
+    expect(getMetric("room-totals-vs-lease")).toBeNull();
+    expect(getCard().textContent).not.toContain("Lease rent $");
+  });
+
   it("renders a green positive delta when expected rent exceeds the active lease rent", async () => {
     // Expected rent $2,000/mo, lease $1,500/mo → +$500 (covering the
     // lease). The badge should be green (`text-green-600`).

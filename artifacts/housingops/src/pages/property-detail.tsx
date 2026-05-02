@@ -916,6 +916,19 @@ export default function PropertyDetail() {
                                     <span>Rent</span>
                                     <InlineEdit value={room.monthlyRent} prefix="$" type="number" onSave={v => updateRoom(room.id, { monthlyRent: parseFloat(v) || 0 })} />
                                   </div>
+                                  {(() => {
+                                    const ppsf = computePricePerSqft(room.monthlyRent, room.sqft);
+                                    if (ppsf === null) return null;
+                                    return (
+                                      <span
+                                        className="tabular-nums"
+                                        data-testid={`room-${room.id}-price-per-sqft`}
+                                        title="Monthly rent per square foot"
+                                      >
+                                        ${ppsf.toFixed(2)}/sqft
+                                      </span>
+                                    );
+                                  })()}
                                   <Button
                                     size="sm"
                                     variant="outline"

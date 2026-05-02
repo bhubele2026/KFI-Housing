@@ -116,11 +116,88 @@ export interface ImportSummary {
   utilities: number;
 }
 
+export type ImportMode = "replace" | "merge";
+
+export interface ImportResult {
+  mode: ImportMode;
+  /** Count of records read from the imported file (per type). */
+  summary: ImportSummary;
+  /** Merge mode only: records whose id did not exist before this import. */
+  added?: ImportSummary;
+  /**
+   * Merge mode only: existing records whose content was overwritten by the
+   * imported version (same id, different field values).
+   */
+  updated?: ImportSummary;
+}
+
 export interface ImportPreview {
   data: ExportData;
   summary: ImportSummary;
   /** True when the file was a v1 backup and we auto-created a Legacy customer. */
   migratedFromV1: boolean;
+}
+
+/** Sums two ImportSummary objects field-by-field. */
+export function totalImportSummary(s: ImportSummary): number {
+  return s.customers + s.properties + s.leases + s.beds + s.occupants + s.utilities;
+}
+
+const EMPTY_SUMMARY: ImportSummary = {
+  customers: 0,
+  properties: 0,
+  leases: 0,
+  beds: 0,
+  occupants: 0,
+  utilities: 0,
+};
+
+/**
+ * Merge an imported bundle into the current data. Records are matched by id:
+ *   - new ids are appended ("added")
+ *   - existing ids whose content differs are overwritten ("updated")
+ *   - existing ids whose content is identical are left as-is (not counted)
+ *   - records that exist locally but not in the file are preserved
+ *
+ * Returns the resulting bundle plus per-type counts of added/updated rows.
+ */
+export function mergeImportBundles(
+  current: ExportData,
+  incoming: ExportData,
+): { data: ExportData; added: ImportSummary; updated: ImportSummary } {
+  const added: ImportSummary = { ...EMPTY_SUMMARY };
+  const updated: ImportSummary = { ...EMPTY_SUMMARY };
+
+  function mergeList<T extends { id: string }>(
+    currentList: readonly T[],
+    incomingList: readonly T[],
+    key: keyof ImportSummary,
+  ): T[] {
+    const byId = new Map<string, T>();
+    for (const item of currentList) byId.set(item.id, item);
+    for (const item of incomingList) {
+      const existing = byId.get(item.id);
+      if (!existing) {
+        added[key] += 1;
+        byId.set(item.id, item);
+      } else if (JSON.stringify(existing) !== JSON.stringify(item)) {
+        updated[key] += 1;
+        byId.set(item.id, item);
+      }
+    }
+    return Array.from(byId.values());
+  }
+
+  const data: ExportData = {
+    customers: mergeList(current.customers, incoming.customers, "customers"),
+    properties: mergeList(current.properties, incoming.properties, "properties"),
+    leases: mergeList(current.leases, incoming.leases, "leases"),
+    beds: mergeList(current.beds, incoming.beds, "beds"),
+    occupants: mergeList(current.occupants, incoming.occupants, "occupants"),
+    utilities: mergeList(current.utilities, incoming.utilities, "utilities"),
+  };
+
+  return { data, added, updated };
 }
 
 // Strict shape check: only treat a value as a pre-validated ImportPreview when
@@ -254,7 +331,7 @@ interface DataStore {
   deleteUtility: (id: string) => void;
   resetToSampleData: () => void;
   exportData: () => ExportPayload;
-  importData: (input: unknown | ImportPreview) => ImportSummary;
+  importData: (input: unknown | ImportPreview, mode?: ImportMode) => ImportResult;
 }
 
 const DataContext = createContext<DataStore | undefined>(undefined);
@@ -563,29 +640,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // or a pre-validated ImportPreview (so callers that already inspected the
   // file — e.g. to show a tailored confirmation dialog — don't pay to parse
   // it twice). Throws UnsupportedImportError for unrecognized payloads.
-  const importData = (input: unknown): ImportSummary => {
+  //
+  // mode="replace" (default) wipes existing data and writes the file's contents.
+  // mode="merge" overlays the file onto current data: new ids are added,
+  // existing ids whose content differs are overwritten, and local-only
+  // records are preserved.
+  const importData = (input: unknown, mode: ImportMode = "replace"): ImportResult => {
     const preview =
       isImportPreview(input) ? input : inspectImportPayload(input);
-    const { data } = preview;
+
+    let dataToWrite: ExportData;
+    let added: ImportSummary | undefined;
+    let updated: ImportSummary | undefined;
+
+    if (mode === "merge") {
+      const merged = mergeImportBundles(
+        { customers, properties, leases, beds, occupants, utilities },
+        preview.data,
+      );
+      dataToWrite = merged.data;
+      added = merged.added;
+      updated = merged.updated;
+    } else {
+      dataToWrite = preview.data;
+    }
 
     // Optimistically populate caches so the UI reflects the import immediately.
-    queryClient.setQueryData<Customer[]>(customersKey, data.customers);
-    queryClient.setQueryData<Property[]>(propertiesKey, data.properties);
-    queryClient.setQueryData<Lease[]>(leasesKey, data.leases);
-    queryClient.setQueryData<Bed[]>(bedsKey, data.beds);
-    queryClient.setQueryData<Occupant[]>(occupantsKey, data.occupants);
-    queryClient.setQueryData<Utility[]>(utilitiesKey, data.utilities);
+    queryClient.setQueryData<Customer[]>(customersKey, dataToWrite.customers);
+    queryClient.setQueryData<Property[]>(propertiesKey, dataToWrite.properties);
+    queryClient.setQueryData<Lease[]>(leasesKey, dataToWrite.leases);
+    queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
+    queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
+    queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
 
-    // Persist atomically on the server, then re-fetch to confirm.
+    // Persist atomically on the server. The /import endpoint replaces all
+    // data with the bundle we send, so for merge mode we send the already-
+    // merged bundle (current ∪ imported) and end up at the same state.
     importMut.mutate(
-      { data },
+      { data: dataToWrite },
       {
         onError: () => notifySaveError("save the imported data"),
         onSettled: invalidateAll,
       },
     );
 
-    return preview.summary;
+    return { mode, summary: preview.summary, added, updated };
   };
 
   return (

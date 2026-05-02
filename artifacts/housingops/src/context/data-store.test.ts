@@ -4,6 +4,9 @@ import {
   UnsupportedImportError,
   EXPORT_FORMAT_VERSION,
   LEGACY_CUSTOMER_ID,
+  mergeImportBundles,
+  totalImportSummary,
+  type ExportData,
 } from "./data-store";
 
 const exportedAt = "2026-04-01T12:00:00.000Z";
@@ -203,5 +206,151 @@ describe("inspectImportPayload", () => {
         `v${EXPORT_FORMAT_VERSION + 1}`,
       );
     }
+  });
+});
+
+// ── Merge import logic ──────────────────────────────────────────────────
+// These tests exercise mergeImportBundles directly so we can verify the
+// "X added, Y updated" semantics surfaced in the import dialog without
+// needing a React tree.
+
+const baseProperty = (id: string, overrides: Partial<typeof sampleProperty> = {}) => ({
+  ...sampleProperty,
+  id,
+  ...overrides,
+});
+
+const baseCustomer = (id: string, overrides: Partial<typeof sampleCustomer> = {}) => ({
+  ...sampleCustomer,
+  id,
+  ...overrides,
+});
+
+const emptyBundle = (): ExportData => ({
+  customers: [],
+  properties: [],
+  leases: [],
+  beds: [],
+  occupants: [],
+  utilities: [],
+});
+
+describe("mergeImportBundles", () => {
+  it("adds new records and reports them as added", () => {
+    const current: ExportData = {
+      ...emptyBundle(),
+      customers: [baseCustomer("c1")],
+      properties: [baseProperty("p1")],
+    };
+    const incoming: ExportData = {
+      ...emptyBundle(),
+      customers: [baseCustomer("c2", { name: "New Co" })],
+      properties: [baseProperty("p2", { name: "New Place" })],
+    };
+
+    const merged = mergeImportBundles(current, incoming);
+
+    expect(merged.added).toEqual({
+      customers: 1,
+      properties: 1,
+      leases: 0,
+      beds: 0,
+      occupants: 0,
+      utilities: 0,
+    });
+    expect(merged.updated.customers).toBe(0);
+    expect(merged.updated.properties).toBe(0);
+    expect(merged.data.customers.map((c) => c.id).sort()).toEqual(["c1", "c2"]);
+    expect(merged.data.properties.map((p) => p.id).sort()).toEqual(["p1", "p2"]);
+  });
+
+  it("overwrites existing records with the same id and reports them as updated", () => {
+    const current: ExportData = {
+      ...emptyBundle(),
+      properties: [baseProperty("p1", { name: "Old Name" })],
+    };
+    const incoming: ExportData = {
+      ...emptyBundle(),
+      properties: [baseProperty("p1", { name: "New Name" })],
+    };
+
+    const merged = mergeImportBundles(current, incoming);
+
+    expect(merged.added.properties).toBe(0);
+    expect(merged.updated.properties).toBe(1);
+    expect(merged.data.properties).toHaveLength(1);
+    expect(merged.data.properties[0].name).toBe("New Name");
+  });
+
+  it("does not count records whose content is unchanged", () => {
+    const property = baseProperty("p1", { name: "Same" });
+    const current: ExportData = { ...emptyBundle(), properties: [property] };
+    const incoming: ExportData = { ...emptyBundle(), properties: [{ ...property }] };
+
+    const merged = mergeImportBundles(current, incoming);
+
+    expect(merged.added.properties).toBe(0);
+    expect(merged.updated.properties).toBe(0);
+    expect(merged.data.properties).toHaveLength(1);
+  });
+
+  it("preserves local-only records that are not in the imported file", () => {
+    const current: ExportData = {
+      ...emptyBundle(),
+      properties: [baseProperty("p1"), baseProperty("p2", { name: "Keep me" })],
+    };
+    const incoming: ExportData = {
+      ...emptyBundle(),
+      properties: [baseProperty("p3", { name: "From file" })],
+    };
+
+    const merged = mergeImportBundles(current, incoming);
+
+    expect(merged.added.properties).toBe(1);
+    expect(merged.updated.properties).toBe(0);
+    const ids = merged.data.properties.map((p) => p.id).sort();
+    expect(ids).toEqual(["p1", "p2", "p3"]);
+    // The local-only "Keep me" property is untouched.
+    expect(merged.data.properties.find((p) => p.id === "p2")?.name).toBe("Keep me");
+  });
+
+  it("merges all entity types independently", () => {
+    const current: ExportData = {
+      customers: [baseCustomer("c1")],
+      properties: [baseProperty("p1")],
+      leases: [{ id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-01-01", monthlyRent: 100, securityDeposit: 200, status: "Active" as const, notes: "" }],
+      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, room: "R1", status: "Vacant" as const, occupantId: null }],
+      occupants: [],
+      utilities: [],
+    };
+    const incoming: ExportData = {
+      customers: [baseCustomer("c1", { name: "Renamed" })], // updated
+      properties: [baseProperty("p2", { name: "New" })], // added
+      leases: [], // nothing
+      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, room: "R1", status: "Vacant" as const, occupantId: null }], // unchanged
+      occupants: [],
+      utilities: [{ id: "u1", propertyId: "p1", type: "Electric" as const, company: "X", monthlyCost: 100, accountNumber: "", notes: "" }], // added
+    };
+
+    const merged = mergeImportBundles(current, incoming);
+
+    expect(merged.added).toEqual({
+      customers: 0,
+      properties: 1,
+      leases: 0,
+      beds: 0,
+      occupants: 0,
+      utilities: 1,
+    });
+    expect(merged.updated).toEqual({
+      customers: 1,
+      properties: 0,
+      leases: 0,
+      beds: 0,
+      occupants: 0,
+      utilities: 0,
+    });
+    expect(totalImportSummary(merged.added)).toBe(2);
+    expect(totalImportSummary(merged.updated)).toBe(1);
   });
 });

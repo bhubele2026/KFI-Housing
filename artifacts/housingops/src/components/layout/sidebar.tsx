@@ -7,7 +7,9 @@ import {
   useData,
   inspectImportPayload,
   UnsupportedImportError,
-  type ImportSummary,
+  totalImportSummary,
+  type ImportMode,
+  type ImportResult,
   type ImportPreview,
 } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +24,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -42,6 +46,7 @@ export function Sidebar() {
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [pendingImport, setPendingImport] = useState<{ preview: ImportPreview; fileName: string } | null>(null);
+  const [importMode, setImportMode] = useState<ImportMode>("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleConfirmReset = () => {
@@ -103,6 +108,7 @@ export function Sidebar() {
     try {
       const preview = inspectImportPayload(parsed);
       setPendingImport({ preview, fileName: file.name });
+      setImportMode("replace");
       setImportOpen(true);
     } catch (err) {
       const description =
@@ -120,9 +126,9 @@ export function Sidebar() {
   const handleConfirmImport = () => {
     if (!pendingImport) return;
     const { preview, fileName } = pendingImport;
-    let summary: ImportSummary;
+    let result: ImportResult;
     try {
-      summary = importData(preview);
+      result = importData(preview, importMode);
     } catch (err) {
       const description =
         err instanceof UnsupportedImportError
@@ -139,13 +145,29 @@ export function Sidebar() {
     }
     setImportOpen(false);
     setPendingImport(null);
+    const summary = result.summary;
     const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities`;
-    toast({
-      title: preview.migratedFromV1 ? "Older backup imported" : "Data imported",
-      description: preview.migratedFromV1
-        ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer and assigned all ${summary.properties} imported properties to it. Loaded ${counts}.`
-        : `Loaded ${counts}.`,
-    });
+    if (result.mode === "merge" && result.added && result.updated) {
+      const addedTotal = totalImportSummary(result.added);
+      const updatedTotal = totalImportSummary(result.updated);
+      const unchanged =
+        totalImportSummary(summary) - addedTotal - updatedTotal;
+      const unchangedNote =
+        unchanged > 0 ? ` ${unchanged} were already up to date.` : "";
+      toast({
+        title: "Data merged",
+        description: preview.migratedFromV1
+          ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer for the migrated properties. ${addedTotal} added, ${updatedTotal} updated.${unchangedNote}`
+          : `From ${fileName}: ${addedTotal} added, ${updatedTotal} updated.${unchangedNote} Existing records not in the file were kept.`,
+      });
+    } else {
+      toast({
+        title: preview.migratedFromV1 ? "Older backup imported" : "Data imported",
+        description: preview.migratedFromV1
+          ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer and assigned all ${summary.properties} imported properties to it. Loaded ${counts}.`
+          : `Loaded ${counts}.`,
+      });
+    }
   };
 
   const handleCancelImport = () => {
@@ -272,21 +294,75 @@ export function Sidebar() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pendingImport?.preview.migratedFromV1
-                ? "Import older backup?"
-                : "Replace current data with import?"}
+              {importMode === "merge"
+                ? "Merge import into current data?"
+                : pendingImport?.preview.migratedFromV1
+                  ? "Import older backup?"
+                  : "Replace current data with import?"}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p>
-                  Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span> will
-                  replace every customer, property, lease, bed, occupant, and utility in this browser with
-                  the contents of the file. Your current data will be lost. Consider exporting first if you
-                  want a backup.
+                  Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span>.
+                  Choose how it should be applied to your current data.
                 </p>
+                <RadioGroup
+                  value={importMode}
+                  onValueChange={(v) => setImportMode(v as ImportMode)}
+                  className="gap-3"
+                  data-testid="radio-import-mode"
+                >
+                  <div className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <RadioGroupItem
+                      value="replace"
+                      id="import-mode-replace"
+                      className="mt-0.5"
+                      data-testid="radio-import-mode-replace"
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="import-mode-replace"
+                        className="font-medium cursor-pointer"
+                      >
+                        Replace all data
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Wipe every customer, property, lease, bed, occupant, and utility in this
+                        browser and load only what&apos;s in the file. Use this to restore a backup
+                        or move to a new browser.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-md border border-border p-3">
+                    <RadioGroupItem
+                      value="merge"
+                      id="import-mode-merge"
+                      className="mt-0.5"
+                      data-testid="radio-import-mode-merge"
+                    />
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="import-mode-merge"
+                        className="font-medium cursor-pointer"
+                      >
+                        Merge into current data
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Add records from the file as new entries, update any existing records that
+                        share the same id, and keep everything else you already have. Use this to
+                        combine data from another teammate&apos;s export.
+                      </p>
+                    </div>
+                  </div>
+                </RadioGroup>
+                {importMode === "replace" ? (
+                  <p className="text-sm text-muted-foreground">
+                    Your current data will be lost. Consider exporting first if you want a backup.
+                  </p>
+                ) : null}
                 {pendingImport?.preview.migratedFromV1 ? (
                   <p
-                    className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                    className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
                     data-testid="text-import-legacy-warning"
                   >
                     This backup was made before Customers existed. We&apos;ll create a single
@@ -306,9 +382,17 @@ export function Sidebar() {
             <AlertDialogAction
               onClick={handleConfirmImport}
               data-testid="button-import-confirm"
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className={
+                importMode === "replace"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
             >
-              {pendingImport?.preview.migratedFromV1 ? "Import and migrate" : "Replace data"}
+              {importMode === "merge"
+                ? "Merge data"
+                : pendingImport?.preview.migratedFromV1
+                  ? "Import and migrate"
+                  : "Replace data"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

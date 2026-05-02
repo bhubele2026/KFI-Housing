@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { toMonthlyCharge } from "@/data/mockData";
+import { sumActiveRent, toMonthlyCharge } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,7 +30,10 @@ export default function Finance() {
   const financialData = visibleProperties.map(p => {
     const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
     const revenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
-    const leaseCost = leases.find(l => l.propertyId === p.id && l.status === "Active")?.monthlyRent ?? 0;
+    // Sum across every Active lease for the property — a property can hold
+    // more than one (e.g. overlapping renewals or multi-room agreements).
+    // Picking just the first match silently under-reports rent and profit.
+    const leaseCost = sumActiveRent(leases, p.id);
     const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((s, u) => s + u.monthlyCost, 0);
     const totalCost = leaseCost + utilCost;
     const occupiedBeds = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length;

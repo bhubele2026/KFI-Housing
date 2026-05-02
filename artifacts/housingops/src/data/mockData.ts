@@ -210,6 +210,57 @@ export const LeaseSchema = z.object({
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 
+// ── Lease aggregation helpers ──────────────────────────────────────────
+// Centralized so the property header, finance tab, and any future caller
+// agree on what "active rent for this property" means. A property can hold
+// more than one Active lease at a time (e.g. renewals overlap, or two
+// rooms are leased separately) — the database has always allowed this and
+// the UI must sum across them rather than pick "the first match".
+
+/** Every Active lease that belongs to this property, in input order. */
+export function getActiveLeasesForProperty(
+  leases: readonly Lease[],
+  propertyId: string,
+): Lease[] {
+  return leases.filter(
+    (l) => l.propertyId === propertyId && l.status === "Active",
+  );
+}
+
+/** Sum of `monthlyRent` across every Active lease for the property. */
+export function sumActiveRent(
+  leases: readonly Lease[],
+  propertyId: string,
+): number {
+  return getActiveLeasesForProperty(leases, propertyId).reduce(
+    (s, l) => s + (l.monthlyRent || 0),
+    0,
+  );
+}
+
+const LEASE_STATUS_ORDER: Record<Lease["status"], number> = {
+  Active: 0,
+  Upcoming: 1,
+  Expired: 2,
+};
+
+/**
+ * Stable display order for leases: Active first, then Upcoming, then Expired.
+ * Within each group, most-recent end date first so the lease most likely to
+ * matter (still running / about to renew / just expired) sits at the top.
+ * Returns a NEW array — the input is treated as readonly.
+ */
+export function sortLeases(leases: readonly Lease[]): Lease[] {
+  return [...leases].sort((a, b) => {
+    const sa = LEASE_STATUS_ORDER[a.status] ?? 99;
+    const sb = LEASE_STATUS_ORDER[b.status] ?? 99;
+    if (sa !== sb) return sa - sb;
+    // Newest end date first within the same status group. localeCompare on
+    // YYYY-MM-DD strings is a correct chronological sort.
+    return b.endDate.localeCompare(a.endDate);
+  });
+}
+
 export const RoomSchema = z.object({
   id: z.string(),
   propertyId: z.string(),

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, type Ratings, type RentFrequency } from "@/data/mockData";
+import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -113,9 +113,9 @@ const TYPE_COLORS: Record<string, string> = {
   Other:    "bg-gray-100 text-gray-700",
 };
 
-function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: { label: string; value: string | number; sub?: string; icon?: React.ElementType; color?: string }) {
+function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", testId }: { label: string; value: string | number; sub?: React.ReactNode; icon?: React.ElementType; color?: string; testId?: string }) {
   return (
-    <Card>
+    <Card data-testid={testId}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
@@ -408,6 +408,11 @@ export default function PropertyDetail() {
   // Controlled tab state so clicking a tile in the Bed Map can jump
   // straight to the Beds tab and scroll the matching row into view.
   const [activeTab, setActiveTab] = useState<string>("overview");
+  // Controlled-open state for the AddLeaseDialog opened by the Leases
+  // tab's placeholder row CTA. Kept here so the dialog instance can live
+  // outside the LeasesTable component tree (which is also re-used by the
+  // global Leases page).
+  const [leasesTabCreateOpen, setLeasesTabCreateOpen] = useState(false);
   const [highlightedBedId, setHighlightedBedId] = useState<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -477,14 +482,25 @@ export default function PropertyDetail() {
   const propBeds = beds.filter(b => b.propertyId === id);
   const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
   const propLeases = leases.filter(l => l.propertyId === id);
+  const sortedPropLeases = sortLeases(propLeases);
   const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
-  const activeLease = propLeases.find(l => l.status === "Active");
+  // A property can have more than one Active lease at a time (overlapping
+  // renewals, multi-room agreements). Picking just the first match silently
+  // under-reports rent and profit, so the header and Finance tab sum across
+  // all active leases via `sumActiveRent`/`getActiveLeasesForProperty`.
+  const activeLeases = getActiveLeasesForProperty(propLeases, id);
+  // The lease whose end date is closest (used for the renewal badge / popover
+  // and for the inline rent editor). Picking the soonest-expiring active
+  // lease keeps the urgency signal honest when several overlap.
+  const primaryActiveLease = [...activeLeases].sort((a, b) =>
+    a.endDate.localeCompare(b.endDate),
+  )[0];
 
   const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;
   const vacantBeds = propBeds.length - occupiedBeds;
   const monthlyRevenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
   const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
-  const monthlyLeaseCost = activeLease?.monthlyRent ?? 0;
+  const monthlyLeaseCost = activeLeases.reduce((s, l) => s + (l.monthlyRent || 0), 0);
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
   const roomTotals = computeRoomTotals(propRooms);
@@ -544,8 +560,8 @@ export default function PropertyDetail() {
                 </div>
               );
             })()}
-            {activeLease && (() => {
-              const renewal = getRenewalInfo(activeLease.endDate);
+            {primaryActiveLease && (() => {
+              const renewal = getRenewalInfo(primaryActiveLease.endDate);
               if (renewal.level === "ok") return null;
               return (
                 <div className="flex items-center gap-1.5 ml-1">
@@ -554,11 +570,11 @@ export default function PropertyDetail() {
                     Renewal: {renewal.label}
                   </Badge>
                   <RenewLeasePopover
-                    currentEndDate={activeLease.endDate}
-                    currentStatus={activeLease.status}
+                    currentEndDate={primaryActiveLease.endDate}
+                    currentStatus={primaryActiveLease.status}
                     propertyName={property.name}
                     onRenew={(newEndDate, newStatus) =>
-                      updateLease(activeLease.id, {
+                      updateLease(primaryActiveLease.id, {
                         endDate: newEndDate,
                         status: newStatus,
                       })
@@ -582,7 +598,28 @@ export default function PropertyDetail() {
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
           <StatCard label="Monthly Revenue" value={`$${monthlyRevenue.toLocaleString()}`} icon={TrendingUp} color="text-green-600" />
-          <StatCard label="Lease Rent" value={monthlyLeaseCost > 0 ? `$${monthlyLeaseCost.toLocaleString()}` : "—"} icon={KeyRound} color="text-destructive" sub="active lease" />
+          <StatCard
+            testId="stat-lease-rent"
+            label="Lease Rent"
+            value={monthlyLeaseCost > 0 ? `$${monthlyLeaseCost.toLocaleString()}` : "—"}
+            icon={KeyRound}
+            color="text-destructive"
+            sub={
+              activeLeases.length >= 2 ? (
+                <span
+                  className="inline-flex items-center gap-1 text-amber-700"
+                  data-testid="badge-multi-active-leases"
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  {activeLeases.length} active leases — rents combined
+                </span>
+              ) : activeLeases.length === 1 ? (
+                "active lease"
+              ) : (
+                "no active lease"
+              )
+            }
+          />
           <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
@@ -845,10 +882,31 @@ export default function PropertyDetail() {
                         <span className="text-sm text-muted-foreground">Rent</span>
                       </div>
                       {(() => {
+                        // The inline editor edits a single lease; with multiple active
+                        // leases the operator should go to the Leases tab to disambiguate.
+                        // We surface the SUM as a read-only value so the number on screen
+                        // still matches the header and the Finance tab.
                         const freq: RentFrequency = property.rentFrequency ?? "Monthly";
                         const factor = RENT_FREQUENCY_FACTOR[freq];
-                        const monthly = activeLease?.monthlyRent ?? 0;
+                        const monthly = monthlyLeaseCost;
                         const displayAmount = Math.round(monthly * factor * 100) / 100;
+                        const editableLease =
+                          activeLeases.length === 1 ? activeLeases[0] : null;
+                        if (!editableLease) {
+                          return (
+                            <span
+                              className="text-sm tabular-nums text-muted-foreground"
+                              data-testid="rent-amount-readonly"
+                              title={
+                                activeLeases.length === 0
+                                  ? "No active lease — add one on the Leases tab"
+                                  : `${activeLeases.length} active leases — open the Leases tab to edit each one`
+                              }
+                            >
+                              ${displayAmount.toLocaleString()}
+                            </span>
+                          );
+                        }
                         return (
                           <InlineEdit
                             value={displayAmount}
@@ -856,11 +914,10 @@ export default function PropertyDetail() {
                             type="number"
                             testId="rent-amount-inline-edit"
                             onSave={v => {
-                              if (!activeLease) return;
                               const entered = parseFloat(v);
                               if (Number.isNaN(entered)) return;
                               const newMonthly = entered / factor;
-                              updateLease(activeLease.id, { monthlyRent: newMonthly });
+                              updateLease(editableLease.id, { monthlyRent: newMonthly });
                             }}
                           />
                         );
@@ -907,22 +964,44 @@ export default function PropertyDetail() {
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
                 {propLeases.length} lease{propLeases.length !== 1 ? "s" : ""} for this property
+                {activeLeases.length >= 2 && (
+                  <span
+                    className="ml-2 inline-flex items-center gap-1 text-amber-700"
+                    data-testid="text-leases-tab-multi-active"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {activeLeases.length} active — rents combined in header
+                  </span>
+                )}
               </p>
               <AddLeaseDialog propertyId={id} onAdd={addLease} />
             </div>
             <Card>
               <CardContent className="p-0">
                 <LeasesTable
-                  leases={propLeases}
+                  leases={sortedPropLeases}
                   properties={properties}
                   showProperty={false}
                   showCustomer={false}
                   onUpdate={updateLease}
                   onDelete={deleteLease}
                   emptyMessage="No leases found."
+                  // When the property has zero leases, render a single
+                  // placeholder row matching the global Leases page so the
+                  // operator gets the same "Create lease" CTA in either view.
+                  placeholderProperties={propLeases.length === 0 ? [property] : []}
+                  onCreateLeaseForProperty={() => setLeasesTabCreateOpen(true)}
                 />
               </CardContent>
             </Card>
+            {/* Controlled-open AddLeaseDialog used by the placeholder row's
+                "Create lease" CTA. The property is locked to this page's id. */}
+            <AddLeaseDialog
+              propertyId={id}
+              open={leasesTabCreateOpen}
+              onOpenChange={setLeasesTabCreateOpen}
+              onAdd={addLease}
+            />
           </TabsContent>
 
           {/* ── BEDS TAB (grouped by room, merged with occupants) ── */}

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
-import { getRenewalInfo } from "@/data/mockData";
+import { getRenewalInfo, sortLeases } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,13 +40,42 @@ export default function Leases() {
     return map;
   }, [properties]);
 
-  const filteredLeases = leases.filter((l) => {
-    const matchesStatus = statusFilter === "All" || l.status === statusFilter;
-    if (!matchesStatus) return false;
-    if (customerFilter === ALL_CUSTOMERS) return true;
-    const property = propertyById.get(l.propertyId);
-    return property?.customerId === customerFilter;
-  });
+  const filteredLeases = useMemo(
+    () =>
+      sortLeases(
+        leases.filter((l) => {
+          const matchesStatus = statusFilter === "All" || l.status === statusFilter;
+          if (!matchesStatus) return false;
+          if (customerFilter === ALL_CUSTOMERS) return true;
+          const property = propertyById.get(l.propertyId);
+          return property?.customerId === customerFilter;
+        }),
+      ),
+    [leases, statusFilter, customerFilter, propertyById],
+  );
+
+  // Placeholder rows: every property in the active customer scope that has no
+  // lease records yet. Rendered only on the unfiltered Status view because a
+  // placeholder row has no status to filter on — restricting them to the
+  // "All Statuses" view keeps the count next to the dropdown honest.
+  const placeholderProperties = useMemo(() => {
+    const propertiesWithAnyLease = new Set(leases.map((l) => l.propertyId));
+    const scoped = properties.filter((p) =>
+      customerFilter === ALL_CUSTOMERS ? true : p.customerId === customerFilter,
+    );
+    return scoped
+      .filter((p) => !propertiesWithAnyLease.has(p.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [properties, leases, customerFilter]);
+
+  const showPlaceholders = statusFilter === "All";
+  const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
+
+  // The placeholder row's "Create lease" CTA opens this controlled dialog
+  // with the property locked. We track only the propertyId — the open state
+  // is derived from `placeholderCreateForId !== null` so closing the dialog
+  // also clears the binding.
+  const [placeholderCreateForId, setPlaceholderCreateForId] = useState<string | null>(null);
 
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
   const renewalAlerts = leases
@@ -272,6 +301,12 @@ export default function Leases() {
               </div>
               <span className="text-xs text-muted-foreground">
                 {filteredLeases.length} of {leases.length} lease{leases.length === 1 ? "" : "s"}
+                {visiblePlaceholderProperties.length > 0 && (
+                  <span className="ml-2" data-testid="text-placeholder-count">
+                    + {visiblePlaceholderProperties.length} propert
+                    {visiblePlaceholderProperties.length === 1 ? "y" : "ies"} without a lease
+                  </span>
+                )}
               </span>
             </div>
 
@@ -290,9 +325,37 @@ export default function Leases() {
               onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
               onUpdate={updateLease}
               onDelete={deleteLease}
+              placeholderProperties={visiblePlaceholderProperties}
+              onCreateLeaseForProperty={(propertyId) =>
+                setPlaceholderCreateForId(propertyId)
+              }
             />
           </CardContent>
         </Card>
+        {/* Controlled-open AddLeaseDialog used by the placeholder row's
+            "Create lease" CTA. The property is locked so the user only fills
+            in dates + amounts. Bound to a single propertyId at a time. */}
+        {placeholderCreateForId && (
+          <AddLeaseDialog
+            propertyId={placeholderCreateForId}
+            properties={properties}
+            customers={customers}
+            open
+            onOpenChange={(next) => {
+              if (!next) setPlaceholderCreateForId(null);
+            }}
+            onAdd={(lease) => {
+              addLease(lease);
+              const property = propertyById.get(lease.propertyId);
+              toast({
+                title: "Lease added",
+                description: property
+                  ? `Added a new lease for ${property.name}.`
+                  : "New lease created.",
+              });
+            }}
+          />
+        )}
       </div>
     </MainLayout>
   );

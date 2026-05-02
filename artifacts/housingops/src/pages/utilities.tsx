@@ -197,18 +197,6 @@ export default function Utilities() {
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-3 items-center">
-              <Select value={customerFilter} onValueChange={updateCustomerFilter}>
-                <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
-                  <SelectValue placeholder="Customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Customers</SelectItem>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
                 <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-property-filter">
                   <SelectValue placeholder="All Properties" />

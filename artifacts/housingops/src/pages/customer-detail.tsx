@@ -15,6 +15,9 @@ import {
   Briefcase, ChevronLeft, ChevronRight, Building2, BedDouble,
   TrendingUp, Mail, Phone, FileText, User,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 function StatCard({
   label, value, sub, icon: Icon, color = "text-foreground", testId,
@@ -89,6 +92,47 @@ export default function CustomerDetail() {
       };
     });
   }, [properties, beds, occupants, id]);
+
+  // Last ~12 months of monthly revenue for THIS customer. For each month, we
+  // sum up the normalized monthly charge of every occupant who was at one of
+  // this customer's properties during that month — based on the occupant's
+  // moveInDate / moveOutDate window, not their current Active/Former status,
+  // so historical revenue stays correct even after move-outs.
+  const revenueTrend = useMemo(() => {
+    const now = new Date();
+    const months: { key: string; label: string; tooltipLabel: string }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+      const short = d.toLocaleString("en-US", { month: "short" });
+      months.push({
+        key,
+        label: short,
+        tooltipLabel: `${short} ${year}`,
+      });
+    }
+
+    const customerPropIds = new Set(
+      properties.filter((p) => p.customerId === id).map((p) => p.id),
+    );
+    const relevantOccupants = occupants.filter(
+      (o) => o.propertyId && customerPropIds.has(o.propertyId),
+    );
+
+    return months.map(({ key, label, tooltipLabel }) => {
+      let revenue = 0;
+      for (const o of relevantOccupants) {
+        const moveInKey = (o.moveInDate ?? "").slice(0, 7);
+        if (!moveInKey || moveInKey > key) continue;
+        const moveOutKey = o.moveOutDate ? o.moveOutDate.slice(0, 7) : null;
+        if (moveOutKey && moveOutKey < key) continue;
+        revenue += toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly");
+      }
+      return { key, label, tooltipLabel, revenue: Math.round(revenue) };
+    });
+  }, [properties, occupants, id]);
 
   const totals = useMemo(() => {
     let totalBeds = 0;
@@ -221,6 +265,60 @@ export default function CustomerDetail() {
             testId="stat-revenue"
           />
         </div>
+
+        {/* Revenue trend (last 12 months) */}
+        <Card data-testid="card-customer-revenue-trend">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Revenue Trend
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                Last 12 months
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-44" data-testid="customer-revenue-trend-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={revenueTrend}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    width={48}
+                    tickFormatter={(v: number) =>
+                      v >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`
+                    }
+                  />
+                  <Tooltip
+                    cursor={{ fill: "transparent" }}
+                    formatter={(value: number) => [
+                      `$${value.toLocaleString()}`,
+                      "Revenue",
+                    ]}
+                    labelFormatter={(_label, payload) =>
+                      (payload?.[0]?.payload as { tooltipLabel?: string } | undefined)
+                        ?.tooltipLabel ?? ""
+                    }
+                  />
+                  <Bar dataKey="revenue" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Contact + Properties */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

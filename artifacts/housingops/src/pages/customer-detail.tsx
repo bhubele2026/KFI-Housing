@@ -18,6 +18,8 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { InlineEdit, NotesEditor } from "./property-detail";
+import { useToast } from "@/hooks/use-toast";
 
 function StatCard({
   label, value, sub, icon: Icon, color = "text-foreground", testId,
@@ -52,7 +54,8 @@ function StatCard({
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, isLoading } = useData();
+  const { customers, properties, beds, occupants, isLoading, updateCustomer } = useData();
+  const { toast } = useToast();
 
   // Per-property roll-ups for THIS customer: total beds, occupied beds, and
   // monthly revenue (summed from each active occupant's normalized monthly
@@ -197,6 +200,33 @@ export default function CustomerDetail() {
     );
   }
 
+  // Optimistic save for an inline-edited customer field. The data store
+  // applies the patch immediately and reverts (with a destructive toast) if
+  // the server save fails, so we surface a confirmation toast right away —
+  // mirroring the pattern used by the Customers list dialog.
+  const saveField = <K extends keyof typeof customer>(
+    field: K,
+    nextValue: (typeof customer)[K],
+    label: string,
+  ) => {
+    if (customer[field] === nextValue) return;
+    updateCustomer(customer.id, { [field]: nextValue } as Partial<typeof customer>);
+    toast({ title: "Customer updated", description: `${label} saved.` });
+  };
+
+  const saveName = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      toast({
+        title: "Name is required",
+        description: "Customer name can't be empty.",
+        variant: "destructive",
+      });
+      return;
+    }
+    saveField("name", trimmed, "Company name");
+  };
+
   return (
     <MainLayout>
       <motion.div
@@ -224,8 +254,17 @@ export default function CustomerDetail() {
               <Briefcase className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight" data-testid="customer-detail-name">
-                {customer.name}
+              <h1
+                className="text-2xl font-bold tracking-tight"
+                data-testid="customer-detail-name"
+              >
+                <InlineEdit
+                  value={customer.name}
+                  onSave={saveName}
+                  displayClassName="!text-2xl font-bold tracking-tight"
+                  inputClassName="w-72 !text-base"
+                  testId="inline-customer-name"
+                />
               </h1>
               <p className="text-sm text-muted-foreground">
                 {totals.propertyCount} propert{totals.propertyCount === 1 ? "y" : "ies"} · {totals.totalBeds} bed{totals.totalBeds === 1 ? "" : "s"}
@@ -333,44 +372,56 @@ export default function CustomerDetail() {
             <CardContent className="space-y-3 text-sm">
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Primary contact</p>
-                <p className="mt-0.5" data-testid="contact-name">
-                  {customer.contactName || <span className="text-muted-foreground italic">Not set</span>}
-                </p>
+                <div className="mt-0.5" data-testid="contact-name">
+                  <InlineEdit
+                    value={customer.contactName}
+                    placeholder="Add contact name"
+                    inputClassName="w-56"
+                    onSave={(v) => saveField("contactName", v.trim(), "Contact name")}
+                    testId="inline-contact-name"
+                  />
+                </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Email</p>
-                <p className="mt-0.5" data-testid="contact-email">
-                  {customer.email ? (
-                    <a href={`mailto:${customer.email}`} className="inline-flex items-center gap-1.5 hover:underline">
-                      <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                      {customer.email}
-                    </a>
-                  ) : (
-                    <span className="text-muted-foreground italic">Not set</span>
-                  )}
-                </p>
+                <div className="mt-0.5 flex items-center gap-1.5" data-testid="contact-email">
+                  {customer.email && <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                  <InlineEdit
+                    value={customer.email}
+                    type="email"
+                    placeholder="Add email"
+                    inputClassName="w-56"
+                    onSave={(v) => saveField("email", v.trim(), "Email")}
+                    testId="inline-contact-email"
+                  />
+                </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Phone</p>
-                <p className="mt-0.5" data-testid="contact-phone">
-                  {customer.phone ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                      {customer.phone}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground italic">Not set</span>
-                  )}
-                </p>
+                <div className="mt-0.5 flex items-center gap-1.5" data-testid="contact-phone">
+                  {customer.phone && <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                  <InlineEdit
+                    value={customer.phone}
+                    type="tel"
+                    placeholder="Add phone"
+                    inputClassName="w-56"
+                    onSave={(v) => saveField("phone", v.trim(), "Phone")}
+                    testId="inline-contact-phone"
+                  />
+                </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
                   <FileText className="h-3 w-3" />
                   Notes
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-muted-foreground" data-testid="contact-notes">
-                  {customer.notes ? customer.notes : <span className="italic">No notes yet.</span>}
-                </p>
+                <div className="mt-1" data-testid="contact-notes">
+                  <NotesEditor
+                    value={customer.notes ?? ""}
+                    onSave={(v) => saveField("notes", v, "Notes")}
+                    className="min-h-[88px] text-sm"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

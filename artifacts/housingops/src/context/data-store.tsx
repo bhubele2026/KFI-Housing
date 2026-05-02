@@ -576,7 +576,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Customer>(customersKey, id, updates);
     updateCustomerMut.mutate(
       { id, data: updates },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: customersKey }) },
+      {
+        onError: () => notifySaveError("save your customer changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: customersKey }),
+      },
     );
   };
   const deleteCustomer = async (id: string): Promise<void> => {

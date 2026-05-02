@@ -242,7 +242,19 @@ export function NotesEditor({ value, onSave, className }: { value: string; onSav
   );
 }
 
-export function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | number; onSave: (v: string) => void; type?: string; prefix?: string }) {
+export function InlineEdit({
+  value, onSave, type = "text", prefix,
+  placeholder, displayClassName, inputClassName, testId,
+}: {
+  value: string | number;
+  onSave: (v: string) => void;
+  type?: string;
+  prefix?: string;
+  placeholder?: string;
+  displayClassName?: string;
+  inputClassName?: string;
+  testId?: string;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const lastIncomingRef = useRef(String(value));
@@ -265,9 +277,20 @@ export function InlineEdit({ value, onSave, type = "text", prefix }: { value: st
   const cancel = () => { setDraft(String(value)); setEditing(false); };
 
   if (!editing) {
+    const isEmpty = String(value).length === 0;
     return (
-      <span className="group flex items-center gap-1 cursor-pointer" onClick={() => setEditing(true)}>
-        <span className="text-sm">{prefix}{value}</span>
+      <span
+        className="group flex items-center gap-1 cursor-pointer"
+        onClick={() => setEditing(true)}
+        data-testid={testId}
+      >
+        {isEmpty && placeholder ? (
+          <span className={`text-sm text-muted-foreground italic ${displayClassName ?? ""}`}>
+            {placeholder}
+          </span>
+        ) : (
+          <span className={`text-sm ${displayClassName ?? ""}`}>{prefix}{value}</span>
+        )}
         <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
       </span>
     );
@@ -278,12 +301,14 @@ export function InlineEdit({ value, onSave, type = "text", prefix }: { value: st
         type={type}
         value={draft}
         onChange={e => setDraft(e.target.value)}
-        className="h-7 text-sm py-0 w-36"
+        placeholder={placeholder}
+        className={`h-7 text-sm py-0 ${inputClassName ?? "w-36"}`}
         autoFocus
         onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
+        data-testid={testId ? `${testId}-input` : undefined}
       />
-      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={commit}><Check className="h-3 w-3 text-green-600" /></Button>
-      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={cancel}><X className="h-3 w-3 text-destructive" /></Button>
+      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={commit} data-testid={testId ? `${testId}-save` : undefined}><Check className="h-3 w-3 text-green-600" /></Button>
+      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={cancel} data-testid={testId ? `${testId}-cancel` : undefined}><X className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
 }

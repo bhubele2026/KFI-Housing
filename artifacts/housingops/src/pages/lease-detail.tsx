@@ -771,6 +771,32 @@ export default function LeaseDetail() {
                     : "Choose the property this lease covers."
                   : "Choose the property this lease covers. Re-attaching always asks you to confirm — the rent / deposit on the lease come along with it, but bed assignments stay on the original property."}
               </p>
+              {/*
+                Lock fell through: `?propertyId=` was present but didn't
+                resolve to a real property (deleted, hand-edited URL,
+                stale bookmark, or a link shared between users with
+                different scopes). Without this notice the operator just
+                sees the picker with nothing pre-selected and has to
+                guess why their click-through didn't carry over. Once
+                they pick a property the notice disappears, since the
+                situation is resolved.
+              */}
+              {isCreateMode &&
+                requestedPropertyId &&
+                !lockedPropertyId &&
+                !lease.propertyId && (
+                  <div
+                    className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start gap-2"
+                    data-testid="lease-property-missing-notice"
+                    role="status"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      The property you were creating a lease for was not
+                      found — pick another property below.
+                    </span>
+                  </div>
+                )}
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Attached property</Label>
                 {isCreateMode && lockedPropertyId ? (

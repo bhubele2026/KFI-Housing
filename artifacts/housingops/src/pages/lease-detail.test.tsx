@@ -802,6 +802,36 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
     expect(
       container.querySelector('[data-testid="select-lease-property"]'),
     ).not.toBeNull();
+
+    // The fallback notice explains *why* the picker showed up instead of
+    // a locked panel — without it the operator just sees the picker with
+    // nothing pre-selected and has to guess why their click-through
+    // didn't carry over. Pin the user-visible copy so a future refactor
+    // doesn't silently regress to a generic / empty notice.
+    const notice = container.querySelector(
+      '[data-testid="lease-property-missing-notice"]',
+    );
+    expect(notice).not.toBeNull();
+    expect(notice!.textContent).toContain(
+      "The property you were creating a lease for was not found",
+    );
+    expect(notice!.textContent).toContain("pick another property below");
+
+    // And once the operator picks a real property from the picker, the
+    // notice clears — the situation has been resolved, leaving it up
+    // would just nag.
+    const propSelect = container.querySelector(
+      '[data-testid="select-lease-property"]',
+    )!;
+    const realProp = propSelect.querySelector(
+      '[data-select-item="prop-1"]',
+    ) as HTMLButtonElement;
+    expect(realProp).toBeTruthy();
+    act(() => realProp.click());
+
+    expect(
+      container.querySelector('[data-testid="lease-property-missing-notice"]'),
+    ).toBeNull();
   });
 
   it("validates the property is set before saving — toast + no addLease when missing", () => {

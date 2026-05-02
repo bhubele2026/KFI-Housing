@@ -1,5 +1,6 @@
 import type { PushSchemaOptions, PushSchemaResult } from "@workspace/db";
 import type { Logger } from "pino";
+import { isSchemaDriftError } from "./lib/notify-schema-drift";
 
 export interface StartDeps {
   pushSchemaIfNeeded: (
@@ -7,7 +8,11 @@ export interface StartDeps {
   ) => Promise<PushSchemaResult>;
   seedIfEmpty: () => Promise<void>;
   listen: (port: number) => Promise<void>;
-  logger: Pick<Logger, "info" | "error">;
+  notifySchemaDrift: (params: {
+    webhookUrl: string;
+    message: string;
+  }) => Promise<void>;
+  logger: Pick<Logger, "info" | "error" | "warn">;
   env: NodeJS.ProcessEnv;
   exit: (code: number) => never;
 }
@@ -50,6 +55,36 @@ export function resolvePort(env: NodeJS.ProcessEnv): number {
   return port;
 }
 
+async function notifySchemaDriftIfConfigured(
+  err: unknown,
+  deps: Pick<StartDeps, "env" | "logger" | "notifySchemaDrift">,
+): Promise<void> {
+  if (!isSchemaDriftError(err)) {
+    return;
+  }
+
+  const webhookUrl = deps.env["SCHEMA_DRIFT_WEBHOOK_URL"];
+  if (!webhookUrl) {
+    deps.logger.warn(
+      "SCHEMA_DRIFT_WEBHOOK_URL is not set — skipping schema drift chat notification",
+    );
+    return;
+  }
+
+  try {
+    await deps.notifySchemaDrift({
+      webhookUrl,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    deps.logger.info("Sent schema drift notification to chat webhook");
+  } catch (notifyErr) {
+    deps.logger.error(
+      { err: notifyErr },
+      "Failed to send schema drift chat notification",
+    );
+  }
+}
+
 export async function start(deps: StartDeps): Promise<void> {
   const isProduction = isProductionEnv(deps.env);
 
@@ -65,6 +100,7 @@ export async function start(deps: StartDeps): Promise<void> {
         { err },
         "Database schema is out of date in production — run `pnpm --filter @workspace/db run push` to apply pending changes",
       );
+      await notifySchemaDriftIfConfigured(err, deps);
     } else {
       deps.logger.error({ err }, "Failed to apply database schema changes");
     }

@@ -10,6 +10,7 @@ function fakeLogger() {
   return {
     info: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
   };
 }
 
@@ -23,6 +24,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
     listen: vi.fn().mockResolvedValue(undefined),
+    notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),
     env: { PORT: "3000" },
     exit: vi.fn() as unknown as (code: number) => never,
@@ -150,6 +152,136 @@ describe("start", () => {
     expect(
       errorCalls.some(([, message]) =>
         /pnpm --filter @workspace\/db run push/.test(String(message)),
+      ),
+    ).toBe(true);
+  });
+
+  it("notifies the chat webhook when production schema drift is detected", async () => {
+    const pushSchemaIfNeeded = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("Schema is out of date: 3 pending statement(s) detected."),
+      );
+    const notifySchemaDrift = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        notifySchemaDrift,
+        exit,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+        },
+      }),
+    );
+
+    expect(notifySchemaDrift).toHaveBeenCalledTimes(1);
+    expect(notifySchemaDrift).toHaveBeenCalledWith({
+      webhookUrl: "https://hooks.example.com/T/B/X",
+      message: "Schema is out of date: 3 pending statement(s) detected.",
+    });
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("does not notify when SCHEMA_DRIFT_WEBHOOK_URL is unset", async () => {
+    const pushSchemaIfNeeded = vi
+      .fn()
+      .mockRejectedValue(new Error("Schema is out of date: 1 pending"));
+    const notifySchemaDrift = vi.fn();
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        notifySchemaDrift,
+        logger,
+        env: { NODE_ENV: "production", PORT: "3000" },
+      }),
+    );
+
+    expect(notifySchemaDrift).not.toHaveBeenCalled();
+    const warnCalls = logger.warn.mock.calls;
+    expect(
+      warnCalls.some(([msg]) =>
+        /SCHEMA_DRIFT_WEBHOOK_URL/.test(String(msg)),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not notify outside of production even with a webhook configured", async () => {
+    const pushSchemaIfNeeded = vi
+      .fn()
+      .mockRejectedValue(new Error("Schema is out of date: 1 pending"));
+    const notifySchemaDrift = vi.fn();
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        notifySchemaDrift,
+        env: {
+          NODE_ENV: "development",
+          PORT: "3000",
+          SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+        },
+      }),
+    );
+
+    expect(notifySchemaDrift).not.toHaveBeenCalled();
+  });
+
+  it("does not notify when production startup fails for a non-drift reason", async () => {
+    const pushSchemaIfNeeded = vi
+      .fn()
+      .mockRejectedValue(new Error("ECONNREFUSED: cannot reach database"));
+    const notifySchemaDrift = vi.fn();
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        notifySchemaDrift,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+        },
+      }),
+    );
+
+    expect(notifySchemaDrift).not.toHaveBeenCalled();
+  });
+
+  it("still exits cleanly if the chat webhook itself fails", async () => {
+    const pushSchemaIfNeeded = vi
+      .fn()
+      .mockRejectedValue(new Error("Schema is out of date: 1 pending"));
+    const notifySchemaDrift = vi
+      .fn()
+      .mockRejectedValue(new Error("webhook 500"));
+    const logger = fakeLogger();
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        notifySchemaDrift,
+        logger,
+        exit,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+        },
+      }),
+    );
+
+    expect(exit).toHaveBeenCalledWith(1);
+    const errorCalls = logger.error.mock.calls;
+    expect(
+      errorCalls.some(([, message]) =>
+        /Failed to send schema drift chat notification/.test(String(message)),
       ),
     ).toBe(true);
   });

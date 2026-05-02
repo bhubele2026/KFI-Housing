@@ -19,6 +19,14 @@ export interface ExtractedLeaseFromPdf {
   monthlyRent: number | null;
   securityDeposit: number | null;
   notes: string;
+  /** Free-form summary of notable clauses (pet policy, late fees, etc.). "" when none. */
+  clauses: string;
+  /** Utilities/services included in rent. Canonical strings preferred (e.g. "Water"). */
+  includedItems: string[];
+  /** True only when the lease explicitly grants an early-termination buyout option. */
+  buyoutAvailable: boolean;
+  /** Flat USD buyout fee when stated, else null. Always null when buyoutAvailable is false. */
+  buyoutCost: number | null;
   confidence: LeasePdfConfidence;
 }
 

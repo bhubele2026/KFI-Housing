@@ -75,6 +75,10 @@ function makeExtracted(overrides: Partial<ExtractedLease> = {}): ExtractedLease 
     monthlyRent: null,
     securityDeposit: null,
     notes: "",
+    clauses: "",
+    includedItems: [],
+    buyoutAvailable: false,
+    buyoutCost: null,
     confidence: "medium",
     ...overrides,
   };

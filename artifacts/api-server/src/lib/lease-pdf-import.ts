@@ -24,6 +24,13 @@ export const ExtractedLeaseSchema = z.object({
   monthlyRent: z.number().nullable(),
   securityDeposit: z.number().nullable(),
   notes: z.string(),
+  // Extended fields surfaced on the lease detail page (clauses tab, included
+  // items checklist, buyout option). Default to empty / false / null when
+  // the PDF doesn't mention them so the reviewer dialog gets a stable shape.
+  clauses: z.string().default(""),
+  includedItems: z.array(z.string()).default([]),
+  buyoutAvailable: z.boolean().default(false),
+  buyoutCost: z.number().nullable().default(null),
   confidence: z.enum(["high", "medium", "low"]),
 });
 export type ExtractedLease = z.infer<typeof ExtractedLeaseSchema>;
@@ -46,15 +53,38 @@ markdown fences, no commentary:
   "monthlyRent":      number | null,  // in USD, no currency symbol
   "securityDeposit":  number | null,  // in USD
   "notes":            string,         // 1-3 short sentences summarising notable lease terms; "" if nothing notable
+  "clauses":          string,         // notable lease clauses worth surfacing for the operator (see rules)
+  "includedItems":    string[],       // utilities/services included in rent (see rules)
+  "buyoutAvailable":  boolean,        // true only when an early-termination buyout is explicitly available
+  "buyoutCost":       number | null,  // flat USD buyout fee when stated, else null
   "confidence":       "high" | "medium" | "low"
 }
 
 Rules:
-- Use null (not 0, not "") when a field is missing or ambiguous.
+- Use null (not 0, not "") when a numeric/date field is missing or ambiguous.
 - Dates MUST be ISO YYYY-MM-DD. Reject partial dates ("June 2026") by returning null.
 - Rent and deposit must be plain numbers, not strings.
+- "clauses" is a human-readable summary of notable clauses (pet policy,
+  smoking, subletting, late fees, parking, maintenance responsibilities,
+  early termination, renewal, guests, alterations, etc.). Separate
+  individual clauses with blank lines. Use "" if the lease has nothing
+  beyond boilerplate worth flagging. Do NOT copy the entire lease verbatim.
+- "includedItems" lists utilities or services the LANDLORD covers as part of
+  rent (NOT items the tenant pays separately). Prefer items from this
+  canonical list when they apply: Water, Electric, Gas, Internet,
+  Cable / TV, Garbage, Lawn care, Snow removal, Pest control, Parking,
+  Furnishings, Pool access, Gym access, Storage. You may add other
+  short, title-cased items (e.g. "Boat slip") if the lease clearly
+  includes them. Use [] if nothing is included or it's unclear.
+- "buyoutAvailable" is true ONLY when the lease explicitly grants the
+  tenant the option to terminate early by paying a defined fee
+  (sometimes called "buyout", "lease break fee", "early termination fee").
+  A clause that merely lists damages for breach does not count.
+- "buyoutCost" is the flat dollar buyout fee (plain number, no $).
+  Use null if the cost is variable, missing, or buyoutAvailable is false.
 - "confidence" reflects your overall confidence in the lease being parseable.
-  Use "low" if more than half the fields are null.
+  Use "low" if more than half the core fields (dates / rent / property)
+  are null.
 - Output JSON only.`;
 
 export async function extractLeaseFromText(text: string): Promise<ExtractedLease> {
@@ -100,7 +130,17 @@ export async function extractLeaseFromText(text: string): Promise<ExtractedLease
     );
   }
 
-  return ExtractedLeaseSchema.parse(parsed);
+  const result = ExtractedLeaseSchema.parse(parsed);
+
+  // Keep buyout fields internally consistent — if the lease isn't a buyout
+  // lease, the cost is meaningless. The reviewer dialog mirrors this same
+  // invariant (clears the cost when the toggle goes off), so we apply it
+  // here too rather than relying on the LLM to be perfectly consistent.
+  if (!result.buyoutAvailable) {
+    result.buyoutCost = null;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -736,10 +736,31 @@ export const ImportLeasePdfResponse = zod.object({
       monthlyRent: zod.number().nullable(),
       securityDeposit: zod.number().nullable(),
       notes: zod.string(),
+      clauses: zod
+        .string()
+        .describe(
+          "Free-form summary of notable lease clauses (pet policy, late fees, etc.). Empty when none.",
+        ),
+      includedItems: zod
+        .array(zod.string())
+        .describe(
+          'Utilities or services included in rent. Canonical strings preferred (e.g. \"Water\").',
+        ),
+      buyoutAvailable: zod
+        .boolean()
+        .describe(
+          "True only when the lease explicitly grants an early-termination buyout option.",
+        ),
+      buyoutCost: zod
+        .number()
+        .nullable()
+        .describe(
+          "Flat USD buyout fee when stated, else null. Always null when `buyoutAvailable` is false.",
+        ),
       confidence: zod.enum(["high", "medium", "low"]),
     })
     .describe(
-      'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` for\nnotes) so the user can fill it in during the review step.\n',
+      'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` \/\n`[]` \/ `false` for the non-nullable string \/ array \/ boolean fields)\nso the user can fill it in during the review step.\n',
     ),
   topMatch: zod
     .object({

@@ -143,6 +143,10 @@ describe("POST /api/leases/import-pdf", () => {
       monthlyRent: 4800,
       securityDeposit: 4800,
       notes: "12-month residential lease.",
+      clauses: "",
+      includedItems: [],
+      buyoutAvailable: false,
+      buyoutCost: null,
       confidence: "high",
     });
 
@@ -284,6 +288,10 @@ describe("POST /api/leases/import-pdf", () => {
       monthlyRent: null,
       securityDeposit: null,
       notes: "",
+      clauses: "",
+      includedItems: [],
+      buyoutAvailable: false,
+      buyoutCost: null,
       confidence: "low",
     });
 

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -19,7 +20,10 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  DollarSign,
+  FileText,
   FileUp,
+  ListChecks,
   Loader2,
   Plus,
   RotateCcw,
@@ -44,7 +48,7 @@ import {
   useRecentLeaseUploads,
   type RecentLeaseUpload,
 } from "@/lib/recent-lease-uploads";
-import type { Lease, Property } from "@/data/mockData";
+import { INCLUDED_ITEM_SUGGESTIONS, type Lease, type Property } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 
 const NEW_PROPERTY_VALUE = "__new_property__";
@@ -72,6 +76,14 @@ interface LeaseDraft {
   securityDeposit: string;
   status: Lease["status"];
   notes: string;
+  // Extended fields auto-extracted from the PDF (task #121). Stored on the
+  // draft so the operator can confirm / edit them in the reviewer dialog
+  // before the lease is saved.
+  clauses: string;
+  includedItems: string[];
+  buyoutAvailable: boolean;
+  /** Stored as a string so the input stays controlled and "" means "unset". */
+  buyoutCost: string;
 }
 
 type QueueItemStatus =
@@ -106,6 +118,32 @@ function emptyPropertyDraft(extracted: ExtractedLeaseFromPdf): PropertyDraft {
   };
 }
 
+/**
+ * Snap each extracted included item to its canonical capitalisation when it
+ * matches one of `INCLUDED_ITEM_SUGGESTIONS` (case-insensitively). That way
+ * "water" / "WATER" / "Water" all collapse to "Water" — which matches the
+ * checklist on the lease detail page so the chip shows up as already
+ * selected — and we drop duplicates / blanks introduced by the LLM.
+ */
+function normalizeIncludedItems(items: readonly string[] | null | undefined): string[] {
+  if (!items || items.length === 0) return [];
+  const canonical = new Map(
+    INCLUDED_ITEM_SUGGESTIONS.map((s) => [s.toLowerCase(), s]),
+  );
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) continue;
+    const lc = trimmed.toLowerCase();
+    const item = canonical.get(lc) ?? trimmed;
+    if (seen.has(item.toLowerCase())) continue;
+    seen.add(item.toLowerCase());
+    out.push(item);
+  }
+  return out;
+}
+
 function leaseDraftFromExtracted(extracted: ExtractedLeaseFromPdf): LeaseDraft {
   return {
     startDate: extracted.startDate ?? "",
@@ -114,6 +152,13 @@ function leaseDraftFromExtracted(extracted: ExtractedLeaseFromPdf): LeaseDraft {
     securityDeposit: extracted.securityDeposit != null ? String(extracted.securityDeposit) : "",
     status: "Active",
     notes: extracted.notes ?? "",
+    clauses: extracted.clauses ?? "",
+    includedItems: normalizeIncludedItems(extracted.includedItems),
+    buyoutAvailable: extracted.buyoutAvailable ?? false,
+    buyoutCost:
+      extracted.buyoutAvailable && extracted.buyoutCost != null
+        ? String(extracted.buyoutCost)
+        : "",
   };
 }
 
@@ -561,6 +606,16 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         }
       }
 
+      // Buyout cost only carries through when the toggle is on AND the input
+      // parses to a finite number — same invariant the lease detail page
+      // uses, so the saved row matches what the reviewer was looking at.
+      const buyoutAvailable = reviewingItem.leaseDraft.buyoutAvailable;
+      const parsedBuyoutCost = parseFloat(reviewingItem.leaseDraft.buyoutCost);
+      const buyoutCost =
+        buyoutAvailable && Number.isFinite(parsedBuyoutCost)
+          ? parsedBuyoutCost
+          : null;
+
       const newLease: Lease = {
         id: `l-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         propertyId,
@@ -570,13 +625,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         securityDeposit: parseFloat(reviewingItem.leaseDraft.securityDeposit) || 0,
         status: reviewingItem.leaseDraft.status,
         notes: reviewingItem.leaseDraft.notes,
-        // The PDF importer doesn't extract clauses/included-items/buyout
-        // metadata yet, so we default them and let the operator fill in
-        // details on the lease detail page after import.
-        clauses: "",
-        includedItems: [],
-        buyoutAvailable: false,
-        buyoutCost: null,
+        // Auto-extracted from the PDF and confirmed by the operator in the
+        // reviewer dialog (task #121). Operators can still tweak anything
+        // further on the lease detail page after import.
+        clauses: reviewingItem.leaseDraft.clauses,
+        includedItems: reviewingItem.leaseDraft.includedItems,
+        buyoutAvailable,
+        buyoutCost,
       };
       addLease(newLease);
 
@@ -968,6 +1023,101 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 />
               </div>
             </div>
+
+            <Separator />
+
+            {/* ── Auto-extracted: clauses / included items / buyout ─────
+                These four fields used to be left blank after a PDF import
+                (task #121). Now they're pre-filled from the LLM extraction
+                so the operator just confirms before saving. */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="pdf-lease-clauses"
+                  className="text-sm font-semibold flex items-center gap-1.5"
+                >
+                  <FileText className="h-4 w-4" />
+                  Clauses
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Notable clauses pulled from the PDF — pet policy, late fees,
+                  parking rules, etc. Edit anything you'd like to keep on the
+                  lease.
+                </p>
+                <Textarea
+                  id="pdf-lease-clauses"
+                  value={reviewingItem.leaseDraft.clauses}
+                  onChange={(e) => updateReviewingLeaseDraft({ clauses: e.target.value })}
+                  className="min-h-[100px] font-mono text-sm"
+                  placeholder="No notable clauses extracted."
+                  data-testid="textarea-pdf-lease-clauses"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <ListChecks className="h-4 w-4" />
+                  Included items
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Utilities or services covered by the landlord. Tap a chip to
+                  remove or add a custom one below.
+                </p>
+                <PdfIncludedItemsEditor
+                  value={reviewingItem.leaseDraft.includedItems}
+                  onChange={(next) => updateReviewingLeaseDraft({ includedItems: next })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4" />
+                  Buyout option
+                </Label>
+                <div
+                  className="flex items-center justify-between gap-2 rounded-md border p-3"
+                  data-testid="pdf-buyout-row"
+                >
+                  <div className="flex flex-col">
+                    <Label htmlFor="pdf-buyout-available" className="text-sm">
+                      Buyout available
+                    </Label>
+                    <span className="text-xs text-muted-foreground">
+                      Tenant can exit early by paying a fixed fee.
+                    </span>
+                  </div>
+                  <Switch
+                    id="pdf-buyout-available"
+                    checked={reviewingItem.leaseDraft.buyoutAvailable}
+                    onCheckedChange={(checked) => {
+                      // Mirror the lease detail page: clearing the toggle
+                      // also clears any cost so we don't carry an orphan
+                      // amount on a non-buyout lease.
+                      updateReviewingLeaseDraft({
+                        buyoutAvailable: checked,
+                        buyoutCost: checked ? reviewingItem.leaseDraft?.buyoutCost ?? "" : "",
+                      });
+                    }}
+                    data-testid="switch-pdf-buyout-available"
+                  />
+                </div>
+                {reviewingItem.leaseDraft.buyoutAvailable && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pdf-buyout-cost" className="text-sm">
+                      Buyout cost ($)
+                    </Label>
+                    <Input
+                      id="pdf-buyout-cost"
+                      type="number"
+                      placeholder="e.g. 2500"
+                      value={reviewingItem.leaseDraft.buyoutCost}
+                      onChange={(e) => updateReviewingLeaseDraft({ buyoutCost: e.target.value })}
+                      data-testid="input-pdf-buyout-cost"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1024,6 +1174,144 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Compact included-items editor used inside the PDF reviewer dialog.
+ *
+ * Mirrors the canonical-suggestion + free-form pattern from the lease
+ * detail page (`IncludedItemsEditor`) so what the operator sees here lines
+ * up with what they'll see after import — but trimmed for the dialog (no
+ * separate "Custom" subgroup; everything renders in one chip row).
+ */
+function PdfIncludedItemsEditor({
+  value,
+  onChange,
+}: {
+  value: readonly string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const selectedSet = useMemo(
+    () => new Set(value.map((v) => v.toLowerCase())),
+    [value],
+  );
+
+  const toggleSuggestion = (item: string) => {
+    if (selectedSet.has(item.toLowerCase())) {
+      onChange(value.filter((v) => v.toLowerCase() !== item.toLowerCase()));
+    } else {
+      onChange([...value, item]);
+    }
+  };
+
+  const removeItem = (item: string) => {
+    onChange(value.filter((v) => v !== item));
+  };
+
+  const commitDraft = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    if (!selectedSet.has(trimmed.toLowerCase())) {
+      onChange([...value, trimmed]);
+    }
+    setDraft("");
+  };
+
+  // Custom items = anything in `value` that isn't part of the canonical
+  // suggestion list. Surfaced as removable chips below the checklist so the
+  // operator can see what the LLM added beyond the curated set.
+  const suggestionSet = useMemo(
+    () => new Set(INCLUDED_ITEM_SUGGESTIONS.map((s) => s.toLowerCase())),
+    [],
+  );
+  const customItems = useMemo(
+    () => value.filter((v) => !suggestionSet.has(v.toLowerCase())),
+    [value, suggestionSet],
+  );
+
+  return (
+    <div className="space-y-2" data-testid="pdf-included-items-editor">
+      <div className="flex flex-wrap gap-1.5" data-testid="pdf-included-items-checklist">
+        {INCLUDED_ITEM_SUGGESTIONS.map((item) => {
+          const isOn = selectedSet.has(item.toLowerCase());
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => toggleSuggestion(item)}
+              data-testid={`pdf-included-suggestion-${item}`}
+              data-checked={isOn ? "true" : "false"}
+              aria-pressed={isOn}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1",
+                isOn
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                  : "bg-white text-muted-foreground border-border hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {isOn ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : (
+                <Plus className="h-3 w-3 opacity-60" />
+              )}
+              {item}
+            </button>
+          );
+        })}
+      </div>
+
+      {customItems.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" data-testid="pdf-included-items-custom">
+          {customItems.map((item) => (
+            <Badge
+              key={item}
+              variant="secondary"
+              className="gap-1.5 pl-2 pr-1"
+              data-testid={`pdf-chip-included-${item}`}
+            >
+              {item}
+              <button
+                type="button"
+                aria-label={`Remove ${item}`}
+                onClick={() => removeItem(item)}
+                className="rounded-full p-0.5 hover:bg-background/60"
+                data-testid={`pdf-button-remove-included-${item}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitDraft();
+            }
+          }}
+          placeholder="Add a custom item — e.g. Boat slip, EV charger…"
+          className="h-8 text-sm"
+          data-testid="input-pdf-add-included-item"
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={commitDraft}
+          disabled={draft.trim().length === 0}
+          data-testid="button-pdf-add-included-item"
+        >
+          Add
+        </Button>
+      </div>
+    </div>
   );
 }
 

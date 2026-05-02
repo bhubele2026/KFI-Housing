@@ -36,6 +36,7 @@ export const propertiesTable = pgTable("properties", {
   paymentMethod: text("payment_method").notNull().default("ACH"),
   paymentRecipient: text("payment_recipient").notNull().default(""),
   paymentDueDay: integer("payment_due_day").notNull().default(1),
+  rentFrequency: text("rent_frequency").notNull().default("Monthly"),
   paymentNotes: text("payment_notes").notNull().default(""),
   bankName: text("bank_name").notNull().default(""),
   bankRouting: text("bank_routing").notNull().default(""),

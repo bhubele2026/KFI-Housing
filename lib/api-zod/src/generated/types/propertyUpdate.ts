@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PropertyUpdatePaymentMethod } from "./propertyUpdatePaymentMethod";
+import type { PropertyUpdateRentFrequency } from "./propertyUpdateRentFrequency";
 import type { PropertyUpdateStatus } from "./propertyUpdateStatus";
 import type { Ratings } from "./ratings";
 
@@ -25,6 +26,7 @@ export interface PropertyUpdate {
   paymentMethod?: PropertyUpdatePaymentMethod;
   paymentRecipient?: string;
   paymentDueDay?: number;
+  rentFrequency?: PropertyUpdateRentFrequency;
   paymentNotes?: string;
   bankName?: string;
   bankRouting?: string;

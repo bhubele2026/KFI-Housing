@@ -45,6 +45,15 @@ export const PropertyPaymentMethod = {
   Money_Order: "Money Order",
 } as const;
 
+export type PropertyRentFrequency =
+  (typeof PropertyRentFrequency)[keyof typeof PropertyRentFrequency];
+
+export const PropertyRentFrequency = {
+  Weekly: "Weekly",
+  "Bi-Weekly": "Bi-Weekly",
+  Monthly: "Monthly",
+} as const;
+
 /**
  * Per-property subjective ratings on a 0–5 whole-star scale.
 A category value of 0 means "not rated yet" and is excluded
@@ -101,6 +110,7 @@ export interface Property {
   paymentMethod: PropertyPaymentMethod;
   paymentRecipient: string;
   paymentDueDay: number;
+  rentFrequency?: PropertyRentFrequency;
   paymentNotes: string;
   bankName: string;
   bankRouting: string;
@@ -131,6 +141,15 @@ export const PropertyUpdatePaymentMethod = {
   Money_Order: "Money Order",
 } as const;
 
+export type PropertyUpdateRentFrequency =
+  (typeof PropertyUpdateRentFrequency)[keyof typeof PropertyUpdateRentFrequency];
+
+export const PropertyUpdateRentFrequency = {
+  Weekly: "Weekly",
+  "Bi-Weekly": "Bi-Weekly",
+  Monthly: "Monthly",
+} as const;
+
 export interface PropertyUpdate {
   name?: string;
   address?: string;
@@ -147,6 +166,7 @@ export interface PropertyUpdate {
   paymentMethod?: PropertyUpdatePaymentMethod;
   paymentRecipient?: string;
   paymentDueDay?: number;
+  rentFrequency?: PropertyUpdateRentFrequency;
   paymentNotes?: string;
   bankName?: string;
   bankRouting?: string;

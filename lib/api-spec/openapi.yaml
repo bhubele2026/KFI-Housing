@@ -581,6 +581,9 @@ components:
           enum: [ACH, Check, Wire, Online Portal, Money Order]
         paymentRecipient: { type: string }
         paymentDueDay: { type: integer }
+        rentFrequency:
+          type: string
+          enum: [Weekly, Bi-Weekly, Monthly]
         paymentNotes: { type: string }
         bankName: { type: string }
         bankRouting: { type: string }
@@ -613,6 +616,9 @@ components:
           enum: [ACH, Check, Wire, Online Portal, Money Order]
         paymentRecipient: { type: string }
         paymentDueDay: { type: integer }
+        rentFrequency:
+          type: string
+          enum: [Weekly, Bi-Weekly, Monthly]
         paymentNotes: { type: string }
         bankName: { type: string }
         bankRouting: { type: string }

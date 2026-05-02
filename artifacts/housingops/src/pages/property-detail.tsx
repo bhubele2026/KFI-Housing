@@ -205,7 +205,7 @@ function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onCh
   );
 }
 
-function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
+export function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
   const [draft, setDraft] = useState(value);
   const lastIncomingRef = useRef(value);
 
@@ -230,7 +230,7 @@ function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: 
   );
 }
 
-function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | number; onSave: (v: string) => void; type?: string; prefix?: string }) {
+export function InlineEdit({ value, onSave, type = "text", prefix }: { value: string | number; onSave: (v: string) => void; type?: string; prefix?: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const lastIncomingRef = useRef(String(value));

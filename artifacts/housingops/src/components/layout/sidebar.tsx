@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase } from "lucide-react";
+import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -12,6 +12,7 @@ import {
   type ImportResult,
   type ImportPreview,
 } from "@/context/data-store";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +42,12 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { resetToSampleData, exportData, importData } = useData();
+  const { resetToSampleData, exportData, importData, customers } = useData();
+  const { customerId, setCustomerId } = useCustomerScope();
+  const activeScopedCustomer =
+    customerId !== ALL_CUSTOMERS
+      ? customers.find((c) => c.id === customerId)
+      : undefined;
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -181,6 +187,36 @@ export function Sidebar() {
         <Building2 className="mr-3 h-6 w-6 text-primary" />
         <span className="text-xl font-bold tracking-tight">HousingOps</span>
       </div>
+
+      {activeScopedCustomer && (
+        <div
+          className="px-4 py-3 border-b border-sidebar-border bg-sidebar-accent/20"
+          data-testid="sidebar-customer-scope"
+        >
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/50 mb-1.5">
+            Filtered by customer
+          </p>
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+            <span
+              className="text-sm font-medium truncate flex-1"
+              title={activeScopedCustomer.name}
+              data-testid="text-sidebar-customer-name"
+            >
+              {activeScopedCustomer.name}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCustomerId(ALL_CUSTOMERS)}
+              className="rounded-sm p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+              aria-label="Clear customer filter"
+              data-testid="button-sidebar-clear-customer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <nav className="flex-1 space-y-1 px-3 py-6 overflow-y-auto">
         {NAV_ITEMS.map((item) => {

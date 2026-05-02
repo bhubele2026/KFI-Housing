@@ -313,3 +313,178 @@ describe("Beds customer filter", () => {
     expect(container.querySelector(`[data-testid="${HINT_TESTID}"]`)).toBeNull();
   });
 });
+
+describe("Beds customer filter URL persistence", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/beds");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+  });
+
+  async function renderAt(url: string) {
+    window.history.replaceState({}, "", url);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<BedsUnderTest />);
+    });
+  }
+
+  function getCustomerSelect() {
+    const el = container.querySelector(`[data-testid="${CUSTOMER_FILTER}"]`);
+    if (!el) throw new Error(`Could not find ${CUSTOMER_FILTER}`);
+    return el;
+  }
+
+  function getCustomerHandler() {
+    const h = selectHandlers.get(CUSTOMER_FILTER);
+    if (!h) throw new Error(`No handler captured for ${CUSTOMER_FILTER}`);
+    return h;
+  }
+
+  function getBadge() {
+    return container.querySelector('[data-testid="badge-customer-filter"]');
+  }
+
+  function getClearBadgeButton() {
+    return container.querySelector(
+      '[data-testid="button-clear-customer-filter"]',
+    ) as HTMLButtonElement | null;
+  }
+
+  function getCustomerCellButton(bedId: string) {
+    return container.querySelector(
+      `[data-testid="button-filter-customer-${bedId}"]`,
+    ) as HTMLButtonElement | null;
+  }
+
+  it("selecting a customer adds ?customer=<id> to the URL and shows the badge", async () => {
+    await renderAt("/beds");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    expect(window.location.search).toBe("");
+    expect(getBadge()).toBeNull();
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("c1");
+    });
+
+    expect(window.location.pathname).toBe("/beds");
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c1");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c1");
+
+    const badge = getBadge();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("Acme Co");
+    expect(getClearBadgeButton()).not.toBeNull();
+  });
+
+  it("clicking a customer name in the table filters and updates the URL", async () => {
+    await renderAt("/beds");
+
+    expect(window.location.search).toBe("");
+    expect(getBadge()).toBeNull();
+
+    // Bed b5 belongs to property p3, owned by Globex (c2). When unfiltered,
+    // the Customer column is visible so the click-to-filter button exists.
+    const button = getCustomerCellButton("b5");
+    expect(button).not.toBeNull();
+
+    await act(async () => {
+      button!.click();
+    });
+
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c2");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c2");
+
+    const badge = getBadge();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("Globex");
+  });
+
+  it("clearing via the badge X removes the ?customer param", async () => {
+    await renderAt("/beds?customer=c1");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c1");
+    const clearBtn = getClearBadgeButton();
+    expect(clearBtn).not.toBeNull();
+
+    await act(async () => {
+      clearBtn!.click();
+    });
+
+    expect(window.location.pathname).toBe("/beds");
+    expect(window.location.search).toBe("");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    expect(getBadge()).toBeNull();
+  });
+
+  it("switching back to All Customers via the dropdown removes the ?customer param", async () => {
+    await renderAt("/beds?customer=c1");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c1");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("All");
+    });
+
+    expect(window.location.pathname).toBe("/beds");
+    expect(window.location.search).toBe("");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    expect(getBadge()).toBeNull();
+  });
+
+  it("loading /beds?customer=<id> pre-selects that customer on first render", async () => {
+    await renderAt("/beds?customer=c2");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c2");
+    // The URL should not be rewritten for a known customer.
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c2");
+
+    const badge = getBadge();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("Globex");
+  });
+
+  it("falls back to All Customers when the URL carries an unknown customer id", async () => {
+    await renderAt("/beds?customer=does-not-exist");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    expect(getBadge()).toBeNull();
+  });
+
+  it("preserves other unrelated query params when toggling the filter", async () => {
+    await renderAt("/beds?other=keep");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("c1");
+    });
+
+    const params1 = new URLSearchParams(window.location.search);
+    expect(params1.get("customer")).toBe("c1");
+    expect(params1.get("other")).toBe("keep");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("All");
+    });
+
+    const params2 = new URLSearchParams(window.location.search);
+    expect(params2.get("customer")).toBeNull();
+    expect(params2.get("other")).toBe("keep");
+  });
+});

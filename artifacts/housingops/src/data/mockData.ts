@@ -206,11 +206,21 @@ export const LeaseSchema = z.object({
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 
+export const RoomSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  name: z.string(),
+  sqft: z.number(),
+  bathrooms: z.number(),
+  monthlyRent: z.number(),
+});
+export type Room = z.infer<typeof RoomSchema>;
+
 export const BedSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
   bedNumber: z.number(),
-  room: z.string(),
+  roomId: z.string(),
   status: z.enum(["Occupied", "Vacant"]),
   occupantId: z.string().nullable(),
 });
@@ -560,12 +570,50 @@ const names = [
 
 const companies = ["Staffco Inc", "BuildRight LLC", "TalentBridge", "ForceWorks", "NexaStaff"];
 
+// ── Rooms layout per property ───────────────────────────────────────────
+// Each property has a fixed list of rooms; beds are evenly distributed
+// across them in order. The first room of p1 always has id `r_p1_1`, etc.
+const ROOM_LAYOUTS: Record<string, { rooms: number; bedsPerRoom: number; sqft: number; bathrooms: number; monthlyRent: number }> = {
+  p1: { rooms: 5, bedsPerRoom: 2, sqft: 180, bathrooms: 1,   monthlyRent: 960 },
+  p2: { rooms: 6, bedsPerRoom: 2, sqft: 160, bathrooms: 1,   monthlyRent: 900 },
+  p3: { rooms: 4, bedsPerRoom: 2, sqft: 200, bathrooms: 1,   monthlyRent: 900 },
+  p4: { rooms: 5, bedsPerRoom: 3, sqft: 240, bathrooms: 1.5, monthlyRent: 1500 },
+  p5: { rooms: 3, bedsPerRoom: 2, sqft: 150, bathrooms: 1,   monthlyRent: 1000 },
+};
+
+export const MOCK_ROOMS: Room[] = Object.entries(ROOM_LAYOUTS).flatMap(([propertyId, layout]) =>
+  Array.from({ length: layout.rooms }, (_, r) => ({
+    id: `r_${propertyId}_${r + 1}`,
+    propertyId,
+    name: `Room ${r + 1}`,
+    sqft: layout.sqft,
+    bathrooms: layout.bathrooms,
+    monthlyRent: layout.monthlyRent,
+  })),
+);
+
+function bedsForProperty(propertyId: string, occupiedCount: number): Bed[] {
+  const layout = ROOM_LAYOUTS[propertyId];
+  const total = layout.rooms * layout.bedsPerRoom;
+  return Array.from({ length: total }, (_, i) => {
+    const roomIndex = Math.floor(i / layout.bedsPerRoom);
+    return {
+      id: `b_${propertyId}_${i + 1}`,
+      propertyId,
+      bedNumber: i + 1,
+      roomId: `r_${propertyId}_${roomIndex + 1}`,
+      status: (i < occupiedCount ? "Occupied" : "Vacant") as "Occupied" | "Vacant",
+      occupantId: i < occupiedCount ? `o_${propertyId}_${i + 1}` : null,
+    };
+  });
+}
+
 export const MOCK_BEDS: Bed[] = [
-  ...Array.from({ length: 10 }, (_, i) => ({ id: `b_p1_${i + 1}`, propertyId: "p1", bedNumber: i + 1, room: `Room ${Math.ceil((i + 1) / 2)}`, status: (i < 8 ? "Occupied" : "Vacant") as "Occupied" | "Vacant", occupantId: i < 8 ? `o_p1_${i + 1}` : null })),
-  ...Array.from({ length: 12 }, (_, i) => ({ id: `b_p2_${i + 1}`, propertyId: "p2", bedNumber: i + 1, room: `Room ${Math.ceil((i + 1) / 2)}`, status: (i < 10 ? "Occupied" : "Vacant") as "Occupied" | "Vacant", occupantId: i < 10 ? `o_p2_${i + 1}` : null })),
-  ...Array.from({ length: 8 }, (_, i) => ({ id: `b_p3_${i + 1}`, propertyId: "p3", bedNumber: i + 1, room: `Room ${Math.ceil((i + 1) / 2)}`, status: (i < 6 ? "Occupied" : "Vacant") as "Occupied" | "Vacant", occupantId: i < 6 ? `o_p3_${i + 1}` : null })),
-  ...Array.from({ length: 15 }, (_, i) => ({ id: `b_p4_${i + 1}`, propertyId: "p4", bedNumber: i + 1, room: `Room ${Math.ceil((i + 1) / 3)}`, status: (i < 12 ? "Occupied" : "Vacant") as "Occupied" | "Vacant", occupantId: i < 12 ? `o_p4_${i + 1}` : null })),
-  ...Array.from({ length: 6 }, (_, i) => ({ id: `b_p5_${i + 1}`, propertyId: "p5", bedNumber: i + 1, room: `Room ${Math.ceil((i + 1) / 2)}`, status: "Vacant" as "Vacant", occupantId: null })),
+  ...bedsForProperty("p1", 8),
+  ...bedsForProperty("p2", 10),
+  ...bedsForProperty("p3", 6),
+  ...bedsForProperty("p4", 12),
+  ...bedsForProperty("p5", 0),
 ];
 
 let nameIdx = 0;

@@ -131,12 +131,22 @@ export const ImportDataBody = zod.object({
       notes: zod.string(),
     }),
   ),
+  rooms: zod.array(
+    zod.object({
+      id: zod.string(),
+      propertyId: zod.string(),
+      name: zod.string(),
+      sqft: zod.number(),
+      bathrooms: zod.number(),
+      monthlyRent: zod.number(),
+    }),
+  ),
   beds: zod.array(
     zod.object({
       id: zod.string(),
       propertyId: zod.string(),
       bedNumber: zod.number(),
-      room: zod.string(),
+      roomId: zod.string(),
       status: zod.enum(["Occupied", "Vacant"]),
       occupantId: zod.string().nullable(),
     }),
@@ -649,13 +659,70 @@ export const DeleteLeaseParams = zod.object({
 });
 
 /**
+ * @summary List all rooms
+ */
+export const ListRoomsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  sqft: zod.number(),
+  bathrooms: zod.number(),
+  monthlyRent: zod.number(),
+});
+export const ListRoomsResponse = zod.array(ListRoomsResponseItem);
+
+/**
+ * @summary Create a room
+ */
+export const CreateRoomBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  sqft: zod.number(),
+  bathrooms: zod.number(),
+  monthlyRent: zod.number(),
+});
+
+/**
+ * @summary Update a room
+ */
+export const UpdateRoomParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateRoomBody = zod.object({
+  propertyId: zod.string().optional(),
+  name: zod.string().optional(),
+  sqft: zod.number().optional(),
+  bathrooms: zod.number().optional(),
+  monthlyRent: zod.number().optional(),
+});
+
+export const UpdateRoomResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  sqft: zod.number(),
+  bathrooms: zod.number(),
+  monthlyRent: zod.number(),
+});
+
+/**
+ * Fails with 409 if any beds reference this room.
+ * @summary Delete a room
+ */
+export const DeleteRoomParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List all beds
  */
 export const ListBedsResponseItem = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
   bedNumber: zod.number(),
-  room: zod.string(),
+  roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
 });
@@ -668,7 +735,7 @@ export const CreateBedBody = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
   bedNumber: zod.number(),
-  room: zod.string(),
+  roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
 });
@@ -683,7 +750,7 @@ export const UpdateBedParams = zod.object({
 export const UpdateBedBody = zod.object({
   propertyId: zod.string().optional(),
   bedNumber: zod.number().optional(),
-  room: zod.string().optional(),
+  roomId: zod.string().optional(),
   status: zod.enum(["Occupied", "Vacant"]).optional(),
   occupantId: zod.string().nullish(),
 });
@@ -692,7 +759,7 @@ export const UpdateBedResponse = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
   bedNumber: zod.number(),
-  room: zod.string(),
+  roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
 });

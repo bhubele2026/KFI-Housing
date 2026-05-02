@@ -5,6 +5,7 @@ import {
   useListCustomers, getListCustomersQueryKey, useCreateCustomer, useUpdateCustomer, useDeleteCustomer,
   useListProperties, getListPropertiesQueryKey, useCreateProperty, useUpdateProperty, useDeleteProperty,
   useListLeases, getListLeasesQueryKey, useCreateLease, useUpdateLease, useDeleteLease,
+  useListRooms, getListRoomsQueryKey, useCreateRoom, useUpdateRoom, useDeleteRoom,
   useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
   useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant,
   useListUtilities, getListUtilitiesQueryKey, useCreateUtility, useUpdateUtility, useDeleteUtility,
@@ -12,13 +13,13 @@ import {
   useImportData,
 } from "@workspace/api-client-react";
 import {
-  CustomerSchema, PropertySchema, LeaseSchema, BedSchema, OccupantSchema, UtilitySchema,
+  CustomerSchema, PropertySchema, LeaseSchema, RoomSchema, BedSchema, OccupantSchema, UtilitySchema,
   RatingsSchema,
-  type Customer, type Property, type Lease, type Bed, type Occupant, type Utility,
+  type Customer, type Property, type Lease, type Room, type Bed, type Occupant, type Utility,
 } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
-export const EXPORT_FORMAT_VERSION = 2;
+export const EXPORT_FORMAT_VERSION = 3;
 
 export const ExportPayloadSchema = z.object({
   format: z.literal("housingops-export"),
@@ -28,6 +29,7 @@ export const ExportPayloadSchema = z.object({
     customers: z.array(CustomerSchema),
     properties: z.array(PropertySchema),
     leases: z.array(LeaseSchema),
+    rooms: z.array(RoomSchema),
     beds: z.array(BedSchema),
     occupants: z.array(OccupantSchema),
     utilities: z.array(UtilitySchema),
@@ -75,6 +77,19 @@ const LegacyPropertySchema = z.object({
   furnishings: z.array(z.string()).optional().default([]),
   ratings: RatingsSchema.optional(),
 });
+
+// v1/v2 beds had a free-text `room` column instead of a `roomId` foreign key.
+// We accept those payloads and synthesize Room rows for each unique
+// (propertyId, room name) pair during the v1→v3 / v2→v3 migration.
+const V2BedSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  bedNumber: z.number(),
+  room: z.string().optional().default(""),
+  status: z.enum(["Occupied", "Vacant"]),
+  occupantId: z.string().nullable(),
+});
+
 const LegacyExportPayloadSchema = z.object({
   format: z.literal("housingops-export"),
   version: z.literal(1),
@@ -82,7 +97,21 @@ const LegacyExportPayloadSchema = z.object({
   data: z.object({
     properties: z.array(LegacyPropertySchema),
     leases: z.array(LeaseSchema),
-    beds: z.array(BedSchema),
+    beds: z.array(V2BedSchema),
+    occupants: z.array(OccupantSchema),
+    utilities: z.array(UtilitySchema),
+  }),
+});
+
+const V2ExportPayloadSchema = z.object({
+  format: z.literal("housingops-export"),
+  version: z.literal(2),
+  exportedAt: z.string(),
+  data: z.object({
+    customers: z.array(CustomerSchema),
+    properties: z.array(PropertySchema),
+    leases: z.array(LeaseSchema),
+    beds: z.array(V2BedSchema),
     occupants: z.array(OccupantSchema),
     utilities: z.array(UtilitySchema),
   }),
@@ -111,6 +140,7 @@ export interface ImportSummary {
   customers: number;
   properties: number;
   leases: number;
+  rooms: number;
   beds: number;
   occupants: number;
   utilities: number;
@@ -136,17 +166,20 @@ export interface ImportPreview {
   summary: ImportSummary;
   /** True when the file was a v1 backup and we auto-created a Legacy customer. */
   migratedFromV1: boolean;
+  /** True when the file was a v1 or v2 backup and we synthesized Rooms from bed.room strings. */
+  migratedRooms: boolean;
 }
 
 /** Sums two ImportSummary objects field-by-field. */
 export function totalImportSummary(s: ImportSummary): number {
-  return s.customers + s.properties + s.leases + s.beds + s.occupants + s.utilities;
+  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities;
 }
 
 const EMPTY_SUMMARY: ImportSummary = {
   customers: 0,
   properties: 0,
   leases: 0,
+  rooms: 0,
   beds: 0,
   occupants: 0,
   utilities: 0,
@@ -192,6 +225,7 @@ export function mergeImportBundles(
     customers: mergeList(current.customers, incoming.customers, "customers"),
     properties: mergeList(current.properties, incoming.properties, "properties"),
     leases: mergeList(current.leases, incoming.leases, "leases"),
+    rooms: mergeList(current.rooms, incoming.rooms, "rooms"),
     beds: mergeList(current.beds, incoming.beds, "beds"),
     occupants: mergeList(current.occupants, incoming.occupants, "occupants"),
     utilities: mergeList(current.utilities, incoming.utilities, "utilities"),
@@ -207,38 +241,80 @@ function isImportPreview(value: unknown): value is ImportPreview {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
   if (typeof v.migratedFromV1 !== "boolean") return false;
+  if (typeof v.migratedRooms !== "boolean") return false;
   const summary = v.summary;
   if (typeof summary !== "object" || summary === null) return false;
   const s = summary as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "beds", "occupants", "utilities"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"]) {
     if (typeof s[k] !== "number") return false;
   }
   const data = v.data;
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "beds", "occupants", "utilities"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"]) {
     if (!Array.isArray(d[k])) return false;
   }
   return true;
 }
 
+// Synthesize Room rows from a list of legacy beds (which carried a free-text
+// `room` column) and convert each bed to use the new `roomId` field. Empty or
+// missing room names map to a per-property "Unassigned" room so every bed
+// satisfies the new NOT NULL FK constraint.
+function migrateBedsToRooms(legacyBeds: z.infer<typeof V2BedSchema>[]): { rooms: Room[]; beds: Bed[] } {
+  const rooms: Room[] = [];
+  const roomIdByKey = new Map<string, string>();
+  let synth = 0;
+
+  const beds: Bed[] = legacyBeds.map((b) => {
+    const name = (b.room ?? "").trim() || "Unassigned";
+    const key = `${b.propertyId}::${name}`;
+    let roomId = roomIdByKey.get(key);
+    if (!roomId) {
+      synth++;
+      roomId = `room-migrated-${synth}`;
+      roomIdByKey.set(key, roomId);
+      rooms.push({
+        id: roomId,
+        propertyId: b.propertyId,
+        name,
+        sqft: 0,
+        bathrooms: 0,
+        monthlyRent: 0,
+      });
+    }
+    return {
+      id: b.id,
+      propertyId: b.propertyId,
+      bedNumber: b.bedNumber,
+      roomId,
+      status: b.status,
+      occupantId: b.occupantId,
+    };
+  });
+  return { rooms, beds };
+}
+
 /**
- * Validate a parsed JSON payload, optionally migrating an older v1 backup.
- * Throws {@link UnsupportedImportError} with a user-friendly message if the
- * file is unrecognized or from an unsupported future version.
+ * Validate a parsed JSON payload, optionally migrating older backups (v1, v2)
+ * up to the current v3 format. Throws {@link UnsupportedImportError} with a
+ * user-friendly message if the file is unrecognized or from an unsupported
+ * future version.
  */
 export function inspectImportPayload(payload: unknown): ImportPreview {
-  // Try the current (v2) format first.
-  const v2 = ExportPayloadSchema.safeParse(payload);
-  if (v2.success) {
-    const d = v2.data.data;
+  // Try the current (v3) format first.
+  const v3 = ExportPayloadSchema.safeParse(payload);
+  if (v3.success) {
+    const d = v3.data.data;
     return {
       data: d,
       migratedFromV1: false,
+      migratedRooms: false,
       summary: {
         customers: d.customers.length,
         properties: d.properties.length,
         leases: d.leases.length,
+        rooms: d.rooms.length,
         beds: d.beds.length,
         occupants: d.occupants.length,
         utilities: d.utilities.length,
@@ -246,29 +322,29 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
     };
   }
 
-  // Fall back to the v1 (pre-Customers) format and migrate it.
-  const v1 = LegacyExportPayloadSchema.safeParse(payload);
-  if (v1.success) {
-    const old = v1.data.data;
-    const migratedProperties: Property[] = old.properties.map((p) => ({
-      ...p,
-      customerId: LEGACY_CUSTOMER_ID,
-    }));
+  // Try v2 (pre-Rooms) and migrate by synthesizing Room rows from bed.room.
+  const v2 = V2ExportPayloadSchema.safeParse(payload);
+  if (v2.success) {
+    const old = v2.data.data;
+    const { rooms, beds } = migrateBedsToRooms(old.beds);
     const data: ExportData = {
-      customers: [LEGACY_CUSTOMER],
-      properties: migratedProperties,
+      customers: old.customers,
+      properties: old.properties,
       leases: old.leases,
-      beds: old.beds,
+      rooms,
+      beds,
       occupants: old.occupants,
       utilities: old.utilities,
     };
     return {
       data,
-      migratedFromV1: true,
+      migratedFromV1: false,
+      migratedRooms: true,
       summary: {
-        customers: 1,
+        customers: data.customers.length,
         properties: data.properties.length,
         leases: data.leases.length,
+        rooms: data.rooms.length,
         beds: data.beds.length,
         occupants: data.occupants.length,
         utilities: data.utilities.length,
@@ -276,7 +352,41 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
     };
   }
 
-  // Couldn't parse as either version — produce a tailored message.
+  // Fall back to the v1 (pre-Customers, pre-Rooms) format.
+  const v1 = LegacyExportPayloadSchema.safeParse(payload);
+  if (v1.success) {
+    const old = v1.data.data;
+    const migratedProperties: Property[] = old.properties.map((p) => ({
+      ...p,
+      customerId: LEGACY_CUSTOMER_ID,
+    }));
+    const { rooms, beds } = migrateBedsToRooms(old.beds);
+    const data: ExportData = {
+      customers: [LEGACY_CUSTOMER],
+      properties: migratedProperties,
+      leases: old.leases,
+      rooms,
+      beds,
+      occupants: old.occupants,
+      utilities: old.utilities,
+    };
+    return {
+      data,
+      migratedFromV1: true,
+      migratedRooms: true,
+      summary: {
+        customers: 1,
+        properties: data.properties.length,
+        leases: data.leases.length,
+        rooms: data.rooms.length,
+        beds: data.beds.length,
+        occupants: data.occupants.length,
+        utilities: data.utilities.length,
+      },
+    };
+  }
+
+  // Couldn't parse as any version — produce a tailored message.
   const obj =
     payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
   const format = obj?.format;
@@ -304,10 +414,18 @@ export class CustomerInUseError extends Error {
   }
 }
 
+export class RoomInUseError extends Error {
+  constructor() {
+    super("Cannot delete a room that still has beds.");
+    this.name = "RoomInUseError";
+  }
+}
+
 interface DataStore {
   customers: Customer[];
   properties: Property[];
   leases: Lease[];
+  rooms: Room[];
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
@@ -321,6 +439,9 @@ interface DataStore {
   updateLease: (id: string, updates: Partial<Lease>) => void;
   addLease: (lease: Lease) => void;
   deleteLease: (id: string) => void;
+  addRoom: (room: Room) => Promise<Room>;
+  updateRoom: (id: string, updates: Partial<Room>) => void;
+  deleteRoom: (id: string) => Promise<void>;
   addBed: (bed: Bed) => void;
   deleteBed: (id: string) => void;
   updateBed: (id: string, updates: Partial<Bed>) => void;
@@ -353,6 +474,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const customersQuery = useListCustomers();
   const propertiesQuery = useListProperties();
   const leasesQuery = useListLeases();
+  const roomsQuery = useListRooms();
   const bedsQuery = useListBeds();
   const occupantsQuery = useListOccupants();
   const utilitiesQuery = useListUtilities();
@@ -360,6 +482,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const customersKey = getListCustomersQueryKey();
   const propertiesKey = getListPropertiesQueryKey();
   const leasesKey = getListLeasesQueryKey();
+  const roomsKey = getListRoomsQueryKey();
   const bedsKey = getListBedsQueryKey();
   const occupantsKey = getListOccupantsQueryKey();
   const utilitiesKey = getListUtilitiesQueryKey();
@@ -373,6 +496,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const createLeaseMut = useCreateLease();
   const updateLeaseMut = useUpdateLease();
   const deleteLeaseMut = useDeleteLease();
+  const createRoomMut = useCreateRoom();
+  const updateRoomMut = useUpdateRoom();
+  const deleteRoomMut = useDeleteRoom();
   const createBedMut = useCreateBed();
   const updateBedMut = useUpdateBed();
   const deleteBedMut = useDeleteBed();
@@ -387,6 +513,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const customers = (customersQuery.data as Customer[] | undefined) ?? EMPTY;
   const properties = (propertiesQuery.data as Property[] | undefined) ?? EMPTY;
   const leases = (leasesQuery.data as Lease[] | undefined) ?? EMPTY;
+  const rooms = (roomsQuery.data as Room[] | undefined) ?? EMPTY;
   const beds = (bedsQuery.data as Bed[] | undefined) ?? EMPTY;
   const occupants = (occupantsQuery.data as Occupant[] | undefined) ?? EMPTY;
   const utilities = (utilitiesQuery.data as Utility[] | undefined) ?? EMPTY;
@@ -395,6 +522,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     customersQuery.isLoading ||
     propertiesQuery.isLoading ||
     leasesQuery.isLoading ||
+    roomsQuery.isLoading ||
     bedsQuery.isLoading ||
     occupantsQuery.isLoading ||
     utilitiesQuery.isLoading;
@@ -422,6 +550,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: customersKey });
     queryClient.invalidateQueries({ queryKey: propertiesKey });
     queryClient.invalidateQueries({ queryKey: leasesKey });
+    queryClient.invalidateQueries({ queryKey: roomsKey });
     queryClient.invalidateQueries({ queryKey: bedsKey });
     queryClient.invalidateQueries({ queryKey: occupantsKey });
     queryClient.invalidateQueries({ queryKey: utilitiesKey });
@@ -539,6 +668,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // ── Room mutations ──────────────────────────────────────────────────────
+  // addRoom returns a promise so the UI can await the server-confirmed Room
+  // (and its id) before adding a bed that references it.
+  const addRoom = async (room: Room): Promise<Room> => {
+    pushToList<Room>(roomsKey, room);
+    try {
+      const saved = await createRoomMut.mutateAsync({ data: room });
+      return saved as Room;
+    } catch (err) {
+      removeFromList<Room>(roomsKey, room.id);
+      notifySaveError("add the new room");
+      throw err;
+    } finally {
+      queryClient.invalidateQueries({ queryKey: roomsKey });
+    }
+  };
+  const updateRoom = (id: string, updates: Partial<Room>) => {
+    patchInList<Room>(roomsKey, id, updates);
+    updateRoomMut.mutate(
+      { id, data: updates },
+      {
+        onError: () => notifySaveError("save your room changes"),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: roomsKey }),
+      },
+    );
+  };
+  const deleteRoom = async (id: string): Promise<void> => {
+    // Client-side guard mirrors the server's 409: rooms with beds can't be
+    // deleted. We still translate a server 409 below in case the cache is stale.
+    const hasBed = beds.some((b) => b.roomId === id);
+    if (hasBed) throw new RoomInUseError();
+    return new Promise<void>((resolve, reject) => {
+      deleteRoomMut.mutate(
+        { id },
+        {
+          onSuccess: () => {
+            removeFromList<Room>(roomsKey, id);
+            resolve();
+          },
+          onError: (err: unknown) => {
+            const status = (err as { status?: number } | undefined)?.status;
+            if (status === 409) reject(new RoomInUseError());
+            else reject(err);
+          },
+          onSettled: () => queryClient.invalidateQueries({ queryKey: roomsKey }),
+        },
+      );
+    });
+  };
+
   const addBed = (bed: Bed) => {
     pushToList<Bed>(bedsKey, bed);
     createBedMut.mutate(
@@ -633,7 +812,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     format: "housingops-export",
     version: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { customers, properties, leases, beds, occupants, utilities },
+    data: { customers, properties, leases, rooms, beds, occupants, utilities },
   });
 
   // Accepts either a raw parsed JSON payload (which we'll inspect ourselves)
@@ -655,7 +834,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     if (mode === "merge") {
       const merged = mergeImportBundles(
-        { customers, properties, leases, beds, occupants, utilities },
+        { customers, properties, leases, rooms, beds, occupants, utilities },
         preview.data,
       );
       dataToWrite = merged.data;
@@ -669,6 +848,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData<Customer[]>(customersKey, dataToWrite.customers);
     queryClient.setQueryData<Property[]>(propertiesKey, dataToWrite.properties);
     queryClient.setQueryData<Lease[]>(leasesKey, dataToWrite.leases);
+    queryClient.setQueryData<Room[]>(roomsKey, dataToWrite.rooms);
     queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
     queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
     queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
@@ -689,10 +869,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      customers, properties, leases, beds, occupants, utilities, isLoading,
+      customers, properties, leases, rooms, beds, occupants, utilities, isLoading,
       addCustomer, updateCustomer, deleteCustomer,
       addProperty, updateProperty, deleteProperty,
       updateLease, addLease, deleteLease,
+      addRoom, updateRoom, deleteRoom,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
       resetToSampleData, exportData, importData,

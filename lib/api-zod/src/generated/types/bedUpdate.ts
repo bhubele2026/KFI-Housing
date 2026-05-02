@@ -10,7 +10,7 @@ import type { BedUpdateStatus } from "./bedUpdateStatus";
 export interface BedUpdate {
   propertyId?: string;
   bedNumber?: number;
-  room?: string;
+  roomId?: string;
   status?: BedUpdateStatus;
   /** @nullable */
   occupantId?: string | null;

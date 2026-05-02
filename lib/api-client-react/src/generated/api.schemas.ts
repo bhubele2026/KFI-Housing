@@ -196,6 +196,23 @@ export interface LeaseUpdate {
   notes?: string;
 }
 
+export interface Room {
+  id: string;
+  propertyId: string;
+  name: string;
+  sqft: number;
+  bathrooms: number;
+  monthlyRent: number;
+}
+
+export interface RoomUpdate {
+  propertyId?: string;
+  name?: string;
+  sqft?: number;
+  bathrooms?: number;
+  monthlyRent?: number;
+}
+
 export type BedStatus = (typeof BedStatus)[keyof typeof BedStatus];
 
 export const BedStatus = {
@@ -207,7 +224,7 @@ export interface Bed {
   id: string;
   propertyId: string;
   bedNumber: number;
-  room: string;
+  roomId: string;
   status: BedStatus;
   /** @nullable */
   occupantId: string | null;
@@ -224,7 +241,7 @@ export const BedUpdateStatus = {
 export interface BedUpdate {
   propertyId?: string;
   bedNumber?: number;
-  room?: string;
+  roomId?: string;
   status?: BedUpdateStatus;
   /** @nullable */
   occupantId?: string | null;
@@ -349,11 +366,16 @@ export interface ImportPayload {
   customers: Customer[];
   properties: Property[];
   leases: Lease[];
+  rooms: Room[];
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
 }
 
 export type DeleteCustomer409 = {
+  error: string;
+};
+
+export type DeleteRoom409 = {
   error: string;
 };

@@ -1,6 +1,7 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
-import { db } from "./client";
+import { db, pool } from "./client";
 import * as schema from "./schema";
+import { backfillRoomsIfNeeded } from "./migrations/backfill-rooms";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -27,6 +28,11 @@ export async function pushSchemaIfNeeded(
         console.log(`[db:migrate] ${message}`);
       }
     });
+
+  // Bring legacy databases (with `bed.room` text column) up to the new
+  // Property → Rooms → Beds shape BEFORE drizzle diffs the schema, so the
+  // diff afterwards is empty (and free of any data-loss warnings).
+  await backfillRoomsIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

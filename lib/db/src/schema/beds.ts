@@ -4,7 +4,7 @@ export const bedsTable = pgTable("beds", {
   id: text("id").primaryKey(),
   propertyId: text("property_id").notNull(),
   bedNumber: integer("bed_number").notNull().default(1),
-  room: text("room").notNull().default(""),
+  roomId: text("room_id").notNull().default(""),
   status: text("status").notNull().default("Vacant"),
   occupantId: text("occupant_id"),
 });

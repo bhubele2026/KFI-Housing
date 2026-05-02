@@ -11,7 +11,7 @@ export interface Bed {
   id: string;
   propertyId: string;
   bedNumber: number;
-  room: string;
+  roomId: string;
   status: BedStatus;
   /** @nullable */
   occupantId: string | null;

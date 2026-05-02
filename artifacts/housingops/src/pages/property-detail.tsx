@@ -22,11 +22,13 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, type Ratings } from "@/data/mockData";
+import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, type Ratings } from "@/data/mockData";
+import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { StarRating } from "@/components/star-rating";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 const FURNISHING_ICONS: Record<string, LucideIcon> = {
   BedDouble, Sofa, Refrigerator, Utensils, Bath, WashingMachine,
@@ -60,19 +62,27 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground" }: 
   );
 }
 
-function BedMap({ beds, occupants, propertyId, onAddBed, onDeleteBed }: {
+function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed }: {
   beds: Bed[];
   occupants: Occupant[];
+  rooms: Room[];
   propertyId: string;
   onAddBed: (bed: Bed) => void;
   onDeleteBed: (id: string) => void;
 }) {
   const occupied = beds.filter(b => b.status === "Occupied").length;
   const pct = beds.length > 0 ? Math.round((occupied / beds.length) * 100) : 0;
+  const roomNameById = new Map(rooms.map(r => [r.id, r.name] as const));
+
+  // Default new beds into the first room of the property. The "+" control is
+  // disabled below if the property has no rooms yet so we always have a valid
+  // FK when the user clicks it.
+  const defaultRoomId = rooms[0]?.id ?? "";
 
   const addBed = () => {
+    if (!defaultRoomId) return;
     const nextNum = beds.length > 0 ? Math.max(...beds.map(b => b.bedNumber)) + 1 : 1;
-    onAddBed({ id: `bed-${Date.now()}`, propertyId, bedNumber: nextNum, room: "", status: "Vacant", occupantId: null });
+    onAddBed({ id: `bed-${Date.now()}`, propertyId, bedNumber: nextNum, roomId: defaultRoomId, status: "Vacant", occupantId: null });
   };
 
   const removeBed = () => {
@@ -108,6 +118,8 @@ function BedMap({ beds, occupants, propertyId, onAddBed, onDeleteBed }: {
                 size="icon" variant="ghost"
                 className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
                 onClick={addBed}
+                disabled={!defaultRoomId}
+                title={defaultRoomId ? "Add bed" : "Add a room first"}
               >
                 <span className="text-base leading-none font-bold">+</span>
               </Button>
@@ -137,7 +149,7 @@ function BedMap({ beds, occupants, propertyId, onAddBed, onDeleteBed }: {
                   </motion.div>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  <p className="font-semibold">Bed {bed.bedNumber}{bed.room ? ` · ${bed.room}` : ""}</p>
+                  <p className="font-semibold">Bed {bed.bedNumber}{roomNameById.get(bed.roomId) ? ` · ${roomNameById.get(bed.roomId)}` : ""}</p>
                   {isOccupied && occ
                     ? <p className="text-muted-foreground">{occ.name}</p>
                     : <p className="text-rose-400">Vacant</p>
@@ -279,7 +291,8 @@ export function InlineEdit({ value, onSave, type = "text", prefix }: { value: st
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { toast } = useToast();
 
   if (isLoading) {
     return (
@@ -325,6 +338,7 @@ export default function PropertyDetail() {
     );
   }
 
+  const propRooms = rooms.filter(r => r.propertyId === id);
   const propBeds = beds.filter(b => b.propertyId === id);
   const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
   const propLeases = leases.filter(l => l.propertyId === id);
@@ -429,7 +443,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Bed Map */}
-        <BedMap beds={propBeds} occupants={propOccupants} propertyId={id} onAddBed={addBed} onDeleteBed={deleteBed} />
+        <BedMap beds={propBeds} occupants={propOccupants} rooms={propRooms} propertyId={id} onAddBed={addBed} onDeleteBed={deleteBed} />
 
         {/* Tabs */}
         <Tabs defaultValue="overview" className="space-y-4">
@@ -673,105 +687,278 @@ export default function PropertyDetail() {
             </Card>
           </TabsContent>
 
-          {/* ── BEDS TAB (merged with occupants) ── */}
+          {/* ── BEDS TAB (grouped by room, merged with occupants) ── */}
           <TabsContent value="beds" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <div className="flex gap-4 text-sm text-muted-foreground">
+            <div className="flex justify-between items-center gap-3 flex-wrap">
+              <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{occupiedBeds} occupied</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{vacantBeds} vacant</span>
+                <span>{propRooms.length} room{propRooms.length !== 1 ? "s" : ""}</span>
                 <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0).toLocaleString()}/mo revenue</span>
               </div>
+              <Button
+                size="sm"
+                data-testid="button-add-room"
+                onClick={async () => {
+                  const nextNum = propRooms.length + 1;
+                  try {
+                    await addRoom({
+                      id: `room-${Date.now()}`,
+                      propertyId: id,
+                      name: `Room ${nextNum}`,
+                      sqft: 0,
+                      bathrooms: 0,
+                      monthlyRent: 0,
+                    });
+                  } catch {
+                    /* toast already shown by data-store */
+                  }
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />Add Room
+              </Button>
             </div>
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">Bed #</TableHead>
-                      <TableHead>Room</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Occupant Name</TableHead>
-                      <TableHead>Employee ID</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Move-in</TableHead>
-                      <TableHead className="text-right">Charge</TableHead>
-                      <TableHead>Billing</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {propBeds.length === 0 ? (
-                      <TableRow><TableCell colSpan={11} className="h-24 text-center text-muted-foreground">No beds added yet. Use the + button above.</TableCell></TableRow>
-                    ) : propBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
-                      const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
-                      const isOccupied = bed.status === "Occupied";
 
-                      const handleStatusChange = (newStatus: string) => {
-                        updateBed(bed.id, { status: newStatus as "Occupied" | "Vacant", occupantId: newStatus === "Vacant" ? null : bed.occupantId });
-                        if (newStatus === "Vacant" && occ) {
-                          updateOccupant(occ.id, { status: "Former", bedId: null });
-                        }
-                      };
+            {propRooms.length === 0 && propBeds.length === 0 ? (
+              <Card>
+                <CardContent className="p-12 text-center text-sm text-muted-foreground">
+                  No rooms yet. Click <span className="font-semibold text-foreground">Add Room</span> to create your first room.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {(() => {
+                  // Group beds by room. Beds whose roomId no longer matches a
+                  // known room (shouldn't happen post-migration, but be
+                  // defensive) are bucketed under "Unassigned" so they're still
+                  // visible and editable.
+                  const bedsByRoomId = new Map<string, Bed[]>();
+                  for (const r of propRooms) bedsByRoomId.set(r.id, []);
+                  const orphans: Bed[] = [];
+                  for (const b of propBeds) {
+                    const list = bedsByRoomId.get(b.roomId);
+                    if (list) list.push(b);
+                    else orphans.push(b);
+                  }
+                  const groups = propRooms.map((r) => ({ room: r, beds: bedsByRoomId.get(r.id) ?? [] }));
 
-                      return (
-                        <TableRow key={bed.id} className={isOccupied ? "" : "bg-muted/20"}>
-                          <TableCell className="font-bold text-center">{bed.bedNumber}</TableCell>
-                          <TableCell>
-                            <InlineEdit value={bed.room || ""} onSave={v => updateBed(bed.id, { room: v })} />
-                          </TableCell>
-                          <TableCell>
-                            <Select value={bed.status} onValueChange={handleStatusChange}>
-                              <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Occupied">Occupied</SelectItem>
-                                <SelectItem value="Vacant">Vacant</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          {occ ? (
-                            <>
-                              <TableCell className="font-medium"><InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} /></TableCell>
-                              <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
-                              <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
-                              <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
-                              <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
-                              <TableCell>
-                                <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as any })}>
-                                  <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
-                              <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
-                            </>
-                          ) : (
-                            <>
-                              <TableCell colSpan={7}>
-                                <AssignOccupantDialog
-                                  bedId={bed.id}
-                                  propertyId={id}
-                                  onAssign={(occ) => {
-                                    addOccupant(occ);
-                                    updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground/40 text-sm">—</TableCell>
-                              <TableCell />
-                            </>
-                          )}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  return (
+                    <>
+                      {groups.map(({ room, beds: roomBeds }) => {
+                        const roomOccupied = roomBeds.filter(b => b.status === "Occupied").length;
+                        const handleAddBedToRoom = () => {
+                          const nextNum = propBeds.length > 0 ? Math.max(...propBeds.map(b => b.bedNumber)) + 1 : 1;
+                          addBed({
+                            id: `bed-${Date.now()}`,
+                            propertyId: id,
+                            bedNumber: nextNum,
+                            roomId: room.id,
+                            status: "Vacant",
+                            occupantId: null,
+                          });
+                        };
+                        const handleDeleteRoom = async () => {
+                          try {
+                            await deleteRoom(room.id);
+                          } catch (err) {
+                            if (err instanceof RoomInUseError) {
+                              toast({
+                                title: "Room still has beds",
+                                description: "Delete or move the beds in this room before removing it.",
+                                variant: "destructive",
+                              });
+                            } else {
+                              toast({
+                                title: "Couldn't delete room",
+                                description: "Please try again.",
+                                variant: "destructive",
+                              });
+                            }
+                          }
+                        };
+                        return (
+                          <Card key={room.id} data-testid={`room-card-${room.id}`}>
+                            <CardHeader className="pb-3">
+                              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-between">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <CardTitle className="text-base flex items-center gap-2">
+                                    <BedDouble className="h-4 w-4 text-muted-foreground" />
+                                    <InlineEdit value={room.name} onSave={v => updateRoom(room.id, { name: v })} />
+                                  </CardTitle>
+                                  <span className="text-xs text-muted-foreground">
+                                    {roomBeds.length} bed{roomBeds.length !== 1 ? "s" : ""} · {roomOccupied} occupied
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                                  <div className="flex items-center gap-1">
+                                    <span>Sqft</span>
+                                    <InlineEdit value={room.sqft} type="number" onSave={v => updateRoom(room.id, { sqft: parseInt(v) || 0 })} />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Bath className="h-3.5 w-3.5" />
+                                    <InlineEdit value={room.bathrooms} type="number" onSave={v => updateRoom(room.id, { bathrooms: parseFloat(v) || 0 })} />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span>Rent</span>
+                                    <InlineEdit value={room.monthlyRent} prefix="$" type="number" onSave={v => updateRoom(room.id, { monthlyRent: parseFloat(v) || 0 })} />
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleAddBedToRoom}
+                                    data-testid={`button-add-bed-${room.id}`}
+                                  >
+                                    <Plus className="h-3.5 w-3.5 mr-1" />Add Bed
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                    onClick={handleDeleteRoom}
+                                    disabled={roomBeds.length > 0}
+                                    title={roomBeds.length > 0 ? "Delete or move the beds in this room first" : "Delete room"}
+                                    data-testid={`button-delete-room-${room.id}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead className="w-12">Bed #</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>Occupant Name</TableHead>
+                                    <TableHead>Employee ID</TableHead>
+                                    <TableHead>Company</TableHead>
+                                    <TableHead>Move-in</TableHead>
+                                    <TableHead className="text-right">Charge</TableHead>
+                                    <TableHead>Billing</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Phone</TableHead>
+                                    <TableHead className="w-10" />
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {roomBeds.length === 0 ? (
+                                    <TableRow><TableCell colSpan={11} className="h-16 text-center text-muted-foreground text-sm">No beds in this room yet. Click "Add Bed" to add one.</TableCell></TableRow>
+                                  ) : roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
+                                    const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
+                                    const isOccupied = bed.status === "Occupied";
+
+                                    const handleStatusChange = (newStatus: string) => {
+                                      updateBed(bed.id, { status: newStatus as "Occupied" | "Vacant", occupantId: newStatus === "Vacant" ? null : bed.occupantId });
+                                      if (newStatus === "Vacant" && occ) {
+                                        updateOccupant(occ.id, { status: "Former", bedId: null });
+                                      }
+                                    };
+
+                                    return (
+                                      <TableRow key={bed.id} className={isOccupied ? "" : "bg-muted/20"}>
+                                        <TableCell className="font-bold text-center">{bed.bedNumber}</TableCell>
+                                        <TableCell>
+                                          <Select value={bed.status} onValueChange={handleStatusChange}>
+                                            <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="Occupied">Occupied</SelectItem>
+                                              <SelectItem value="Vacant">Vacant</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                        {occ ? (
+                                          <>
+                                            <TableCell className="font-medium"><InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} /></TableCell>
+                                            <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
+                                            <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
+                                            <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
+                                            <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
+                                            <TableCell>
+                                              <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as any })}>
+                                                <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                  {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                                </SelectContent>
+                                              </Select>
+                                            </TableCell>
+                                            <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
+                                            <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <TableCell colSpan={7}>
+                                              <AssignOccupantDialog
+                                                bedId={bed.id}
+                                                propertyId={id}
+                                                onAssign={(occ) => {
+                                                  addOccupant(occ);
+                                                  updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
+                                                }}
+                                              />
+                                            </TableCell>
+                                            <TableCell className="text-right text-muted-foreground/40 text-sm">—</TableCell>
+                                            <TableCell />
+                                          </>
+                                        )}
+                                        <TableCell>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                            onClick={() => deleteBed(bed.id)}
+                                            disabled={isOccupied}
+                                            title={isOccupied ? "Mark vacant before deleting" : "Delete bed"}
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </Button>
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+
+                      {orphans.length > 0 && (
+                        <Card data-testid="orphan-beds-card">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base flex items-center gap-2 text-amber-600">
+                              <AlertTriangle className="h-4 w-4" />
+                              Beds without a room ({orphans.length})
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4 text-sm text-muted-foreground">
+                            These beds reference a room that no longer exists. Pick a room for each, or delete them.
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {orphans.sort((a, b) => a.bedNumber - b.bedNumber).map(b => (
+                                <div key={b.id} className="flex items-center gap-2 border rounded-md px-2 py-1">
+                                  <span className="font-semibold text-foreground">Bed {b.bedNumber}</span>
+                                  <Select value="" onValueChange={v => updateBed(b.id, { roomId: v })}>
+                                    <SelectTrigger className="h-7 text-xs w-32"><SelectValue placeholder="Choose room" /></SelectTrigger>
+                                    <SelectContent>
+                                      {propRooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => deleteBed(b.id)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </TabsContent>
 
           {/* ── FURNISHINGS TAB ── */}

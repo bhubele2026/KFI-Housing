@@ -10,12 +10,14 @@ import type { Customer } from "./customer";
 import type { Lease } from "./lease";
 import type { Occupant } from "./occupant";
 import type { Property } from "./property";
+import type { Room } from "./room";
 import type { Utility } from "./utility";
 
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];
   leases: Lease[];
+  rooms: Room[];
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];

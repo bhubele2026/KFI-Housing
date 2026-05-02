@@ -47,7 +47,16 @@ const sampleCustomer = {
   notes: "",
 };
 
-const v2Payload = {
+const sampleRoom = {
+  id: "r1",
+  propertyId: "p1",
+  name: "Master",
+  sqft: 200,
+  bathrooms: 1,
+  monthlyRent: 1000,
+};
+
+const v3Payload = {
   format: "housingops-export",
   version: EXPORT_FORMAT_VERSION,
   exportedAt,
@@ -55,7 +64,28 @@ const v2Payload = {
     customers: [sampleCustomer],
     properties: [sampleProperty],
     leases: [],
+    rooms: [sampleRoom],
     beds: [],
+    occupants: [],
+    utilities: [],
+  },
+};
+
+// v2 payloads carry no `rooms` array; beds have a free-text `room` column.
+const v2Payload = {
+  format: "housingops-export",
+  version: 2,
+  exportedAt,
+  data: {
+    customers: [sampleCustomer],
+    properties: [sampleProperty],
+    leases: [],
+    beds: [
+      { id: "b1", propertyId: "p1", bedNumber: 1, room: "Master", status: "Vacant", occupantId: null },
+      { id: "b2", propertyId: "p1", bedNumber: 2, room: "Master", status: "Vacant", occupantId: null },
+      { id: "b3", propertyId: "p1", bedNumber: 3, room: "Guest",  status: "Vacant", occupantId: null },
+      { id: "b4", propertyId: "p1", bedNumber: 4, room: "",       status: "Vacant", occupantId: null },
+    ],
     occupants: [],
     utilities: [],
   },
@@ -71,7 +101,9 @@ const v1FullPayload = {
   data: {
     properties: [v1PropertyAllFields],
     leases: [],
-    beds: [],
+    beds: [
+      { id: "b1", propertyId: "p1", bedNumber: 1, room: "Suite A", status: "Vacant", occupantId: null },
+    ],
     occupants: [],
     utilities: [],
   },
@@ -105,28 +137,67 @@ const v1MinimalPayload = {
 };
 
 describe("inspectImportPayload", () => {
-  it("accepts a valid v2 payload without migrating", () => {
-    const preview = inspectImportPayload(v2Payload);
+  it("accepts a valid v3 payload without migrating", () => {
+    const preview = inspectImportPayload(v3Payload);
 
     expect(preview.migratedFromV1).toBe(false);
+    expect(preview.migratedRooms).toBe(false);
     expect(preview.summary).toEqual({
       customers: 1,
       properties: 1,
       leases: 0,
+      rooms: 1,
       beds: 0,
       occupants: 0,
       utilities: 0,
     });
     expect(preview.data.customers[0].id).toBe("c1");
     expect(preview.data.properties[0].customerId).toBe("c1");
+    expect(preview.data.rooms[0].id).toBe("r1");
   });
 
-  it("accepts a v1 payload that already has all newer fields", () => {
+  it("migrates a v2 payload by synthesizing rooms from bed.room strings", () => {
+    const preview = inspectImportPayload(v2Payload);
+
+    expect(preview.migratedFromV1).toBe(false);
+    expect(preview.migratedRooms).toBe(true);
+
+    // Two unique non-empty room names plus one empty → "Unassigned".
+    expect(preview.data.rooms).toHaveLength(3);
+    const names = preview.data.rooms.map(r => r.name).sort();
+    expect(names).toEqual(["Guest", "Master", "Unassigned"]);
+    for (const room of preview.data.rooms) {
+      expect(room.propertyId).toBe("p1");
+      expect(room.sqft).toBe(0);
+      expect(room.bathrooms).toBe(0);
+      expect(room.monthlyRent).toBe(0);
+    }
+
+    // All beds now reference a real roomId (no empty strings).
+    expect(preview.data.beds).toHaveLength(4);
+    for (const bed of preview.data.beds) {
+      expect(bed.roomId).not.toBe("");
+      expect(preview.data.rooms.some(r => r.id === bed.roomId)).toBe(true);
+    }
+
+    // Beds in the same legacy room name share a roomId.
+    const masterRoom = preview.data.rooms.find(r => r.name === "Master")!;
+    const masterBeds = preview.data.beds.filter(b => b.roomId === masterRoom.id);
+    expect(masterBeds).toHaveLength(2);
+    expect(masterBeds.map(b => b.id).sort()).toEqual(["b1", "b2"]);
+
+    expect(preview.summary.rooms).toBe(3);
+    expect(preview.summary.beds).toBe(4);
+  });
+
+  it("accepts a v1 payload that already has all newer fields and migrates rooms", () => {
     const preview = inspectImportPayload(v1FullPayload);
 
     expect(preview.migratedFromV1).toBe(true);
+    expect(preview.migratedRooms).toBe(true);
     expect(preview.summary.customers).toBe(1);
     expect(preview.summary.properties).toBe(1);
+    expect(preview.summary.rooms).toBe(1);
     expect(preview.data.customers[0].id).toBe(LEGACY_CUSTOMER_ID);
 
     const migrated = preview.data.properties[0];
@@ -136,12 +207,16 @@ describe("inspectImportPayload", () => {
     expect(migrated.paymentMethod).toBe("ACH");
     expect(migrated.bankName).toBe("Acme Bank");
     expect(migrated.furnishings).toEqual(["Queen beds"]);
+
+    expect(preview.data.rooms[0].name).toBe("Suite A");
+    expect(preview.data.beds[0].roomId).toBe(preview.data.rooms[0].id);
   });
 
   it("migrates a v1 payload missing landlord/payment/banking/furnishings", () => {
     const preview = inspectImportPayload(v1MinimalPayload);
 
     expect(preview.migratedFromV1).toBe(true);
+    expect(preview.migratedRooms).toBe(true);
     expect(preview.data.customers).toHaveLength(1);
     expect(preview.data.customers[0].id).toBe(LEGACY_CUSTOMER_ID);
     expect(preview.data.customers[0].name).toBe("Legacy Properties");
@@ -163,6 +238,9 @@ describe("inspectImportPayload", () => {
     expect(migrated.portalUrl).toBe("");
     expect(migrated.notes).toBe("");
     expect(migrated.furnishings).toEqual([]);
+
+    // No legacy beds → no synthesized rooms.
+    expect(preview.data.rooms).toEqual([]);
   });
 
   it("throws a friendly error for a payload that isn't a HousingOps export", () => {
@@ -187,6 +265,7 @@ describe("inspectImportPayload", () => {
         customers: [],
         properties: [],
         leases: [],
+        rooms: [],
         beds: [],
         occupants: [],
         utilities: [],
@@ -230,6 +309,7 @@ const emptyBundle = (): ExportData => ({
   customers: [],
   properties: [],
   leases: [],
+  rooms: [],
   beds: [],
   occupants: [],
   utilities: [],
@@ -254,6 +334,7 @@ describe("mergeImportBundles", () => {
       customers: 1,
       properties: 1,
       leases: 0,
+      rooms: 0,
       beds: 0,
       occupants: 0,
       utilities: 0,
@@ -319,7 +400,8 @@ describe("mergeImportBundles", () => {
       customers: [baseCustomer("c1")],
       properties: [baseProperty("p1")],
       leases: [{ id: "l1", propertyId: "p1", startDate: "2024-01-01", endDate: "2025-01-01", monthlyRent: 100, securityDeposit: 200, status: "Active" as const, notes: "" }],
-      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, room: "R1", status: "Vacant" as const, occupantId: null }],
+      rooms: [{ id: "r1", propertyId: "p1", name: "Master", sqft: 100, bathrooms: 1, monthlyRent: 500 }],
+      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Vacant" as const, occupantId: null }],
       occupants: [],
       utilities: [],
     };
@@ -327,7 +409,8 @@ describe("mergeImportBundles", () => {
       customers: [baseCustomer("c1", { name: "Renamed" })], // updated
       properties: [baseProperty("p2", { name: "New" })], // added
       leases: [], // nothing
-      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, room: "R1", status: "Vacant" as const, occupantId: null }], // unchanged
+      rooms: [], // nothing
+      beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Vacant" as const, occupantId: null }], // unchanged
       occupants: [],
       utilities: [{ id: "u1", propertyId: "p1", type: "Electric" as const, company: "X", monthlyCost: 100, accountNumber: "", notes: "" }], // added
     };
@@ -338,6 +421,7 @@ describe("mergeImportBundles", () => {
       customers: 0,
       properties: 1,
       leases: 0,
+      rooms: 0,
       beds: 0,
       occupants: 0,
       utilities: 1,
@@ -346,6 +430,7 @@ describe("mergeImportBundles", () => {
       customers: 1,
       properties: 0,
       leases: 0,
+      rooms: 0,
       beds: 0,
       occupants: 0,
       utilities: 0,

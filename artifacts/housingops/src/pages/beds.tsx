@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
-  const { beds, properties, occupants, customers, isLoading } = useData();
+  const { beds, properties, rooms, occupants, customers, isLoading } = useData();
   const { toast } = useToast();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
@@ -40,10 +40,17 @@ export default function Beds() {
     return map;
   }, [properties]);
 
+  const roomById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rooms) map.set(r.id, r.name);
+    return map;
+  }, [rooms]);
+
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
   const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
-  const columnCount = showCustomerColumn ? 5 : 4;
+  // +1 column for Room (always shown).
+  const columnCount = showCustomerColumn ? 6 : 5;
 
   const propertiesForFilter = useMemo(() => {
     if (!scopedPropertyIds) return properties;
@@ -90,7 +97,7 @@ export default function Beds() {
           return property ? customers.find((c) => c.id === property.customerId)?.name ?? "" : "";
         } },
       { header: "Bed Number", value: (b) => b.bedNumber },
-      { header: "Room",       value: (b) => b.room },
+      { header: "Room",       value: (b) => roomById.get(b.roomId) ?? "" },
       { header: "Occupant",   value: (b) => (b.occupantId ? occupants.find((o) => o.id === b.occupantId)?.name ?? "" : "") },
       { header: "Status",     value: (b) => b.status },
     ]);
@@ -214,6 +221,7 @@ export default function Beds() {
                 <TableRow>
                   <TableHead>Property</TableHead>
                   {showCustomerColumn && <TableHead>Customer</TableHead>}
+                  <TableHead>Room</TableHead>
                   <TableHead>Bed #</TableHead>
                   <TableHead>Occupant</TableHead>
                   <TableHead className="text-center">Status</TableHead>
@@ -259,6 +267,9 @@ export default function Beds() {
                             )}
                           </TableCell>
                         )}
+                        <TableCell className="text-muted-foreground" data-testid={`text-bed-room-${bed.id}`}>
+                          {roomById.get(bed.roomId) ?? "—"}
+                        </TableCell>
                         <TableCell>Bed {bed.bedNumber}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {occupant ? occupant.name : "-"}

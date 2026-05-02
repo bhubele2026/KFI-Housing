@@ -262,6 +262,78 @@ paths:
         "204":
           description: Deleted
 
+  /rooms:
+    get:
+      operationId: listRooms
+      tags: [rooms]
+      summary: List all rooms
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Room" }
+    post:
+      operationId: createRoom
+      tags: [rooms]
+      summary: Create a room
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Room" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Room" }
+  /rooms/{id}:
+    patch:
+      operationId: updateRoom
+      tags: [rooms]
+      summary: Update a room
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoomUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Room" }
+    delete:
+      operationId: deleteRoom
+      tags: [rooms]
+      summary: Delete a room
+      description: Fails with 409 if any beds reference this room.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Conflict — room still has beds
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+
   /beds:
     get:
       operationId: listBeds
@@ -592,14 +664,33 @@ components:
         status: { type: string, enum: [Active, Expired, Upcoming] }
         notes: { type: string }
 
+    Room:
+      type: object
+      required: [id, propertyId, name, sqft, bathrooms, monthlyRent]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        name: { type: string }
+        sqft: { type: integer }
+        bathrooms: { type: number }
+        monthlyRent: { type: number }
+    RoomUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        name: { type: string }
+        sqft: { type: integer }
+        bathrooms: { type: number }
+        monthlyRent: { type: number }
+
     Bed:
       type: object
-      required: [id, propertyId, bedNumber, room, status, occupantId]
+      required: [id, propertyId, bedNumber, roomId, status, occupantId]
       properties:
         id: { type: string }
         propertyId: { type: string }
         bedNumber: { type: integer }
-        room: { type: string }
+        roomId: { type: string }
         status: { type: string, enum: [Occupied, Vacant] }
         occupantId:
           type: ["string", "null"]
@@ -608,7 +699,7 @@ components:
       properties:
         propertyId: { type: string }
         bedNumber: { type: integer }
-        room: { type: string }
+        roomId: { type: string }
         status: { type: string, enum: [Occupied, Vacant] }
         occupantId:
           type: ["string", "null"]
@@ -692,7 +783,7 @@ components:
 
     ImportPayload:
       type: object
-      required: [customers, properties, leases, beds, occupants, utilities]
+      required: [customers, properties, leases, rooms, beds, occupants, utilities]
       properties:
         customers:
           type: array
@@ -703,6 +794,9 @@ components:
         leases:
           type: array
           items: { $ref: "#/components/schemas/Lease" }
+        rooms:
+          type: array
+          items: { $ref: "#/components/schemas/Room" }
         beds:
           type: array
           items: { $ref: "#/components/schemas/Bed" }

@@ -3,12 +3,14 @@ import {
   customersTable,
   propertiesTable,
   leasesTable,
+  roomsTable,
   bedsTable,
   occupantsTable,
   utilitiesTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
+  type InsertRoomRow,
   type InsertBedRow,
   type InsertOccupantRow,
   type InsertUtilityRow,
@@ -252,61 +254,143 @@ const NAMES = [
 ];
 const COMPANIES = ["Staffco Inc", "BuildRight LLC", "TalentBridge", "ForceWorks", "NexaStaff"];
 
-function buildBedsAndOccupants(): {
+interface RoomLayout {
+  /** Position-based room id within the property (1..n). */
+  index: number;
+  name: string;
+  sqft: number;
+  bathrooms: number;
+  monthlyRent: number;
+  /** How many beds live in this room. */
+  beds: number;
+}
+
+interface PropertyLayout {
+  propertyId: string;
+  occupied: number;
+  rooms: RoomLayout[];
+}
+
+const PROPERTY_LAYOUTS: PropertyLayout[] = [
+  {
+    propertyId: "p1",
+    occupied: 8,
+    rooms: [
+      { index: 1, name: "Master Suite",  sqft: 220, bathrooms: 1,   monthlyRent: 1200, beds: 2 },
+      { index: 2, name: "Bedroom 2",     sqft: 160, bathrooms: 0.5, monthlyRent: 950,  beds: 2 },
+      { index: 3, name: "Bedroom 3",     sqft: 150, bathrooms: 0.5, monthlyRent: 900,  beds: 2 },
+      { index: 4, name: "Bedroom 4",     sqft: 140, bathrooms: 0,   monthlyRent: 850,  beds: 2 },
+      { index: 5, name: "Loft",          sqft: 180, bathrooms: 0,   monthlyRent: 900,  beds: 2 },
+    ],
+  },
+  {
+    propertyId: "p2",
+    occupied: 10,
+    rooms: [
+      { index: 1, name: "Bunk Room A",   sqft: 200, bathrooms: 1,   monthlyRent: 1050, beds: 2 },
+      { index: 2, name: "Bunk Room B",   sqft: 200, bathrooms: 1,   monthlyRent: 1050, beds: 2 },
+      { index: 3, name: "Bunk Room C",   sqft: 180, bathrooms: 0.5, monthlyRent: 950,  beds: 2 },
+      { index: 4, name: "Bunk Room D",   sqft: 180, bathrooms: 0.5, monthlyRent: 950,  beds: 2 },
+      { index: 5, name: "Bunk Room E",   sqft: 160, bathrooms: 0,   monthlyRent: 850,  beds: 2 },
+      { index: 6, name: "Bunk Room F",   sqft: 160, bathrooms: 0,   monthlyRent: 850,  beds: 2 },
+    ],
+  },
+  {
+    propertyId: "p3",
+    occupied: 6,
+    rooms: [
+      { index: 1, name: "Bedroom 1",     sqft: 170, bathrooms: 1,   monthlyRent: 1100, beds: 2 },
+      { index: 2, name: "Bedroom 2",     sqft: 150, bathrooms: 0.5, monthlyRent: 950,  beds: 2 },
+      { index: 3, name: "Bedroom 3",     sqft: 150, bathrooms: 0,   monthlyRent: 900,  beds: 2 },
+      { index: 4, name: "Bedroom 4",     sqft: 140, bathrooms: 0,   monthlyRent: 850,  beds: 2 },
+    ],
+  },
+  {
+    propertyId: "p4",
+    occupied: 12,
+    rooms: [
+      { index: 1, name: "Suite A",       sqft: 280, bathrooms: 1,   monthlyRent: 1500, beds: 3 },
+      { index: 2, name: "Suite B",       sqft: 280, bathrooms: 1,   monthlyRent: 1500, beds: 3 },
+      { index: 3, name: "Bunk Room C",   sqft: 220, bathrooms: 0.5, monthlyRent: 1200, beds: 3 },
+      { index: 4, name: "Bunk Room D",   sqft: 220, bathrooms: 0.5, monthlyRent: 1200, beds: 3 },
+      { index: 5, name: "Loft",          sqft: 200, bathrooms: 0,   monthlyRent: 1100, beds: 3 },
+    ],
+  },
+  {
+    propertyId: "p5",
+    occupied: 0,
+    rooms: [
+      { index: 1, name: "Bedroom 1",     sqft: 160, bathrooms: 1,   monthlyRent: 950,  beds: 2 },
+      { index: 2, name: "Bedroom 2",     sqft: 150, bathrooms: 0.5, monthlyRent: 900,  beds: 2 },
+      { index: 3, name: "Bedroom 3",     sqft: 150, bathrooms: 0,   monthlyRent: 850,  beds: 2 },
+    ],
+  },
+];
+
+function buildRoomsBedsAndOccupants(): {
+  rooms: InsertRoomRow[];
   beds: InsertBedRow[];
   occupants: InsertOccupantRow[];
 } {
-  const layout: { propertyId: string; total: number; occupied: number }[] = [
-    { propertyId: "p1", total: 10, occupied: 8 },
-    { propertyId: "p2", total: 12, occupied: 10 },
-    { propertyId: "p3", total: 8, occupied: 6 },
-    { propertyId: "p4", total: 15, occupied: 12 },
-    { propertyId: "p5", total: 6, occupied: 0 },
-  ];
-
+  const rooms: InsertRoomRow[] = [];
   const beds: InsertBedRow[] = [];
   const occupants: InsertOccupantRow[] = [];
   let nameIdx = 0;
 
-  for (const { propertyId, total, occupied } of layout) {
+  for (const { propertyId, occupied, rooms: roomDefs } of PROPERTY_LAYOUTS) {
     const prop = SEED_PROPERTIES.find((p) => p.id === propertyId)!;
-    for (let i = 0; i < total; i++) {
-      const bedNumber = i + 1;
-      const isOccupied = i < occupied;
-      const bedId = `b_${propertyId}_${bedNumber}`;
-      const occupantId = isOccupied ? `o_${propertyId}_${bedNumber}` : null;
 
-      beds.push({
-        id: bedId,
+    let bedCounter = 0;
+    for (const roomDef of roomDefs) {
+      const roomId = `r_${propertyId}_${roomDef.index}`;
+      rooms.push({
+        id: roomId,
         propertyId,
-        bedNumber,
-        room: `Room ${Math.ceil(bedNumber / (propertyId === "p4" ? 3 : 2))}`,
-        status: isOccupied ? "Occupied" : "Vacant",
-        occupantId,
+        name: roomDef.name,
+        sqft: roomDef.sqft,
+        bathrooms: roomDef.bathrooms,
+        monthlyRent: roomDef.monthlyRent,
       });
 
-      if (isOccupied && occupantId) {
-        const name = NAMES[nameIdx % NAMES.length];
-        nameIdx++;
-        occupants.push({
-          id: occupantId,
-          name,
-          email: `${name.split(" ")[0].toLowerCase()}@${propertyId}.worker.com`,
-          phone: `512-555-${String(1000 + nameIdx).slice(-4)}`,
-          bedId,
+      for (let i = 0; i < roomDef.beds; i++) {
+        bedCounter += 1;
+        const bedNumber = bedCounter;
+        const isOccupied = bedNumber <= occupied;
+        const bedId = `b_${propertyId}_${bedNumber}`;
+        const occupantId = isOccupied ? `o_${propertyId}_${bedNumber}` : null;
+
+        beds.push({
+          id: bedId,
           propertyId,
-          moveInDate: "2024-01-15",
-          moveOutDate: null,
-          status: "Active",
-          chargePerBed: prop.chargePerBed ?? 0,
-          billingFrequency: "Monthly",
-          employeeId: `EMP-${String(1000 + nameIdx).slice(-4)}`,
-          company: COMPANIES[nameIdx % COMPANIES.length],
+          bedNumber,
+          roomId,
+          status: isOccupied ? "Occupied" : "Vacant",
+          occupantId,
         });
+
+        if (isOccupied && occupantId) {
+          const name = NAMES[nameIdx % NAMES.length];
+          nameIdx++;
+          occupants.push({
+            id: occupantId,
+            name,
+            email: `${name.split(" ")[0].toLowerCase()}@${propertyId}.worker.com`,
+            phone: `512-555-${String(1000 + nameIdx).slice(-4)}`,
+            bedId,
+            propertyId,
+            moveInDate: "2024-01-15",
+            moveOutDate: null,
+            status: "Active",
+            chargePerBed: prop.chargePerBed ?? 0,
+            billingFrequency: "Monthly",
+            employeeId: `EMP-${String(1000 + nameIdx).slice(-4)}`,
+            company: COMPANIES[nameIdx % COMPANIES.length],
+          });
+        }
       }
     }
   }
-  return { beds, occupants };
+  return { rooms, beds, occupants };
 }
 
 const SEED_LEASES: InsertLeaseRow[] = [
@@ -352,6 +436,7 @@ interface DataBundle {
   customers: InsertCustomerRow[];
   properties: InsertPropertyRow[];
   leases: InsertLeaseRow[];
+  rooms: InsertRoomRow[];
   beds: InsertBedRow[];
   occupants: InsertOccupantRow[];
   utilities: InsertUtilityRow[];
@@ -363,6 +448,7 @@ async function wipeAll(): Promise<void> {
     await tx.delete(occupantsTable);
     await tx.delete(leasesTable);
     await tx.delete(utilitiesTable);
+    await tx.delete(roomsTable);
     await tx.delete(propertiesTable);
     await tx.delete(customersTable);
   });
@@ -373,6 +459,7 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
     if (bundle.customers.length > 0) await tx.insert(customersTable).values(bundle.customers);
     if (bundle.properties.length > 0) await tx.insert(propertiesTable).values(bundle.properties);
     if (bundle.leases.length > 0) await tx.insert(leasesTable).values(bundle.leases);
+    if (bundle.rooms.length > 0) await tx.insert(roomsTable).values(bundle.rooms);
     if (bundle.occupants.length > 0) await tx.insert(occupantsTable).values(bundle.occupants);
     if (bundle.beds.length > 0) await tx.insert(bedsTable).values(bundle.beds);
     if (bundle.utilities.length > 0) await tx.insert(utilitiesTable).values(bundle.utilities);
@@ -380,11 +467,12 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
 }
 
 function buildSeedBundle(): DataBundle {
-  const { beds, occupants } = buildBedsAndOccupants();
+  const { rooms, beds, occupants } = buildRoomsBedsAndOccupants();
   return {
     customers: SEED_CUSTOMERS,
     properties: SEED_PROPERTIES,
     leases: SEED_LEASES,
+    rooms,
     beds,
     occupants,
     utilities: SEED_UTILITIES,
@@ -406,6 +494,7 @@ export async function seedIfEmpty(): Promise<void> {
       customers: bundle.customers.length,
       properties: bundle.properties.length,
       leases: bundle.leases.length,
+      rooms: bundle.rooms.length,
       beds: bundle.beds.length,
       occupants: bundle.occupants.length,
       utilities: bundle.utilities.length,
@@ -428,6 +517,7 @@ export async function replaceAllData(bundle: DataBundle): Promise<void> {
       customers: bundle.customers.length,
       properties: bundle.properties.length,
       leases: bundle.leases.length,
+      rooms: bundle.rooms.length,
       beds: bundle.beds.length,
       occupants: bundle.occupants.length,
       utilities: bundle.utilities.length,

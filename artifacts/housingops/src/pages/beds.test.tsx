@@ -101,6 +101,7 @@ vi.mock("@/components/layout/main-layout", () => ({
 
 const mockData: {
   properties: unknown[];
+  rooms: unknown[];
   beds: unknown[];
   leases: unknown[];
   utilities: unknown[];
@@ -114,6 +115,7 @@ const mockData: {
     { id: "p3", customerId: "c2", name: "Pine", monthlyRent: 1200 },
     { id: "p4", customerId: "c2", name: "Cedar", monthlyRent: 1300 },
   ],
+  rooms: [],
   beds: [
     // p1: 2 occupied, 1 vacant
     { id: "b1", propertyId: "p1", bedNumber: 1, status: "Occupied", occupantId: "o1" },

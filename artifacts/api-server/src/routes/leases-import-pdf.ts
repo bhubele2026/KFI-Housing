@@ -49,6 +49,52 @@ function uploadSinglePdf(req: Request, res: Response, next: NextFunction): void 
   });
 }
 
+// ─── Concurrency cap ──────────────────────────────────────────────────────
+// PDF parsing + the LLM extraction are both expensive. With batch upload on
+// the frontend, a single property manager can fire many requests in parallel.
+// Cap how many run at once so the LLM provider doesn't rate-limit us and we
+// don't OOM on big PDFs. Extra requests queue up in memory; if the queue gets
+// pathologically deep we 503 the new arrivals so they retry instead of
+// holding sockets open forever.
+const MAX_CONCURRENT_PDF_IMPORTS = 3;
+const MAX_QUEUED_PDF_IMPORTS = 20;
+
+let inFlight = 0;
+const waiters: Array<() => void> = [];
+
+class ImportQueueOverflowError extends Error {
+  constructor() {
+    super("Too many lease PDFs queued");
+    this.name = "ImportQueueOverflowError";
+  }
+}
+
+async function acquireImportSlot(): Promise<void> {
+  if (inFlight < MAX_CONCURRENT_PDF_IMPORTS) {
+    inFlight += 1;
+    return;
+  }
+  if (waiters.length >= MAX_QUEUED_PDF_IMPORTS) {
+    throw new ImportQueueOverflowError();
+  }
+  await new Promise<void>((resolve) => {
+    waiters.push(resolve);
+  });
+  // The slot was handed off directly by releaseImportSlot — inFlight is
+  // already accounted for, so we just return.
+}
+
+function releaseImportSlot(): void {
+  const next = waiters.shift();
+  if (next) {
+    // Hand the slot directly to the next waiter without ever dropping
+    // inFlight, so the cap is never exceeded.
+    next();
+  } else {
+    inFlight = Math.max(0, inFlight - 1);
+  }
+}
+
 router.post(
   "/leases/import-pdf",
   uploadSinglePdf,
@@ -68,61 +114,78 @@ router.post(
       return;
     }
 
-    let text: string;
     try {
-      // PDFParse needs a Uint8Array (it transfers ownership to the worker),
-      // so hand it a fresh copy of the upload buffer rather than the Node
-      // Buffer view shared with multer.
-      const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
-      const parsed = await parser.getText();
-      text = (parsed.text ?? "").trim();
-      await parser.destroy?.();
+      await acquireImportSlot();
     } catch (err) {
-      logger.warn({ err }, "pdf-parse failed");
-      res.status(422).json({
-        error:
-          "Couldn't read this PDF. It may be image-only (scanned) — OCR isn't supported here.",
-      });
-      return;
+      if (err instanceof ImportQueueOverflowError) {
+        res.status(503).json({
+          error:
+            "Too many lease PDFs are being processed right now. Please retry in a moment.",
+        });
+        return;
+      }
+      throw err;
     }
 
-    if (text.length < 50) {
-      // pdf-parse returns text even for image-only PDFs, but it's almost
-      // empty. Treat that the same as an unreadable file rather than
-      // silently asking the LLM to hallucinate from nothing.
-      res.status(422).json({
-        error:
-          "This PDF doesn't contain readable text — it may be a scanned image. OCR isn't supported.",
-      });
-      return;
-    }
-
-    let extracted;
     try {
-      extracted = await extractLeaseFromText(text);
-    } catch (err) {
-      logger.error({ err }, "Lease LLM extraction failed");
-      res.status(502).json({
-        error: "Couldn't extract lease fields from this PDF. Please try again.",
+      let text: string;
+      try {
+        // PDFParse needs a Uint8Array (it transfers ownership to the worker),
+        // so hand it a fresh copy of the upload buffer rather than the Node
+        // Buffer view shared with multer.
+        const parser = new PDFParse({ data: new Uint8Array(file.buffer) });
+        const parsed = await parser.getText();
+        text = (parsed.text ?? "").trim();
+        await parser.destroy?.();
+      } catch (err) {
+        logger.warn({ err }, "pdf-parse failed");
+        res.status(422).json({
+          error:
+            "Couldn't read this PDF. It may be image-only (scanned) — OCR isn't supported here.",
+        });
+        return;
+      }
+
+      if (text.length < 50) {
+        // pdf-parse returns text even for image-only PDFs, but it's almost
+        // empty. Treat that the same as an unreadable file rather than
+        // silently asking the LLM to hallucinate from nothing.
+        res.status(422).json({
+          error:
+            "This PDF doesn't contain readable text — it may be a scanned image. OCR isn't supported.",
+        });
+        return;
+      }
+
+      let extracted;
+      try {
+        extracted = await extractLeaseFromText(text);
+      } catch (err) {
+        logger.error({ err }, "Lease LLM extraction failed");
+        res.status(502).json({
+          error: "Couldn't extract lease fields from this PDF. Please try again.",
+        });
+        return;
+      }
+
+      const [properties, customers] = await Promise.all([
+        db.select().from(propertiesTable),
+        db.select().from(customersTable),
+      ]);
+
+      const candidates = rankPropertyCandidates(extracted, properties, customers);
+      // Treat the top candidate as a "match" only when it's clearly above
+      // the noise floor — otherwise the dialog defaults to "create new".
+      const topMatch = candidates[0] && candidates[0].score >= 0.6 ? candidates[0] : null;
+
+      res.json({
+        extracted,
+        topMatch,
+        candidates,
       });
-      return;
+    } finally {
+      releaseImportSlot();
     }
-
-    const [properties, customers] = await Promise.all([
-      db.select().from(propertiesTable),
-      db.select().from(customersTable),
-    ]);
-
-    const candidates = rankPropertyCandidates(extracted, properties, customers);
-    // Treat the top candidate as a "match" only when it's clearly above
-    // the noise floor — otherwise the dialog defaults to "create new".
-    const topMatch = candidates[0] && candidates[0].score >= 0.6 ? candidates[0] : null;
-
-    res.json({
-      extracted,
-      topMatch,
-      candidates,
-    });
   },
 );
 

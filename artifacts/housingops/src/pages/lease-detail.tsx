@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, ListChecks, CalendarPlus, DollarSign, Trash2,
-  CheckCircle2, Plus,
+  CheckCircle2, Plus, Save,
 } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/main-layout";
@@ -12,6 +12,7 @@ import { useData } from "@/context/data-store";
 import {
   getRenewalInfo,
   INCLUDED_ITEM_SUGGESTIONS,
+  type Lease,
   type RentFrequency,
 } from "@/data/mockData";
 
@@ -238,20 +239,103 @@ function IncludedItemsEditor({
   );
 }
 
+/**
+ * Build the initial draft for the create-mode page (`/leases/new`). All
+ * fields use sensible "operator can change anything later" defaults:
+ *   • Dates: today → today + 1 year (a typical residential term).
+ *   • Amounts: 0 (operators always need to set these explicitly anyway).
+ *   • Status: "Upcoming" — rarely is a freshly-typed lease already in
+ *     effect, and Upcoming makes the renewal alerts on the leases page
+ *     skip it until it actually starts.
+ *   • Buyout: off, no clauses, no included items — the operator opts in
+ *     to each of those from the same form.
+ *
+ * The propertyId is seeded from `?propertyId=` so a placeholder click
+ * lands with the property pre-selected (and locked, see the property
+ * card below).
+ */
+function makeCreateDraft(propertyId: string): Lease {
+  const today = new Date();
+  const oneYear = new Date(today);
+  oneYear.setFullYear(today.getFullYear() + 1);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    id: "",
+    propertyId,
+    startDate: fmt(today),
+    endDate: fmt(oneYear),
+    monthlyRent: 0,
+    securityDeposit: 0,
+    status: "Upcoming",
+    notes: "",
+    clauses: "",
+    includedItems: [],
+    buyoutAvailable: false,
+    buyoutCost: null,
+  };
+}
+
 export default function LeaseDetail() {
-  const { id } = useParams<{ id: string }>();
+  // useParams returns `{}` for the `/leases/new` route (registered separately
+  // in App.tsx with no `:id` segment), so an undefined id flips us into
+  // create mode. The same component handles both surfaces because the form
+  // layout, field editors, and back-link logic are identical — only the
+  // commit path differs (local draft + Save vs. optimistic per-field save).
+  const { id } = useParams<{ id?: string }>();
+  const isCreateMode = !id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const {
     leases, properties, customers, isLoading,
-    updateLease, deleteLease,
+    updateLease, addLease, deleteLease,
   } = useData();
+
+  // ?propertyId= locks the create form to a single property. Used when the
+  // user lands here from a placeholder row on a Property's Leases tab —
+  // re-picking the property would be confusing and risky in that flow.
+  // Read once at mount: the user can't change query strings without a
+  // re-render that would re-run the effect chain anyway.
+  const requestedPropertyId = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("propertyId") ?? "";
+  }, []);
 
   // Pending property re-attachment requires explicit confirm. We hold the
   // candidate id here while the AlertDialog is open and clear it on close.
+  // (Edit-mode only: in create mode there's no committed lease to "move",
+  // so property changes apply directly to the draft.)
   const [pendingPropertyId, setPendingPropertyId] = useState<string | null>(null);
 
-  const lease = useMemo(() => leases.find((l) => l.id === id), [leases, id]);
+  // Local draft used for create mode. Lazy-initialized once with the
+  // ?propertyId= query value so a placeholder click pre-fills the form.
+  const [draft, setDraft] = useState<Lease>(() => makeCreateDraft(requestedPropertyId));
+
+  // Resolve the locked property only if `?propertyId=` actually refers to a
+  // known property. If the operator hand-edits the URL with a bogus id we
+  // want to *fall back* to the picker so they can't save an orphaned lease
+  // bound to a non-existent property. While the data store is still loading
+  // we trust the requested id (avoids a flicker between "locked" and
+  // "unlocked" on first render); the worst case there is the picker
+  // appearing one render later, which is the same UX as the unlocked path.
+  const lockedPropertyId = useMemo(() => {
+    if (!requestedPropertyId) return "";
+    if (isLoading) return requestedPropertyId;
+    return properties.some((p) => p.id === requestedPropertyId)
+      ? requestedPropertyId
+      : "";
+  }, [requestedPropertyId, isLoading, properties]);
+
+  const realLease = useMemo(
+    () => (isCreateMode ? undefined : leases.find((l) => l.id === id)),
+    [isCreateMode, leases, id],
+  );
+
+  // `lease` is the working object every renderer below reads from. In edit
+  // mode it points at the persisted lease; in create mode it's the local
+  // draft. Both shapes are the same `Lease` type so the form code is
+  // identical.
+  const lease = isCreateMode ? draft : realLease;
+
   const property = useMemo(
     () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),
     [lease, properties],
@@ -292,6 +376,17 @@ export default function LeaseDetail() {
   const rentInPropertyFrequency =
     Math.round(monthlyRent * frequencyFactor * 100) / 100;
 
+  // Field-update helper. ONE branch between create and edit lives here so
+  // every field editor below stays mode-agnostic: just call
+  // `applyUpdate({ field: value })` and the right thing happens.
+  const applyUpdate = (updates: Partial<Lease>) => {
+    if (isCreateMode) {
+      setDraft((d) => ({ ...d, ...updates }));
+    } else if (realLease) {
+      updateLease(realLease.id, updates);
+    }
+  };
+
   // Reset the pending-confirm state if the user navigates between leases
   // while a dialog is open — guards against confirming a re-attach against
   // the wrong lease.
@@ -299,7 +394,7 @@ export default function LeaseDetail() {
     setPendingPropertyId(null);
   }, [id]);
 
-  if (isLoading && !lease) {
+  if (!isCreateMode && isLoading && !realLease) {
     return (
       <MainLayout>
         <div className="p-8 max-w-5xl mx-auto space-y-4">
@@ -311,7 +406,7 @@ export default function LeaseDetail() {
     );
   }
 
-  if (!lease) {
+  if (!isCreateMode && !realLease) {
     return (
       <MainLayout>
         <div className="p-8 max-w-5xl mx-auto">
@@ -336,10 +431,16 @@ export default function LeaseDetail() {
     );
   }
 
+  // After the early returns above, `lease` is guaranteed defined: edit mode
+  // returns early if `realLease` is missing; create mode always has the
+  // local draft. This narrowing keeps every JSX site below safe to read
+  // `lease.x` directly.
+  if (!lease) return null;
+
   const confirmReattach = () => {
-    if (!pendingPropertyId) return;
+    if (!pendingPropertyId || !realLease) return;
     const targetProperty = properties.find((p) => p.id === pendingPropertyId);
-    updateLease(lease.id, { propertyId: pendingPropertyId });
+    updateLease(realLease.id, { propertyId: pendingPropertyId });
     setPendingPropertyId(null);
     toast({
       title: "Lease moved",
@@ -347,6 +448,42 @@ export default function LeaseDetail() {
         ? `Now attached to ${targetProperty.name}.`
         : "Property re-attached.",
     });
+  };
+
+  // Save handler for create mode. Validates the minimum-viable lease (a
+  // property + start/end dates), generates the id locally so we can navigate
+  // straight to the edit page after the optimistic insert, and threads the
+  // `?from=` origin through so "Back" still returns to the surface the
+  // operator came from.
+  const saveCreate = () => {
+    if (!draft.propertyId) {
+      toast({
+        title: "Pick a property first",
+        description: "Choose which property this lease covers before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!draft.startDate || !draft.endDate) {
+      toast({
+        title: "Set start and end dates",
+        description: "Both dates are required to save the lease.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const newId = `l-${Date.now()}`;
+    addLease({ ...draft, id: newId });
+    toast({
+      title: "Lease created",
+      description: property ? `Saved a new lease for ${property.name}.` : undefined,
+    });
+    // `replace: true` so the browser Back button skips the create form
+    // (which would otherwise re-open with a fresh empty draft).
+    const fromQs = origin.path && origin.path !== "/leases"
+      ? `?from=${encodeURIComponent(origin.path)}`
+      : "";
+    navigate(`/leases/${newId}${fromQs}`, { replace: true });
   };
 
   return (
@@ -385,7 +522,7 @@ export default function LeaseDetail() {
             <span className="italic text-muted-foreground">Unattached</span>
           )}
           <span className="text-muted-foreground">/</span>
-          <span className="font-medium">Lease</span>
+          <span className="font-medium">{isCreateMode ? "New" : "Lease"}</span>
         </div>
 
         {/* Header */}
@@ -396,7 +533,7 @@ export default function LeaseDetail() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight" data-testid="lease-detail-title">
-                Lease — {property ? property.name : "Unattached"}
+                {isCreateMode ? "New lease" : "Lease"} — {property ? property.name : isCreateMode ? "Pick a property" : "Unattached"}
               </h1>
               <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
                 <Calendar className="h-3.5 w-3.5" />
@@ -435,34 +572,53 @@ export default function LeaseDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <RenewLeasePopover
-              currentEndDate={lease.endDate}
-              currentStatus={lease.status}
-              propertyName={property?.name}
-              onRenew={(newEndDate, newStatus) =>
-                updateLease(lease.id, { endDate: newEndDate, status: newStatus })
-              }
-              trigger={
-                <Button size="sm" variant="outline" className="gap-1" data-testid="button-renew-lease">
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  Renew
+            {isCreateMode ? (
+              // Create mode: a single "Save lease" CTA replaces Renew + Delete
+              // since neither makes sense before the lease exists. The button
+              // is wired to the same validation + addLease + navigate flow
+              // tested in lease-detail.test.tsx.
+              <Button
+                size="sm"
+                onClick={saveCreate}
+                data-testid="button-save-new-lease"
+              >
+                <Save className="h-3.5 w-3.5 mr-1.5" />
+                Save lease
+              </Button>
+            ) : (
+              <>
+                <RenewLeasePopover
+                  currentEndDate={lease.endDate}
+                  currentStatus={lease.status}
+                  propertyName={property?.name}
+                  onRenew={(newEndDate, newStatus) =>
+                    applyUpdate({ endDate: newEndDate, status: newStatus })
+                  }
+                  trigger={
+                    <Button size="sm" variant="outline" className="gap-1" data-testid="button-renew-lease">
+                      <CalendarPlus className="h-3.5 w-3.5" />
+                      Renew
+                    </Button>
+                  }
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive hover:text-destructive"
+                  data-testid="button-delete-lease-detail"
+                  onClick={() => {
+                    if (realLease) {
+                      deleteLease(realLease.id);
+                      toast({ title: "Lease deleted" });
+                      navigate("/leases");
+                    }
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete
                 </Button>
-              }
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              data-testid="button-delete-lease-detail"
-              onClick={() => {
-                deleteLease(lease.id);
-                toast({ title: "Lease deleted" });
-                navigate("/leases");
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete
-            </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -482,7 +638,7 @@ export default function LeaseDetail() {
                 <InlineEdit
                   value={lease.startDate}
                   type="date"
-                  onSave={(v) => updateLease(lease.id, { startDate: v })}
+                  onSave={(v) => applyUpdate( { startDate: v })}
                   testId="inline-lease-start"
                 />
               </div>
@@ -491,7 +647,7 @@ export default function LeaseDetail() {
                 <InlineEdit
                   value={lease.endDate}
                   type="date"
-                  onSave={(v) => updateLease(lease.id, { endDate: v })}
+                  onSave={(v) => applyUpdate( { endDate: v })}
                   testId="inline-lease-end"
                 />
               </div>
@@ -503,7 +659,7 @@ export default function LeaseDetail() {
                     prefix="$"
                     type="number"
                     onSave={(v) =>
-                      updateLease(lease.id, { monthlyRent: parseFloat(v) || 0 })
+                      applyUpdate( { monthlyRent: parseFloat(v) || 0 })
                     }
                     testId="inline-lease-rent"
                   />
@@ -535,7 +691,7 @@ export default function LeaseDetail() {
                   value={lease.securityDeposit}
                   prefix="$"
                   type="number"
-                  onSave={(v) => updateLease(lease.id, { securityDeposit: parseFloat(v) || 0 })}
+                  onSave={(v) => applyUpdate( { securityDeposit: parseFloat(v) || 0 })}
                   testId="inline-lease-deposit"
                 />
               </div>
@@ -544,7 +700,7 @@ export default function LeaseDetail() {
                 <Select
                   value={lease.status}
                   onValueChange={(v) =>
-                    updateLease(lease.id, { status: v as typeof lease.status })
+                    applyUpdate( { status: v as typeof lease.status })
                   }
                 >
                   <SelectTrigger className="h-7 text-sm w-36" data-testid="select-lease-status-detail">
@@ -562,7 +718,7 @@ export default function LeaseDetail() {
                 <NotesEditor
                   value={lease.notes}
                   className="text-sm min-h-[72px]"
-                  onSave={(v) => updateLease(lease.id, { notes: v })}
+                  onSave={(v) => applyUpdate( { notes: v })}
                 />
               </div>
             </CardContent>
@@ -578,52 +734,80 @@ export default function LeaseDetail() {
             </CardHeader>
             <CardContent className="space-y-3" data-testid="lease-property-card">
               <p className="text-xs text-muted-foreground">
-                Choose the property this lease covers. Re-attaching always asks
-                you to confirm — the rent / deposit on the lease come along
-                with it, but bed assignments stay on the original property.
+                {isCreateMode
+                  ? lockedPropertyId
+                    ? "This lease will be attached to the property below. Open the lease detail page later to re-attach if needed."
+                    : "Choose the property this lease covers."
+                  : "Choose the property this lease covers. Re-attaching always asks you to confirm — the rent / deposit on the lease come along with it, but bed assignments stay on the original property."}
               </p>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Attached property</Label>
-                <Select
-                  value={lease.propertyId}
-                  onValueChange={(v) => {
-                    if (v === lease.propertyId) return;
-                    setPendingPropertyId(v);
-                  }}
-                >
-                  <SelectTrigger
-                    className="text-sm"
-                    data-testid="select-lease-property"
+                {isCreateMode && lockedPropertyId ? (
+                  // Locked-mode display: render a plain non-interactive panel
+                  // so the operator can see (but not change) the bound
+                  // property. We deliberately do NOT use a disabled Select —
+                  // its trigger still grabs focus on tab and confuses
+                  // screen readers about what is editable.
+                  <div
+                    className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium"
+                    data-testid="lease-property-locked"
                   >
-                    <SelectValue placeholder="Choose a property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {properties.length === 0 ? (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                        No properties yet.
-                      </div>
-                    ) : (
-                      properties.map((p) => {
-                        const owner = customers.find((c) => c.id === p.customerId);
-                        // Show name + address + customer so operators can
-                        // disambiguate two units at the same complex (same
-                        // owner) — and two units with the same name across
-                        // different owners. The address is the most
-                        // discriminating field, so it sits between the two
-                        // human-readable names.
-                        const parts = [p.name];
-                        if (p.address) parts.push(p.address);
-                        if (owner) parts.push(owner.name);
-                        const label = parts.join(" — ");
-                        return (
-                          <SelectItem key={p.id} value={p.id}>
-                            {label}
-                          </SelectItem>
-                        );
-                      })
+                    {property ? property.name : "Unknown property"}
+                    {property?.address && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {property.address}
+                      </span>
                     )}
-                  </SelectContent>
-                </Select>
+                  </div>
+                ) : (
+                  <Select
+                    value={lease.propertyId}
+                    onValueChange={(v) => {
+                      if (v === lease.propertyId) return;
+                      // Create mode applies the change directly — there's no
+                      // committed lease to "move" yet, so the confirm dialog
+                      // would just be noise.
+                      if (isCreateMode) {
+                        applyUpdate({ propertyId: v });
+                      } else {
+                        setPendingPropertyId(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className="text-sm"
+                      data-testid="select-lease-property"
+                    >
+                      <SelectValue placeholder="Choose a property" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          No properties yet.
+                        </div>
+                      ) : (
+                        properties.map((p) => {
+                          const owner = customers.find((c) => c.id === p.customerId);
+                          // Show name + address + customer so operators can
+                          // disambiguate two units at the same complex (same
+                          // owner) — and two units with the same name across
+                          // different owners. The address is the most
+                          // discriminating field, so it sits between the two
+                          // human-readable names.
+                          const parts = [p.name];
+                          if (p.address) parts.push(p.address);
+                          if (owner) parts.push(owner.name);
+                          const label = parts.join(" — ");
+                          return (
+                            <SelectItem key={p.id} value={p.id}>
+                              {label}
+                            </SelectItem>
+                          );
+                        })
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {property && (
@@ -667,7 +851,7 @@ export default function LeaseDetail() {
               <NotesEditor
                 value={lease.clauses ?? ""}
                 className="text-sm min-h-[120px] font-mono"
-                onSave={(v) => updateLease(lease.id, { clauses: v })}
+                onSave={(v) => applyUpdate( { clauses: v })}
               />
             </CardContent>
           </Card>
@@ -683,7 +867,7 @@ export default function LeaseDetail() {
             <CardContent>
               <IncludedItemsEditor
                 value={lease.includedItems ?? []}
-                onChange={(next) => updateLease(lease.id, { includedItems: next })}
+                onChange={(next) => applyUpdate( { includedItems: next })}
               />
             </CardContent>
           </Card>
@@ -712,7 +896,7 @@ export default function LeaseDetail() {
                   onCheckedChange={(checked) => {
                     // Clearing the buyout cost when the toggle goes off keeps
                     // the data tidy (no orphan cost on a non-buyout lease).
-                    updateLease(lease.id, {
+                    applyUpdate( {
                       buyoutAvailable: checked,
                       buyoutCost: checked ? lease.buyoutCost ?? null : null,
                     });
@@ -733,7 +917,7 @@ export default function LeaseDetail() {
                     onSave={(v) => {
                       const trimmed = v.trim();
                       const next = trimmed === "" ? null : parseFloat(trimmed);
-                      updateLease(lease.id, {
+                      applyUpdate( {
                         buyoutCost: Number.isFinite(next as number) ? (next as number) : null,
                       });
                     }}

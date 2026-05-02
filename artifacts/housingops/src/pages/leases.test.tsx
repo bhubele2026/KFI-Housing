@@ -13,11 +13,13 @@ import { memoryLocation } from "wouter/memory-location";
 //      (never persisted), so a regression that filtered them out would silently
 //      hide the workflow this whole feature exists to enable.
 //
-//   2. The placeholder's "Create lease" CTA opens the AddLeaseDialog with the
-//      property preselected and locked. We capture the rendered AddLeaseDialog's
-//      props with a spy so we can assert on the controlled-open + locked
-//      propertyId combination directly, even though the real Radix Dialog
-//      portal can't render in jsdom.
+//   2. Clicking a placeholder row navigates to `/leases/new?propertyId=…` so
+//      the lease detail page can host the create flow with the property
+//      pre-selected and locked. The previous flow opened an inline dialog with
+//      a controlled `propertyId`; that wiring is gone. The navigation contract
+//      now is the single thing the rest of the app depends on for placeholder
+//      "Create lease" — if it regresses, the operator's primary path to
+//      onboard a lease for an empty property silently breaks.
 
 vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -401,23 +403,23 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     expect(last).toBe(`/leases/l1?from=${encodeURIComponent("/leases")}`);
   });
 
-  it("clicking inside an inline editor on a row does NOT trigger row navigation (preserves inline edit)", async () => {
-    // The row-level click handler bails out when the click target lives
-    // inside an interactive element. Without that guard, clicking the
-    // monthly-rent input to edit it would navigate the user away —
-    // catastrophic for inline editing.
-    const memory = await renderPageWithMemory();
+  it("renders no inline editors on lease rows (the list is read-only; editing happens on the lease detail page)", async () => {
+    // The whole list is now navigation-only — no inline rent / status / notes
+    // editors. A regression that re-introduced an editor would also re-introduce
+    // the row-vs-editor click conflict that motivated this redesign, so the
+    // simplest guard is: assert the editor testids do not exist at all.
+    await renderPage();
 
-    const initialHistoryLen = memory.history.length;
-    const inlineRent = container.querySelector(
-      '[data-testid="inline-lease-rent-l1"]',
-    ) as HTMLElement;
-    expect(inlineRent).not.toBeNull();
-
-    await act(async () => inlineRent.click());
-
-    // No new history entry — we stayed on /leases.
-    expect(memory.history.length).toBe(initialHistoryLen);
+    expect(
+      container.querySelector('[data-testid="inline-lease-rent-l1"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inline-lease-notes-l1"]'),
+    ).toBeNull();
+    // No status select on the row either — status is read-only badge only.
+    expect(
+      container.querySelector('[data-testid="select-lease-status-l1"]'),
+    ).toBeNull();
   });
 
   it("renders one placeholder row for every property that has no lease, alongside the real lease rows", async () => {
@@ -467,42 +469,27 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     ).toBeNull();
   });
 
-  it("clicking the placeholder's Create lease CTA opens AddLeaseDialog with the property locked", async () => {
-    // Initially the controlled AddLeaseDialog is not rendered (only the
-    // page-header and PDF-fallback instances are mounted, neither of which
-    // pre-binds a propertyId).
-    await renderPage();
+  it("clicking a placeholder row navigates to /leases/new with the property locked via ?propertyId and the origin threaded through ?from", async () => {
+    // The placeholder row IS the CTA now — the whole row is clickable and
+    // takes the operator to the create-mode lease detail page. The query
+    // string carries (a) the locked property id and (b) the origin so the
+    // back link returns here. Both pieces are required: without propertyId
+    // the create form would render with no property pre-selected; without
+    // `from` the back button would default to /leases even when the user
+    // came from a property's leases tab.
+    const memory = await renderPageWithMemory();
 
-    const beforeBindings = addLeaseDialogPropsLog.filter(
-      (p) => p.propertyId !== undefined && p.open === true,
+    const placeholderRow = container.querySelector(
+      '[data-testid="row-lease-placeholder-p2"]',
+    ) as HTMLTableRowElement | null;
+    expect(placeholderRow).not.toBeNull();
+
+    await act(async () => placeholderRow!.click());
+
+    const last = memory.history[memory.history.length - 1];
+    expect(last).toBe(
+      `/leases/new?propertyId=p2&from=${encodeURIComponent("/leases")}`,
     );
-    expect(beforeBindings).toHaveLength(0);
-
-    // Click "Create lease" on the p2 placeholder row.
-    const cta = container.querySelector(
-      '[data-testid="button-create-lease-placeholder-p2"]',
-    ) as HTMLButtonElement | null;
-    expect(cta).not.toBeNull();
-    await act(async () => {
-      cta!.click();
-    });
-
-    // The placeholder click should mount a new AddLeaseDialog instance with
-    // open=true AND propertyId pinned to p2. That's the "locked property"
-    // contract — the dialog won't show a property picker for this case.
-    const lockedRender = addLeaseDialogPropsLog.find(
-      (p) => p.propertyId === "p2" && p.open === true,
-    );
-    expect(lockedRender).toBeDefined();
-
-    // Sanity: no other property got accidentally bound at the same time.
-    const otherLocked = addLeaseDialogPropsLog.find(
-      (p) =>
-        p.open === true &&
-        typeof p.propertyId === "string" &&
-        p.propertyId !== "p2",
-    );
-    expect(otherLocked).toBeUndefined();
   });
 
   // ── Terms column: at-a-glance buyout/clauses signals (task #122) ─────

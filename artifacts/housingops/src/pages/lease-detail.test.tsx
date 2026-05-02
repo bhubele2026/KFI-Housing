@@ -229,6 +229,7 @@ vi.mock("@/components/ui/select", () => {
 // ── Mock data store ─────────────────────────────────────────────────────
 const updateLeaseMock = vi.fn();
 const deleteLeaseMock = vi.fn();
+const addLeaseMock = vi.fn();
 const dataState: {
   leases: Array<Record<string, unknown>>;
   properties: Array<Record<string, unknown>>;
@@ -250,6 +251,7 @@ vi.mock("@/context/data-store", () => ({
     utilities: [],
     isLoading: false,
     updateLease: updateLeaseMock,
+    addLease: addLeaseMock,
     deleteLease: deleteLeaseMock,
   }),
 }));
@@ -303,16 +305,24 @@ function buildProperty(over: Record<string, unknown> = {}): Record<string, unkno
 }
 
 function mountAt(path: string) {
-  const { hook } = memoryLocation({ path });
+  // memoryLocation parses out the search string for us so `?propertyId=…&from=…`
+  // ends up on window.location.search via the wouter Router's `searchHook`
+  // wiring. We return the memory object so create-mode tests can assert on
+  // post-save navigation.
+  const memory = memoryLocation({ path, record: true });
   act(() => {
     root.render(
-      <Router hook={hook}>
+      <Router hook={memory.hook}>
         <Switch>
+          {/* Order matters: the literal `/leases/new` must be matched before
+              the `:id` route, otherwise wouter would resolve "new" as an id. */}
+          <Route path="/leases/new" component={LeaseDetail} />
           <Route path="/leases/:id" component={LeaseDetail} />
         </Switch>
       </Router>,
     );
   });
+  return memory;
 }
 
 beforeEach(() => {
@@ -321,6 +331,7 @@ beforeEach(() => {
   root = createRoot(container);
   updateLeaseMock.mockReset();
   deleteLeaseMock.mockReset();
+  addLeaseMock.mockReset();
   toastMock.mockReset();
   dataState.leases = [];
   dataState.properties = [];
@@ -594,5 +605,192 @@ describe("LeaseDetail — not found", () => {
     mountAt("/leases/missing-id");
 
     expect(container.querySelector('[data-testid="button-back-to-leases"]')).not.toBeNull();
+  });
+});
+
+describe("LeaseDetail — create mode (/leases/new)", () => {
+  // The /leases/new route renders the SAME component as the edit route, but
+  // backed by a local draft instead of a persisted lease. These tests pin
+  // down the three things that have to hold for the placeholder-row workflow
+  // to keep working end-to-end:
+  //
+  //   1. The form mounts cleanly with no real lease in the store.
+  //   2. When `?propertyId=…` is present, the property is locked — the
+  //      operator can't accidentally pick a different property and
+  //      orphan the binding the placeholder row was carrying.
+  //   3. Save validates, calls addLease with the draft (id assigned
+  //      locally so we can navigate immediately), and replaces the
+  //      browser history entry so Back skips the create form.
+  beforeEach(() => {
+    // Reset window.location.search between tests — the create-mode tests
+    // rely on the locked-property useMemo reading `?propertyId=` directly,
+    // and a leftover from the back-link tests above would poison the next
+    // mount.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "" },
+    });
+  });
+
+  it("renders the New-lease form with the property locked when ?propertyId is present", () => {
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House", address: "123 Main St" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=prop-1" },
+    });
+
+    mountAt("/leases/new?propertyId=prop-1");
+
+    // Title flips to "New lease — <property name>" — operators read the
+    // header to know they're not on an existing record.
+    expect(
+      container.querySelector('[data-testid="lease-detail-title"]')?.textContent,
+    ).toContain("New lease");
+    expect(
+      container.querySelector('[data-testid="lease-detail-title"]')?.textContent,
+    ).toContain("Sunset House");
+
+    // The locked-property panel is rendered INSTEAD of the property select
+    // — operators cannot re-pick the property from this surface.
+    expect(
+      container.querySelector('[data-testid="lease-property-locked"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="select-lease-property"]'),
+    ).toBeNull();
+
+    // The save button is the create-mode CTA. Renew / Delete must NOT
+    // appear (neither makes sense before the lease exists).
+    expect(
+      container.querySelector('[data-testid="button-save-new-lease"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="button-renew-lease"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="button-delete-lease-detail"]'),
+    ).toBeNull();
+  });
+
+  it("clicking Save calls addLease with the locked property + draft, and replaces history with /leases/<newId>", () => {
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=prop-1" },
+    });
+
+    const memory = mountAt("/leases/new?propertyId=prop-1");
+
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement | null;
+    expect(save).not.toBeNull();
+
+    act(() => save!.click());
+
+    // addLease called once with the draft — id is generated locally so the
+    // navigate target below can land on a stable url.
+    expect(addLeaseMock).toHaveBeenCalledTimes(1);
+    const [createdLease] = addLeaseMock.mock.calls[0] as [Record<string, unknown>];
+    expect(createdLease.propertyId).toBe("prop-1");
+    expect(createdLease.status).toBe("Upcoming");
+    expect(typeof createdLease.id).toBe("string");
+    expect((createdLease.id as string).length).toBeGreaterThan(0);
+
+    // Last history entry is `/leases/<newId>` (no `?from=` because the
+    // origin defaulted to /leases). `replace: true` is exercised by the
+    // saveCreate handler — we don't double-assert wouter internals, just
+    // that the post-save URL is correct.
+    const last = memory.history[memory.history.length - 1];
+    expect(last).toMatch(/^\/leases\/[^?]+$/);
+    expect(last).toContain(createdLease.id as string);
+  });
+
+  it("threads the `from` origin into the post-save URL when the create page was opened from a property", () => {
+    // When the placeholder row on a property's leases tab navigates here,
+    // it carries `&from=/properties/prop-1?tab=leases` so the lease detail
+    // page (post-save) still knows where to send the operator back. The
+    // saveCreate handler must preserve that contract.
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    const fromValue = "/properties/prop-1?tab=leases";
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...window.location,
+        search: `?propertyId=prop-1&from=${encodeURIComponent(fromValue)}`,
+      },
+    });
+
+    const memory = mountAt(
+      `/leases/new?propertyId=prop-1&from=${encodeURIComponent(fromValue)}`,
+    );
+
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    act(() => save.click());
+
+    const last = memory.history[memory.history.length - 1] as string;
+    expect(last).toContain(`from=${encodeURIComponent(fromValue)}`);
+  });
+
+  it("falls back to the picker (and does NOT lock) when `?propertyId=` references a property that doesn't exist", () => {
+    // Defensive guard against hand-edited URLs and stale links: if the
+    // requested property has been deleted (or never existed), we must not
+    // render the locked panel — that would let the operator save a lease
+    // bound to a phantom property id, orphaning it from the rest of the
+    // app. Instead the page falls back to the regular Select so the
+    // operator picks a real property before Save can succeed.
+    dataState.properties = [
+      buildProperty({ id: "prop-1", name: "Sunset House" }),
+    ];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, search: "?propertyId=ghost-id" },
+    });
+
+    mountAt("/leases/new?propertyId=ghost-id");
+
+    expect(
+      container.querySelector('[data-testid="lease-property-locked"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="select-lease-property"]'),
+    ).not.toBeNull();
+  });
+
+  it("validates the property is set before saving — toast + no addLease when missing", () => {
+    // Without ?propertyId, the draft starts with propertyId="". Hitting Save
+    // should toast a guidance message instead of inserting a half-formed
+    // lease. (Operators can still pick a property from the in-page select
+    // since the locked panel only renders when ?propertyId is set.)
+    dataState.properties = [];
+    dataState.customers = [];
+
+    mountAt("/leases/new");
+
+    const save = container.querySelector(
+      '[data-testid="button-save-new-lease"]',
+    ) as HTMLButtonElement;
+    act(() => save.click());
+
+    expect(addLeaseMock).not.toHaveBeenCalled();
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "destructive" }),
+    );
   });
 });

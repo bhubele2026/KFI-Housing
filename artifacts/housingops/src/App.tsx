@@ -33,6 +33,11 @@ function Router() {
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
+      {/* Create-mode route is registered BEFORE the parameterized one so
+          wouter's <Switch> matches it first; otherwise `/leases/new` would
+          land on the edit page with id="new" and try to look up a lease
+          that doesn't exist yet. */}
+      <Route path="/leases/new" component={LeaseDetail} />
       <Route path="/leases/:id" component={LeaseDetail} />
       <Route path="/beds" component={Beds} />
       <Route path="/occupants" component={Occupants} />

@@ -430,11 +430,6 @@ export default function PropertyDetail() {
     const tab = new URLSearchParams(window.location.search).get("tab");
     return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
   });
-  // Controlled-open state for the AddLeaseDialog opened by the Leases
-  // tab's placeholder row CTA. Kept here so the dialog instance can live
-  // outside the LeasesTable component tree (which is also re-used by the
-  // global Leases page).
-  const [leasesTabCreateOpen, setLeasesTabCreateOpen] = useState(false);
   const [highlightedBedId, setHighlightedBedId] = useState<string | null>(null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -1087,31 +1082,24 @@ export default function PropertyDetail() {
                   properties={properties}
                   showProperty={false}
                   showCustomer={false}
-                  onUpdate={updateLease}
                   onDelete={deleteLease}
                   emptyMessage="No leases found."
                   // When the property has zero leases, render a single
-                  // placeholder row matching the global Leases page so the
-                  // operator gets the same "Create lease" CTA in either view.
+                  // placeholder row matching the global Leases page. Clicking
+                  // it navigates to the lease-detail create page with the
+                  // property pre-selected and locked.
                   placeholderProperties={propLeases.length === 0 ? [property] : []}
-                  onCreateLeaseForProperty={() => setLeasesTabCreateOpen(true)}
                   // Threaded so opening a lease here and clicking "Back"
                   // returns the user to *this* property's Leases tab,
                   // not the global Leases page. The `?tab=leases` is
                   // read by PropertyDetail's activeTab initializer so
-                  // the round trip lands on the same tab.
+                  // the round trip lands on the same tab. Same value is
+                  // used by the placeholder row to forward `&from=` to
+                  // the create page.
                   originPath={`/properties/${id}?tab=leases`}
                 />
               </CardContent>
             </Card>
-            {/* Controlled-open AddLeaseDialog used by the placeholder row's
-                "Create lease" CTA. The property is locked to this page's id. */}
-            <AddLeaseDialog
-              propertyId={id}
-              open={leasesTabCreateOpen}
-              onOpenChange={setLeasesTabCreateOpen}
-              onAdd={addLease}
-            />
           </TabsContent>
 
           {/* ── BEDS TAB (grouped by room, merged with occupants) ── */}

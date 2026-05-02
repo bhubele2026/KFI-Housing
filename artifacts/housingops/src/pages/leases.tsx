@@ -90,12 +90,6 @@ export default function Leases() {
   const showPlaceholders = statusFilter === "All" && buyoutFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
-  // The placeholder row's "Create lease" CTA opens this controlled dialog
-  // with the property locked. We track only the propertyId — the open state
-  // is derived from `placeholderCreateForId !== null` so closing the dialog
-  // also clears the binding.
-  const [placeholderCreateForId, setPlaceholderCreateForId] = useState<string | null>(null);
-
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
   const renewalAlerts = leases
     .filter((l) => l.status === "Active" || l.status === "Upcoming")
@@ -358,42 +352,16 @@ export default function Leases() {
               customers={customers}
               showProperty
               onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
-              onUpdate={updateLease}
               onDelete={deleteLease}
               placeholderProperties={visiblePlaceholderProperties}
-              onCreateLeaseForProperty={(propertyId) =>
-                setPlaceholderCreateForId(propertyId)
-              }
               // Threaded so the lease detail back-link returns to /leases
               // (with our customer/status filters preserved by the URL).
+              // Placeholder rows use the same value to thread `&from=`
+              // through to the create page (`/leases/new?propertyId=…`).
               originPath="/leases"
             />
           </CardContent>
         </Card>
-        {/* Controlled-open AddLeaseDialog used by the placeholder row's
-            "Create lease" CTA. The property is locked so the user only fills
-            in dates + amounts. Bound to a single propertyId at a time. */}
-        {placeholderCreateForId && (
-          <AddLeaseDialog
-            propertyId={placeholderCreateForId}
-            properties={properties}
-            customers={customers}
-            open
-            onOpenChange={(next) => {
-              if (!next) setPlaceholderCreateForId(null);
-            }}
-            onAdd={(lease) => {
-              addLease(lease);
-              const property = propertyById.get(lease.propertyId);
-              toast({
-                title: "Lease added",
-                description: property
-                  ? `Added a new lease for ${property.name}.`
-                  : "New lease created.",
-              });
-            }}
-          />
-        )}
       </div>
     </MainLayout>
   );

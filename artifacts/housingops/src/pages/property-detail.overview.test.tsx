@@ -39,30 +39,15 @@ vi.mock("@/components/layout/main-layout", () => ({
 }));
 
 // framer-motion's motion.<tag> becomes a plain element of the same tag,
-// stripping animation-only props so DOM semantics are preserved.
-vi.mock("framer-motion", () => {
-  const motionPropKeys = new Set([
-    "initial", "animate", "exit", "transition",
-    "whileHover", "whileTap", "whileFocus", "whileDrag", "whileInView",
-    "variants", "layout", "layoutId", "drag", "dragConstraints",
-    "onAnimationStart", "onAnimationComplete", "onUpdate", "viewport",
-  ]);
-  const motion = new Proxy({} as Record<string, unknown>, {
-    get: (_t, tag: string) => {
-      const Component = ({ children, ...rest }: Record<string, unknown> & { children?: ReactNode }) => {
-        const dom: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(rest)) {
-          if (!motionPropKeys.has(k)) dom[k] = v;
-        }
-        return React.createElement(tag, dom, children);
-      };
-      return Component;
-    },
-  });
-  return {
-    motion,
-    AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  };
+// stripping animation-only props so DOM semantics are preserved. The
+// shared mock caches one component per tag (see
+// src/test-utils/framer-motion-mock.tsx) — without that cache, React
+// would unmount/remount the entire <motion.div> subtree on every parent
+// re-render, blowing away the Tabs mock's useState and silently flipping
+// the page back to the default "overview" tab mid-test.
+vi.mock("framer-motion", async () => {
+  const { createMotionMock } = await import("@/test-utils/framer-motion-mock");
+  return createMotionMock();
 });
 
 vi.mock("@/hooks/use-toast", () => ({

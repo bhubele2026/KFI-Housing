@@ -27,42 +27,16 @@ vi.mock("@/components/layout/main-layout", () => ({
 }));
 
 // framer-motion's `motion.<tag>` becomes a plain element of the same tag,
-// stripping animation-only props. This keeps DOM semantics intact.
-//
-// IMPORTANT: components are cached per tag. A naive Proxy that synthesizes
-// a fresh function component on every `motion.div` access returns a NEW
-// component type each render — which makes React unmount the entire
-// subtree under <motion.div> on every re-render of the parent (e.g. when
-// the Beds-tab sort dropdown calls setBedsSort). That, in turn, blows
-// away the Tabs mock's internal useState and silently flips the page
-// back to the default "overview" tab mid-test.
-vi.mock("framer-motion", () => {
-  const motionPropKeys = new Set([
-    "initial", "animate", "exit", "transition",
-    "whileHover", "whileTap", "whileFocus", "whileDrag", "whileInView",
-    "variants", "layout", "layoutId", "drag", "dragConstraints",
-    "onAnimationStart", "onAnimationComplete", "onUpdate", "viewport",
-  ]);
-  const cache = new Map<string, React.ComponentType<Record<string, unknown> & { children?: ReactNode }>>();
-  const motion = new Proxy({} as Record<string, unknown>, {
-    get: (_t, tag: string) => {
-      const cached = cache.get(tag);
-      if (cached) return cached;
-      const Component = ({ children, ...rest }: Record<string, unknown> & { children?: ReactNode }) => {
-        const dom: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(rest)) {
-          if (!motionPropKeys.has(k)) dom[k] = v;
-        }
-        return React.createElement(tag, dom, children);
-      };
-      cache.set(tag, Component);
-      return Component;
-    },
-  });
-  return {
-    motion,
-    AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  };
+// stripping animation-only props. This keeps DOM semantics intact. The
+// shared mock caches one component per tag (see
+// src/test-utils/framer-motion-mock.tsx) — without that cache, React
+// would unmount/remount the entire <motion.div> subtree on every parent
+// re-render (e.g. when the Beds-tab sort dropdown calls setBedsSort),
+// blowing away the Tabs mock's internal useState and silently flipping
+// the page back to the default "overview" tab mid-test.
+vi.mock("framer-motion", async () => {
+  const { createMotionMock } = await import("@/test-utils/framer-motion-mock");
+  return createMotionMock();
 });
 
 vi.mock("@/hooks/use-toast", () => ({

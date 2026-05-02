@@ -17,30 +17,13 @@ vi.mock("@/components/layout/main-layout", () => ({
 // framer-motion's `motion.<tag>` is replaced with a plain HTML element of
 // the same tag, with the animation-only props stripped. This preserves
 // table semantics (motion.tr → tr) so querying `tbody tr` still works.
-vi.mock("framer-motion", () => {
-  const motionPropKeys = new Set([
-    "initial", "animate", "exit", "transition",
-    "whileHover", "whileTap", "whileFocus", "whileDrag", "whileInView",
-    "variants", "layout", "layoutId", "drag", "dragConstraints",
-    "onAnimationStart", "onAnimationComplete", "onUpdate",
-    "viewport",
-  ]);
-  const motion = new Proxy({} as Record<string, unknown>, {
-    get: (_target, tag: string) => {
-      const Component = ({ children, ...rest }: Record<string, unknown> & { children?: ReactNode }) => {
-        const domProps: Record<string, unknown> = {};
-        for (const [k, v] of Object.entries(rest)) {
-          if (!motionPropKeys.has(k)) domProps[k] = v;
-        }
-        return React.createElement(tag, domProps, children);
-      };
-      return Component;
-    },
-  });
-  return {
-    motion,
-    AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  };
+// The shared mock caches one component per tag (see
+// src/test-utils/framer-motion-mock.tsx) — without that cache, React
+// would unmount/remount the entire <motion.tr> subtree on every parent
+// re-render and silently destroy any child useState.
+vi.mock("framer-motion", async () => {
+  const { createMotionMock } = await import("@/test-utils/framer-motion-mock");
+  return createMotionMock();
 });
 
 // Customers page calls `useToast()` even on read-only renders.

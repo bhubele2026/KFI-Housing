@@ -863,12 +863,13 @@ export default function PropertyDetail() {
                                     <TableHead>Billing</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Phone</TableHead>
+                                    <TableHead className="w-36">Room</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
-                                    <TableRow><TableCell colSpan={11} className="h-16 text-center text-muted-foreground text-sm">No beds in this room yet. Click "Add Bed" to add one.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={12} className="h-16 text-center text-muted-foreground text-sm">No beds in this room yet. Click "Add Bed" to add one.</TableCell></TableRow>
                                   ) : roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
                                     const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
                                     const isOccupied = bed.status === "Occupied";
@@ -928,6 +929,30 @@ export default function PropertyDetail() {
                                             <TableCell />
                                           </>
                                         )}
+                                        <TableCell>
+                                          <Select
+                                            value={bed.roomId}
+                                            onValueChange={(newRoomId) => {
+                                              if (newRoomId !== bed.roomId) {
+                                                updateBed(bed.id, { roomId: newRoomId });
+                                              }
+                                            }}
+                                            disabled={propRooms.length < 2}
+                                          >
+                                            <SelectTrigger
+                                              className="h-7 text-xs w-32"
+                                              data-testid={`bed-${bed.id}-move-room`}
+                                              title={propRooms.length < 2 ? "Add another room to move beds" : "Move bed to another room"}
+                                            >
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {propRooms.map(r => (
+                                                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </TableCell>
                                         <TableCell>
                                           <Button
                                             size="icon"

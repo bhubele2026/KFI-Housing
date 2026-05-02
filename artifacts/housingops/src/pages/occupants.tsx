@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, UserPlus } from "lucide-react";
+import { Search, UserPlus, Download } from "lucide-react";
 import { SkeletonRows } from "@/components/skeleton-rows";
+import { useToast } from "@/hooks/use-toast";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Occupants() {
   const { occupants, properties, beds, isLoading } = useData();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -23,6 +26,32 @@ export default function Occupants() {
     return matchesSearch && matchesProperty && matchesStatus;
   });
 
+  const handleDownloadCsv = () => {
+    const csv = toCsv(filteredOccupants, [
+      { header: "Name",              value: (o) => o.name },
+      { header: "Email",             value: (o) => o.email },
+      { header: "Phone",             value: (o) => o.phone },
+      { header: "Company",           value: (o) => o.company },
+      { header: "Employee ID",       value: (o) => o.employeeId },
+      { header: "Property",          value: (o) => (o.propertyId ? properties.find((p) => p.id === o.propertyId)?.name ?? "" : "") },
+      { header: "Bed",               value: (o) => {
+          if (!o.bedId) return "";
+          const bed = beds.find((b) => b.id === o.bedId);
+          return bed ? `Bed ${bed.bedNumber}` : "";
+        } },
+      { header: "Move In",           value: (o) => o.moveInDate },
+      { header: "Move Out",          value: (o) => o.moveOutDate ?? "" },
+      { header: "Charge per Bed",    value: (o) => o.chargePerBed },
+      { header: "Billing Frequency", value: (o) => o.billingFrequency },
+      { header: "Status",            value: (o) => o.status },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-occupants"), csv);
+    toast({
+      title: "Occupants exported",
+      description: `Downloaded ${filteredOccupants.length} ${filteredOccupants.length === 1 ? "occupant" : "occupants"} as CSV.`,
+    });
+  };
+
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -31,10 +60,21 @@ export default function Occupants() {
             <h1 className="text-3xl font-bold tracking-tight">Occupants</h1>
             <p className="text-muted-foreground mt-1">Manage employee housing assignments</p>
           </div>
-          <Button>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Occupant
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={isLoading || filteredOccupants.length === 0}
+              data-testid="button-download-occupants-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+            <Button>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Occupant
+            </Button>
+          </div>
         </div>
 
         <Card>

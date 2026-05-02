@@ -8,13 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X } from "lucide-react";
+import { Plus, AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
+import { useToast } from "@/hooks/use-toast";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Leases() {
   const [, navigate] = useLocation();
   const searchString = useSearch();
+  const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
   const { leases, properties, customers, updateLease } = useData();
@@ -75,6 +78,28 @@ export default function Leases() {
   const activeCustomerName =
     customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
 
+  const handleDownloadCsv = () => {
+    const csv = toCsv(filteredLeases, [
+      { header: "Property",         value: (l) => propertyById.get(l.propertyId)?.name ?? "Unknown" },
+      { header: "Customer",         value: (l) => {
+          const property = propertyById.get(l.propertyId);
+          return property ? customerById.get(property.customerId) ?? "" : "";
+        } },
+      { header: "Start Date",       value: (l) => l.startDate },
+      { header: "End Date",         value: (l) => l.endDate },
+      { header: "Days Left",        value: (l) => getRenewalInfo(l.endDate).days },
+      { header: "Monthly Rent",     value: (l) => l.monthlyRent },
+      { header: "Security Deposit", value: (l) => l.securityDeposit },
+      { header: "Status",           value: (l) => l.status },
+      { header: "Notes",            value: (l) => l.notes },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-leases"), csv);
+    toast({
+      title: "Leases exported",
+      description: `Downloaded ${filteredLeases.length} ${filteredLeases.length === 1 ? "lease" : "leases"} as CSV.`,
+    });
+  };
+
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
@@ -83,10 +108,21 @@ export default function Leases() {
             <h1 className="text-3xl font-bold tracking-tight">Leases</h1>
             <p className="text-muted-foreground mt-1">Manage master lease agreements</p>
           </div>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Lease
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={filteredLeases.length === 0}
+              data-testid="button-download-leases-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Lease
+            </Button>
+          </div>
         </div>
 
         {activeCustomerName && (

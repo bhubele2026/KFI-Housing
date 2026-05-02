@@ -14,11 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X } from "lucide-react";
+import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download } from "lucide-react";
 import { motion } from "framer-motion";
 import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating";
@@ -288,6 +289,44 @@ export default function Properties() {
   const activeCustomerName =
     customerFilter === "All" ? null : customerById.get(customerFilter)?.name ?? null;
 
+  const handleDownloadCsv = () => {
+    const rows = filtered.map((property) => {
+      const propBeds = beds.filter((b) => b.propertyId === property.id);
+      const occupied = propBeds.filter((b) => b.status === "Occupied").length;
+      const vacant = propBeds.length - occupied;
+      const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
+      const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
+      const overallRating = computeOverallRating(property.ratings);
+      const customer = customerById.get(property.customerId);
+      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating };
+    });
+    const csv = toCsv(rows, [
+      { header: "Property",        value: (r) => r.property.name },
+      { header: "Customer",        value: (r) => r.customer?.name ?? "" },
+      { header: "Address",         value: (r) => r.property.address },
+      { header: "City",            value: (r) => r.property.city },
+      { header: "State",           value: (r) => r.property.state },
+      { header: "ZIP",             value: (r) => r.property.zip },
+      { header: "Total Beds",      value: (r) => r.propBeds.length },
+      { header: "Occupied",        value: (r) => r.occupied },
+      { header: "Vacant",          value: (r) => r.vacant },
+      { header: "Charge per Bed",  value: (r) => r.property.chargePerBed },
+      { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
+      { header: "Status",          value: (r) => r.property.status },
+      { header: "Overall Rating",  value: (r) => (r.overallRating === null ? "" : r.overallRating) },
+      { header: "Lease End Date",  value: (r) => r.activeLease?.endDate ?? "" },
+      { header: "Days to Renewal", value: (r) => (r.renewal ? r.renewal.days : "") },
+      { header: "Landlord",        value: (r) => r.property.landlordName },
+      { header: "Landlord Email",  value: (r) => r.property.landlordEmail },
+      { header: "Landlord Phone",  value: (r) => r.property.landlordPhone },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-properties"), csv);
+    toast({
+      title: "Properties exported",
+      description: `Downloaded ${filtered.length} ${filtered.length === 1 ? "property" : "properties"} as CSV.`,
+    });
+  };
+
   return (
     <MainLayout>
       <motion.div
@@ -301,10 +340,21 @@ export default function Properties() {
             <h1 className="text-3xl font-bold tracking-tight">Properties</h1>
             <p className="text-muted-foreground mt-1">Select a property to manage it</p>
           </div>
-          <Button onClick={openAdd} data-testid="button-add-property">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Property
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={isLoading || filtered.length === 0}
+              data-testid="button-download-properties-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+            <Button onClick={openAdd} data-testid="button-add-property">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Property
+            </Button>
+          </div>
         </div>
 
         {activeCustomerName && (

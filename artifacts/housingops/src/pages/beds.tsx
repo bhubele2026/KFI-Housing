@@ -2,16 +2,20 @@ import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
   const { beds, properties, occupants, customers, isLoading } = useData();
+  const { toast } = useToast();
   const [customerFilter, setCustomerFilter] = useState("All");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -61,6 +65,25 @@ export default function Beds() {
   const activeCustomerName =
     customerFilter === "All" ? null : customers.find((c) => c.id === customerFilter)?.name ?? null;
 
+  const handleDownloadCsv = () => {
+    const csv = toCsv(filteredBeds, [
+      { header: "Property",  value: (b) => properties.find((p) => p.id === b.propertyId)?.name ?? "" },
+      { header: "Customer",  value: (b) => {
+          const property = properties.find((p) => p.id === b.propertyId);
+          return property ? customers.find((c) => c.id === property.customerId)?.name ?? "" : "";
+        } },
+      { header: "Bed Number", value: (b) => b.bedNumber },
+      { header: "Room",       value: (b) => b.room },
+      { header: "Occupant",   value: (b) => (b.occupantId ? occupants.find((o) => o.id === b.occupantId)?.name ?? "" : "") },
+      { header: "Status",     value: (b) => b.status },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-beds"), csv);
+    toast({
+      title: "Beds exported",
+      description: `Downloaded ${filteredBeds.length} ${filteredBeds.length === 1 ? "bed" : "beds"} as CSV.`,
+    });
+  };
+
   const handleCustomerChange = (next: string) => {
     setCustomerFilter(next);
     // If the previously selected property no longer belongs to the new
@@ -90,17 +113,28 @@ export default function Beds() {
               </p>
             )}
           </div>
-          <Select value={customerFilter} onValueChange={handleCustomerChange}>
-            <SelectTrigger className="w-full sm:w-56" data-testid="select-beds-customer-filter">
-              <SelectValue placeholder="Customer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Customers</SelectItem>
-              {customers.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={customerFilter} onValueChange={handleCustomerChange}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-beds-customer-filter">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Customers</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={isLoading || filteredBeds.length === 0}
+              data-testid="button-download-beds-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+          </div>
         </div>
 
         <Card>

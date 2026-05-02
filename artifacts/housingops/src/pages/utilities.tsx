@@ -6,11 +6,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Briefcase, ChevronRight, X, Zap } from "lucide-react";
+import { Briefcase, ChevronRight, X, Zap, Download } from "lucide-react";
 import { UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
@@ -26,6 +29,7 @@ export default function Utilities() {
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const { utilities, properties, customers, isLoading } = useData();
+  const { toast } = useToast();
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
   const [customerFilter, setCustomerFilter] = useState("All");
@@ -73,6 +77,26 @@ export default function Utilities() {
   });
 
   const totalMonthly = filtered.reduce((s, u) => s + u.monthlyCost, 0);
+
+  const handleDownloadCsv = () => {
+    const csv = toCsv(filtered, [
+      { header: "Property",     value: (u) => propertyById.get(u.propertyId)?.name ?? "" },
+      { header: "Customer",     value: (u) => {
+          const property = propertyById.get(u.propertyId);
+          return property ? customerById.get(property.customerId) ?? "" : "";
+        } },
+      { header: "Type",         value: (u) => u.type },
+      { header: "Company",      value: (u) => u.company },
+      { header: "Account #",    value: (u) => u.accountNumber },
+      { header: "Monthly Cost", value: (u) => u.monthlyCost },
+      { header: "Notes",        value: (u) => u.notes },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-utilities"), csv);
+    toast({
+      title: "Utilities exported",
+      description: `Downloaded ${filtered.length} utility ${filtered.length === 1 ? "service" : "services"} as CSV.`,
+    });
+  };
 
   const activeCustomerName =
     customerFilter === "All" ? null : customerById.get(customerFilter) ?? null;
@@ -132,6 +156,15 @@ export default function Utilities() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={isLoading || filtered.length === 0}
+              data-testid="button-download-utilities-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
             <div className="text-right">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Monthly</p>
               {isLoading ? (

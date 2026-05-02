@@ -318,3 +318,109 @@ describe("Finance customer filter", () => {
     expect(container.querySelector(`[data-testid="${HINT_TESTID}"]`)).toBeNull();
   });
 });
+
+describe("Finance customer filter URL persistence", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    window.history.replaceState({}, "", "/finance");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+  });
+
+  async function renderAt(url: string) {
+    window.history.replaceState({}, "", url);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Finance />);
+    });
+  }
+
+  function getCustomerSelect() {
+    const el = container.querySelector(`[data-testid="${CUSTOMER_FILTER}"]`);
+    if (!el) throw new Error(`Could not find ${CUSTOMER_FILTER}`);
+    return el;
+  }
+
+  function getCustomerHandler() {
+    const h = selectHandlers.get(CUSTOMER_FILTER);
+    if (!h) throw new Error(`No handler captured for ${CUSTOMER_FILTER}`);
+    return h;
+  }
+
+  it("selecting a customer adds ?customer=<id> to the URL", async () => {
+    await renderAt("/finance");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+    expect(window.location.search).toBe("");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("c1");
+    });
+
+    expect(window.location.pathname).toBe("/finance");
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c1");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c1");
+  });
+
+  it("switching back to All Customers removes the ?customer param", async () => {
+    await renderAt("/finance?customer=c1");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c1");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("All");
+    });
+
+    expect(window.location.pathname).toBe("/finance");
+    expect(window.location.search).toBe("");
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+  });
+
+  it("loading /finance?customer=<id> pre-selects that customer", async () => {
+    await renderAt("/finance?customer=c2");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("c2");
+    // The URL should not be rewritten for a known customer.
+    expect(new URLSearchParams(window.location.search).get("customer")).toBe("c2");
+  });
+
+  it("falls back to All Customers when the URL carries an unknown customer id", async () => {
+    await renderAt("/finance?customer=does-not-exist");
+
+    expect(getCustomerSelect().getAttribute("data-current")).toBe("All");
+  });
+
+  it("preserves other unrelated query params when toggling the filter", async () => {
+    await renderAt("/finance?other=keep");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("c1");
+    });
+
+    const params1 = new URLSearchParams(window.location.search);
+    expect(params1.get("customer")).toBe("c1");
+    expect(params1.get("other")).toBe("keep");
+
+    await act(async () => {
+      getCustomerHandler().onValueChange("All");
+    });
+
+    const params2 = new URLSearchParams(window.location.search);
+    expect(params2.get("customer")).toBeNull();
+    expect(params2.get("other")).toBe("keep");
+  });
+});

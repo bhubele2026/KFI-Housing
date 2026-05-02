@@ -340,13 +340,19 @@ export default function LeaseDetail() {
   // exist, scrub the stale value out of the draft so the Select picker
   // renders with no selection (rather than displaying a phantom value
   // it has no option for) and the operator is forced to pick a real
-  // property before Save can succeed.
+  // property before Save can succeed. The `draft.propertyId ===
+  // requestedPropertyId` guard is critical: it ensures we only ever
+  // scrub the *original* bogus seed value. Once the operator picks a
+  // real property from the picker, draft.propertyId moves off of the
+  // requested id and this effect goes quiet — otherwise it would
+  // re-fire on every re-render and clobber every selection the
+  // operator makes.
   useEffect(() => {
     if (!isCreateMode) return;
     if (isLoading) return;
     if (!requestedPropertyId) return;
     if (lockedPropertyId) return;
-    if (!draft.propertyId) return;
+    if (draft.propertyId !== requestedPropertyId) return;
     setDraft((d) => ({ ...d, propertyId: "" }));
   }, [isCreateMode, isLoading, requestedPropertyId, lockedPropertyId, draft.propertyId]);
 

@@ -35,6 +35,25 @@ vi.mock("@/hooks/use-toast", () => {
   };
 });
 
+// recharts uses ResizeObserver under the hood (via ResponsiveContainer),
+// which jsdom does not provide. Stub the chart primitives with simple
+// passthrough components — the customer-detail tests don't assert on the
+// rendered chart, only on the surrounding stat cards and tables. This
+// matches the pattern already used in dashboard.test.tsx.
+vi.mock("recharts", () => {
+  const Stub = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
+  return {
+    BarChart: Stub,
+    Bar: Stub,
+    XAxis: Stub,
+    YAxis: Stub,
+    CartesianGrid: Stub,
+    Tooltip: Stub,
+    Legend: Stub,
+    ResponsiveContainer: Stub,
+  };
+});
+
 // ── Mock data ───────────────────────────────────────────────────────────
 //
 // Hand-picked numbers chosen so the per-customer roll-ups (beds, occupied,

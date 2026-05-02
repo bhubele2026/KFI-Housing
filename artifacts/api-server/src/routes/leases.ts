@@ -9,6 +9,7 @@ import {
   UpdateLeaseResponse,
   DeleteLeaseParams,
 } from "@workspace/api-zod";
+import { normalizeLeaseDates } from "../lib/normalize-lease-dates";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,10 @@ router.post("/leases", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(leasesTable).values(body.data).returning();
+  const [row] = await db
+    .insert(leasesTable)
+    .values(normalizeLeaseDates(body.data))
+    .returning();
   res.status(201).json(UpdateLeaseResponse.parse(row));
 });
 
@@ -40,7 +44,7 @@ router.patch("/leases/:id", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .update(leasesTable)
-    .set(body.data)
+    .set(normalizeLeaseDates(body.data))
     .where(eq(leasesTable.id, params.data.id))
     .returning();
   if (!row) {

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   customersTable,
@@ -16,6 +17,7 @@ import {
   type InsertUtilityRow,
 } from "@workspace/db";
 import { logger } from "./logger";
+import { normalizeLeaseDates } from "./normalize-lease-dates";
 
 const SEED_CUSTOMERS: InsertCustomerRow[] = [
   {
@@ -455,15 +457,51 @@ async function wipeAll(): Promise<void> {
 }
 
 async function insertBundle(bundle: DataBundle): Promise<void> {
+  // Defensive normalization: any imported / seeded lease may carry a stray
+  // time component on its dates (e.g. "2026-05-31 00:00:00"). Strip it here
+  // so the renewal calculator on the frontend never sees a malformed value.
+  const normalizedLeases = bundle.leases.map((lease) =>
+    normalizeLeaseDates(lease),
+  );
   await db.transaction(async (tx) => {
     if (bundle.customers.length > 0) await tx.insert(customersTable).values(bundle.customers);
     if (bundle.properties.length > 0) await tx.insert(propertiesTable).values(bundle.properties);
-    if (bundle.leases.length > 0) await tx.insert(leasesTable).values(bundle.leases);
+    if (normalizedLeases.length > 0) await tx.insert(leasesTable).values(normalizedLeases);
     if (bundle.rooms.length > 0) await tx.insert(roomsTable).values(bundle.rooms);
     if (bundle.occupants.length > 0) await tx.insert(occupantsTable).values(bundle.occupants);
     if (bundle.beds.length > 0) await tx.insert(bedsTable).values(bundle.beds);
     if (bundle.utilities.length > 0) await tx.insert(utilitiesTable).values(bundle.utilities);
   });
+}
+
+/**
+ * Strip any stray time component from existing `start_date` / `end_date`
+ * values in the leases table.
+ *
+ * Earlier versions of the spreadsheet importer stored dates with a trailing
+ * `" 00:00:00"` (or similar) suffix. Those rows render as "NaN days left"
+ * and silently disappear from the Renewal Alerts panel. This is a one-shot,
+ * idempotent cleanup that runs at startup; once every row is normalized the
+ * UPDATE matches zero rows and is effectively a no-op.
+ *
+ * Returns the number of rows that were actually rewritten so callers can
+ * log a meaningful summary.
+ */
+export async function cleanupLeaseDates(): Promise<number> {
+  const result = await db.execute<{ id: string }>(sql`
+    UPDATE leases
+    SET
+      start_date = split_part(split_part(start_date, ' ', 1), 'T', 1),
+      end_date = split_part(split_part(end_date, ' ', 1), 'T', 1)
+    WHERE start_date ~ '[ T]' OR end_date ~ '[ T]'
+    RETURNING id
+  `);
+  const rows = (result as unknown as { rows?: Array<{ id: string }> }).rows;
+  const count = Array.isArray(rows) ? rows.length : 0;
+  if (count > 0) {
+    logger.info({ count }, "Normalized lease date column(s) to YYYY-MM-DD");
+  }
+  return count;
 }
 
 function buildSeedBundle(): DataBundle {

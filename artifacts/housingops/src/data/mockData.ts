@@ -255,11 +255,29 @@ export function toMonthlyCharge(charge: number, freq: BillingFrequency): number 
 // ── Lease renewal helpers ──────────────────────────────────────────────
 export type RenewalUrgency = "expired" | "critical" | "warning" | "soon" | "ok";
 
+/**
+ * Coerce a stored date value to plain `YYYY-MM-DD`.
+ *
+ * Some legacy/imported rows have an extra time component (e.g.
+ * `"2026-05-31 00:00:00"` or `"2026-05-31T00:00:00.000Z"`) which then breaks
+ * any code that splits the string on `-`. This strips anything after the
+ * first space or `T` so the rest of the date pipeline only ever sees the
+ * calendar-date prefix.
+ */
+export function normalizeDateOnly(dateStr: string): string {
+  if (!dateStr) return dateStr;
+  // Cut at the first whitespace or `T` (ISO datetime separator).
+  const cut = dateStr.search(/[ T]/);
+  return cut === -1 ? dateStr : dateStr.slice(0, cut);
+}
+
 export function daysUntil(dateStr: string): number {
   // Parse YYYY-MM-DD as a local calendar date to avoid timezone drift.
   // (`new Date("2025-12-31")` is parsed as UTC midnight, which can shift to
   // a different local day depending on the user's timezone.)
-  const [yStr, mStr, dStr] = dateStr.split("-");
+  // Strip any stray time component first so a malformed value like
+  // "2026-05-31 00:00:00" still parses correctly instead of yielding NaN.
+  const [yStr, mStr, dStr] = normalizeDateOnly(dateStr).split("-");
   const target = new Date(Number(yStr), Number(mStr) - 1, Number(dStr));
   target.setHours(0, 0, 0, 0);
   const today = new Date();

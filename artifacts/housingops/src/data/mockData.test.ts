@@ -139,6 +139,34 @@ describe("daysUntil", () => {
     vi.setSystemTime(new Date(2025, 5, 15, 0, 0, 1));
     expect(daysUntil("2025-06-15")).toBe(0);
   });
+
+  it("tolerates a stray time component on imported dates", () => {
+    // Some imported / legacy rows arrive as "2026-05-31 00:00:00" or
+    // "2026-05-31T00:00:00.000Z". Without the defensive strip these would
+    // parse as NaN and silently disappear from the renewal alerts panel.
+    expect(daysUntil("2025-06-30 00:00:00")).toBe(15);
+    expect(daysUntil("2025-06-30T00:00:00.000Z")).toBe(15);
+    expect(daysUntil("2025-06-15 23:59:59")).toBe(0);
+  });
+});
+
+describe("getRenewalInfo (defensive against malformed dates)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2025, 5, 15, 9, 0, 0));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("classifies a legacy 'YYYY-MM-DD HH:MM:SS' end date as a normal critical/warning lease", () => {
+    // 2025-07-15 is 30 days out from the fake 'today' of 2025-06-15 →
+    // critical (≤ 30). The malformed time suffix must not turn this into NaN.
+    const info = getRenewalInfo("2025-07-15 00:00:00");
+    expect(info.level).toBe("critical");
+    expect(info.days).toBe(30);
+    expect(info.label).toBe("30 days left");
+  });
 });
 
 describe("getRenewalInfo", () => {

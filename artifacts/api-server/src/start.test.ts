@@ -23,6 +23,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
       hasDataLoss: false,
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
+    cleanupLeaseDates: vi.fn().mockResolvedValue(0),
     listen: vi.fn().mockResolvedValue(undefined),
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),
@@ -122,6 +123,57 @@ describe("start", () => {
 
     const calledWith = pushSchemaIfNeeded.mock.calls[0]?.[0];
     expect(calledWith?.checkOnly).toBe(false);
+  });
+
+  it("runs cleanupLeaseDates after seeding and before listening", async () => {
+    const calls: string[] = [];
+    const seedIfEmpty = vi.fn(async () => {
+      calls.push("seed");
+    });
+    const cleanupLeaseDates = vi.fn(async () => {
+      calls.push("cleanup");
+      return 0;
+    });
+    const listen = vi.fn(async () => {
+      calls.push("listen");
+    });
+
+    await start(
+      makeDeps({
+        seedIfEmpty,
+        cleanupLeaseDates,
+        listen,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(cleanupLeaseDates).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(["seed", "cleanup", "listen"]);
+  });
+
+  it("still listens when cleanupLeaseDates throws (logs and continues)", async () => {
+    const cleanupLeaseDates = vi
+      .fn()
+      .mockRejectedValue(new Error("UPDATE failed"));
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        cleanupLeaseDates,
+        listen,
+        logger,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(listen).toHaveBeenCalledTimes(1);
+    const errorCalls = logger.error.mock.calls;
+    expect(
+      errorCalls.some(([, message]) =>
+        /normalize lease dates/.test(String(message)),
+      ),
+    ).toBe(true);
   });
 
   it("exits with a production-specific error message when schema is out of date", async () => {

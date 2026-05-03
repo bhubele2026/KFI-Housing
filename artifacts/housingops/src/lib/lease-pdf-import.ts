@@ -3,7 +3,11 @@
 // We mirror the server's response shape here instead of going through the
 // generated OpenAPI client because the request is multipart/form-data with a
 // PDF file — orval's emitted Blob/File types don't fit our setup, so we own
-// this small, hand-written client.
+// this small, hand-written client. We still go through the shared
+// `customFetch` wrapper so we pick up the same base-URL handling, bearer
+// token injection, and ApiError shape as every other request in the app.
+
+import { customFetch, ApiError } from "@workspace/api-client-react";
 
 export type LeasePdfConfidence = "high" | "medium" | "low";
 
@@ -67,28 +71,32 @@ export class LeasePdfImportError extends Error {
 export async function importLeasePdf(
   file: File,
 ): Promise<LeasePdfImportResponse> {
-  // BASE_URL is "/" for housingops, but the /api prefix is owned by the
-  // platform router that maps it to the api-server artifact — so we hit
-  // a root-relative URL directly. Same pattern the generated api client uses.
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch("/api/leases/import-pdf", {
-    method: "POST",
-    body: form,
-    credentials: "include",
-  });
-
-  if (!res.ok) {
-    let message = `Lease PDF import failed (${res.status}).`;
-    try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) message = body.error;
-    } catch {
-      // Body wasn't JSON — keep the generic message.
+  // We deliberately do NOT set a content-type header — the browser supplies
+  // `multipart/form-data; boundary=…` automatically when given a FormData
+  // body, and customFetch's "looks like JSON" auto-content-type guard is
+  // skipped for non-string bodies.
+  try {
+    return await customFetch<LeasePdfImportResponse>(
+      "/api/leases/import-pdf",
+      {
+        method: "POST",
+        body: form,
+        responseType: "json",
+      },
+    );
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      // Server may have returned `{ error: "..." }`; fall back to the
+      // status text otherwise so the toast is never blank.
+      const data = err.data as { error?: string } | null;
+      const message =
+        (data && typeof data.error === "string" && data.error) ||
+        `Lease PDF import failed (${err.status}).`;
+      throw new LeasePdfImportError(message, err.status);
     }
-    throw new LeasePdfImportError(message, res.status);
+    throw err;
   }
-
-  return (await res.json()) as LeasePdfImportResponse;
 }

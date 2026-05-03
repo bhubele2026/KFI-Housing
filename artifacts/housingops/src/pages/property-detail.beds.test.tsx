@@ -556,16 +556,31 @@ describe("Property detail — Beds tab room interactions", () => {
     expect(deleteR2.disabled).toBe(false);
   });
 
-  it("clicking the trash on an empty room calls deleteRoom and shows no toast on success", async () => {
-    mocks.deleteRoom.mockResolvedValueOnce(undefined);
-    await renderBedsTab();
-
+  // The room trash button is wrapped in a ConfirmDeleteButton (AlertDialog).
+  // Clicking the trash opens the dialog; the actual deleteRoom call only
+  // fires when the user clicks the confirm button inside the dialog (which
+  // renders into a portal, so we query off `document` not `container`).
+  async function clickRoomDeleteAndConfirm(roomId: string) {
     const btn = container.querySelector(
-      '[data-testid="button-delete-room-r2"]',
+      `[data-testid="button-delete-room-${roomId}"]`,
     ) as HTMLButtonElement;
     await act(async () => {
       btn.click();
     });
+    const confirm = document.querySelector(
+      '[data-testid="button-confirm-delete-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(confirm, "confirm dialog should be open after clicking trash").not.toBeNull();
+    await act(async () => {
+      confirm!.click();
+    });
+  }
+
+  it("clicking the trash on an empty room calls deleteRoom and shows no toast on success", async () => {
+    mocks.deleteRoom.mockResolvedValueOnce(undefined);
+    await renderBedsTab();
+
+    await clickRoomDeleteAndConfirm("r2");
     await flushPromises();
 
     expect(mocks.deleteRoom).toHaveBeenCalledWith("r2");
@@ -581,12 +596,7 @@ describe("Property detail — Beds tab room interactions", () => {
     mocks.deleteRoom.mockRejectedValueOnce(new MockRoomInUseError());
     await renderBedsTab();
 
-    const btn = container.querySelector(
-      '[data-testid="button-delete-room-r2"]',
-    ) as HTMLButtonElement;
-    await act(async () => {
-      btn.click();
-    });
+    await clickRoomDeleteAndConfirm("r2");
     await flushPromises();
 
     expect(mocks.deleteRoom).toHaveBeenCalledWith("r2");
@@ -606,12 +616,7 @@ describe("Property detail — Beds tab room interactions", () => {
     mocks.deleteRoom.mockRejectedValueOnce(new Error("network down"));
     await renderBedsTab();
 
-    const btn = container.querySelector(
-      '[data-testid="button-delete-room-r2"]',
-    ) as HTMLButtonElement;
-    await act(async () => {
-      btn.click();
-    });
+    await clickRoomDeleteAndConfirm("r2");
     await flushPromises();
 
     expect(toastMock).toHaveBeenCalledTimes(1);

@@ -546,6 +546,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  /**
+   * Capture the current cache for {@link key} BEFORE we apply an optimistic
+   * patch, then return mutation handlers that restore that snapshot on
+   * failure (so the user's row visibly reverts) and refetch on settle (so
+   * the local cache catches any server-side fields we didn't predict).
+   *
+   * Mutation `retry: false` is set globally on the QueryClient — if the
+   * server rejects once we surface the failure immediately rather than
+   * thrashing the optimistic patch on every retry attempt.
+   */
+  function captureRollback<T>(key: QueryKey, action: string) {
+    const snapshot = queryClient.getQueryData<T>(key);
+    return {
+      onError: () => {
+        if (snapshot !== undefined) queryClient.setQueryData<T>(key, snapshot);
+        notifySaveError(action);
+      },
+      onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
+    };
+  }
+
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: customersKey });
     queryClient.invalidateQueries({ queryKey: propertiesKey });
@@ -573,14 +594,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const updateCustomer = (id: string, updates: Partial<Customer>) => {
+    const handlers = captureRollback<Customer[]>(customersKey, "save your customer changes");
     patchInList<Customer>(customersKey, id, updates);
-    updateCustomerMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your customer changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: customersKey }),
-      },
-    );
+    updateCustomerMut.mutate({ id, data: updates }, handlers);
   };
   const deleteCustomer = async (id: string): Promise<void> => {
     // Guard: refuse if any property still references this customer.
@@ -623,52 +639,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const updateProperty = (id: string, updates: Partial<Property>) => {
+    const handlers = captureRollback<Property[]>(propertiesKey, "save your property changes");
     patchInList<Property>(propertiesKey, id, updates);
-    updatePropertyMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your property changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: propertiesKey }),
-      },
-    );
+    updatePropertyMut.mutate({ id, data: updates }, handlers);
   };
   const deleteProperty = (id: string) => {
+    const handlers = captureRollback<Property[]>(propertiesKey, "delete the property");
     removeFromList<Property>(propertiesKey, id);
-    deletePropertyMut.mutate(
-      { id },
-      { onSettled: () => queryClient.invalidateQueries({ queryKey: propertiesKey }) },
-    );
+    deletePropertyMut.mutate({ id }, handlers);
   };
 
   const updateLease = (id: string, updates: Partial<Lease>) => {
+    const handlers = captureRollback<Lease[]>(leasesKey, "save your lease changes");
     patchInList<Lease>(leasesKey, id, updates);
-    updateLeaseMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your lease changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
-      },
-    );
+    updateLeaseMut.mutate({ id, data: updates }, handlers);
   };
   const addLease = (lease: Lease) => {
+    const handlers = captureRollback<Lease[]>(leasesKey, "add the new lease");
     pushToList<Lease>(leasesKey, lease);
-    createLeaseMut.mutate(
-      { data: lease },
-      {
-        onError: () => notifySaveError("add the new lease"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
-      },
-    );
+    createLeaseMut.mutate({ data: lease }, handlers);
   };
   const deleteLease = (id: string) => {
+    const handlers = captureRollback<Lease[]>(leasesKey, "delete the lease");
     removeFromList<Lease>(leasesKey, id);
-    deleteLeaseMut.mutate(
-      { id },
-      {
-        onError: () => notifySaveError("delete the lease"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: leasesKey }),
-      },
-    );
+    deleteLeaseMut.mutate({ id }, handlers);
   };
 
   // ── Room mutations ──────────────────────────────────────────────────────
@@ -688,14 +682,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const updateRoom = (id: string, updates: Partial<Room>) => {
+    const handlers = captureRollback<Room[]>(roomsKey, "save your room changes");
     patchInList<Room>(roomsKey, id, updates);
-    updateRoomMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your room changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: roomsKey }),
-      },
-    );
+    updateRoomMut.mutate({ id, data: updates }, handlers);
   };
   const deleteRoom = async (id: string): Promise<void> => {
     // Client-side guard mirrors the server's 409: rooms with beds can't be
@@ -722,86 +711,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const addBed = (bed: Bed) => {
+    const handlers = captureRollback<Bed[]>(bedsKey, "add the new bed");
     pushToList<Bed>(bedsKey, bed);
-    createBedMut.mutate(
-      { data: bed },
-      {
-        onError: () => notifySaveError("add the new bed"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
-      },
-    );
+    createBedMut.mutate({ data: bed }, handlers);
   };
   const deleteBed = (id: string) => {
+    const handlers = captureRollback<Bed[]>(bedsKey, "delete the bed");
     removeFromList<Bed>(bedsKey, id);
-    deleteBedMut.mutate(
-      { id },
-      {
-        onError: () => notifySaveError("delete the bed"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
-      },
-    );
+    deleteBedMut.mutate({ id }, handlers);
   };
   const updateBed = (id: string, updates: Partial<Bed>) => {
+    const handlers = captureRollback<Bed[]>(bedsKey, "save your bed changes");
     patchInList<Bed>(bedsKey, id, updates);
-    updateBedMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your bed changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: bedsKey }),
-      },
-    );
+    updateBedMut.mutate({ id, data: updates }, handlers);
   };
 
   const updateOccupant = (id: string, updates: Partial<Occupant>) => {
+    const handlers = captureRollback<Occupant[]>(occupantsKey, "save your occupant changes");
     patchInList<Occupant>(occupantsKey, id, updates);
-    updateOccupantMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your occupant changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }),
-      },
-    );
+    updateOccupantMut.mutate({ id, data: updates }, handlers);
   };
   const addOccupant = (occupant: Occupant) => {
+    const handlers = captureRollback<Occupant[]>(occupantsKey, "add the new occupant");
     pushToList<Occupant>(occupantsKey, occupant);
-    createOccupantMut.mutate(
-      { data: occupant },
-      {
-        onError: () => notifySaveError("add the new occupant"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: occupantsKey }),
-      },
-    );
+    createOccupantMut.mutate({ data: occupant }, handlers);
   };
 
   const updateUtility = (id: string, updates: Partial<Utility>) => {
+    const handlers = captureRollback<Utility[]>(utilitiesKey, "save your utility changes");
     patchInList<Utility>(utilitiesKey, id, updates);
-    updateUtilityMut.mutate(
-      { id, data: updates },
-      {
-        onError: () => notifySaveError("save your utility changes"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
-      },
-    );
+    updateUtilityMut.mutate({ id, data: updates }, handlers);
   };
   const addUtility = (utility: Utility) => {
+    const handlers = captureRollback<Utility[]>(utilitiesKey, "add the new utility");
     pushToList<Utility>(utilitiesKey, utility);
-    createUtilityMut.mutate(
-      { data: utility },
-      {
-        onError: () => notifySaveError("add the new utility"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
-      },
-    );
+    createUtilityMut.mutate({ data: utility }, handlers);
   };
   const deleteUtility = (id: string) => {
+    const handlers = captureRollback<Utility[]>(utilitiesKey, "delete the utility");
     removeFromList<Utility>(utilitiesKey, id);
-    deleteUtilityMut.mutate(
-      { id },
-      {
-        onError: () => notifySaveError("delete the utility"),
-        onSettled: () => queryClient.invalidateQueries({ queryKey: utilitiesKey }),
-      },
-    );
+    deleteUtilityMut.mutate({ id }, handlers);
   };
 
   const resetToSampleData = () => {

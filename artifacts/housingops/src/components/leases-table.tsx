@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Trash2, DollarSign, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 
 export interface LeasesTableProps {
   leases: readonly Lease[];
@@ -266,19 +267,42 @@ export function LeasesTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(lease.id);
-                      }}
-                      data-testid={`button-delete-lease-${lease.id}`}
-                      aria-label="Delete lease"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {/* AlertDialog confirms the delete so a stray row-trash
+                        click doesn't permanently remove a lease during the
+                        demo. The trigger Button still calls stopPropagation
+                        so the row's click handler doesn't ALSO navigate to
+                        the lease detail page when opening the dialog. */}
+                    <ConfirmDeleteButton
+                      title="Delete this lease?"
+                      description={
+                        <>
+                          You're about to delete the lease for{" "}
+                          <span className="font-medium text-foreground">
+                            {property?.name ?? "this property"}
+                          </span>
+                          {customer ? (
+                            <>
+                              {" "}(<span>{customer.name}</span>)
+                            </>
+                          ) : null}
+                          . This can't be undone.
+                        </>
+                      }
+                      onConfirm={() => onDelete(lease.id)}
+                      testId={`dialog-confirm-delete-lease-${lease.id}`}
+                      trigger={
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid={`button-delete-lease-${lease.id}`}
+                          aria-label="Delete lease"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               );

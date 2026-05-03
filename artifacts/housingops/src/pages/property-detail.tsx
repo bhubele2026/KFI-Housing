@@ -22,10 +22,11 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { StarRating } from "@/components/star-rating";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -842,7 +843,7 @@ export default function PropertyDetail() {
                   ] as { label: string; field: keyof typeof property }[]).map(({ label, field }) => (
                     <div key={field} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
                       <span className="text-sm text-muted-foreground w-36 shrink-0">{label}</span>
-                      <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as any)} />
+                      <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as Partial<Property>)} />
                     </div>
                   ))}
                   <div className="flex items-start justify-between py-1 border-b border-dashed border-border/50 gap-2">
@@ -921,7 +922,7 @@ export default function PropertyDetail() {
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0">
                           <Icon className="h-3.5 w-3.5" />{label}
                         </div>
-                        <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as any)} />
+                        <InlineEdit value={property[field] as string} onSave={v => updateProperty(id, { [field]: v } as Partial<Property>)} />
                       </div>
                     ))}
                   </CardContent>
@@ -943,7 +944,7 @@ export default function PropertyDetail() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                       <span className="text-sm text-muted-foreground w-40 shrink-0">Payment Method</span>
-                      <Select value={property.paymentMethod} onValueChange={v => updateProperty(id, { paymentMethod: v as any })}>
+                      <Select value={property.paymentMethod} onValueChange={v => updateProperty(id, { paymentMethod: v as Property["paymentMethod"] })}>
                         <SelectTrigger className="h-7 text-sm w-40"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {["ACH", "Check", "Wire", "Online Portal", "Money Order"].map(m => (
@@ -1296,17 +1297,24 @@ export default function PropertyDetail() {
                                   >
                                     <Plus className="h-3.5 w-3.5 mr-1" />Add Bed
                                   </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                    onClick={handleDeleteRoom}
-                                    disabled={roomBeds.length > 0}
-                                    title={roomBeds.length > 0 ? "Delete or move the beds in this room first" : "Delete room"}
-                                    data-testid={`button-delete-room-${room.id}`}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+                                  <ConfirmDeleteButton
+                                    title={`Delete ${room.name}?`}
+                                    description="This permanently removes the room. You can't undo this."
+                                    onConfirm={handleDeleteRoom}
+                                    testId={`dialog-confirm-delete-room-${room.id}`}
+                                    trigger={
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                        disabled={roomBeds.length > 0}
+                                        title={roomBeds.length > 0 ? "Delete or move the beds in this room first" : "Delete room"}
+                                        data-testid={`button-delete-room-${room.id}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    }
+                                  />
                                 </div>
                               </div>
                             </CardHeader>
@@ -1370,7 +1378,7 @@ export default function PropertyDetail() {
                                             <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
                                             <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
                                             <TableCell>
-                                              <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as any })}>
+                                              <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
                                                 <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                   {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
@@ -1421,16 +1429,24 @@ export default function PropertyDetail() {
                                           </Select>
                                         </TableCell>
                                         <TableCell>
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                            onClick={() => deleteBed(bed.id)}
-                                            disabled={isOccupied}
-                                            title={isOccupied ? "Mark vacant before deleting" : "Delete bed"}
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </Button>
+                                          <ConfirmDeleteButton
+                                            title={`Delete Bed ${bed.bedNumber}?`}
+                                            description="This removes the bed from the room. You can't undo this."
+                                            onConfirm={() => deleteBed(bed.id)}
+                                            testId={`dialog-confirm-delete-bed-${bed.id}`}
+                                            trigger={
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                                disabled={isOccupied}
+                                                data-testid={`button-delete-bed-${bed.id}`}
+                                                title={isOccupied ? "Mark vacant before deleting" : "Delete bed"}
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </Button>
+                                            }
+                                          />
                                         </TableCell>
                                       </TableRow>
                                     );
@@ -1462,9 +1478,17 @@ export default function PropertyDetail() {
                                       {propRooms.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                                     </SelectContent>
                                   </Select>
-                                  <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => deleteBed(b.id)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  <ConfirmDeleteButton
+                                    title={`Delete orphan Bed ${b.bedNumber}?`}
+                                    description="This bed has no room. Deleting it removes it permanently."
+                                    onConfirm={() => deleteBed(b.id)}
+                                    testId={`dialog-confirm-delete-orphan-bed-${b.id}`}
+                                    trigger={
+                                      <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" data-testid={`button-delete-orphan-bed-${b.id}`}>
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    }
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -1522,9 +1546,23 @@ export default function PropertyDetail() {
                         <TableCell className="text-right"><InlineEdit value={u.monthlyCost} prefix="$" type="number" onSave={v => updateUtility(u.id, { monthlyCost: parseFloat(v) })} /></TableCell>
                         <TableCell><InlineEdit value={u.notes || ""} onSave={v => updateUtility(u.id, { notes: v })} /></TableCell>
                         <TableCell>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteUtility(u.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <ConfirmDeleteButton
+                            title="Delete this utility?"
+                            description={
+                              <>
+                                Remove the{" "}
+                                <span className="font-medium text-foreground">{u.type}</span>{" "}
+                                service from this property. You can't undo this.
+                              </>
+                            }
+                            onConfirm={() => deleteUtility(u.id)}
+                            testId={`dialog-confirm-delete-utility-${u.id}`}
+                            trigger={
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" data-testid={`button-delete-utility-${u.id}`}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     ))}

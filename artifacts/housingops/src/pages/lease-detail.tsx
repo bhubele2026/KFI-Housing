@@ -82,6 +82,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 
 // We deliberately reuse the inline editors from the Property Detail page so
 // every lease field on this page commits with the same save-on-blur +
@@ -685,22 +686,29 @@ export default function LeaseDetail() {
                     </Button>
                   }
                 />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  data-testid="button-delete-lease-detail"
-                  onClick={() => {
+                <ConfirmDeleteButton
+                  title="Delete this lease?"
+                  description="This permanently removes the lease record. You can't undo this."
+                  onConfirm={() => {
                     if (realLease) {
                       deleteLease(realLease.id);
                       toast({ title: "Lease deleted" });
                       navigate("/leases");
                     }
                   }}
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  Delete
-                </Button>
+                  testId="dialog-confirm-delete-lease-detail"
+                  trigger={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      data-testid="button-delete-lease-detail"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      Delete
+                    </Button>
+                  }
+                />
               </>
             )}
           </div>

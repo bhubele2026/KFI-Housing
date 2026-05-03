@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -20,7 +21,17 @@ import Occupants from "@/pages/occupants";
 import Utilities from "@/pages/utilities";
 import Finance from "@/pages/finance";
 
-const queryClient = new QueryClient();
+// Demo-grade defaults: never auto-retry mutations (a stale optimistic patch
+// will get re-applied on top of fresh data, which is more confusing than a
+// single visible error toast), and only retry queries once before surfacing
+// a load failure. The data store rolls back optimistic patches on error so
+// the user sees their last-good value, not the half-applied change.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+    mutations: { retry: false },
+  },
+});
 
 function Router() {
   return (
@@ -56,7 +67,14 @@ function App() {
           <DataProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <CustomerScopeProvider>
-                <Router />
+                {/* Boundary lives below WouterRouter so a buggy page only
+                    blanks the main content area — the sidebar (rendered
+                    inside MainLayout, also below the boundary) stays
+                    available via the "Try again" button or by navigating
+                    to a different route which remounts the subtree. */}
+                <ErrorBoundary>
+                  <Router />
+                </ErrorBoundary>
               </CustomerScopeProvider>
             </WouterRouter>
           </DataProvider>

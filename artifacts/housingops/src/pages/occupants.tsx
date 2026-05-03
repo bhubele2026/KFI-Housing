@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
@@ -136,6 +137,15 @@ export default function Occupants() {
                       occupants.length === 0
                         ? "Assign your first occupant to a bed to see them here."
                         : "Try clearing your search or filters above."
+                    }
+                    action={
+                      occupants.length === 0 ? (
+                        <Button asChild data-testid="button-empty-occupants-cta">
+                          <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
+                            {properties.length === 0 ? "Add Property" : "Assign Occupant"}
+                          </Link>
+                        </Button>
+                      ) : undefined
                     }
                     testId="empty-occupants-table"
                   />

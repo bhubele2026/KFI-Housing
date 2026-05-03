@@ -25,6 +25,8 @@ export interface LeasesTableProps {
   onDelete: (id: string) => void;
   /** Custom message for the empty state. */
   emptyMessage?: string;
+  /** Optional CTA rendered inside the empty-state block (e.g. "Add Lease"). */
+  emptyAction?: import("react").ReactNode;
   /**
    * Properties that have **no** lease records yet. The table renders one
    * "No lease yet" placeholder row per property so the operator sees every
@@ -93,6 +95,7 @@ export function LeasesTable({
   onCustomerClick,
   onDelete,
   emptyMessage = "No leases found.",
+  emptyAction,
   placeholderProperties = [],
   originPath,
 }: LeasesTableProps) {
@@ -162,6 +165,7 @@ export function LeasesTable({
             icon={KeyRound}
             title={emptyMessage}
             description="Leases you create or import will appear here."
+            action={emptyAction}
             testId="empty-leases-table"
           />
         ) : (

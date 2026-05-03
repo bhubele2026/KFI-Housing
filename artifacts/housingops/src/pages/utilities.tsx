@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -224,6 +224,15 @@ export default function Utilities() {
                     icon={Zap}
                     title="No utility services found"
                     description="Utilities you add to a property will show up here."
+                    action={
+                      utilities.length === 0 ? (
+                        <Button asChild data-testid="button-empty-utilities-cta">
+                          <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}?tab=utilities`}>
+                            {properties.length === 0 ? "Add Property" : "Add Utility"}
+                          </Link>
+                        </Button>
+                      ) : undefined
+                    }
                     testId="empty-utilities-table"
                   />
                 ) : (

@@ -455,6 +455,14 @@ export default function Customers() {
                         ? "Add your first customer to start grouping properties and leases by client."
                         : "Try clearing your search above."
                     }
+                    action={
+                      customers.length === 0 ? (
+                        <Button onClick={openAdd} data-testid="button-add-customer-empty">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Customer
+                        </Button>
+                      ) : undefined
+                    }
                     testId="empty-customers-table"
                   />
                 ) : (

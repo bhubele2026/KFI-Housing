@@ -739,6 +739,14 @@ export default function Properties() {
                         ? "Add your first property to start tracking beds, leases, and utilities."
                         : "Try clearing your search or filters above."
                     }
+                    action={
+                      properties.length === 0 ? (
+                        <Button onClick={openAdd} data-testid="button-add-property-empty">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Property
+                        </Button>
+                      ) : undefined
+                    }
                     testId="empty-properties-table"
                   />
                 ) : (

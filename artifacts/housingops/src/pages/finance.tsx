@@ -9,7 +9,9 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { motion } from "framer-motion";
-import { Briefcase, X, DollarSign } from "lucide-react";
+import { Briefcase, X, DollarSign, Building2 } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 
 export default function Finance() {
@@ -194,9 +196,24 @@ export default function Finance() {
                   <tr>
                     <td colSpan={tableColCount} className="p-0">
                       <EmptyState
-                        icon={DollarSign}
-                        title="No properties match this filter"
-                        description="Adjust the customer filter above to see revenue and expenses."
+                        icon={properties.length === 0 ? Building2 : DollarSign}
+                        title={
+                          properties.length === 0
+                            ? "No properties yet"
+                            : "No properties match this filter"
+                        }
+                        description={
+                          properties.length === 0
+                            ? "Add your first property to start seeing revenue and expenses here."
+                            : "Adjust the customer filter above to see revenue and expenses."
+                        }
+                        action={
+                          properties.length === 0 ? (
+                            <Button asChild data-testid="button-empty-finance-cta">
+                              <Link href="/properties">Add Property</Link>
+                            </Button>
+                          ) : undefined
+                        }
                         testId="empty-finance-table"
                       />
                     </td>

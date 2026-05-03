@@ -4,6 +4,7 @@ import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
@@ -205,9 +206,24 @@ export default function Dashboard() {
           <CardContent>
             {topRatedProperties.length === 0 ? (
               <EmptyState
-                icon={Trophy}
-                title={`No ${sortLabel.toLowerCase()} ratings yet`}
-                description="Rate your properties to see your top performers ranked here."
+                icon={properties.length === 0 ? Building2 : Trophy}
+                title={
+                  properties.length === 0
+                    ? "No properties yet"
+                    : `No ${sortLabel.toLowerCase()} ratings yet`
+                }
+                description={
+                  properties.length === 0
+                    ? "Add your first property to start ranking your top performers here."
+                    : "Rate your properties to see your top performers ranked here."
+                }
+                action={
+                  <Button asChild data-testid="button-empty-top-rated-cta">
+                    <Link href="/properties">
+                      {properties.length === 0 ? "Add Property" : "Rate Properties"}
+                    </Link>
+                  </Button>
+                }
                 testId="empty-top-rated-properties"
               />
             ) : (
@@ -295,8 +311,21 @@ export default function Dashboard() {
                     <EmptyStateRow
                       colSpan={4}
                       icon={Building2}
-                      title="No properties match this customer"
-                      description="Pick a different customer above, or add properties to this one to see performance."
+                      title={
+                        properties.length === 0
+                          ? "No properties yet"
+                          : "No properties match this customer"
+                      }
+                      description={
+                        properties.length === 0
+                          ? "Add your first property to start tracking performance here."
+                          : "Pick a different customer above, or add properties to this one to see performance."
+                      }
+                      action={
+                        <Button asChild data-testid="button-empty-perf-cta">
+                          <Link href="/properties">Add Property</Link>
+                        </Button>
+                      }
                       testId="empty-property-performance"
                     />
                   ) : (

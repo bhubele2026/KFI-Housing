@@ -354,6 +354,24 @@ export default function Leases() {
               onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
               onDelete={deleteLease}
               placeholderProperties={visiblePlaceholderProperties}
+              emptyAction={
+                leases.length === 0 ? (
+                  <AddLeaseDialog
+                    properties={properties}
+                    customers={customers}
+                    onAdd={(lease) => {
+                      addLease(lease);
+                      const property = propertyById.get(lease.propertyId);
+                      toast({
+                        title: "Lease added",
+                        description: property
+                          ? `Added a new lease for ${property.name}.`
+                          : "New lease created.",
+                      });
+                    }}
+                  />
+                ) : undefined
+              }
               // Threaded so the lease detail back-link returns to /leases
               // (with our customer/status filters preserved by the URL).
               // Placeholder rows use the same value to thread `&from=`

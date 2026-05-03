@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -240,6 +241,15 @@ export default function Beds() {
                       beds.length === 0
                         ? "Add a property and its rooms to start tracking beds."
                         : "Try clearing your search or filters above."
+                    }
+                    action={
+                      beds.length === 0 ? (
+                        <Button asChild data-testid="button-empty-beds-cta">
+                          <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
+                            {properties.length === 0 ? "Add Property" : "Add Beds"}
+                          </Link>
+                        </Button>
+                      ) : undefined
                     }
                     testId="empty-beds-table"
                   />

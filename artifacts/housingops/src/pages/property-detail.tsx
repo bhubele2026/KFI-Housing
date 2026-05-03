@@ -1092,15 +1092,32 @@ export default function PropertyDetail() {
                   // re-uses the AddLeaseDialog with the property pre-bound,
                   // mirroring the dialog wired up in the tab header.
                   emptyAction={
-                    <AddLeaseDialog
-                      propertyId={id}
-                      onAdd={addLease}
-                      trigger={
-                        <Button size="sm" data-testid="button-add-lease-empty">
-                          <Plus className="h-4 w-4 mr-1.5" />Add Lease
-                        </Button>
-                      }
-                    />
+                    // Two routes from the empty state:
+                    //  1. The quick AddLeaseDialog (primary) — fast path with
+                    //     just the essential fields.
+                    //  2. A secondary "Open full form" deep-link to the
+                    //     lease-detail create page, which exposes
+                    //     buyout/clauses/terms in one screen. Restored after
+                    //     task #132 removed the placeholder-row shortcut.
+                    //     `from=` round-trips back to this Leases tab.
+                    <div className="flex flex-col items-center gap-2">
+                      <AddLeaseDialog
+                        propertyId={id}
+                        onAdd={addLease}
+                        trigger={
+                          <Button size="sm" data-testid="button-add-lease-empty">
+                            <Plus className="h-4 w-4 mr-1.5" />Add Lease
+                          </Button>
+                        }
+                      />
+                      <Link
+                        href={`/leases/new?propertyId=${encodeURIComponent(id)}&from=${encodeURIComponent(`/properties/${id}?tab=leases`)}`}
+                        className="text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                        data-testid="link-add-lease-full-form-empty"
+                      >
+                        Open full form
+                      </Link>
+                    </div>
                   }
                   // Threaded so opening a lease here and clicking "Back"
                   // returns the user to *this* property's Leases tab,

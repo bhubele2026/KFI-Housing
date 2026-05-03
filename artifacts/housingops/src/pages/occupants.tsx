@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, UserPlus, Download } from "lucide-react";
+import { Search, UserPlus, Download, Users } from "lucide-react";
+import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
@@ -127,11 +128,17 @@ export default function Occupants() {
                 {isLoading ? (
                   <SkeletonRows rows={6} columns={6} />
                 ) : filteredOccupants.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      No occupants found.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyStateRow
+                    colSpan={6}
+                    icon={Users}
+                    title="No occupants found"
+                    description={
+                      occupants.length === 0
+                        ? "Assign your first occupant to a bed to see them here."
+                        : "Try clearing your search or filters above."
+                    }
+                    testId="empty-occupants-table"
+                  />
                 ) : (
                   filteredOccupants.map((occupant) => {
                     const property = occupant.propertyId ? properties.find(p => p.id === occupant.propertyId) : null;

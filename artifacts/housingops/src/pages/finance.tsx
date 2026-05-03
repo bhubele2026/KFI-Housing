@@ -9,7 +9,8 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { motion } from "framer-motion";
-import { Briefcase, X } from "lucide-react";
+import { Briefcase, X, DollarSign } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 export default function Finance() {
   const { properties, beds, leases, utilities, occupants, customers } = useData();
@@ -191,8 +192,13 @@ export default function Finance() {
               <TableBody>
                 {financialData.length === 0 ? (
                   <tr>
-                    <td colSpan={tableColCount} className="h-24 text-center text-sm text-muted-foreground">
-                      No properties match this filter.
+                    <td colSpan={tableColCount} className="p-0">
+                      <EmptyState
+                        icon={DollarSign}
+                        title="No properties match this filter"
+                        description="Adjust the customer filter above to see revenue and expenses."
+                        testId="empty-finance-table"
+                      />
                     </td>
                   </tr>
                 ) : (

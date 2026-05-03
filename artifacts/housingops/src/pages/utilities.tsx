@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Briefcase, ChevronRight, X, Zap, Download } from "lucide-react";
+import { EmptyStateRow } from "@/components/empty-state";
 import { UTILITY_TYPES } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -218,11 +219,13 @@ export default function Utilities() {
                 {isLoading ? (
                   <SkeletonRows rows={6} columns={columnCount} />
                 ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-                      No utility services found.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyStateRow
+                    colSpan={columnCount}
+                    icon={Zap}
+                    title="No utility services found"
+                    description="Utilities you add to a property will show up here."
+                    testId="empty-utilities-table"
+                  />
                 ) : (
                   <>
                     {filtered.map((u, i) => {

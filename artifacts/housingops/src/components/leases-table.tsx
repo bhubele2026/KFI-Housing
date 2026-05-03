@@ -1,4 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyStateRow } from "@/components/empty-state";
+import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trash2, DollarSign, FileText } from "lucide-react";
@@ -155,11 +157,13 @@ export function LeasesTable({
       </TableHeader>
       <TableBody>
         {!hasAnyRows ? (
-          <TableRow>
-            <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
-              {emptyMessage}
-            </TableCell>
-          </TableRow>
+          <EmptyStateRow
+            colSpan={columnCount}
+            icon={KeyRound}
+            title={emptyMessage}
+            description="Leases you create or import will appear here."
+            testId="empty-leases-table"
+          />
         ) : (
           <>
             {leases.map((lease) => {

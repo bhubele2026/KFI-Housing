@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download } from "lucide-react";
+import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home } from "lucide-react";
+import { EmptyStateRow } from "@/components/empty-state";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -729,11 +730,17 @@ export default function Properties() {
                 {isLoading ? (
                   <SkeletonRows rows={6} columns={13} />
                 ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
-                      No properties found.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyStateRow
+                    colSpan={13}
+                    icon={Home}
+                    title="No properties found"
+                    description={
+                      properties.length === 0
+                        ? "Add your first property to start tracking beds, leases, and utilities."
+                        : "Try clearing your search or filters above."
+                    }
+                    testId="empty-properties-table"
+                  />
                 ) : (
                   filtered.map((property, i) => {
                     const propBeds = beds.filter((b) => b.propertyId === property.id);

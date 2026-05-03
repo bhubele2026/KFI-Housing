@@ -4,6 +4,7 @@ import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -203,9 +204,12 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {topRatedProperties.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No properties have a {sortLabel.toLowerCase()} rating yet.
-              </p>
+              <EmptyState
+                icon={Trophy}
+                title={`No ${sortLabel.toLowerCase()} ratings yet`}
+                description="Rate your properties to see your top performers ranked here."
+                testId="empty-top-rated-properties"
+              />
             ) : (
               <Table>
                 <TableHeader>

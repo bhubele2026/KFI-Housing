@@ -20,6 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { EmptyStateRow } from "@/components/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -441,13 +442,21 @@ export default function Customers() {
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                      {customers.length === 0
-                        ? "No customers yet. Add your first customer to get started."
-                        : "No customers match your search."}
-                    </TableCell>
-                  </TableRow>
+                  <EmptyStateRow
+                    colSpan={8}
+                    icon={Briefcase}
+                    title={
+                      customers.length === 0
+                        ? "No customers yet"
+                        : "No customers match your search"
+                    }
+                    description={
+                      customers.length === 0
+                        ? "Add your first customer to start grouping properties and leases by client."
+                        : "Try clearing your search above."
+                    }
+                    testId="empty-customers-table"
+                  />
                 ) : (
                   filtered.map((c, i) => {
                     const stats = statsByCustomer.get(c.id);

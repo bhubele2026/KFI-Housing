@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
-import { Briefcase, Download, X } from "lucide-react";
+import { Briefcase, Download, X, BedDouble } from "lucide-react";
+import { EmptyStateRow } from "@/components/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
@@ -231,11 +232,17 @@ export default function Beds() {
                 {isLoading ? (
                   <SkeletonRows rows={6} columns={columnCount} />
                 ) : filteredBeds.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={columnCount} className="h-24 text-center">
-                      No beds found.
-                    </TableCell>
-                  </TableRow>
+                  <EmptyStateRow
+                    colSpan={columnCount}
+                    icon={BedDouble}
+                    title="No beds found"
+                    description={
+                      beds.length === 0
+                        ? "Add a property and its rooms to start tracking beds."
+                        : "Try clearing your search or filters above."
+                    }
+                    testId="empty-beds-table"
+                  />
                 ) : (
                   filteredBeds.map((bed) => {
                     const property = propertyById.get(bed.propertyId);

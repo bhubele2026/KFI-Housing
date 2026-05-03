@@ -4,7 +4,7 @@ import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
+import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -292,11 +292,13 @@ export default function Dashboard() {
                 </TableHeader>
                 <TableBody>
                   {chartData.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                        No properties match this customer.
-                      </TableCell>
-                    </TableRow>
+                    <EmptyStateRow
+                      colSpan={4}
+                      icon={Building2}
+                      title="No properties match this customer"
+                      description="Pick a different customer above, or add properties to this one to see performance."
+                      testId="empty-property-performance"
+                    />
                   ) : (
                     chartData.map((data) => {
                       const property = scopedProperties.find(p => p.name === data.name);

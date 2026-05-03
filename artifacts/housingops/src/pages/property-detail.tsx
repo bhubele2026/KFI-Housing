@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
+import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -1084,12 +1085,23 @@ export default function PropertyDetail() {
                   showProperty={false}
                   showCustomer={false}
                   onDelete={deleteLease}
-                  emptyMessage="No leases found."
-                  // When the property has zero leases, render a single
-                  // placeholder row matching the global Leases page. Clicking
-                  // it navigates to the lease-detail create page with the
-                  // property pre-selected and locked.
-                  placeholderProperties={propLeases.length === 0 ? [property] : []}
+                  emptyMessage="No leases yet"
+                  // Render the branded EmptyState block (icon + headline +
+                  // CTA) when this property has no leases — same treatment
+                  // task #128 added to the global list pages. The CTA
+                  // re-uses the AddLeaseDialog with the property pre-bound,
+                  // mirroring the dialog wired up in the tab header.
+                  emptyAction={
+                    <AddLeaseDialog
+                      propertyId={id}
+                      onAdd={addLease}
+                      trigger={
+                        <Button size="sm" data-testid="button-add-lease-empty">
+                          <Plus className="h-4 w-4 mr-1.5" />Add Lease
+                        </Button>
+                      }
+                    />
+                  }
                   // Threaded so opening a lease here and clicking "Back"
                   // returns the user to *this* property's Leases tab,
                   // not the global Leases page. The `?tab=leases` is
@@ -1159,8 +1171,35 @@ export default function PropertyDetail() {
 
             {propRooms.length === 0 && propBeds.length === 0 ? (
               <Card>
-                <CardContent className="p-12 text-center text-sm text-muted-foreground">
-                  No rooms yet. Click <span className="font-semibold text-foreground">Add Room</span> to create your first room.
+                <CardContent className="p-0">
+                  <EmptyState
+                    icon={BedDouble}
+                    title="No rooms yet"
+                    description="Add your first room to start tracking beds and occupants for this property."
+                    testId="empty-property-beds"
+                    action={
+                      <Button
+                        size="sm"
+                        data-testid="button-add-room-empty"
+                        onClick={async () => {
+                          try {
+                            await addRoom({
+                              id: `room-${Date.now()}`,
+                              propertyId: id,
+                              name: `Room 1`,
+                              sqft: 0,
+                              bathrooms: 0,
+                              monthlyRent: 0,
+                            });
+                          } catch {
+                            /* toast already shown by data-store */
+                          }
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />Add Room
+                      </Button>
+                    }
+                  />
                 </CardContent>
               </Card>
             ) : (
@@ -1338,7 +1377,23 @@ export default function PropertyDetail() {
                                 </TableHeader>
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
-                                    <TableRow><TableCell colSpan={12} className="h-16 text-center text-muted-foreground text-sm">No beds in this room yet. Click "Add Bed" to add one.</TableCell></TableRow>
+                                    <EmptyStateRow
+                                      colSpan={12}
+                                      icon={BedDouble}
+                                      title="No beds in this room yet"
+                                      description={`Add the first bed to ${room.name} so you can assign an occupant.`}
+                                      testId={`empty-room-beds-${room.id}`}
+                                      action={
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={handleAddBedToRoom}
+                                          data-testid={`button-add-bed-empty-${room.id}`}
+                                        >
+                                          <Plus className="h-3.5 w-3.5 mr-1" />Add Bed
+                                        </Button>
+                                      }
+                                    />
                                   ) : roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
                                     const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
                                     const isOccupied = bed.status === "Occupied";
@@ -1533,7 +1588,24 @@ export default function PropertyDetail() {
                   </TableHeader>
                   <TableBody>
                     {propUtils.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No utility services added yet.</TableCell></TableRow>
+                      <EmptyStateRow
+                        colSpan={6}
+                        icon={Zap}
+                        title="No utility services yet"
+                        description="Track power, water, internet, and other monthly services for this property."
+                        testId="empty-property-utilities"
+                        action={
+                          <AddUtilityDialog
+                            propertyId={id}
+                            onAdd={addUtility}
+                            trigger={
+                              <Button size="sm" data-testid="button-add-utility-empty">
+                                <Plus className="h-4 w-4 mr-1.5" />Add Service
+                              </Button>
+                            }
+                          />
+                        }
+                      />
                     ) : propUtils.map(u => (
                       <TableRow key={u.id}>
                         <TableCell>
@@ -1712,7 +1784,7 @@ function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
   );
 }
 
-function AddUtilityDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (u: Utility) => void }) {
+function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; onAdd: (u: Utility) => void; trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     type: "Electric" as Utility["type"],
@@ -1740,7 +1812,7 @@ function AddUtilityDialog({ propertyId, onAdd }: { propertyId: string; onAdd: (u
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Service</Button>
+        {trigger ?? <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Service</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Add Utility Service</DialogTitle></DialogHeader>

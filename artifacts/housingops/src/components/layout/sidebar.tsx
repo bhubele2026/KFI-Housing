@@ -210,7 +210,7 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg">
-      <div className="flex h-16 items-center px-4 border-b border-sidebar-border bg-sidebar-accent/30">
+      <div className="flex h-16 items-center px-4 border-b border-sidebar-border bg-sidebar">
         <img
           src={kfiLogoUrl}
           alt="KFI Staffing"

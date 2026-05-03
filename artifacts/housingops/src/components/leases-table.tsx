@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyStateRow } from "@/components/empty-state";
+import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -198,10 +199,10 @@ export function LeasesTable({
                             className="rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring text-left"
                             data-testid={`link-lease-property-${lease.id}`}
                           >
-                            {property.name}
+                            <PropertyNameCell name={property.name} />
                           </button>
                         ) : (
-                          property.name
+                          <PropertyNameCell name={property.name} />
                         )
                       ) : (
                         <span className="italic text-muted-foreground">Unknown</span>
@@ -341,10 +342,10 @@ export function LeasesTable({
                           className="rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring text-left"
                           data-testid={`link-lease-placeholder-property-${property.id}`}
                         >
-                          {property.name}
+                          <PropertyNameCell name={property.name} />
                         </button>
                       ) : (
-                        property.name
+                        <PropertyNameCell name={property.name} />
                       )}
                       {property.address && (
                         <p className="text-[11px] font-normal text-muted-foreground mt-0.5">

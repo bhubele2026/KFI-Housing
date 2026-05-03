@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PropertyNameCell } from "@/components/property-name-cell";
+import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { sumActiveRent, toMonthlyCharge } from "@/data/mockData";
@@ -46,7 +48,7 @@ export default function Finance() {
     return {
       id: p.id,
       name: p.name,
-      shortName: p.name.split(" ")[0],
+      shortName: formatPropertyName(p.name).primary,
       customerId: p.customerId,
       customerName,
       revenue,
@@ -229,7 +231,7 @@ export default function Finance() {
                         className={`border-b transition-colors ${d.profit < 0 ? "bg-destructive/5" : ""}`}
                         data-testid={`row-finance-${d.id}`}
                       >
-                        <td className="p-4 font-medium">{d.name}</td>
+                        <td className="p-4"><PropertyNameCell name={d.name} /></td>
                         {showCustomerColumn && (
                           <td className="p-4 text-sm text-muted-foreground" data-testid={`text-finance-customer-${d.id}`}>
                             {d.customerId && d.customerName ? (

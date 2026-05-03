@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { PropertyNameCell } from "@/components/property-name-cell";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
@@ -157,7 +158,7 @@ export default function Occupants() {
                     return (
                       <TableRow key={occupant.id}>
                         <TableCell className="font-medium">{occupant.name}</TableCell>
-                        <TableCell>{property ? property.name : "-"}</TableCell>
+                        <TableCell>{property ? <PropertyNameCell name={property.name} /> : <span className="italic text-muted-foreground">—</span>}</TableCell>
                         <TableCell>{bed ? `Bed ${bed.bedNumber}` : "-"}</TableCell>
                         <TableCell>{occupant.moveInDate}</TableCell>
                         <TableCell className="text-right">${occupant.chargePerBed}</TableCell>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { PropertyNameCell } from "@/components/property-name-cell";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -774,7 +775,7 @@ export default function Properties() {
                         onClick={() => navigate(`/properties/${property.id}`)}
                         data-testid={`row-property-${property.id}`}
                       >
-                        <td className="p-4 font-semibold">{property.name}</td>
+                        <td className="p-4"><PropertyNameCell name={property.name} primaryClassName="font-semibold" /></td>
                         <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`}>
                           {customer ? (
                             <button

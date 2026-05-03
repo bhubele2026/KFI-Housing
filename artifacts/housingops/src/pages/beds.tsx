@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { PropertyNameCell } from "@/components/property-name-cell";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -263,7 +264,7 @@ export default function Beds() {
                     
                     return (
                       <TableRow key={bed.id}>
-                        <TableCell className="font-medium">{property?.name}</TableCell>
+                        <TableCell><PropertyNameCell name={property?.name} /></TableCell>
                         {showCustomerColumn && (
                           <TableCell className="text-muted-foreground" data-testid={`text-bed-customer-${bed.id}`}>
                             {property?.customerId && customerName ? (

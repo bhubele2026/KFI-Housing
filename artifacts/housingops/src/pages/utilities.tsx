@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { PropertyNameCell } from "@/components/property-name-cell";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -252,7 +253,7 @@ export default function Utilities() {
                           onClick={() => navigate(`/properties/${u.propertyId}?tab=utilities`)}
                           data-testid={`row-utility-${u.id}`}
                         >
-                          <td className="p-4 font-medium text-sm">{property?.name}</td>
+                          <td className="p-4"><PropertyNameCell name={property?.name} primaryClassName="text-sm" /></td>
                           {showCustomerColumn && (
                             <td className="p-4 text-sm text-muted-foreground" data-testid={`text-utility-customer-${u.id}`}>
                               {property?.customerId && customerName ? (

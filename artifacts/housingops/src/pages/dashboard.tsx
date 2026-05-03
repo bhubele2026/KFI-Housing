@@ -15,6 +15,8 @@ import { motion } from "framer-motion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PropertyNameCell } from "@/components/property-name-cell";
+import { formatPropertyName } from "@/lib/property-name";
 
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
@@ -251,7 +253,10 @@ export default function Dashboard() {
                             href={`/properties/${row.property.id}`}
                             className="hover:underline text-primary"
                           >
-                            {row.property.name}
+                            <PropertyNameCell
+                              name={row.property.name}
+                              primaryClassName="text-primary"
+                            />
                           </Link>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
@@ -281,7 +286,13 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                  <XAxis
+                    dataKey="name"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => formatPropertyName(value).primary}
+                  />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
                   <Tooltip formatter={(value) => `$${value}`} cursor={{fill: 'transparent'}} />
                   <Legend />
@@ -334,7 +345,7 @@ export default function Dashboard() {
                       const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
                       return (
                         <TableRow key={data.name} data-testid={`row-perf-${property?.id ?? data.name}`}>
-                          <TableCell className="font-medium">{data.name}</TableCell>
+                          <TableCell><PropertyNameCell name={data.name} /></TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {customer?.name ?? <span className="italic">—</span>}
                           </TableCell>

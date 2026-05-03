@@ -190,4 +190,55 @@ describe("Empty-state graphics on per-property tabs", () => {
     expect(cta).not.toBeNull();
     expect(cta!.textContent).toContain("Add Service");
   });
+
+  // Regression coverage for task #134: the Furnishings tab should
+  // render the same branded EmptyState block when a property has no
+  // furnishings selected yet, hinting operators at the category
+  // checklists below.
+  it("Furnishings tab renders the EmptyState when the property has no furnishings selected", async () => {
+    window.history.replaceState({}, "", "/properties/p1?tab=furnishings");
+
+    await act(async () => {
+      root = mount(<PropertyDetail />, container);
+    });
+
+    const empty = container.querySelector(
+      '[data-testid="empty-property-furnishings"]',
+    );
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toContain("No furnishings selected yet");
+    expect(empty!.textContent).toContain("category checklists");
+  });
+
+  // Second branch from task #134: when the user types a search query
+  // that doesn't match anything, the same branded EmptyState replaces
+  // the old plain-text "No furnishings match …" line.
+  it("Furnishings tab renders the search EmptyState when the filter eliminates all categories", async () => {
+    window.history.replaceState({}, "", "/properties/p1?tab=furnishings");
+
+    await act(async () => {
+      root = mount(<PropertyDetail />, container);
+    });
+
+    const searchInput = container.querySelector(
+      '[data-testid="furnishings-search"]',
+    ) as HTMLInputElement | null;
+    expect(searchInput).not.toBeNull();
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
+      setter.call(searchInput, "zzz-no-such-furnishing");
+      searchInput!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const empty = container.querySelector(
+      '[data-testid="empty-property-furnishings-search"]',
+    );
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toContain("No furnishings match");
+    expect(empty!.textContent).toContain("zzz-no-such-furnishing");
+  });
 });

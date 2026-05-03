@@ -1933,12 +1933,34 @@ function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange
         </CardContent>
       </Card>
 
+      {/* Branded EmptyState when no furnishings have been picked yet —
+          visual parity with the Leases / Beds / Utilities tabs (task
+          #132). Renders alongside the category checklists below so
+          operators still see where to start tagging amenities. */}
+      {totalSelected === 0 && q === "" && (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Sofa}
+              title="No furnishings selected yet"
+              description="Pick from the category checklists below to mark what's included at this property — beds, appliances, building amenities, and more."
+              testId="empty-property-furnishings"
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Category cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {visibleCategories.length === 0 && (
           <Card className="lg:col-span-2">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              No furnishings match "{search}".
+            <CardContent className="p-0">
+              <EmptyState
+                icon={Sofa}
+                title={`No furnishings match "${search}"`}
+                description="Try a different keyword, or clear the search to browse every category checklist."
+                testId="empty-property-furnishings-search"
+              />
             </CardContent>
           </Card>
         )}

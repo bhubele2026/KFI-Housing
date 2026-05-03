@@ -9,8 +9,9 @@ import { createRoot, type Root } from "react-dom/client";
 // care about the customer scope wiring, so we replace everything else with
 // minimal stand-ins.
 
+const toastMock = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn(), dismiss: vi.fn(), toasts: [] }),
+  useToast: () => ({ toast: toastMock, dismiss: vi.fn(), toasts: [] }),
 }));
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -19,16 +20,18 @@ vi.mock("@/hooks/use-auth", () => ({
 
 // Mutable mock data so individual tests can rename / delete the active
 // scoped customer between renders and verify the badge reacts.
+const resetToSampleDataMock =
+  vi.fn<(opts?: { onSuccess?: () => void }) => void>();
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;
-  resetToSampleData: () => void;
+  resetToSampleData: typeof resetToSampleDataMock;
   exportData: () => unknown;
   importData: () => unknown;
 } = {
   customers: [],
   isLoading: false,
-  resetToSampleData: vi.fn(),
+  resetToSampleData: resetToSampleDataMock,
   exportData: vi.fn(),
   importData: vi.fn(),
 };
@@ -172,6 +175,70 @@ describe("Sidebar customer scope badge", () => {
     expect(
       new URLSearchParams(window.location.search).get("customer"),
     ).toBe("c1");
+  });
+
+  it("renders the dev-only Reset demo data button when import.meta.env.DEV is true", async () => {
+    vi.stubEnv("DEV", true);
+    try {
+      await renderAt("/dashboard");
+      const btn = container.querySelector(
+        '[data-testid="button-reset-demo-data"]',
+      );
+      expect(btn).not.toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("hides the dev-only Reset demo data button in production builds", async () => {
+    vi.stubEnv("DEV", false);
+    try {
+      await renderAt("/dashboard");
+      const btn = container.querySelector(
+        '[data-testid="button-reset-demo-data"]',
+      );
+      expect(btn).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("opens the confirm dialog and triggers reset + success toast on confirm", async () => {
+    vi.stubEnv("DEV", true);
+    resetToSampleDataMock.mockReset();
+    resetToSampleDataMock.mockImplementation((opts) => {
+      opts?.onSuccess?.();
+    });
+    toastMock.mockReset();
+    try {
+      await renderAt("/dashboard");
+
+      const openBtn = container.querySelector(
+        '[data-testid="button-reset-demo-data"]',
+      ) as HTMLButtonElement | null;
+      expect(openBtn).not.toBeNull();
+
+      await act(async () => {
+        openBtn!.click();
+      });
+
+      // The AlertDialog portals into document.body, not the test container.
+      const confirmBtn = document.querySelector(
+        '[data-testid="button-reset-demo-confirm"]',
+      ) as HTMLButtonElement | null;
+      expect(confirmBtn).not.toBeNull();
+
+      await act(async () => {
+        confirmBtn!.click();
+      });
+
+      expect(resetToSampleDataMock).toHaveBeenCalledTimes(1);
+      expect(toastMock).toHaveBeenCalledTimes(1);
+      const arg = toastMock.mock.calls[0][0];
+      expect(arg.title).toBe("Demo data reset");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("badge disappears automatically when the underlying customer is deleted", async () => {

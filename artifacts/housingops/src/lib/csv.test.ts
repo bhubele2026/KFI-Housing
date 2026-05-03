@@ -77,9 +77,9 @@ describe("toCsv", () => {
 
 describe("timestampedCsvName", () => {
   it("appends a YYYY-MM-DD-HH-MM-SS stamp and .csv extension", () => {
-    const name = timestampedCsvName("housingops-properties");
+    const name = timestampedCsvName("kfi-staffing-properties");
     expect(name).toMatch(
-      /^housingops-properties-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.csv$/,
+      /^kfi-staffing-properties-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.csv$/,
     );
   });
 });

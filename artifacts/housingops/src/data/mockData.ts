@@ -521,7 +521,7 @@ export const MOCK_PROPERTIES: Property[] = [
     paymentMethod: "ACH",
     paymentRecipient: "Harrington Properties LLC",
     paymentDueDay: 1,
-    paymentNotes: "Auto-pay set up via bank. Confirmation email sent to billing@housingops.com.",
+    paymentNotes: "Auto-pay set up via bank. Confirmation email sent to billing@kfistaffing.com.",
     bankName: "First National Bank",
     bankRouting: "021000021",
     bankAccount: "4400123456",

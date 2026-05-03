@@ -47,7 +47,7 @@ export default function Occupants() {
       { header: "Billing Frequency", value: (o) => o.billingFrequency },
       { header: "Status",            value: (o) => o.status },
     ]);
-    downloadCsv(timestampedCsvName("housingops-occupants"), csv);
+    downloadCsv(timestampedCsvName("kfi-staffing-occupants"), csv);
     toast({
       title: "Occupants exported",
       description: `Downloaded ${filteredOccupants.length} ${filteredOccupants.length === 1 ? "occupant" : "occupants"} as CSV.`,

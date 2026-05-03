@@ -514,7 +514,7 @@ export default function Properties() {
       { header: "Landlord Email",  value: (r) => r.property.landlordEmail },
       { header: "Landlord Phone",  value: (r) => r.property.landlordPhone },
     ]);
-    downloadCsv(timestampedCsvName("housingops-properties"), csv);
+    downloadCsv(timestampedCsvName("kfi-staffing-properties"), csv);
     toast({
       title: "Properties exported",
       description: `Downloaded ${filtered.length} ${filtered.length === 1 ? "property" : "properties"} as CSV.`,

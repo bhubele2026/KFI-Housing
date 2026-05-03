@@ -210,35 +210,54 @@ describe("Empty-state graphics on per-property tabs", () => {
     expect(empty!.textContent).toContain("category checklists");
   });
 
-  // Second branch from task #134: when the user types a search query
-  // that doesn't match anything, the same branded EmptyState replaces
-  // the old plain-text "No furnishings match …" line.
+  // Second branch from task #134 (regression coverage added in task
+  // #136): when the user types a search query that doesn't match
+  // anything, the same branded Sofa-icon EmptyState replaces the old
+  // plain-text "No furnishings match …" line. Seed the property with at
+  // least one furnishing so the no-furnishings-yet EmptyState is *not*
+  // the thing under test — only the search-empty branch should fire.
   it("Furnishings tab renders the search EmptyState when the filter eliminates all categories", async () => {
     window.history.replaceState({}, "", "/properties/p1?tab=furnishings");
+    seededProperty.furnishings = ["Queen Bed"];
 
-    await act(async () => {
-      root = mount(<PropertyDetail />, container);
-    });
+    try {
+      await act(async () => {
+        root = mount(<PropertyDetail />, container);
+      });
 
-    const searchInput = container.querySelector(
-      '[data-testid="furnishings-search"]',
-    ) as HTMLInputElement | null;
-    expect(searchInput).not.toBeNull();
+      const searchInput = container.querySelector(
+        '[data-testid="furnishings-search"]',
+      ) as HTMLInputElement | null;
+      expect(searchInput).not.toBeNull();
 
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )!.set!;
-      setter.call(searchInput, "zzz-no-such-furnishing");
-      searchInput!.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value",
+        )!.set!;
+        setter.call(searchInput, "zzz-no-such-furnishing");
+        searchInput!.dispatchEvent(new Event("input", { bubbles: true }));
+      });
 
-    const empty = container.querySelector(
-      '[data-testid="empty-property-furnishings-search"]',
-    );
-    expect(empty).not.toBeNull();
-    expect(empty!.textContent).toContain("No furnishings match");
-    expect(empty!.textContent).toContain("zzz-no-such-furnishing");
+      const empty = container.querySelector(
+        '[data-testid="empty-property-furnishings-search"]',
+      );
+      expect(empty).not.toBeNull();
+      expect(empty!.textContent).toContain("No furnishings match");
+      expect(empty!.textContent).toContain("zzz-no-such-furnishing");
+      // Sofa-icon EmptyState block — lucide renders an <svg> with a
+      // `lucide-sofa` class so a future swap to the bare text line
+      // fails this test loudly.
+      expect(empty!.querySelector("svg.lucide-sofa")).not.toBeNull();
+
+      // And the no-furnishings-yet EmptyState must *not* render, since
+      // the property has a furnishing selected — this guards against
+      // accidentally collapsing both branches into one.
+      expect(
+        container.querySelector('[data-testid="empty-property-furnishings"]'),
+      ).toBeNull();
+    } finally {
+      seededProperty.furnishings = [];
+    }
   });
 });

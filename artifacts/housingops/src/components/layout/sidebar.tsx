@@ -50,18 +50,44 @@ export function Sidebar() {
       : undefined;
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
+  const [demoResetOpen, setDemoResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const isDevBuild = import.meta.env.DEV;
   const [pendingImport, setPendingImport] = useState<{ preview: ImportPreview; fileName: string } | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("replace");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isResetting, setIsResetting] = useState(false);
+  const [isDemoResetting, setIsDemoResetting] = useState(false);
+
   const handleConfirmReset = () => {
-    resetToSampleData();
-    setResetOpen(false);
-    toast({
-      title: "Sample data restored",
-      description: "All saved changes were cleared and the demo data was reloaded.",
+    if (isResetting) return;
+    setIsResetting(true);
+    resetToSampleData({
+      onSuccess: () => {
+        toast({
+          title: "Sample data restored",
+          description: "All saved changes were cleared and the demo data was reloaded.",
+        });
+      },
     });
+    setResetOpen(false);
+    setIsResetting(false);
+  };
+
+  const handleConfirmDemoReset = () => {
+    if (isDemoResetting) return;
+    setIsDemoResetting(true);
+    resetToSampleData({
+      onSuccess: () => {
+        toast({
+          title: "Demo data reset",
+          description: "Edits cleared and the demo dataset was reseeded. Ready for the next take.",
+        });
+      },
+    });
+    setDemoResetOpen(false);
+    setIsDemoResetting(false);
   };
 
   const handleExport = () => {
@@ -292,11 +318,45 @@ export function Sidebar() {
           <RotateCcw className="mr-2 h-4 w-4" />
           Reset to sample data
         </Button>
+        {isDevBuild ? (
+          <Button
+            variant="outline"
+            className="w-full justify-start border-amber-300/60 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            onClick={() => setDemoResetOpen(true)}
+            data-testid="button-reset-demo-data"
+            title="Visible in development builds only"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset demo data (dev)
+          </Button>
+        ) : null}
         <Button variant="outline" className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={logout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </Button>
       </div>
+
+      <AlertDialog open={demoResetOpen} onOpenChange={setDemoResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset demo data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Wipes every edit in this browser and reseeds the demo dataset so you can re-run the
+              demo cleanly between investor takes. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reset-demo-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDemoReset}
+              data-testid="button-reset-demo-confirm"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Reset demo data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent>

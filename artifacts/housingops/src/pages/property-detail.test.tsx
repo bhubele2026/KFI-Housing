@@ -164,6 +164,94 @@ describe("NotesEditor — resync on persisted value change", () => {
     expect(getTextarea().value).toBe("same");
   });
 
+  it("flushes an unsaved draft through onSave on unmount (task #76)", async () => {
+    // Notes draft protection: if the operator types into the textarea and
+    // navigates away (component unmounts) before the field blurs, the
+    // unmount cleanup must still call onSave so the optimistic patch +
+    // server save fire. Otherwise the in-progress text is silently lost.
+    const onSave = vi.fn();
+    await render(<NotesEditor value="original" onSave={onSave} />);
+    await act(async () => {
+      setReactInputValue(getTextarea(), "in-progress note");
+    });
+    expect(onSave).not.toHaveBeenCalled();
+
+    const r = root!;
+    await act(async () => {
+      r.unmount();
+    });
+    root = null;
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith("in-progress note");
+  });
+
+  it("does NOT double-save on unmount when blur already saved the same draft", async () => {
+    // Edge case from code review: if a blur-triggered save is in flight
+    // (so `value` hasn't yet caught up to the saved draft) and the
+    // component unmounts, the unmount cleanup must not re-fire an
+    // identical save. The lastSavedDraftRef dedupe guard prevents this.
+    const onSave = vi.fn();
+    await render(<NotesEditor value="original" onSave={onSave} />);
+
+    await act(async () => {
+      setReactInputValue(getTextarea(), "edited once");
+    });
+    await act(async () => {
+      // React 18+ delegates focus/blur via the bubbling `focusout` event at
+      // the root listener, so a non-bubbling `blur` Event won't fire the
+      // onBlur prop. Dispatch `focusout` (which bubbles) instead.
+      getTextarea().dispatchEvent(new Event("focusout", { bubbles: true }));
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith("edited once");
+
+    // Unmount before the parent re-renders with the persisted value. The
+    // unmount flush must NOT call onSave again with the identical draft.
+    const r = root!;
+    await act(async () => {
+      r.unmount();
+    });
+    root = null;
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call onSave on unmount when the draft was never edited", async () => {
+    const onSave = vi.fn();
+    await render(<NotesEditor value="hello" onSave={onSave} />);
+
+    const r = root!;
+    await act(async () => {
+      r.unmount();
+    });
+    root = null;
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("warns on beforeunload while the draft is dirty (task #76)", async () => {
+    await render(<NotesEditor value="original" onSave={() => {}} />);
+
+    // Clean state — beforeunload should NOT prompt.
+    const cleanEvent = new Event("beforeunload", {
+      cancelable: true,
+    }) as BeforeUnloadEvent;
+    window.dispatchEvent(cleanEvent);
+    expect(cleanEvent.defaultPrevented).toBe(false);
+
+    // User types — draft becomes dirty.
+    await act(async () => {
+      setReactInputValue(getTextarea(), "unsaved typing");
+    });
+
+    const dirtyEvent = new Event("beforeunload", {
+      cancelable: true,
+    }) as BeforeUnloadEvent;
+    window.dispatchEvent(dirtyEvent);
+    expect(dirtyEvent.defaultPrevented).toBe(true);
+  });
+
   it("preserves an in-progress draft across re-renders that do not change value", async () => {
     // Critical: the lastIncomingRef guard is what stops the effect from
     // overwriting the user's typing when the parent re-renders for an

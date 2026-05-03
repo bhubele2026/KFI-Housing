@@ -295,6 +295,15 @@ function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onCh
 export function NotesEditor({ value, onSave, className }: { value: string; onSave: (v: string) => void; className?: string }) {
   const [draft, setDraft] = useState(value);
   const lastIncomingRef = useRef(value);
+  // Latest draft + value + onSave kept on refs so the unmount cleanup can
+  // flush an in-progress edit without re-binding the effect (and re-firing
+  // the cleanup) on every keystroke.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   // Whenever the persisted value changes from outside (e.g. an optimistic
   // patch settles, or a save fails and the data store reverts), pull the new
@@ -307,12 +316,56 @@ export function NotesEditor({ value, onSave, className }: { value: string; onSav
     setDraft(value);
   }, [value]);
 
+  // Notes draft protection (task #76): operators frequently start typing in
+  // a Notes textarea and then click a sidebar link or back button before
+  // blurring the field, which dropped the in-progress text on the floor.
+  // Two safety nets:
+  //
+  //   1. On unmount, if the local draft hasn't been saved yet, flush it
+  //      through onSave so the optimistic update + API call still fire.
+  //      Covers in-app navigation away from the page mid-edit.
+  //   2. On `beforeunload`, set returnValue while the draft is dirty so the
+  //      browser shows its native "Leave site?" prompt. Covers tab close,
+  //      hard refresh, and cross-origin nav, where the unmount flush above
+  //      can't help because the page is being torn down before React runs
+  //      cleanup synchronously enough for an in-flight POST to complete.
+  // Track the most recent draft we've already pushed through onSave (via
+  // blur or a previous unmount flush), so the unmount safety net doesn't
+  // re-fire an identical save when an in-flight blur PATCH hasn't yet
+  // round-tripped to update `value`.
+  const lastSavedDraftRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (draftRef.current === valueRef.current) return;
+      if (draftRef.current === lastSavedDraftRef.current) return;
+      e.preventDefault();
+      e.returnValue = "You have unsaved notes — discard?";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      if (
+        draftRef.current !== valueRef.current &&
+        draftRef.current !== lastSavedDraftRef.current
+      ) {
+        lastSavedDraftRef.current = draftRef.current;
+        onSaveRef.current(draftRef.current);
+      }
+    };
+  }, []);
+
   return (
     <Textarea
       value={draft}
       className={className}
       onChange={e => setDraft(e.target.value)}
-      onBlur={() => { if (draft !== value) onSave(draft); }}
+      onBlur={() => {
+        if (draft !== value && draft !== lastSavedDraftRef.current) {
+          lastSavedDraftRef.current = draft;
+          onSave(draft);
+        }
+      }}
     />
   );
 }

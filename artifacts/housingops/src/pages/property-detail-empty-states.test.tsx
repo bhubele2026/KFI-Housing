@@ -102,7 +102,7 @@ const seededProperty = {
   portalUrl: "",
   paymentNotes: "",
   notes: "",
-  furnishings: [],
+  furnishings: [] as string[],
   ratings: undefined,
 };
 

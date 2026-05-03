@@ -15,7 +15,7 @@ export function buildSchemaDriftPayload(message: string): { text: string } {
   const fix = "pnpm --filter @workspace/db run push";
   return {
     text:
-      ":rotating_light: *HousingOps API failed to start: database schema is out of date*\n" +
+      ":rotating_light: *KFI Staffing API failed to start: database schema is out of date*\n" +
       `> ${message}\n` +
       `*Fix:* run \`${fix}\` against the production database, then redeploy.`,
   };

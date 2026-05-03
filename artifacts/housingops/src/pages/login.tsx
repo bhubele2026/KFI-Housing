@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2 } from "lucide-react";
 import { motion } from "framer-motion";
+import kfiLogoUrl from "@assets/kfi-staffing-logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -30,13 +30,17 @@ export default function Login() {
         <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
           <CardHeader className="space-y-3 text-center pb-6">
             <div className="flex justify-center mb-2">
-              <div className="h-12 w-12 bg-primary rounded-xl flex items-center justify-center shadow-sm">
-                <Building2 className="h-6 w-6 text-primary-foreground" />
+              <div className="rounded-xl bg-primary px-6 py-4 shadow-sm">
+                <img
+                  src={kfiLogoUrl}
+                  alt="KFI Staffing"
+                  className="h-12 w-auto object-contain"
+                />
               </div>
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
             <CardDescription className="text-zinc-500 dark:text-zinc-400">
-              Enter your credentials to access HousingOps
+              Sign in to KFI Staffing — Drastically Different Staffing.
             </CardDescription>
           </CardHeader>
           <CardContent>

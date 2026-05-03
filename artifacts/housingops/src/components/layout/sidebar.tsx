@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Building2, LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X } from "lucide-react";
+import kfiLogoUrl from "@assets/kfi-staffing-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -99,7 +100,7 @@ export function Sidebar() {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `housingops-export-${stamp}.json`;
+      a.download = `kfi-staffing-export-${stamp}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -132,7 +133,7 @@ export function Sidebar() {
     } catch {
       toast({
         title: "Could not read file",
-        description: "That file is not valid JSON. Please choose a HousingOps export file.",
+        description: "That file is not valid JSON. Please choose a KFI Staffing export file.",
         variant: "destructive",
       });
       return;
@@ -146,7 +147,7 @@ export function Sidebar() {
       const description =
         err instanceof UnsupportedImportError
           ? err.message
-          : "That file doesn't look like a HousingOps export. No changes were made.";
+          : "That file doesn't look like a KFI Staffing export. No changes were made.";
       toast({
         title: "Can't import this file",
         description,
@@ -209,9 +210,12 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg">
-      <div className="flex h-16 items-center px-6 border-b border-sidebar-border bg-sidebar-accent/30">
-        <Building2 className="mr-3 h-6 w-6 text-primary" />
-        <span className="text-xl font-bold tracking-tight">HousingOps</span>
+      <div className="flex h-16 items-center px-4 border-b border-sidebar-border bg-sidebar-accent/30">
+        <img
+          src={kfiLogoUrl}
+          alt="KFI Staffing"
+          className="h-10 w-auto max-w-full object-contain"
+        />
       </div>
 
       {activeScopedCustomer && (
@@ -279,7 +283,7 @@ export function Sidebar() {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium">Admin Manager</p>
-              <p className="text-xs text-sidebar-foreground/60">admin@housingops.com</p>
+              <p className="text-xs text-sidebar-foreground/60">admin@kfistaffing.com</p>
             </div>
           </div>
         </div>

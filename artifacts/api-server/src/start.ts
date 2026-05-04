@@ -128,8 +128,38 @@ export async function start(deps: StartDeps): Promise<void> {
   try {
     await deps.listen(port);
     deps.logger.info({ port }, "Server listening");
+    warnIfGoogleMapsKeyMissing(deps);
   } catch (err) {
     deps.logger.error({ err }, "Error listening on port");
     deps.exit(1);
+  }
+}
+
+// Surfaces a single, clearly-worded warning at startup when neither
+// the canonical `GOOGLE_MAPS_API_KEY` nor the legacy
+// `VITE_GOOGLE_MAPS_API_KEY` is set. Without this, a missing key
+// produces an entirely silent failure mode — `/api/config` returns
+// `{"googleMapsApiKey": null, ...}` and the frontend renders its
+// "API key isn't configured" fallback box, but nothing in the
+// workflow logs points at the real cause. The user has now hit this
+// silent failure three times in a row (Task #187), so we make the
+// next regression loud here at boot.
+//
+// We deliberately log only the *presence* of either env var, never
+// their values — these end up in plaintext workflow logs.
+function warnIfGoogleMapsKeyMissing(
+  deps: Pick<StartDeps, "env" | "logger">,
+): void {
+  const primary = (deps.env["GOOGLE_MAPS_API_KEY"] ?? "").trim();
+  const legacy = (deps.env["VITE_GOOGLE_MAPS_API_KEY"] ?? "").trim();
+  if (primary === "" && legacy === "") {
+    deps.logger.warn(
+      "Neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is " +
+        "set — the property-detail Location card and the portfolio " +
+        "map will render their 'API key isn't configured' fallback. " +
+        "Set GOOGLE_MAPS_API_KEY (preferred) on the api-server and " +
+        "restart it to enable the embedded Google Map. The legacy " +
+        "VITE_GOOGLE_MAPS_API_KEY name is also accepted as a fallback.",
+    );
   }
 }

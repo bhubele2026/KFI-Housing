@@ -305,6 +305,103 @@ describe("start", () => {
     expect(notifySchemaDrift).not.toHaveBeenCalled();
   });
 
+  it("warns at startup when neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is set", async () => {
+    // Without this warning, a missing key produces an entirely
+    // silent failure mode — `/api/config` returns
+    // `{"googleMapsApiKey": null, ...}` and the frontend renders its
+    // dashed "API key isn't configured" fallback, but nothing in the
+    // workflow logs points at the real cause. The user has been
+    // burned by this loop three times in a row (Task #187), so the
+    // boot WARN is the loud canary that ends the loop.
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        logger,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    const warnCalls = logger.warn.mock.calls.map(([msg]) => String(msg));
+    const mapsWarn = warnCalls.find((m) =>
+      /GOOGLE_MAPS_API_KEY/.test(m),
+    );
+    expect(mapsWarn).toBeDefined();
+    // Both env var names must appear so the operator who set the
+    // legacy name knows the api-server now also accepts it.
+    expect(mapsWarn).toContain("GOOGLE_MAPS_API_KEY");
+    expect(mapsWarn).toContain("VITE_GOOGLE_MAPS_API_KEY");
+  });
+
+  it("does NOT warn at startup when GOOGLE_MAPS_API_KEY is set", async () => {
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        logger,
+        env: {
+          NODE_ENV: "development",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "live-key",
+        },
+      }),
+    );
+
+    const mapsWarn = logger.warn.mock.calls
+      .map(([msg]) => String(msg))
+      .find((m) => /GOOGLE_MAPS_API_KEY/.test(m));
+    expect(mapsWarn).toBeUndefined();
+  });
+
+  it("does NOT warn at startup when only the legacy VITE_GOOGLE_MAPS_API_KEY is set", async () => {
+    // The /api/config route falls back to the legacy name, so an
+    // operator who set only the legacy secret is still fine — no
+    // warning needed.
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        logger,
+        env: {
+          NODE_ENV: "development",
+          PORT: "3000",
+          VITE_GOOGLE_MAPS_API_KEY: "legacy-key",
+        },
+      }),
+    );
+
+    const mapsWarn = logger.warn.mock.calls
+      .map(([msg]) => String(msg))
+      .find((m) => /GOOGLE_MAPS_API_KEY/.test(m));
+    expect(mapsWarn).toBeUndefined();
+  });
+
+  it("treats whitespace-only env vars as unset for the startup warning", async () => {
+    // Mirrors the route's `trim` behavior so the boot warning agrees
+    // with what `/api/config` actually returns. Without this, an
+    // operator who pasted spaces into the secret would get a "value
+    // looks set" boot but a `googleMapsApiKey: null` response, which
+    // is exactly the silent-failure mismatch this task is closing.
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        logger,
+        env: {
+          NODE_ENV: "development",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "   ",
+          VITE_GOOGLE_MAPS_API_KEY: "  ",
+        },
+      }),
+    );
+
+    const mapsWarn = logger.warn.mock.calls
+      .map(([msg]) => String(msg))
+      .find((m) => /GOOGLE_MAPS_API_KEY/.test(m));
+    expect(mapsWarn).toBeDefined();
+  });
+
   it("still exits cleanly if the chat webhook itself fails", async () => {
     const pushSchemaIfNeeded = vi
       .fn()

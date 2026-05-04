@@ -13,6 +13,7 @@ describe("GET /api/config", () => {
   let server: http.Server;
   let baseUrl: string;
   const originalKey = process.env.GOOGLE_MAPS_API_KEY;
+  const originalLegacyKey = process.env.VITE_GOOGLE_MAPS_API_KEY;
   const originalMapId = process.env.GOOGLE_MAPS_MAP_ID;
 
   beforeAll(async () => {
@@ -32,6 +33,7 @@ describe("GET /api/config", () => {
 
   beforeEach(() => {
     delete process.env.GOOGLE_MAPS_API_KEY;
+    delete process.env.VITE_GOOGLE_MAPS_API_KEY;
     delete process.env.GOOGLE_MAPS_MAP_ID;
   });
 
@@ -40,6 +42,11 @@ describe("GET /api/config", () => {
       delete process.env.GOOGLE_MAPS_API_KEY;
     } else {
       process.env.GOOGLE_MAPS_API_KEY = originalKey;
+    }
+    if (originalLegacyKey === undefined) {
+      delete process.env.VITE_GOOGLE_MAPS_API_KEY;
+    } else {
+      process.env.VITE_GOOGLE_MAPS_API_KEY = originalLegacyKey;
     }
     if (originalMapId === undefined) {
       delete process.env.GOOGLE_MAPS_MAP_ID;
@@ -141,6 +148,70 @@ describe("GET /api/config", () => {
     process.env.GOOGLE_MAPS_MAP_ID = "new-rotated-map-id";
     body = (await (await fetch(`${baseUrl}/api/config`)).json()) as ConfigBody;
     expect(body.googleMapsMapId).toBe("new-rotated-map-id");
+  });
+
+  it("falls back to VITE_GOOGLE_MAPS_API_KEY when only the legacy env var is set", async () => {
+    // The key was migrated env var names twice — first to
+    // VITE_GOOGLE_MAPS_API_KEY (Tasks #143/#147) and then to
+    // GOOGLE_MAPS_API_KEY (Task #154) — and an operator who set the
+    // secret under the legacy name was silently producing a
+    // `googleMapsApiKey: null` response with no log line pointing at
+    // the cause (Task #187). The fallback below means that historical
+    // mistake can't silently kill the embedded map again.
+    process.env.VITE_GOOGLE_MAPS_API_KEY = "legacy-vite-key";
+
+    const res = await fetch(`${baseUrl}/api/config`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ConfigBody;
+    expect(body).toEqual({
+      googleMapsApiKey: "legacy-vite-key",
+      googleMapsMapId: null,
+    });
+  });
+
+  it("prefers the canonical GOOGLE_MAPS_API_KEY when both env vars are set", async () => {
+    // The canonical name is what current code, docs, and rotation
+    // instructions all reference. If both happen to be set during a
+    // partial migration, the canonical name must win so that an
+    // operator who follows the documented rotation flow actually sees
+    // their new value land — otherwise a stale legacy secret could
+    // silently mask the rotation (Task #187).
+    process.env.GOOGLE_MAPS_API_KEY = "canonical-key";
+    process.env.VITE_GOOGLE_MAPS_API_KEY = "legacy-vite-key";
+
+    const res = await fetch(`${baseUrl}/api/config`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ConfigBody;
+    expect(body.googleMapsApiKey).toBe("canonical-key");
+  });
+
+  it("falls back to the legacy env var when GOOGLE_MAPS_API_KEY is whitespace-only", async () => {
+    // Whitespace is treated as unset by the route's `trim` helper, so
+    // a `GOOGLE_MAPS_API_KEY="   "` value (e.g. an operator who
+    // accidentally pasted just spaces into the canonical secret) must
+    // not block the fallback to a real legacy value. Without this,
+    // the embed would render its dashed fallback even though a usable
+    // key is configured under the legacy name (Task #187).
+    process.env.GOOGLE_MAPS_API_KEY = "   ";
+    process.env.VITE_GOOGLE_MAPS_API_KEY = "legacy-vite-key";
+
+    const res = await fetch(`${baseUrl}/api/config`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ConfigBody;
+    expect(body.googleMapsApiKey).toBe("legacy-vite-key");
+  });
+
+  it("returns null when both the canonical and legacy env vars are whitespace-only", async () => {
+    // Belt-and-suspenders: whitespace-on-both must still surface as
+    // `null` so the frontend renders its "API key isn't configured"
+    // fallback rather than handing a useless "" or "   " to the embed
+    // URL.
+    process.env.GOOGLE_MAPS_API_KEY = "   ";
+    process.env.VITE_GOOGLE_MAPS_API_KEY = "  ";
+
+    const res = await fetch(`${baseUrl}/api/config`);
+    const body = (await res.json()) as ConfigBody;
+    expect(body.googleMapsApiKey).toBeNull();
   });
 
   it("does not expose any other environment variable through the response shape", async () => {

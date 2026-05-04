@@ -3,7 +3,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PropertyLocationMap } from "./property-location-map";
-import { __resetGoogleMapsSdkForTest } from "@/lib/google-maps-sdk";
+import {
+  __resetGoogleMapsSdkForTest,
+  primeGeocodeCache,
+} from "@/lib/google-maps-sdk";
 import {
   reportGoogleMapsKeyError,
   __resetGoogleMapsKeyErrorForTest,
@@ -588,6 +591,46 @@ describe("PropertyLocationMap", () => {
     );
 
     // No marker was attached for the failed geocode.
+    expect(mapsState.markers).toHaveLength(0);
+  });
+
+  it("shows the 'Couldn't pinpoint this address' banner immediately when a sibling Maps surface already cached a null for this address (cache hit, no geocoder call)", async () => {
+    // The shared module-level `geocodeCache` is read synchronously by
+    // the geocode effect, so a `null` cached by another surface (the
+    // portfolio map, or a previous mount of this card at the same
+    // address) must immediately drive `point` to `null` and surface
+    // the banner — without ever invoking the geocoder for this mount.
+    // Defends against a future refactor that special-cases the cache
+    // hit and forgets to keep the banner branch wired up: the
+    // ZERO_RESULTS test above only covers the live-geocode path, so a
+    // regression that broke the cached-null path could ship silently.
+    const fullAddress = "100 Oak Way, Austin, TX 78701";
+    primeGeocodeCache(fullAddress, null);
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await settle();
+
+    // Banner appears even though we never went to the geocoder for
+    // this mount — the null came from the shared cache.
+    const banner = get("property-location-map-stale-warning");
+    expect(banner).not.toBeNull();
+    const copy = (banner!.textContent ?? "").toLowerCase();
+    expect(copy).toContain("couldn't pinpoint this address");
+
+    // No live geocoder call for this mount — confirms the cache hit
+    // short-circuited the round-trip and that the banner gating
+    // doesn't depend on a pending request having been issued first.
+    expect(mapsState.pendingGeocodes).toHaveLength(0);
+
+    // And no marker either — there's no point to attach.
     expect(mapsState.markers).toHaveLength(0);
   });
 

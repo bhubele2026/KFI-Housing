@@ -533,6 +533,33 @@ export function PropertyLocationMap({
           rendering it unconditionally costs nothing (Task #175).
         */}
         <RuntimeConfigStaleWarning isStale={isRefreshStale} />
+        {/*
+          Two-column layout at `lg`: the map (or any of the
+          fallback / error / loading panels) sits in the left
+          column, and the address + Directions link sit in the
+          right column, vertically centered next to it. Below `lg`
+          the layout collapses back to the original stacked look —
+          panel on top, address + Directions row underneath — so
+          mobile and tablet aren't affected. The whole Location
+          card used to stretch the full page width while the map
+          itself was capped at `max-w-md`, leaving a large blank
+          area to the right of the map; this wrapper lets the
+          address + Directions block fill that space so the card
+          feels intentional instead of half-finished (Task #209).
+        */}
+        <div className="space-y-2 lg:space-y-0 lg:flex lg:items-center lg:gap-6">
+          {/*
+            Left column is sized to the map (`max-w-md`) rather than
+            half the card, so on very wide desktops the address
+            column sits flush to the right of the map instead of
+            leaving a gap inside the left half. Fallback / config-
+            error / loading panels live in the same slot, so they
+            adopt the same width — a deliberate trade-off so the
+            address + Directions block can absorb the rest of the
+            card width and the panels don't sprawl into an empty
+            half-card on their own.
+          */}
+          <div className="lg:flex-none lg:w-full lg:max-w-md space-y-2">
         {isMapError ? (
           // Single canonical home for the failure state — every
           // render path that detects a map error (the JS SDK's
@@ -761,23 +788,37 @@ export function PropertyLocationMap({
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-          <div className="text-sm" data-testid="property-location-address">
-            {street && <p className="font-medium">{street}</p>}
-            {cityStateZip && (
-              <p className="text-muted-foreground">{cityStateZip}</p>
-            )}
           </div>
-          <a
-            href={directionsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-            data-testid="property-location-directions-link"
-          >
-            <Navigation className="h-4 w-4" />
-            Directions
-          </a>
+          {/*
+            Right column at `lg`: address + Directions link,
+            vertically centered next to the map by the parent
+            wrapper's `lg:items-center`. Below `lg` this collapses
+            back into the original "row at sm+, stacked at xs"
+            layout so mobile and tablet aren't affected. At `lg`
+            we switch to a vertical stack with the address on top
+            and the Directions link below, left-aligned with the
+            address — that fills the previously-blank right side
+            of the card without making the address jump to the
+            far edge (Task #209).
+          */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between lg:flex-col lg:items-start lg:justify-center gap-3 lg:flex-1 lg:min-w-0">
+            <div className="text-sm" data-testid="property-location-address">
+              {street && <p className="font-medium">{street}</p>}
+              {cityStateZip && (
+                <p className="text-muted-foreground">{cityStateZip}</p>
+              )}
+            </div>
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              data-testid="property-location-directions-link"
+            >
+              <Navigation className="h-4 w-4" />
+              Directions
+            </a>
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -1453,6 +1453,11 @@ describe("PortfolioMap — runtime config", () => {
 describe("PortfolioMap — key-rejected branch", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
+  // Capture/restore the real `fetch` around each test. The in-flight
+  // /api/config test below overrides `globalThis.fetch` to hold the
+  // request unresolved; restoring it here keeps that override from
+  // bleeding into other suites if tests are reordered or appended.
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
     // Reset BOTH module-level stores so a code reported in one test
@@ -1467,6 +1472,7 @@ describe("PortfolioMap — key-rejected branch", () => {
     installFakeGoogleMaps();
     container = document.createElement("div");
     document.body.appendChild(container);
+    originalFetch = globalThis.fetch;
   });
 
   afterEach(async () => {
@@ -1481,6 +1487,7 @@ describe("PortfolioMap — key-rejected branch", () => {
     uninstallFakeGoogleMaps();
     __resetPortfolioMapCachesForTest();
     __resetGoogleMapsKeyErrorForTest();
+    globalThis.fetch = originalFetch;
   });
 
   function get(testId: string): HTMLElement | null {
@@ -1594,5 +1601,79 @@ describe("PortfolioMap — key-rejected branch", () => {
     expect(text).not.toBeNull();
     const copy = (text!.textContent ?? "").toLowerCase();
     expect(copy).toContain("referrer");
+  });
+
+  it("flips into the key-rejected panel even while /api/config is still in flight (key-error wins over the loading placeholder)", async () => {
+    // Regression for Task #176: the portfolio map's "Loading map…"
+    // placeholder used to be checked BEFORE the key-error branch in
+    // the component's branch order, so a sibling Maps surface (e.g.
+    // the per-property Location card) detecting a rejected key while
+    // this component's `/api/config` request was still in flight would
+    // be silently hidden — the operator saw an indefinite loading
+    // state next to a toast saying the key was rejected, with no
+    // in-page explanation. The branches were re-ordered so the
+    // key-error panel wins. Without this test, swapping them back
+    // would only fail at the toast/integration level.
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          {/* No `apiKey` prop, so the component fetches /api/config —
+              and we hold that fetch unresolved below. */}
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    // Sanity check — with the fetch held in flight, the loading
+    // placeholder is what's currently rendered.
+    expect(get("portfolio-map-config-loading")).not.toBeNull();
+    expect(get("portfolio-map-key-error")).toBeNull();
+
+    // Now simulate a sibling Maps surface (or the JS SDK) reporting
+    // a rejected key while the config request is still pending. Use
+    // an embed-iframe code so the test exercises the realistic
+    // cross-surface path described in the task.
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+
+    // The loading placeholder must be gone — leaving it visible would
+    // leave the operator staring at a stuck spinner next to a toast.
+    expect(get("portfolio-map-config-loading")).toBeNull();
+
+    // And the dedicated key-error panel must be what's rendered now,
+    // even though `/api/config` has not yet resolved.
+    const panel = get("portfolio-map-key-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe("InvalidKeyMapError");
+
+    // Resolve the in-flight fetch so cleanup doesn't hang on the
+    // pending promise. The key-error branch should still win after
+    // the config arrives.
+    await act(async () => {
+      resolveFetch!(
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "live-key",
+            googleMapsMapId: "live-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    await settle();
+    expect(get("portfolio-map-key-error")).not.toBeNull();
+    expect(get("portfolio-map")).toBeNull();
   });
 });

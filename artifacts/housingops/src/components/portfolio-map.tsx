@@ -844,6 +844,42 @@ export function PortfolioMap({
     onUnmappableChange(unmappable);
   }, [coords, properties, onUnmappableChange]);
 
+  // A key has been observed as rejected anywhere on the page in this
+  // session — show a dedicated "key rejected" panel here too. Without
+  // this branch the portfolio map would either sit at "Loading map…"
+  // forever (if `gm_authFailure` fired before the SDK considered itself
+  // ready) or render Google's tiny grey error tile inside the canvas
+  // with no operator-facing explanation. Render the same tailored copy
+  // the toast surfaces so the in-page state matches the notification.
+  //
+  // This branch is intentionally checked BEFORE `isConfigLoading` /
+  // `isConfigError` / the missing-key fallback: a sibling Maps surface
+  // (e.g. the per-property Location card) can detect a rejected key
+  // via postMessage *while* this component's `/api/config` request is
+  // still in flight. If the loading placeholder won that race, the
+  // operator would stare at a "Loading map…" spinner indefinitely
+  // next to a toast saying the key was rejected, with no in-page
+  // explanation. Letting the key-error branch win means the panel
+  // shows up the moment any surface knows the key is bad — even if
+  // this map's own config fetch hasn't returned yet (Task #176).
+  if (keyError.code) {
+    return (
+      <Card
+        data-testid="portfolio-map-key-error"
+        data-error-code={keyError.code}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span data-testid="portfolio-map-key-error-text">
+              {keyError.message}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // While the runtime config request is in flight we render a neutral
   // placeholder rather than the "set up your key" copy — we don't yet
   // know whether a key is configured and flashing the warning before
@@ -914,31 +950,6 @@ export function PortfolioMap({
               </code>{" "}
               on the api-server (and restart it) to render every
               property as pins on a single portfolio map.
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // A key has been observed as rejected anywhere on the page in this
-  // session — show a dedicated "key rejected" panel here too. Without
-  // this branch the portfolio map would either sit at "Loading map…"
-  // forever (if `gm_authFailure` fired before the SDK considered itself
-  // ready) or render Google's tiny grey error tile inside the canvas
-  // with no operator-facing explanation. Render the same tailored copy
-  // the toast surfaces so the in-page state matches the notification.
-  if (keyError.code) {
-    return (
-      <Card
-        data-testid="portfolio-map-key-error"
-        data-error-code={keyError.code}
-      >
-        <CardContent className="p-6">
-          <div className="flex items-start gap-2 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span data-testid="portfolio-map-key-error-text">
-              {keyError.message}
             </span>
           </div>
         </CardContent>

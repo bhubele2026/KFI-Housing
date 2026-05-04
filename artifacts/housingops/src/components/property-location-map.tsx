@@ -5,6 +5,7 @@ import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
 import {
   MAPS_ERROR_MESSAGES,
   extractGoogleMapsErrorCode,
+  getMapsKeyConsoleUrl,
   reportGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
 import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
@@ -360,16 +361,45 @@ export function PropertyLocationMap({
                 {errorMessage}
               </span>
             </div>
-            <a
-              href={searchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-              data-testid="property-location-map-error-link"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Open in Google Maps
-            </a>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <a
+                href={searchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                data-testid="property-location-map-error-link"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open in Google Maps
+              </a>
+              {/*
+                Same per-code Google Cloud Console deep-link the
+                app-level toast surfaces (Task #173). Operators who
+                dismissed that toast — or arrived at this card after
+                the toast had already fired and timed out — still get
+                the single-click jump to the right Console page
+                (credentials / quotas / library / …) for whatever code
+                Google reported. Falls back to the credentials list
+                when the code is unrecognized so the link is never
+                dead. Uses the iframe-reported code only — when the
+                iframe's own `error` event fires we have no code, so
+                we don't surface a Console link in that case
+                (`reportedErrorCode` is null then) since we'd just be
+                guessing which page to send the operator to.
+              */}
+              {reportedErrorCode !== null && (
+                <a
+                  href={getMapsKeyConsoleUrl(reportedErrorCode)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  data-testid="property-location-map-error-console-link"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Google Cloud Console
+                </a>
+              )}
+            </div>
           </div>
         ) : (
           <div

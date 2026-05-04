@@ -3,6 +3,10 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PropertyLocationMap } from "./property-location-map";
+import {
+  MAPS_KEY_CONSOLE_URLS,
+  getMapsKeyConsoleUrl,
+} from "@/hooks/use-google-maps-key-error";
 
 // These tests pin down the four render branches of the property location
 // card — full embed (address + key), graceful fallback (address but no
@@ -823,6 +827,171 @@ describe("PropertyLocationMap", () => {
       );
     });
   }
+
+  // -------------------------------------------------------------------
+  // Open-in-Google-Cloud-Console deep-link in the in-card error panel
+  // (Task #177)
+  //
+  // Mirrors the toast's per-code action button (Task #173) inside the
+  // in-page error panel so an operator who dismissed the toast — or
+  // landed on a property page after the toast had already fired and
+  // timed out — still gets a single-click jump to the right Console
+  // page (credentials / library / quotas / project picker / …) for
+  // whatever code Google reported. Hard-coding the expected URL per
+  // code keeps the assertions honest: a typo in the lookup table
+  // would silently pass a "table === table" round-trip.
+  // -------------------------------------------------------------------
+  const CONSOLE_LINK_CASES: ReadonlyArray<{
+    code: string;
+    expectedHref: string;
+  }> = [
+    {
+      code: "RefererNotAllowedMapError",
+      expectedHref: "https://console.cloud.google.com/apis/credentials",
+    },
+    {
+      code: "ApiNotActivatedMapError",
+      expectedHref:
+        "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    },
+    {
+      code: "OverQuotaMapError",
+      expectedHref:
+        "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas",
+    },
+    {
+      code: "DeletedApiProjectMapError",
+      expectedHref:
+        "https://console.cloud.google.com/projectselector2/home/dashboard",
+    },
+    {
+      code: "RetiredVersionMapError",
+      expectedHref:
+        "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    },
+  ];
+
+  for (const { code, expectedHref } of CONSOLE_LINK_CASES) {
+    it(`renders an "Open in Google Cloud Console" link pointing at ${expectedHref} for ${code}`, async () => {
+      await render(
+        <PropertyLocationMap
+          address="400 Cedar Blvd"
+          city="Phoenix"
+          state="AZ"
+          zip="85001"
+          apiKey="key-under-test"
+        />,
+      );
+      const iframe = get(
+        "property-location-map-iframe",
+      ) as HTMLIFrameElement | null;
+      expect(iframe).not.toBeNull();
+
+      await act(async () => {
+        fireGoogleMapsErrorMessage(iframe!, { code });
+      });
+
+      const panel = get("property-location-map-error");
+      expect(panel).not.toBeNull();
+      // The panel's data-error-code must match the code that drives
+      // the Console link, so no future refactor can silently send
+      // the operator to the wrong page.
+      expect(panel!.getAttribute("data-error-code")).toBe(code);
+
+      const link = get(
+        "property-location-map-error-console-link",
+      ) as HTMLAnchorElement | null;
+      expect(link).not.toBeNull();
+      expect(link!.href).toBe(expectedHref);
+      // Cross-check against the helper + table — guarantees the
+      // panel link can't drift from what the toast would surface
+      // for the same code.
+      expect(link!.href).toBe(getMapsKeyConsoleUrl(code));
+      expect(MAPS_KEY_CONSOLE_URLS[code]).toBe(expectedHref);
+      // Opens in a new tab so a click doesn't blow the operator's
+      // current HousingOps view away.
+      expect(link!.target).toBe("_blank");
+      // `noopener` so the opened Console tab can't reach back into
+      // window.opener — same hygiene the toast's action enforces.
+      expect(link!.rel).toContain("noopener");
+      expect(link!.rel).toContain("noreferrer");
+      expect(link!.textContent ?? "").toContain(
+        "Open in Google Cloud Console",
+      );
+    });
+  }
+
+  it("falls back to the credentials list when Google posts a code we don't have a tailored URL for (link is never dead)", async () => {
+    // Same contract as the toast (Task #173): an unknown / brand-new
+    // code must still produce a working button instead of an empty
+    // href, so the operator always has a one-click path even before
+    // we ship a tailored mapping for the new code.
+    const unknownCode = "BrandNewUnknownMapError";
+    expect(MAPS_KEY_CONSOLE_URLS[unknownCode]).toBeUndefined();
+
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
+    });
+
+    const link = get(
+      "property-location-map-error-console-link",
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link!.href).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(link!.target).toBe("_blank");
+    expect(link!.rel).toContain("noopener");
+  });
+
+  it("does NOT render an Open in Google Cloud Console link when the iframe element fails to load (no code, no guess)", async () => {
+    // The iframe-onError path has no Google-reported code — Google
+    // never told us *why* the embed broke (network blocked, CSP
+    // refused, malformed URL, …). Surfacing a Console deep-link in
+    // that case would just be a guess; the panel's "Open in Google
+    // Maps" escape hatch is the right action and the Console button
+    // should stay hidden until we have a code to act on.
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    await act(async () => {
+      fireReactOnError(iframe!);
+    });
+
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    // No reported code → the data attribute stays empty, and the
+    // Console link is omitted entirely.
+    expect(panel!.getAttribute("data-error-code")).toBe("");
+    expect(get("property-location-map-error-console-link")).toBeNull();
+    // The "Open in Google Maps" link is still there — the only
+    // operator-facing action when we have no code to act on.
+    expect(get("property-location-map-error-link")).not.toBeNull();
+  });
 
   it("surfaces an unknown `*MapError` code verbatim alongside the generic fix line, instead of silently ignoring it", async () => {
     // Defends against the silent-failure mode this branch was created

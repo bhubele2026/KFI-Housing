@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, MapPin } from "lucide-react";
-import { useGoogleMapsKeyError } from "@/hooks/use-google-maps-key-error";
+import { AlertCircle, ExternalLink, MapPin } from "lucide-react";
+import {
+  getMapsKeyConsoleUrl,
+  useGoogleMapsKeyError,
+} from "@/hooks/use-google-maps-key-error";
 import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
@@ -889,18 +892,42 @@ export function PortfolioMap({
   // shows up the moment any surface knows the key is bad — even if
   // this map's own config fetch hasn't returned yet (Task #176).
   if (keyError.code) {
+    // Same per-code Google Cloud Console deep-link the toast uses
+    // (Task #173). Surfacing it here too means an operator who
+    // dismissed the toast — or arrived at the map after the toast had
+    // already fired and timed out — still gets the single-click jump
+    // to the right Console page (credentials / quotas / library / …)
+    // for the reported code, instead of being told what's wrong with
+    // no actionable button (Task #177).
+    const consoleUrl = getMapsKeyConsoleUrl(keyError.code);
     return (
       <Card
         data-testid="portfolio-map-key-error"
         data-error-code={keyError.code}
       >
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-3">
           <div className="flex items-start gap-2 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span data-testid="portfolio-map-key-error-text">
               {keyError.message}
             </span>
           </div>
+          <Button
+            asChild
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="portfolio-map-key-error-console-link"
+          >
+            <a
+              href={consoleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in Google Cloud Console
+            </a>
+          </Button>
         </CardContent>
       </Card>
     );

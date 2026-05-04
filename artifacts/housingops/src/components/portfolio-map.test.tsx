@@ -11,6 +11,8 @@ import {
   reportGoogleMapsKeyError,
   __resetGoogleMapsKeyErrorForTest,
   MAPS_AUTH_FAILURE_CODE,
+  MAPS_KEY_CONSOLE_URLS,
+  getMapsKeyConsoleUrl,
 } from "@/hooks/use-google-maps-key-error";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -1806,5 +1808,144 @@ describe("PortfolioMap — key-rejected branch", () => {
     await settle();
     expect(get("portfolio-map-key-error")).not.toBeNull();
     expect(get("portfolio-map")).toBeNull();
+  });
+
+  // -------------------------------------------------------------------
+  // Open-in-Google-Cloud-Console action button (Task #177)
+  //
+  // The same per-code Console deep-link the toast carries (Task #173)
+  // also has to live in this in-page panel so an operator who
+  // dismissed the toast — or arrived at the map after the toast had
+  // already fired and timed out — still gets a single-click jump to
+  // the right Console page for whatever code Google reported. These
+  // tests pin down: the link's per-code href, that it opens in a new
+  // tab with the right `rel`, that an unknown code falls back instead
+  // of breaking the link, and that the same code drives both panel +
+  // link in lockstep.
+  // -------------------------------------------------------------------
+  // Cover at least one code per Console page (credentials, library,
+  // quotas, project picker) plus the synthetic JS-SDK auth-failure
+  // code — that is the surface area Task #173's URL table cares
+  // about, so the panel's link must follow the same shape.
+  const CONSOLE_LINK_CASES: ReadonlyArray<{
+    code: string;
+    expectedHref: string;
+  }> = [
+    {
+      code: MAPS_AUTH_FAILURE_CODE,
+      expectedHref: "https://console.cloud.google.com/apis/credentials",
+    },
+    {
+      code: "RefererNotAllowedMapError",
+      expectedHref: "https://console.cloud.google.com/apis/credentials",
+    },
+    {
+      code: "ApiNotActivatedMapError",
+      expectedHref:
+        "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    },
+    {
+      code: "OverQuotaMapError",
+      expectedHref:
+        "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas",
+    },
+    {
+      code: "DeletedApiProjectMapError",
+      expectedHref:
+        "https://console.cloud.google.com/projectselector2/home/dashboard",
+    },
+  ];
+
+  for (const { code, expectedHref } of CONSOLE_LINK_CASES) {
+    it(`renders an "Open in Google Cloud Console" link pointing at ${expectedHref} for ${code}`, async () => {
+      const Wrapper = makeWrapper();
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <Wrapper>
+            <PortfolioMap
+              properties={[makeProperty()]}
+              onPinClick={vi.fn()}
+              apiKey="fake-key"
+            />
+          </Wrapper>,
+        );
+      });
+      await settle();
+
+      await act(async () => {
+        reportGoogleMapsKeyError(code);
+      });
+
+      const panel = get("portfolio-map-key-error");
+      expect(panel).not.toBeNull();
+      // Stable contract: the panel's data-error-code must agree with
+      // the code that drives the Console link, so no future refactor
+      // can drift them apart and silently send the operator to the
+      // wrong page.
+      expect(panel!.getAttribute("data-error-code")).toBe(code);
+
+      const link = get(
+        "portfolio-map-key-error-console-link",
+      ) as HTMLAnchorElement | null;
+      expect(link).not.toBeNull();
+      // Per-code expectations are the contract: the URL has to be
+      // the right page for the fix the message names. Hard-coding
+      // the expected URLs (instead of round-tripping through
+      // MAPS_KEY_CONSOLE_URLS) keeps the assertion honest — a typo
+      // in the table would silently pass a "table === table" check.
+      expect(link!.href).toBe(expectedHref);
+      // Cross-check: also matches the source-of-truth helper, so
+      // the panel's link can't drift from the toast's link without
+      // one of these expectations failing first.
+      expect(link!.href).toBe(getMapsKeyConsoleUrl(code));
+      expect(MAPS_KEY_CONSOLE_URLS[code]).toBe(expectedHref);
+      // Opens in a new tab so a click doesn't blow the operator's
+      // current HousingOps view away.
+      expect(link!.target).toBe("_blank");
+      // `noopener` so the opened Console tab can't reach back into
+      // window.opener — same hygiene the toast's action enforces.
+      expect(link!.rel).toContain("noopener");
+      expect(link!.rel).toContain("noreferrer");
+      expect(link!.textContent ?? "").toContain("Open in Google Cloud Console");
+    });
+  }
+
+  it("falls back to the credentials list when Google reports a code we don't have a tailored URL for (link is never dead)", async () => {
+    // Mirrors the toast's contract: an unknown / brand-new code must
+    // still produce a working button instead of an empty href, so
+    // the operator always has a one-click path even before we ship
+    // a tailored mapping for the new code.
+    const unknownCode = "BrandNewUnknownMapError";
+    expect(MAPS_KEY_CONSOLE_URLS[unknownCode]).toBeUndefined();
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    await act(async () => {
+      reportGoogleMapsKeyError(unknownCode);
+    });
+
+    const link = get(
+      "portfolio-map-key-error-console-link",
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link!.href).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(link!.target).toBe("_blank");
+    expect(link!.rel).toContain("noopener");
   });
 });

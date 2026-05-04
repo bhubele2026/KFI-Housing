@@ -71,6 +71,34 @@ describe("PropertyLocationMap", () => {
     ) as HTMLElement | null;
   }
 
+  // React 18 attaches event listeners at the root container rather
+  // than on individual elements, and for non-bubbling events like
+  // `error` on an iframe a plain `dispatchEvent(new Event("error"))`
+  // does NOT reach React's handler in jsdom. To simulate the iframe
+  // failing to load, we instead read the React props that React
+  // stores on the DOM node (`__reactProps$<key>`) and invoke the
+  // `onError` handler directly. This still verifies the wiring —
+  // if `onError={...}` is removed from the iframe in the component,
+  // this lookup returns undefined and the test fails.
+  function fireReactOnError(el: Element) {
+    const propsKey = Object.keys(el).find((k) =>
+      k.startsWith("__reactProps$"),
+    );
+    if (!propsKey) {
+      throw new Error("React props not found on element");
+    }
+    const props = (el as unknown as Record<string, unknown>)[propsKey] as
+      | { onError?: (e: unknown) => void }
+      | undefined;
+    if (!props || typeof props.onError !== "function") {
+      throw new Error(
+        "iframe is missing an onError handler — the in-card error " +
+          "branch can't be triggered without it.",
+      );
+    }
+    props.onError({ type: "error" });
+  }
+
   it("renders the embedded map, search/directions URLs, and address block when an address and key are present", async () => {
     await render(
       <PropertyLocationMap
@@ -289,6 +317,331 @@ describe("PropertyLocationMap", () => {
     // forms — otherwise the URL would be malformed.
     expect(link!.href).not.toContain(" ");
     expect(link!.href).not.toContain("#");
+  });
+
+  it("renders the troubleshooting message inline with the embed (always visible, not gated on detection)", async () => {
+    // Why this test exists: the iframe `onError` handler only fires
+    // when the iframe element itself fails (network blocked, CSP
+    // refused, malformed URL). Google's Embed API renders its
+    // `RefererNotAllowedMapError` / `ApiNotActivatedMapError` /
+    // `InvalidKeyMapError` / quota-exhausted screens as Google content
+    // *inside* the iframe, which is cross-origin from the host page —
+    // browsers don't expose those to the parent's onError. So for the
+    // most common real-world failures the dedicated error branch
+    // (`property-location-map-error`) will not trigger.
+    //
+    // To make the requested operator-facing message reliably visible
+    // in those cases, the troubleshooting copy is rendered
+    // unconditionally below the embed in the success branch — not
+    // hidden behind a click or a flaky detection heuristic. When
+    // Google shows its grey error tile inside the iframe, the
+    // operator sees the plain-English fix list right next to it.
+    // This test pins down (a) the message is present whenever the
+    // embed is, (b) the visible copy lists the exact two key-side
+    // fixes (Maps Embed API / allowlist), and (c) it never appears
+    // in branches where it would be misleading (loading, empty,
+    // missing-key, error — covered by the dedicated test below).
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key-abc"
+      />,
+    );
+
+    const note = get("property-location-map-troubleshoot");
+    expect(note).not.toBeNull();
+
+    const text = get("property-location-map-troubleshoot-text");
+    expect(text).not.toBeNull();
+    // Crucially, the message must be visible immediately — no <details>
+    // wrapper, no `hidden` attribute, no required user interaction.
+    // This is what distinguishes "shown when Google rejects the key"
+    // from "discoverable when Google rejects the key".
+    expect(note!.closest("details")).toBeNull();
+    expect(note!.hasAttribute("hidden")).toBe(false);
+
+    const copy = (text!.textContent ?? "").toLowerCase();
+    expect(copy).toContain("google");
+    expect(copy).toContain("api key");
+    expect(copy).toContain("maps embed api");
+    expect(copy).toContain("allowlist");
+  });
+
+  it("uses the same troubleshooting copy in the inline note and the error branch (no drift)", async () => {
+    // Both surfaces describe the same operator-side fix. If they ever
+    // drift, we'd be telling operators two different stories about
+    // the same key problem. The implementation sources both from a
+    // shared constant; this test pins down the shared substring so
+    // the two surfaces can't accidentally diverge.
+    const SHARED_FIX_LINE =
+      "Google rejected this Maps API key. Check that the Maps Embed " +
+      "API is enabled and that this domain is on the key's allowlist.";
+
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key-abc"
+      />,
+    );
+    const inlineCopy =
+      get("property-location-map-troubleshoot-text")?.textContent ?? "";
+    expect(inlineCopy).toContain(SHARED_FIX_LINE);
+
+    // Re-render in the error state in a fresh tree to read its copy.
+    await act(async () => {
+      root!.unmount();
+      root = null;
+    });
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key-abc"
+      />,
+    );
+    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    await act(async () => {
+      fireReactOnError(iframe!);
+    });
+    const errorPanel = get("property-location-map-error");
+    expect(errorPanel).not.toBeNull();
+    expect(errorPanel!.textContent).toContain(SHARED_FIX_LINE);
+  });
+
+  it("does not render the troubleshooting disclosure in the loading, empty, missing-key, or error branches", async () => {
+    // The disclosure is only meaningful when the embed is actually
+    // mounted. In the empty/missing-key states there's no iframe to
+    // troubleshoot; in the loading state we don't yet know whether
+    // the key is configured; and in the error state the same copy
+    // is already visible, so showing the collapsible disclosure on
+    // top of it would be redundant noise.
+    await render(
+      <PropertyLocationMap
+        address=""
+        city=""
+        state=""
+        zip=""
+        apiKey="test-key-abc"
+      />,
+    );
+    expect(get("property-location-map-troubleshoot")).toBeNull();
+
+    await act(async () => {
+      root!.unmount();
+      root = null;
+    });
+    await render(
+      <PropertyLocationMap
+        address="200 Maple Dr"
+        city="Dallas"
+        state="TX"
+        zip="75201"
+        apiKey=""
+      />,
+    );
+    expect(get("property-location-map-troubleshoot")).toBeNull();
+
+    await act(async () => {
+      root!.unmount();
+      root = null;
+    });
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="some-key"
+      />,
+    );
+    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    await act(async () => {
+      fireReactOnError(iframe!);
+    });
+    expect(get("property-location-map-error")).not.toBeNull();
+    expect(get("property-location-map-troubleshoot")).toBeNull();
+  });
+
+  it("swaps the embed for an in-card error message when Google rejects the iframe (bad key, allowlist, etc.)", async () => {
+    // Embed renders normally first — Google's grey "this page can't
+    // load Google Maps correctly" tile inside our card looks like the
+    // embed is "almost working" and gives the operator no clue what to
+    // fix on their key (RefererNotAllowedMapError,
+    // ApiNotActivatedMapError, InvalidKeyMapError, quota, …). We hook
+    // the iframe's `onError` so we can replace that with a plain-
+    // English message above the address while keeping the one-click
+    // jump to Google Maps + Directions intact.
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="bad-or-restricted-key"
+      />,
+    );
+
+    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    // Sanity: not in the error branch yet — the embed is still mounted
+    // and the dedicated error surface hasn't appeared.
+    expect(get("property-location-map-error")).toBeNull();
+
+    // Simulate the iframe failing to load by invoking React's
+    // onError prop directly (see fireReactOnError comment for why).
+    await act(async () => {
+      fireReactOnError(iframe!);
+    });
+
+    // Iframe (and its enclosing map-link wrapper) is gone — the embed
+    // branch yields to the error branch entirely instead of layering
+    // the warning on top of a broken Google tile.
+    expect(get("property-location-map-iframe")).toBeNull();
+    expect(get("property-location-map-link")).toBeNull();
+
+    // The new in-card message is operator-facing and names the
+    // concrete things to check on the key.
+    const err = get("property-location-map-error");
+    expect(err).not.toBeNull();
+    const text = err!.textContent ?? "";
+    expect(text.toLowerCase()).toContain("google");
+    expect(text.toLowerCase()).toContain("api key");
+    // Calls out the two most common operator-side fixes by name so the
+    // copy isn't a vague "something went wrong".
+    expect(text.toLowerCase()).toContain("maps embed api");
+    expect(text.toLowerCase()).toContain("allowlist");
+
+    // The "Open in Google Maps" jump that used to live on the embed
+    // wrapper must still be reachable from the error branch — that's
+    // the operator's one-click escape hatch and the task explicitly
+    // requires it to keep working.
+    const errLink = get("property-location-map-error-link") as HTMLAnchorElement | null;
+    expect(errLink).not.toBeNull();
+    const expectedQuery = encodeURIComponent("400 Cedar Blvd, Phoenix, AZ 85001");
+    expect(errLink!.href).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+    );
+    expect(errLink!.target).toBe("_blank");
+    expect(errLink!.rel).toContain("noopener");
+
+    // Directions link — rendered below the map area — must also still
+    // work in the error state.
+    const dir = get("property-location-directions-link") as HTMLAnchorElement | null;
+    expect(dir).not.toBeNull();
+    expect(dir!.href).toBe(
+      `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
+    );
+
+    // Address block stays put so the operator still sees what address
+    // failed to render.
+    const addr = get("property-location-address");
+    expect(addr).not.toBeNull();
+    expect(addr!.textContent).toContain("400 Cedar Blvd");
+    expect(addr!.textContent).toContain("Phoenix, AZ 85001");
+
+    // The empty-address and missing-key branches must not be reused
+    // for this case — they say different (and misleading) things.
+    expect(get("property-location-empty")).toBeNull();
+    expect(get("property-location-fallback")).toBeNull();
+  });
+
+  it("does not show the iframe-rejected error before the iframe has actually failed", async () => {
+    // Defends the happy path: the error branch must only appear after
+    // the iframe fires `error` — not on first render. Otherwise every
+    // map would flash the "Google rejected this key" warning even
+    // when the key is fine.
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key-abc"
+      />,
+    );
+
+    expect(get("property-location-map-iframe")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+    expect(get("property-location-map-error-link")).toBeNull();
+  });
+
+  it("does not render the iframe-rejected error in the missing-key fallback branch", async () => {
+    // The missing-key branch and the rejected-key branch are
+    // different stories ("set your key" vs "your key was refused").
+    // They must not be conflated — only the friendly fallback should
+    // appear when no key is configured at all.
+    await render(
+      <PropertyLocationMap
+        address="200 Maple Dr"
+        city="Dallas"
+        state="TX"
+        zip="75201"
+        apiKey=""
+      />,
+    );
+
+    expect(get("property-location-fallback")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+    expect(get("property-location-map-error-link")).toBeNull();
+  });
+
+  it("re-attempts the embed (clears the error state) when the address changes after a previous failure", async () => {
+    // Sticky error state would be a UX trap: rotate the key or fix
+    // the address and the card would still claim Google rejected it.
+    // The component resets `mapStatus` whenever the embed URL
+    // changes, so a fresh address gets a fresh attempt.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="400 Cedar Blvd"
+            city="Phoenix"
+            state="AZ"
+            zip="85001"
+            apiKey="some-key"
+          />
+        </Wrapper>,
+      );
+    });
+
+    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    await act(async () => {
+      fireReactOnError(iframe!);
+    });
+    expect(get("property-location-map-error")).not.toBeNull();
+
+    // Re-render with a different address — same key. The new embed
+    // URL must trigger a fresh attempt rather than staying stuck on
+    // the rejected-key copy.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="500 Birch Ln"
+            city="Phoenix"
+            state="AZ"
+            zip="85002"
+            apiKey="some-key"
+          />
+        </Wrapper>,
+      );
+    });
+
+    expect(get("property-location-map-error")).toBeNull();
+    expect(get("property-location-map-iframe")).not.toBeNull();
   });
 
   it("renders only the parts of the address the user has filled in (street present, city/state/zip blank)", async () => {

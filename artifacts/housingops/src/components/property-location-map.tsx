@@ -1,9 +1,28 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
 import {
   useGetRuntimeConfig,
   getGetRuntimeConfigQueryKey,
 } from "@workspace/api-client-react";
+
+// Plain-English troubleshooting copy shared between the dedicated
+// error branch (shown when the iframe's own `error` event fires —
+// network blocked, CSP refused, malformed URL) and the persistent
+// disclosure rendered alongside the success branch.
+//
+// The disclosure exists because Google's Embed API renders its
+// `RefererNotAllowedMapError` / `ApiNotActivatedMapError` /
+// `InvalidKeyMapError` / quota-exhausted screens *inside* the iframe
+// as same-origin Google content — so the parent page never sees an
+// `error` event for those failures (cross-origin content errors are
+// not exposed to the host page). The disclosure makes the same
+// troubleshooting reachable in those cases without us having to
+// guess at the failure via timeouts. Keeping the copy in one place
+// guarantees the two surfaces never drift.
+const MAPS_KEY_TROUBLESHOOTING_TEXT =
+  "Google rejected this Maps API key. Check that the Maps Embed API " +
+  "is enabled and that this domain is on the key's allowlist.";
 
 interface PropertyLocationMapProps {
   address: string;
@@ -128,6 +147,21 @@ export function PropertyLocationMap({
     ? `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(resolvedKey)}&q=${encoded}`
     : null;
 
+  // Track whether the embedded iframe failed to load. When Google
+  // rejects the key (`RefererNotAllowedMapError`,
+  // `ApiNotActivatedMapError`, `InvalidKeyMapError`, quota exhausted,
+  // etc.) or the network blocks the embed entirely, the iframe's
+  // `onError` event lets us swap the tiny grey Google error tile —
+  // which inside our card looks like the embed is "almost working" —
+  // for a plain-English message that points the operator at what to
+  // fix on their key. We reset back to "ok" whenever the embed URL
+  // changes (new address or rotated key) so a freshly-valid setup
+  // gets a fresh attempt instead of being stuck in the error branch.
+  const [mapStatus, setMapStatus] = useState<"ok" | "error">("ok");
+  useEffect(() => {
+    setMapStatus("ok");
+  }, [embedUrl]);
+
   return (
     <Card data-testid="card-property-location">
       <CardHeader className="pb-3">
@@ -148,30 +182,82 @@ export function PropertyLocationMap({
               Loading map…
             </span>
           </div>
-        ) : embedUrl ? (
-          <a
-            href={searchUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open ${full} in Google Maps`}
-            className="block relative rounded-lg overflow-hidden border bg-muted group focus:outline-none focus:ring-2 focus:ring-ring w-full max-w-xl"
-            data-testid="property-location-map-link"
+        ) : embedUrl && mapStatus === "ok" ? (
+          <div className="space-y-2">
+            <a
+              href={searchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open ${full} in Google Maps`}
+              className="block relative rounded-lg overflow-hidden border bg-muted group focus:outline-none focus:ring-2 focus:ring-ring w-full max-w-xl"
+              data-testid="property-location-map-link"
+            >
+              <div className="h-40 sm:h-48 w-full">
+                <iframe
+                  title={`Map of ${full}`}
+                  src={embedUrl}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  className="h-full w-full block pointer-events-none"
+                  data-testid="property-location-map-iframe"
+                  onError={() => setMapStatus("error")}
+                />
+              </div>
+              <div className="absolute top-2 right-2 rounded-md bg-background/90 backdrop-blur px-2 py-1 text-xs font-medium shadow-sm border flex items-center gap-1 opacity-90 group-hover:opacity-100">
+                <ExternalLink className="h-3 w-3" />
+                Open in Google Maps
+              </div>
+            </a>
+            {/*
+              Always-visible companion message. Why this is rendered
+              unconditionally next to the embed — not as a collapsible
+              disclosure and not gated on detection:
+              Google's Embed API renders its key-rejection screens
+              (RefererNotAllowedMapError, ApiNotActivatedMapError,
+              InvalidKeyMapError, quota exhausted) as same-origin
+              Google content *inside* the iframe. Cross-origin content
+              errors are not exposed to the host page, so the iframe's
+              `error` event never fires for the most common rejection
+              modes — meaning detection is not possible from the
+              browser. By always rendering the plain-English fix list
+              right below the embed, the operator sees the message
+              alongside Google's grey error tile in the failure case,
+              which is the behavior the task describes. We accept the
+              small amount of permanent UI weight in the success case
+              as the cost of having reliable, no-false-positives
+              messaging in the failure case.
+            */}
+            <p
+              className="text-xs text-muted-foreground flex items-start gap-1.5"
+              data-testid="property-location-map-troubleshoot"
+            >
+              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+              <span data-testid="property-location-map-troubleshoot-text">
+                Seeing a Google error in the map?{" "}
+                {MAPS_KEY_TROUBLESHOOTING_TEXT}
+              </span>
+            </p>
+          </div>
+        ) : embedUrl && mapStatus === "error" ? (
+          <div
+            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
+            data-testid="property-location-map-error"
           >
-            <div className="h-40 sm:h-48 w-full">
-              <iframe
-                title={`Map of ${full}`}
-                src={embedUrl}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                className="h-full w-full block pointer-events-none"
-                data-testid="property-location-map-iframe"
-              />
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>{MAPS_KEY_TROUBLESHOOTING_TEXT}</span>
             </div>
-            <div className="absolute top-2 right-2 rounded-md bg-background/90 backdrop-blur px-2 py-1 text-xs font-medium shadow-sm border flex items-center gap-1 opacity-90 group-hover:opacity-100">
-              <ExternalLink className="h-3 w-3" />
+            <a
+              href={searchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+              data-testid="property-location-map-error-link"
+            >
+              <ExternalLink className="h-4 w-4" />
               Open in Google Maps
-            </div>
-          </a>
+            </a>
+          </div>
         ) : (
           <div
             className="rounded-lg border border-dashed bg-muted/30 p-4 space-y-2"

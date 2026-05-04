@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   PortfolioMap,
   __resetPortfolioMapCachesForTest,
@@ -229,6 +230,25 @@ function makeProperty(over: Partial<MappableProperty> = {}): MappableProperty {
   };
 }
 
+// Per-test QueryClient + provider so cached `/api/config` responses
+// can't bleed across tests. Tests that pass `apiKey` explicitly skip
+// the runtime fetch entirely (the hook is mounted with `enabled:
+// false`), but the QueryClientProvider is still required because the
+// component always calls `useGetRuntimeConfig`.
+function makeWrapper() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+    },
+  });
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return Wrapper;
+}
+
 async function flush() {
   // Drain the microtask queue + a macrotask so the loader promise's
   // `.then`, the resulting `setState("ready")`, and the next effect run
@@ -244,6 +264,33 @@ async function settle() {
   for (let i = 0; i < 5; i++) {
     await flush();
   }
+}
+
+// React Query schedules its observer notifications via `setTimeout`
+// and `queueMicrotask`, so a fixed-count microtask drain is not
+// reliable for the runtime-config branch. We poll a predicate inside
+// `act()` between checks. Mirrors the helper used by
+// property-location-map.test.tsx.
+async function waitFor(
+  predicate: () => boolean,
+  { timeoutMs = 1000, intervalMs = 5 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  const start = Date.now();
+  let lastError: unknown = null;
+  while (Date.now() - start < timeoutMs) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, intervalMs));
+    });
+    try {
+      if (predicate()) return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error(
+    `waitFor: predicate did not become true within ${timeoutMs}ms`,
+  );
 }
 
 describe("PortfolioMap — pin info bubble", () => {
@@ -291,15 +338,18 @@ describe("PortfolioMap — pin info bubble", () => {
     props: Partial<React.ComponentProps<typeof PortfolioMap>> = {},
   ) {
     const onPinClick = vi.fn();
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={[baseProperty]}
-          onPinClick={onPinClick}
-          apiKey="fake-key"
-          {...props}
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={[baseProperty]}
+            onPinClick={onPinClick}
+            apiKey="fake-key"
+            {...props}
+          />
+        </Wrapper>,
       );
     });
 
@@ -442,14 +492,17 @@ describe("PortfolioMap — pin info bubble", () => {
   it("uses the latest onPinClick callback after the parent re-renders", async () => {
     const first = vi.fn();
     const second = vi.fn();
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={[baseProperty]}
-          onPinClick={first}
-          apiKey="fake-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={[baseProperty]}
+            onPinClick={first}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -472,11 +525,13 @@ describe("PortfolioMap — pin info bubble", () => {
     // Re-render with a different callback identity.
     await act(async () => {
       root!.render(
-        <PortfolioMap
-          properties={[baseProperty]}
-          onPinClick={second}
-          apiKey="fake-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={[baseProperty]}
+            onPinClick={second}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -555,15 +610,18 @@ describe("PortfolioMap geocode deduplication", () => {
     ];
     const onGeocoded = vi.fn();
     const onPinClick = vi.fn();
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={propsV1}
-          onPinClick={onPinClick}
-          onGeocoded={onGeocoded}
-          apiKey="test-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={propsV1}
+            onPinClick={onPinClick}
+            onGeocoded={onGeocoded}
+            apiKey="test-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -581,12 +639,14 @@ describe("PortfolioMap geocode deduplication", () => {
     const propsV2 = propsV1.map((p) => ({ ...p }));
     await act(async () => {
       root!.render(
-        <PortfolioMap
-          properties={propsV2}
-          onPinClick={onPinClick}
-          onGeocoded={onGeocoded}
-          apiKey="test-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={propsV2}
+            onPinClick={onPinClick}
+            onGeocoded={onGeocoded}
+            apiKey="test-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -601,15 +661,18 @@ describe("PortfolioMap geocode deduplication", () => {
     ];
     const onGeocoded = vi.fn();
     const onPinClick = vi.fn();
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={propsInitial}
-          onPinClick={onPinClick}
-          onGeocoded={onGeocoded}
-          apiKey="test-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={propsInitial}
+            onPinClick={onPinClick}
+            onGeocoded={onGeocoded}
+            apiKey="test-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -642,12 +705,14 @@ describe("PortfolioMap geocode deduplication", () => {
     ];
     await act(async () => {
       root!.render(
-        <PortfolioMap
-          properties={propsAfterP1}
-          onPinClick={onPinClick}
-          onGeocoded={onGeocoded}
-          apiKey="test-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={propsAfterP1}
+            onPinClick={onPinClick}
+            onGeocoded={onGeocoded}
+            apiKey="test-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -695,15 +760,18 @@ describe("PortfolioMap geocode deduplication", () => {
       }),
     ];
     const onGeocoded = vi.fn();
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={props}
-          onPinClick={vi.fn()}
-          onGeocoded={onGeocoded}
-          apiKey="test-key"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={props}
+            onPinClick={vi.fn()}
+            onGeocoded={onGeocoded}
+            apiKey="test-key"
+          />
+        </Wrapper>,
       );
     });
     await settle();
@@ -739,137 +807,82 @@ describe("PortfolioMap — branded Map ID", () => {
     container.remove();
     uninstallFakeGoogleMaps();
     __resetPortfolioMapCachesForTest();
-    // Defensive: clean up the env override even if a test threw before
-    // its inline cleanup ran, so the next test starts from the same
-    // baseline as production code.
-    delete (
-      import.meta.env as unknown as Record<string, string | undefined>
-    ).VITE_GOOGLE_MAPS_MAP_ID;
   });
 
   it("passes the explicit mapId prop straight to google.maps.Map", async () => {
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={[makeProperty()]}
-          onPinClick={vi.fn()}
-          apiKey="test-key"
-          mapId="HOUSINGOPS_BRANDED_MAP_ID"
-        />,
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="test-key"
+            mapId="HOUSINGOPS_BRANDED_MAP_ID"
+          />
+        </Wrapper>,
       );
     });
     await settle();
     expect(mapsState.map?.options.mapId).toBe("HOUSINGOPS_BRANDED_MAP_ID");
   });
 
-  it("uses the VITE_GOOGLE_MAPS_MAP_ID env var when no prop is supplied", async () => {
-    (
-      import.meta.env as unknown as Record<string, string | undefined>
-    ).VITE_GOOGLE_MAPS_MAP_ID = "env-supplied-map-id";
-    try {
-      await act(async () => {
-        root = createRoot(container);
-        root.render(
+  it("falls back to DEMO_MAP_ID when no prop is supplied and no runtime config has been fetched (apiKey explicitly provided so the fetch is skipped)", async () => {
+    // When `apiKey` is provided, the runtime config fetch is skipped
+    // entirely — there's no source for a Map ID other than the prop, so
+    // we fall back to DEMO_MAP_ID. This keeps existing test ergonomics
+    // (most tests in this file pass `apiKey` and expect DEMO_MAP_ID
+    // without standing up a fake `/api/config`) and matches what
+    // production sees on a fresh workspace where no Map ID has been
+    // configured yet.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
           <PortfolioMap
             properties={[makeProperty()]}
             onPinClick={vi.fn()}
             apiKey="test-key"
-          />,
-        );
-      });
-      await settle();
-      expect(mapsState.map?.options.mapId).toBe("env-supplied-map-id");
-    } finally {
-      delete (
-        import.meta.env as unknown as Record<string, string | undefined>
-      ).VITE_GOOGLE_MAPS_MAP_ID;
-    }
-  });
-
-  it("falls back to DEMO_MAP_ID when neither prop nor env var is set so AdvancedMarkerElement still renders", async () => {
-    // Sanity-check that no leaked env value influences this test.
-    delete (
-      import.meta.env as unknown as Record<string, string | undefined>
-    ).VITE_GOOGLE_MAPS_MAP_ID;
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <PortfolioMap
-          properties={[makeProperty()]}
-          onPinClick={vi.fn()}
-          apiKey="test-key"
-        />,
+          />
+        </Wrapper>,
       );
     });
     await settle();
     expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
   });
 
-  it("ignores a whitespace-only env value and falls back to DEMO_MAP_ID rather than silently breaking the map", async () => {
-    (
-      import.meta.env as unknown as Record<string, string | undefined>
-    ).VITE_GOOGLE_MAPS_MAP_ID = "   ";
-    try {
-      await act(async () => {
-        root = createRoot(container);
-        root.render(
-          <PortfolioMap
-            properties={[makeProperty()]}
-            onPinClick={vi.fn()}
-            apiKey="test-key"
-          />,
-        );
-      });
-      await settle();
-      expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
-    } finally {
-      delete (
-        import.meta.env as unknown as Record<string, string | undefined>
-      ).VITE_GOOGLE_MAPS_MAP_ID;
-    }
-  });
-
-  it("prefers the explicit prop over the env var so tests can override per render", async () => {
-    (
-      import.meta.env as unknown as Record<string, string | undefined>
-    ).VITE_GOOGLE_MAPS_MAP_ID = "env-id";
-    try {
-      await act(async () => {
-        root = createRoot(container);
-        root.render(
-          <PortfolioMap
-            properties={[makeProperty()]}
-            onPinClick={vi.fn()}
-            apiKey="test-key"
-            mapId="prop-id"
-          />,
-        );
-      });
-      await settle();
-      expect(mapsState.map?.options.mapId).toBe("prop-id");
-    } finally {
-      delete (
-        import.meta.env as unknown as Record<string, string | undefined>
-      ).VITE_GOOGLE_MAPS_MAP_ID;
-    }
-  });
 });
 
-describe("PortfolioMap missing-key fallback copy", () => {
+// ---------------------------------------------------------------------------
+// Runtime-config branch (Task #165): when no `apiKey` prop is supplied,
+// the portfolio map fetches both the API key and the Map ID from the
+// api-server's `/api/config` endpoint at mount and caches them via
+// react-query. Operators rotate either value by setting
+// `GOOGLE_MAPS_API_KEY` / `GOOGLE_MAPS_MAP_ID` on the api-server and
+// restarting only the api-server — no web rebuild needed. These tests
+// mock the global fetch so we can exercise that flow without a real
+// server. They live in their own describe block because they need a
+// per-test fetch override and shouldn't pollute the inline-key tests
+// above.
+// ---------------------------------------------------------------------------
+
+describe("PortfolioMap — runtime config", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
+  let originalFetch: typeof fetch;
 
   beforeEach(() => {
+    __resetPortfolioMapCachesForTest();
     mapsState.map = null;
     mapsState.markers = [];
     mapsState.infoWindow = null;
     mapsState.pendingGeocodes = [];
-    // No fake Google Maps install — the fallback branch must render
-    // before the loader is even consulted, so no SDK shim is needed.
-    __resetPortfolioMapCachesForTest();
+    installFakeGoogleMaps();
     container = document.createElement("div");
     document.body.appendChild(container);
+    originalFetch = globalThis.fetch;
   });
 
   afterEach(async () => {
@@ -881,50 +894,259 @@ describe("PortfolioMap missing-key fallback copy", () => {
       root = null;
     }
     container.remove();
+    uninstallFakeGoogleMaps();
     __resetPortfolioMapCachesForTest();
+    globalThis.fetch = originalFetch;
   });
 
-  // Pinning the wording of the missing-key fallback so a future
-  // refactor can't reintroduce the retired build-time env var
-  // (`VITE_GOOGLE_MAPS_API_KEY`). The Google Maps key now lives on
-  // the api-server (`GOOGLE_MAPS_API_KEY`) and is fetched by the
-  // property-detail Location card via `/api/config`; rotating the
-  // old VITE_-prefixed var no longer does anything, so naming it in
-  // the operator-facing fallback would send them on a wild goose
-  // chase.
-  it("tells operators to set GOOGLE_MAPS_API_KEY on the api-server (and never the retired VITE_ build-time var)", async () => {
+  function get(testId: string): HTMLElement | null {
+    return container.querySelector(
+      `[data-testid="${testId}"]`,
+    ) as HTMLElement | null;
+  }
+
+  it("fetches /api/config exactly once on mount when no apiKey prop is supplied", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "rotated-key-xyz",
+            googleMapsMapId: "branded-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(
-        <PortfolioMap
-          properties={[
-            {
-              id: "p1",
-              name: "Maple",
-              address: "123 Main St",
-              city: "Austin",
-              state: "TX",
-              zip: "78701",
-            },
-          ]}
-          onPinClick={vi.fn()}
-          apiKey=""
-        />,
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
       );
     });
 
-    const fallback = container.querySelector(
-      '[data-testid="portfolio-map-fallback"]',
-    );
-    expect(fallback).not.toBeNull();
+    // The component must hit the runtime config endpoint exactly once.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const firstCall = fetchMock.mock.calls[0] as unknown as [
+      RequestInfo | URL,
+      ...unknown[],
+    ];
+    const requestedUrl = String(firstCall[0]);
+    expect(requestedUrl).toContain("/api/config");
+  });
 
+  it("renders a neutral loading placeholder while /api/config is in flight (not the 'set up your key' fallback)", async () => {
+    // The loading branch is what keeps the operator from being shown a
+    // scary "set up your key" warning during the brief window between
+    // mount and the first response from the api-server.
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    expect(get("portfolio-map-config-loading")).not.toBeNull();
+    expect(get("portfolio-map-fallback")).toBeNull();
+    expect(get("portfolio-map")).toBeNull();
+
+    // Resolve the in-flight request so cleanup doesn't hang.
+    await act(async () => {
+      resolveFetch!(
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "live-key",
+            googleMapsMapId: "live-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    await waitFor(() => get("portfolio-map") !== null);
+  });
+
+  it("loads the map with the fetched key and Map ID once /api/config resolves", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "rotated-key-xyz",
+            googleMapsMapId: "branded-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    // Wait for the query to resolve and the map to mount with the
+    // fetched values. Polling avoids races with react-query's
+    // setTimeout-scheduled notifications.
+    await waitFor(() => mapsState.map !== null);
+
+    // The Map ID handed to google.maps.Map comes from the runtime
+    // config — proves the rotation path works end-to-end without a
+    // rebuild or env var on the web side.
+    expect(mapsState.map?.options.mapId).toBe("branded-map-id");
+    // And the loading placeholder is no longer visible.
+    expect(get("portfolio-map-config-loading")).toBeNull();
+    expect(get("portfolio-map")).not.toBeNull();
+  });
+
+  it("falls back to DEMO_MAP_ID when /api/config returns googleMapsMapId: null but an API key is configured", async () => {
+    // Mirrors the production case where an operator has set the API
+    // key but hasn't provisioned a branded Map ID yet — the map still
+    // needs to render pins, so it falls back to Google's built-in
+    // demo Map ID rather than refusing to mount.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "live-key",
+            googleMapsMapId: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => mapsState.map !== null);
+    expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
+  });
+
+  it("renders the friendly fallback (pointing at the api-server secret) when /api/config reports no key configured", async () => {
+    // The fallback message must NOT mention the retired build-time
+    // env vars (`VITE_GOOGLE_MAPS_API_KEY` / `VITE_GOOGLE_MAPS_MAP_ID`)
+    // — operators who follow that copy would update the wrong place
+    // now that the key lives on the api-server.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: null,
+            googleMapsMapId: null,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("portfolio-map-fallback") !== null);
+
+    expect(get("portfolio-map-config-loading")).toBeNull();
+    expect(get("portfolio-map")).toBeNull();
+    const fallback = get("portfolio-map-fallback");
+    expect(fallback).not.toBeNull();
     const text = fallback!.textContent ?? "";
-    // Points operators at the right knob: the server-side env var on
-    // the api-server, matching the property-detail Location card.
+    // Names the api-server secret (the new source of truth) so the
+    // operator updates the right thing.
     expect(text).toContain("GOOGLE_MAPS_API_KEY");
     expect(text.toLowerCase()).toContain("api-server");
-    // And explicitly does NOT name the retired build-time var.
+    // Must NOT name the retired build-time vars — that would be a
+    // rotation trap.
     expect(text).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
+    expect(text).not.toContain("VITE_GOOGLE_MAPS_MAP_ID");
+  });
+
+  it("does not fetch /api/config when the caller passes an explicit apiKey prop (test injection short-circuit)", async () => {
+    // The component must skip the network entirely when tests inject
+    // the key — otherwise every existing test in this file would need
+    // to stand up a fake fetch.
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="injected-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    // And nothing should be in the loading branch — we have a key.
+    expect(get("portfolio-map-config-loading")).toBeNull();
+  });
+
+  it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "live-key",
+            googleMapsMapId: "fetched-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            mapId="prop-wins"
+          />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => mapsState.map !== null);
+    expect(mapsState.map?.options.mapId).toBe("prop-wins");
   });
 });
-

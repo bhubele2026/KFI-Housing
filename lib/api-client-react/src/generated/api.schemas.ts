@@ -24,6 +24,17 @@ graceful "Open in Google Maps" fallback instead of an embed.
    * @nullable
    */
   googleMapsApiKey: string | null;
+  /**
+   * Google Cloud Map ID for the portfolio map's branded vector
+style (custom palette + reduced POI clutter), or `null` when
+the operator hasn't configured one yet. AdvancedMarkerElement
+requires a Map ID to render at all, so when this is `null`
+the portfolio map falls back to Google's built-in
+`DEMO_MAP_ID` so a fresh workspace still renders pins.
+
+   * @nullable
+   */
+  googleMapsMapId: string | null;
 }
 
 export interface Customer {

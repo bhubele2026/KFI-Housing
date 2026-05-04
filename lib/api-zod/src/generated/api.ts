@@ -34,6 +34,12 @@ export const GetRuntimeConfigResponse = zod
       .describe(
         'Google Maps Embed API key, or `null` when the operator hasn\'t\nconfigured one yet. The web app uses `null` to render its\ngraceful \"Open in Google Maps\" fallback instead of an embed.\n',
       ),
+    googleMapsMapId: zod
+      .string()
+      .nullable()
+      .describe(
+        "Google Cloud Map ID for the portfolio map's branded vector\nstyle (custom palette + reduced POI clutter), or `null` when\nthe operator hasn't configured one yet. AdvancedMarkerElement\nrequires a Map ID to render at all, so when this is `null`\nthe portfolio map falls back to Google's built-in\n`DEMO_MAP_ID` so a fresh workspace still renders pins.\n",
+      ),
   })
   .describe(
     "Runtime config the web app fetches once on mount. The Google Maps\nEmbed API key is intentionally exposed (the embed URL puts it on\nthe wire anyway) but no other secret may be added here.\n",

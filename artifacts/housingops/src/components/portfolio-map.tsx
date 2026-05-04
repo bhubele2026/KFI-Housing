@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, MapPin } from "lucide-react";
+import {
+  useGetRuntimeConfig,
+  getGetRuntimeConfigQueryKey,
+} from "@workspace/api-client-react";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
 // actually call into — installing @types/google.maps just for a handful
@@ -147,22 +151,34 @@ interface PortfolioMapProps {
    */
   onGeocoded?: (id: string, coords: { lat: number; lng: number }) => void;
   /**
-   * Inject the Maps API key for tests. Defaults to the runtime
-   * VITE_GOOGLE_MAPS_API_KEY so production code paths use the real key
-   * without callers having to thread it through every render.
+   * Inject the Maps API key for tests so they don't have to stand up a
+   * fake `/api/config` endpoint. When provided, the component skips the
+   * runtime config fetch entirely and uses this value directly:
+   *   - `undefined` (default) — fetch the key from the api-server
+   *     `/api/config` endpoint via react-query
+   *   - `"some-key"`          — render the map with this key
+   *   - `""` / `null`         — render the friendly fallback branch
+   *
+   * Production code paths leave this `undefined` so an operator can
+   * rotate the key on the api-server side (set `GOOGLE_MAPS_API_KEY`
+   * + restart api-server) without rebuilding the web bundle.
    */
-  apiKey?: string;
+  apiKey?: string | null;
   /**
-   * Override the Google Cloud Map ID for tests. Defaults to the
-   * runtime VITE_GOOGLE_MAPS_MAP_ID, which points at the
-   * HousingOps-branded vector map style configured in the team's
-   * Google Cloud Console (custom palette + reduced POI clutter). When
-   * unset, the map falls back to Google's built-in `DEMO_MAP_ID` so
-   * the app still renders pins in dev environments that haven't yet
-   * provisioned a styled Map ID — AdvancedMarkerElement requires
-   * *some* Map ID to render at all.
+   * Override the Google Cloud Map ID for tests. When `apiKey` is left
+   * `undefined` the component fetches both the API key and the Map ID
+   * together from `/api/config`, so production code paths leave this
+   * `undefined` as well — operators rotate the Map ID by setting
+   * `GOOGLE_MAPS_MAP_ID` on the api-server and restarting it.
+   *
+   * The Map ID points at a HousingOps-branded vector map style
+   * configured in the team's Google Cloud Console (custom palette +
+   * reduced POI clutter). When neither this prop nor the runtime
+   * config provides one, the map falls back to Google's built-in
+   * `DEMO_MAP_ID` so a fresh dev workspace still renders pins —
+   * AdvancedMarkerElement requires *some* Map ID to render at all.
    */
-  mapId?: string;
+  mapId?: string | null;
 }
 
 /**
@@ -417,19 +433,58 @@ export function PortfolioMap({
   apiKey,
   mapId,
 }: PortfolioMapProps) {
-  const resolvedKey =
-    apiKey ?? (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? "";
+  // Only hit `/api/config` when the caller didn't pre-supply a key.
+  // Tests pass `apiKey` explicitly so they never fire a real fetch;
+  // production leaves it `undefined` so we read both the key and the
+  // Map ID from the runtime config endpoint and an operator can rotate
+  // them without rebuilding the web bundle. `mapId` follows the same
+  // convention — supplying it skips the runtime value for that field
+  // only, but does NOT by itself trigger or skip the fetch.
+  const shouldFetchConfig = apiKey === undefined;
+  const configQuery = useGetRuntimeConfig({
+    query: {
+      // Supply queryKey explicitly so TS is happy — the orval-generated
+      // options helper falls back to the same default when omitted, but
+      // react-query v5's `UseQueryOptions` type marks `queryKey` as
+      // required. Sharing the key with the property-detail Location
+      // card means the second consumer to mount gets the cached
+      // response instantly.
+      queryKey: getGetRuntimeConfigQueryKey(),
+      enabled: shouldFetchConfig,
+    },
+  });
+
+  // Resolve the effective key. Test injection wins; otherwise we use
+  // the value from the runtime config endpoint (which can be `null`
+  // when the operator hasn't set GOOGLE_MAPS_API_KEY yet).
+  const fetchedKey =
+    configQuery.data?.googleMapsApiKey == null
+      ? ""
+      : configQuery.data.googleMapsApiKey;
+  const resolvedKey = apiKey === undefined ? fetchedKey : (apiKey ?? "");
+
   // Prefer (in order): an explicit prop (used by tests), the operator's
-  // configured branded Map ID, or Google's built-in DEMO_MAP_ID as a
-  // last-resort fallback. Trim the env var so an accidental
-  // whitespace-only value doesn't pass the truthy check and break the
-  // map silently. AdvancedMarkerElement refuses to render without a
-  // valid Map ID, so the fallback is what keeps a fresh dev workspace
-  // from showing an empty canvas.
-  const envMapId = (
-    (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined) ?? ""
-  ).trim();
-  const resolvedMapId = mapId ?? (envMapId !== "" ? envMapId : "DEMO_MAP_ID");
+  // configured branded Map ID from runtime config, or Google's built-in
+  // DEMO_MAP_ID as a last-resort fallback. AdvancedMarkerElement
+  // refuses to render without a valid Map ID, so the fallback is what
+  // keeps a fresh workspace from showing an empty canvas.
+  const fetchedMapId =
+    configQuery.data?.googleMapsMapId == null
+      ? ""
+      : configQuery.data.googleMapsMapId;
+  const propMapId = mapId == null ? "" : mapId;
+  const resolvedMapId =
+    propMapId !== ""
+      ? propMapId
+      : fetchedMapId !== ""
+        ? fetchedMapId
+        : "DEMO_MAP_ID";
+
+  // While the runtime config request is in flight we don't yet know
+  // whether a key is configured — flashing the "set up your key" copy
+  // before the answer arrives would mislead the operator, so render a
+  // neutral placeholder instead.
+  const isConfigLoading = shouldFetchConfig && configQuery.isPending;
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
   const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);
@@ -496,12 +551,15 @@ export function PortfolioMap({
           // the markers will not render. In production this points at
           // a HousingOps-owned Map ID configured in the Google Cloud
           // Console (custom palette + reduced POI clutter that matches
-          // the rest of the app), supplied via VITE_GOOGLE_MAPS_MAP_ID
-          // so dev and prod can use different IDs without code
-          // changes. When that env var is unset the component falls
-          // back to Google's built-in `DEMO_MAP_ID`, which renders an
-          // unstyled map but at least lets AdvancedMarkerElement
-          // attach pins so a fresh workspace is never blank.
+          // the rest of the app), fetched at runtime from the
+          // api-server's `/api/config` endpoint so an operator can
+          // rotate it (or swap in a fresh branded style) by updating
+          // `GOOGLE_MAPS_MAP_ID` and restarting only the api-server —
+          // no web rebuild needed. When the runtime config returns
+          // `null`, the component falls back to Google's built-in
+          // `DEMO_MAP_ID`, which renders an unstyled map but at least
+          // lets AdvancedMarkerElement attach pins so a fresh
+          // workspace is never blank.
           mapId: resolvedMapId,
           mapTypeControl: false,
           streetViewControl: false,
@@ -717,6 +775,27 @@ export function PortfolioMap({
     onUnmappableChange(unmappable);
   }, [coords, properties, onUnmappableChange]);
 
+  // While the runtime config request is in flight we render a neutral
+  // placeholder rather than the "set up your key" copy — we don't yet
+  // know whether a key is configured and flashing the warning before
+  // the answer arrives would mislead the operator. Mirrors the
+  // property-detail Location card's behavior.
+  if (isConfigLoading) {
+    return (
+      <Card data-testid="portfolio-map-config-loading">
+        <CardContent className="p-0 relative">
+          <div
+            className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-muted flex items-center justify-center text-sm text-muted-foreground"
+            aria-busy="true"
+          >
+            <MapPin className="h-4 w-4 mr-2" />
+            Loading map…
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (!resolvedKey) {
     return (
       <Card data-testid="portfolio-map-fallback">
@@ -729,8 +808,8 @@ export function PortfolioMap({
               <code className="font-mono text-[11px] bg-muted px-1 rounded">
                 GOOGLE_MAPS_API_KEY
               </code>{" "}
-              on the api-server to render every property as pins on a
-              single portfolio map.
+              on the api-server (and restart it) to render every
+              property as pins on a single portfolio map.
             </span>
           </div>
         </CardContent>

@@ -28,12 +28,15 @@ if (!basePath) {
 
 // Vite only auto-loads VITE_* variables from .env files in envDir; it
 // does NOT forward shell-level process.env.VITE_* into the browser
-// bundle. In Replit, secrets like VITE_GOOGLE_MAPS_API_KEY live in the
-// workflow's shell environment, not in a committed .env file, so we
-// have to bridge them ourselves. Enumerate every VITE_* key from
-// process.env at config-evaluation time and inline them into
-// import.meta.env via Vite's `define`. Done generically so the next
-// VITE_* variable the app reads "just works" — no per-key plumbing.
+// bundle. In Replit, build-time secrets live in the workflow's shell
+// environment, not in a committed .env file, so we have to bridge
+// them ourselves. Enumerate every VITE_* key from process.env at
+// config-evaluation time and inline them into import.meta.env via
+// Vite's `define`. Done generically so the next VITE_* variable the
+// app reads "just works" — no per-key plumbing. (Google Maps secrets
+// no longer live here — they're fetched at runtime from the
+// api-server's `GET /api/config` endpoint so they can be rotated
+// without a web rebuild; see replit.md.)
 const viteEnvDefines: Record<string, string> = {};
 for (const [key, value] of Object.entries(process.env)) {
   if (!key.startsWith("VITE_")) continue;

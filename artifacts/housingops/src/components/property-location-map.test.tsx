@@ -3,40 +3,240 @@ import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PropertyLocationMap } from "./property-location-map";
+import { __resetGoogleMapsSdkForTest } from "@/lib/google-maps-sdk";
 import {
-  MAPS_KEY_CONSOLE_URLS,
-  getMapsKeyConsoleUrl,
   reportGoogleMapsKeyError,
   __resetGoogleMapsKeyErrorForTest,
-  __testing as keyErrorTesting,
 } from "@/hooks/use-google-maps-key-error";
 
-// These tests pin down the four render branches of the property location
-// card — full embed (address + key), graceful fallback (address but no
-// key), loading placeholder (config still in flight), and empty state
-// (no address) — plus the exact Google Maps URLs the card hands off to.
-// A regression in any of these would either break the embed iframe,
-// drop the operator's one-click jump to maps, or paint a misleading
-// "set up your key" warning over a working map.
-//
-// The component fetches its Google Maps API key from the api-server's
-// `/api/config` endpoint at runtime so the key can be rotated without a
-// web rebuild (Task #154). To keep these tests fast and offline, every
-// test passes `apiKey` explicitly — the component skips the network
-// call when `apiKey` is provided. The dedicated runtime-config branch
-// (loading + cached fetch) is exercised separately at the bottom with
-// `globalThis.fetch` mocked.
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Pin down the render branches of the property-detail Location card,
+// migrated in Task #195 from the Maps Embed v1 iframe onto the JS Maps
+// SDK + AdvancedMarkerElement so it can use the operator's branded
+// `googleMapsMapId` from `/api/config`. The core branches (empty,
+// loading, fallback, config-error, key-rejected, recheck) are still
+// here from the iframe era; what's new is the canvas branch — a real
+// `google.maps.Map` is constructed against a fake SDK installed below,
+// and the tests assert on map options (`mapId`), the marker library,
+// and the geocoded pin position rather than on iframe `src`.
+
+// Capture every `toast(...)` invocation so the rotation-confirmation
+// path can be asserted on without standing up the real <Toaster /> tree.
+type ToastCall = {
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  variant?: string;
+};
+const toastCalls: ToastCall[] = [];
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({
+    toasts: [],
+    toast: (arg: ToastCall) => {
+      toastCalls.push(arg);
+      return { id: "x", dismiss: () => {}, update: () => {} };
+    },
+    dismiss: () => {},
+  }),
+}));
+
+// ---------------------------------------------------------------------------
+// Hand-rolled Google Maps SDK shim — mirrors the one in portfolio-map.test
+// ---------------------------------------------------------------------------
+interface FakeMarker {
+  position: { lat: number; lng: number };
+  title?: string;
+  gmpClickable?: boolean;
+  map: unknown | null;
+}
+
+interface FakeMapState {
+  options: Record<string, unknown>;
+  centerSets: Array<{ lat: number; lng: number }>;
+  zoomSets: number[];
+  listeners: Map<string, Array<() => void>>;
+}
+
+interface PendingGeocode {
+  addr: string;
+  cb: (
+    results:
+      | Array<{
+          geometry: { location: { lat: () => number; lng: () => number } };
+        }>
+      | null,
+    status: string,
+  ) => void;
+}
+
+const mapsState: {
+  map: FakeMapState | null;
+  markers: FakeMarker[];
+  pendingGeocodes: PendingGeocode[];
+} = {
+  map: null,
+  markers: [],
+  pendingGeocodes: [],
+};
+
+function installFakeGoogleMaps() {
+  class FakeMap {
+    options: Record<string, unknown>;
+    centerSets: Array<{ lat: number; lng: number }> = [];
+    zoomSets: number[] = [];
+    listeners = new Map<string, Array<() => void>>();
+    constructor(_el: HTMLElement, options: Record<string, unknown>) {
+      this.options = options;
+      mapsState.map = this as unknown as FakeMapState;
+    }
+    setCenter(p: { lat: number; lng: number }) {
+      this.centerSets.push(p);
+    }
+    setZoom(z: number) {
+      this.zoomSets.push(z);
+    }
+    fitBounds() {}
+    addListener(event: string, cb: () => void) {
+      const cur = this.listeners.get(event) ?? [];
+      cur.push(cb);
+      this.listeners.set(event, cur);
+    }
+  }
+  class FakeAdvancedMarkerElement {
+    position: { lat: number; lng: number };
+    title?: string;
+    gmpClickable?: boolean;
+    private _map: unknown | null = null;
+    constructor(opts: {
+      position: { lat: number; lng: number };
+      map: unknown;
+      title?: string;
+      gmpClickable?: boolean;
+    }) {
+      this.position = opts.position;
+      this.title = opts.title;
+      this.gmpClickable = opts.gmpClickable;
+      this._map = opts.map ?? null;
+      mapsState.markers.push(this as unknown as FakeMarker);
+    }
+    get map() {
+      return this._map;
+    }
+    set map(m: unknown | null) {
+      this._map = m;
+      if (m === null) {
+        const idx = mapsState.markers.indexOf(this as unknown as FakeMarker);
+        if (idx !== -1) mapsState.markers.splice(idx, 1);
+      }
+    }
+    addEventListener() {}
+  }
+  class FakeInfoWindow {
+    setContent() {}
+    open() {}
+    close() {}
+    addListener() {}
+  }
+  class FakeGeocoder {
+    geocode(req: { address: string }, cb: PendingGeocode["cb"]) {
+      mapsState.pendingGeocodes.push({ addr: req.address, cb });
+    }
+  }
+  class FakeBounds {
+    extend() {}
+    getCenter() {
+      return { lat: () => 0, lng: () => 0 };
+    }
+  }
+
+  const w = window as unknown as {
+    google?: { maps?: unknown };
+    __housingopsMapsLoader?: Promise<void>;
+  };
+  w.google = {
+    maps: {
+      Map: FakeMap,
+      marker: { AdvancedMarkerElement: FakeAdvancedMarkerElement },
+      Geocoder: FakeGeocoder,
+      LatLngBounds: FakeBounds,
+      InfoWindow: FakeInfoWindow,
+    },
+  };
+  // Bypass the real script-tag loader by priming the in-flight loader
+  // promise to a resolved one. `loadMapsApi` short-circuits on the
+  // ready-class check before this anyway, but priming both keeps the
+  // tests robust to either internal path.
+  w.__housingopsMapsLoader = Promise.resolve();
+}
+
+function uninstallFakeGoogleMaps() {
+  const w = window as unknown as {
+    google?: unknown;
+    __housingopsMapsLoader?: unknown;
+  };
+  delete w.google;
+  delete w.__housingopsMapsLoader;
+}
+
+function makeWrapper() {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+    },
+  });
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+  }
+  return { Wrapper, client };
+}
+
+async function flush() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+async function settle() {
+  for (let i = 0; i < 5; i++) {
+    await flush();
+  }
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  { timeoutMs = 1000, intervalMs = 5 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  const start = Date.now();
+  let lastError: unknown = null;
+  while (Date.now() - start < timeoutMs) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, intervalMs));
+    });
+    try {
+      if (predicate()) return;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error(
+    `waitFor: predicate did not become true within ${timeoutMs}ms`,
+  );
+}
 
 describe("PropertyLocationMap", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
   beforeEach(() => {
-    // The component subscribes to the shared Maps key-error store
-    // (Task #178), and that store is module-scoped so a code reported
-    // in one test would otherwise flip subsequent tests' components
-    // straight into the key-rejected branch. Reset before each test
-    // so each one starts with a clean slate.
+    toastCalls.length = 0;
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    __resetGoogleMapsSdkForTest();
     __resetGoogleMapsKeyErrorForTest();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -51,28 +251,13 @@ describe("PropertyLocationMap", () => {
       root = null;
     }
     container.remove();
+    uninstallFakeGoogleMaps();
+    __resetGoogleMapsSdkForTest();
     __resetGoogleMapsKeyErrorForTest();
   });
 
-  function makeWrapper() {
-    // Per-test client so cached `/api/config` responses can't bleed
-    // across tests. Retries off so a deliberately-failing fetch surfaces
-    // immediately instead of being papered over.
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: React.ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
   async function render(node: React.ReactElement) {
-    const Wrapper = makeWrapper();
+    const { Wrapper } = makeWrapper();
     await act(async () => {
       root = createRoot(container);
       root.render(<Wrapper>{node}</Wrapper>);
@@ -85,87 +270,40 @@ describe("PropertyLocationMap", () => {
     ) as HTMLElement | null;
   }
 
-  // React 18 attaches event listeners at the root container rather
-  // than on individual elements, and for non-bubbling events like
-  // `error` on an iframe a plain `dispatchEvent(new Event("error"))`
-  // does NOT reach React's handler in jsdom. To simulate the iframe
-  // failing to load, we instead read the React props that React
-  // stores on the DOM node (`__reactProps$<key>`) and invoke the
-  // `onError` handler directly. This still verifies the wiring —
-  // if `onError={...}` is removed from the iframe in the component,
-  // this lookup returns undefined and the test fails.
-  function fireReactOnError(el: Element) {
-    const propsKey = Object.keys(el).find((k) =>
-      k.startsWith("__reactProps$"),
-    );
-    if (!propsKey) {
-      throw new Error("React props not found on element");
-    }
-    const props = (el as unknown as Record<string, unknown>)[propsKey] as
-      | { onError?: (e: unknown) => void }
-      | undefined;
-    if (!props || typeof props.onError !== "function") {
-      throw new Error(
-        "iframe is missing an onError handler — the in-card error " +
-          "branch can't be triggered without it.",
-      );
-    }
-    props.onError({ type: "error" });
-  }
+  // -------------------------------------------------------------------
+  // Empty / fallback / loading branches (no SDK involvement)
+  // -------------------------------------------------------------------
 
-  it("renders the embedded map, search/directions URLs, and address block when an address and key are present", async () => {
+  it("renders the empty-state card when every address field is blank", async () => {
     await render(
-      <PropertyLocationMap
-        address="100 Oak Way"
-        city="Austin"
-        state="TX"
-        zip="78701"
-        apiKey="test-key-abc"
-      />,
+      <PropertyLocationMap address="" city="" state="" zip="" apiKey="k" />,
     );
-
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    // Embed URL must include the key and the URL-encoded full address.
-    // Spaces become +; commas become %2C in encodeURIComponent.
-    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
-    expect(iframe!.src).toContain("https://www.google.com/maps/embed/v1/place");
-    expect(iframe!.src).toContain(`key=${encodeURIComponent("test-key-abc")}`);
-    expect(iframe!.src).toContain(`q=${expectedQuery}`);
-
-    // The whole map area is wrapped in an anchor that opens the address
-    // in a new tab via Google Maps Search.
-    const mapLink = get("property-location-map-link") as HTMLAnchorElement | null;
-    expect(mapLink).not.toBeNull();
-    expect(mapLink!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-    expect(mapLink!.target).toBe("_blank");
-    expect(mapLink!.rel).toContain("noopener");
-
-    // Directions affordance opens the same address in directions mode.
-    const dir = get("property-location-directions-link") as HTMLAnchorElement | null;
-    expect(dir).not.toBeNull();
-    expect(dir!.href).toBe(
-      `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
-    );
-    expect(dir!.target).toBe("_blank");
-
-    // Address block: street on first line, "city, state zip" on second.
-    const addr = get("property-location-address");
-    expect(addr).not.toBeNull();
-    expect(addr!.textContent).toContain("100 Oak Way");
-    expect(addr!.textContent).toContain("Austin, TX 78701");
-
-    // The fallback / empty-state / loading surfaces must NOT be visible
-    // alongside a working embed — they each represent a different
-    // render branch.
+    const empty = get("property-location-empty");
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent?.toLowerCase()).toContain("add an address");
+    // None of the active branches render alongside the empty state.
+    expect(get("property-location-map-canvas")).toBeNull();
     expect(get("property-location-fallback")).toBeNull();
-    expect(get("property-location-empty")).toBeNull();
     expect(get("property-location-map-loading")).toBeNull();
+    expect(get("property-location-directions-link")).toBeNull();
+    expect(get("property-location-address")).toBeNull();
   });
 
-  it("falls back to a plain 'Open in Google Maps' link with a setup note when the API key is missing", async () => {
+  it("treats whitespace-only address fields as empty", async () => {
+    await render(
+      <PropertyLocationMap
+        address="   "
+        city=" "
+        state=""
+        zip="  "
+        apiKey="k"
+      />,
+    );
+    expect(get("property-location-empty")).not.toBeNull();
+    expect(get("property-location-map-canvas")).toBeNull();
+  });
+
+  it("falls back to a plain 'Open in Google Maps' link with a setup note when no key is configured", async () => {
     await render(
       <PropertyLocationMap
         address="200 Maple Dr"
@@ -175,50 +313,30 @@ describe("PropertyLocationMap", () => {
         apiKey=""
       />,
     );
-
-    // No iframe, no map-link anchor, and no loading placeholder — the
-    // embed branch is off and the config wasn't fetched at all.
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-link")).toBeNull();
+    expect(get("property-location-map-canvas")).toBeNull();
     expect(get("property-location-map-loading")).toBeNull();
 
     const fallback = get("property-location-fallback");
     expect(fallback).not.toBeNull();
-    // Inline note tells the operator the embed is hidden because no
-    // server-side key is configured. The copy is intentionally
-    // operator-facing — it must not name the old build-time env var
-    // (`VITE_GOOGLE_MAPS_API_KEY`) since rotating that would mislead
-    // them now that the key lives on the api-server.
+    // Operator-facing copy must mention the key — but must not name
+    // the retired build-time env var.
     expect(fallback!.textContent?.toLowerCase()).toContain(
       "google maps api key",
     );
     expect(fallback!.textContent).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
 
-    // Plain link still gives the operator a one-click jump to Google Maps.
-    const link = get("property-location-fallback-link") as HTMLAnchorElement | null;
+    const link = get(
+      "property-location-fallback-link",
+    ) as HTMLAnchorElement | null;
     expect(link).not.toBeNull();
     const expectedQuery = encodeURIComponent("200 Maple Dr, Dallas, TX 75201");
     expect(link!.href).toBe(
       `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
     );
     expect(link!.target).toBe("_blank");
-
-    // Address block + Directions link still render even without the embed.
-    expect(get("property-location-address")?.textContent).toContain(
-      "200 Maple Dr",
-    );
-    const dir = get("property-location-directions-link") as HTMLAnchorElement | null;
-    expect(dir).not.toBeNull();
-    expect(dir!.href).toContain("destination=" + expectedQuery);
-
-    // Empty state must NOT be visible — we DO have an address.
-    expect(get("property-location-empty")).toBeNull();
   });
 
-  it("treats an explicit `null` apiKey the same as an empty string (server says no key configured)", async () => {
-    // The runtime config endpoint returns `googleMapsApiKey: null` when
-    // the operator hasn't set the secret. The component normalizes that
-    // to the friendly fallback branch, same as `""`.
+  it("treats an explicit `null` apiKey the same as an empty string", async () => {
     await render(
       <PropertyLocationMap
         address="300 Pine St"
@@ -228,21 +346,15 @@ describe("PropertyLocationMap", () => {
         apiKey={null}
       />,
     );
-
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-loading")).toBeNull();
+    expect(get("property-location-map-canvas")).toBeNull();
     expect(get("property-location-fallback")).not.toBeNull();
   });
 
-  it("never leaks a literal 'undefined' into the iframe src when the key is missing", async () => {
-    // Defends against a regression anywhere in the key pipeline (the
-    // runtime /api/config fetch, the build-time portfolio-map env
-    // forwarding, or any future source) that could mis-stringify a
-    // missing key as the bare identifier `undefined`. Even then the
-    // component must pick the dashed-fallback branch instead of
-    // emitting an iframe whose src is literally
-    // `…/place?key=undefined&q=…` — which would render a broken Google
-    // error tile and look like the embed is "almost working".
+  it("never leaks a literal 'undefined' into the rendered DOM when the key is missing", async () => {
+    // Defends against any upstream regression that mis-stringifies a
+    // missing key as the bare identifier `undefined` — even if it
+    // happened, the component must pick the fallback branch and never
+    // emit "key=undefined" anywhere on the page.
     await render(
       <PropertyLocationMap
         address="300 Pine St"
@@ -252,1123 +364,350 @@ describe("PropertyLocationMap", () => {
         apiKey=""
       />,
     );
-
-    // No iframe is rendered at all in the fallback branch.
-    expect(get("property-location-map-iframe")).toBeNull();
-    // And nothing on the rendered page should contain the substring
-    // "key=undefined" — that would be the smoking gun for a bad
-    // key stringification anywhere upstream of the component.
+    expect(get("property-location-map-canvas")).toBeNull();
     expect(container.innerHTML).not.toContain("key=undefined");
   });
 
-  it("renders a friendly empty state instead of a broken/blank map when every address field is empty", async () => {
-    await render(
-      <PropertyLocationMap
-        address=""
-        city=""
-        state=""
-        zip=""
-        apiKey="test-key-abc"
-      />,
-    );
+  // -------------------------------------------------------------------
+  // SDK / canvas / map ID branch
+  // -------------------------------------------------------------------
 
-    const empty = get("property-location-empty");
-    expect(empty).not.toBeNull();
-    expect(empty!.textContent?.toLowerCase()).toContain(
-      "add an address",
-    );
-
-    // None of the active branches should render alongside the empty state.
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-link")).toBeNull();
-    expect(get("property-location-fallback")).toBeNull();
-    expect(get("property-location-map-loading")).toBeNull();
-    expect(get("property-location-directions-link")).toBeNull();
-    expect(get("property-location-address")).toBeNull();
-  });
-
-  it("treats whitespace-only address fields as empty and shows the empty state", async () => {
-    // Defends against a regression that .length-checked the raw strings
-    // instead of trimming — an operator who typed only spaces would
-    // otherwise see a broken iframe pointed at "%20%20%20".
-    await render(
-      <PropertyLocationMap
-        address="   "
-        city=" "
-        state=""
-        zip="  "
-        apiKey="test-key-abc"
-      />,
-    );
-
-    expect(get("property-location-empty")).not.toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
-  });
-
-  it("URL-encodes special characters in the address so the search/embed URLs stay valid", async () => {
-    // An address with `&`, `#`, and a unit number — characters that
-    // would break the search URL if interpolated raw. encodeURIComponent
-    // turns `&`→`%26`, `#`→`%23`, ` `→`%20`, `,`→`%2C`.
-    await render(
-      <PropertyLocationMap
-        address="100 R&D Way #5"
-        city="San José"
-        state="CA"
-        zip="95110"
-        apiKey="test-key-abc"
-      />,
-    );
-
-    const expectedQuery = encodeURIComponent(
-      "100 R&D Way #5, San José, CA 95110",
-    );
-    const link = get("property-location-map-link") as HTMLAnchorElement | null;
-    expect(link).not.toBeNull();
-    expect(link!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-    // Raw special chars must NOT appear in the URL — only their encoded
-    // forms — otherwise the URL would be malformed.
-    expect(link!.href).not.toContain(" ");
-    expect(link!.href).not.toContain("#");
-  });
-
-  it("does not render the always-on troubleshooting hint in the healthy success branch (Task #196)", async () => {
-    // Why this test exists: a previous iteration of this card kept a
-    // permanent "Seeing a Google error in the map?…" companion line
-    // pinned under the embed even when the map was rendering fine,
-    // which made every healthy property-detail page look like the
-    // key had been rejected. Task #196 removed that always-on line
-    // because the real failure modes are already covered by the
-    // dedicated error branch (`property-location-map-error`), which
-    // is fed by three independent signals: the iframe's own `error`
-    // event (network/CSP/malformed URL), Google's postMessage error
-    // codes (Task #163), and the shared `useGoogleMapsKeyError`
-    // store populated by `gm_authFailure` on the portfolio map
-    // (Task #178). This test pins down that the hint never appears
-    // in the healthy success branch — the address block, the
-    // "Open in Google Maps" overlay, and the Directions link are
-    // the only chrome around the working embed.
+  it("mounts the JS SDK Map with the explicit `mapId` prop and a single AdvancedMarkerElement at the geocoded point", async () => {
     await render(
       <PropertyLocationMap
         address="100 Oak Way"
         city="Austin"
         state="TX"
         zip="78701"
-        apiKey="test-key-abc"
+        apiKey="test-key"
+        mapId="my-branded-map-id"
       />,
     );
+    // Canvas mounts and exposes the resolved Map ID via a data-attr
+    // so a regression that fed the wrong value can be spotted at the
+    // DOM layer too.
+    const canvas = get("property-location-map-canvas");
+    expect(canvas).not.toBeNull();
+    expect(canvas!.getAttribute("data-map-id")).toBe("my-branded-map-id");
 
-    // Embed is rendered (we're in the healthy success branch), and
-    // the dedicated error panel is NOT rendered.
-    expect(get("property-location-map-iframe")).not.toBeNull();
-    expect(get("property-location-map-error")).toBeNull();
+    await settle();
+    // Real `google.maps.Map` was constructed with the same Map ID.
+    expect(mapsState.map).not.toBeNull();
+    expect(mapsState.map?.options.mapId).toBe("my-branded-map-id");
 
-    // The always-on troubleshooting hint and its inner text node
-    // must both be absent — neither the wrapper nor the copy may
-    // sneak back into the healthy branch under any test id.
-    expect(get("property-location-map-troubleshoot")).toBeNull();
-    expect(get("property-location-map-troubleshoot-text")).toBeNull();
-
-    // And the literal opening phrase from the removed companion
-    // message must not appear anywhere in the healthy card — this
-    // catches a regression that re-introduces the copy under a
-    // different test id or wrapper element.
-    expect(container.textContent ?? "").not.toContain(
-      "Seeing a Google error in the map?",
+    // The geocoder was invoked for the formatted address.
+    expect(mapsState.pendingGeocodes).toHaveLength(1);
+    expect(mapsState.pendingGeocodes[0].addr).toBe(
+      "100 Oak Way, Austin, TX 78701",
     );
+
+    // Resolve the geocode and assert a marker was attached at the
+    // returned point.
+    await act(async () => {
+      mapsState.pendingGeocodes[0].cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30.27, lng: () => -97.74 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].position).toEqual({
+      lat: 30.27,
+      lng: -97.74,
+    });
+    expect(mapsState.markers[0].title).toBe(
+      "100 Oak Way, Austin, TX 78701",
+    );
+    // Map should also be re-centered + zoomed once the pin lands.
+    expect(mapsState.map?.centerSets.at(-1)).toEqual({
+      lat: 30.27,
+      lng: -97.74,
+    });
+    expect(mapsState.map?.zoomSets.at(-1)).toBe(15);
   });
 
-  it("does not render the troubleshooting hint in the loading, empty, missing-key, or error branches", async () => {
-    // The hint is gone in every branch now (Task #196 removed the
-    // always-on companion message from the success branch too), so
-    // none of these branches should render it either. Kept as a
-    // separate test so a regression in any one branch surfaces
-    // cleanly instead of getting lumped into the success-branch test.
-    await render(
-      <PropertyLocationMap
-        address=""
-        city=""
-        state=""
-        zip=""
-        apiKey="test-key-abc"
-      />,
-    );
-    expect(get("property-location-map-troubleshoot")).toBeNull();
-
-    await act(async () => {
-      root!.unmount();
-      root = null;
-    });
-    await render(
-      <PropertyLocationMap
-        address="200 Maple Dr"
-        city="Dallas"
-        state="TX"
-        zip="75201"
-        apiKey=""
-      />,
-    );
-    expect(get("property-location-map-troubleshoot")).toBeNull();
-
-    await act(async () => {
-      root!.unmount();
-      root = null;
-    });
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="some-key"
-      />,
-    );
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    await act(async () => {
-      fireReactOnError(iframe!);
-    });
-    expect(get("property-location-map-error")).not.toBeNull();
-    expect(get("property-location-map-troubleshoot")).toBeNull();
-  });
-
-  it("swaps the embed for an in-card error message when Google rejects the iframe (bad key, allowlist, etc.)", async () => {
-    // Embed renders normally first — Google's grey "this page can't
-    // load Google Maps correctly" tile inside our card looks like the
-    // embed is "almost working" and gives the operator no clue what to
-    // fix on their key (RefererNotAllowedMapError,
-    // ApiNotActivatedMapError, InvalidKeyMapError, quota, …). We hook
-    // the iframe's `onError` so we can replace that with a plain-
-    // English message above the address while keeping the one-click
-    // jump to Google Maps + Directions intact.
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="bad-or-restricted-key"
-      />,
-    );
-
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    // Sanity: not in the error branch yet — the embed is still mounted
-    // and the dedicated error surface hasn't appeared.
-    expect(get("property-location-map-error")).toBeNull();
-
-    // Simulate the iframe failing to load by invoking React's
-    // onError prop directly (see fireReactOnError comment for why).
-    await act(async () => {
-      fireReactOnError(iframe!);
-    });
-
-    // Iframe (and its enclosing map-link wrapper) is gone — the embed
-    // branch yields to the error branch entirely instead of layering
-    // the warning on top of a broken Google tile.
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-link")).toBeNull();
-
-    // The new in-card message is operator-facing and names the
-    // concrete things to check on the key.
-    const err = get("property-location-map-error");
-    expect(err).not.toBeNull();
-    const text = err!.textContent ?? "";
-    expect(text.toLowerCase()).toContain("google");
-    expect(text.toLowerCase()).toContain("api key");
-    // Calls out the two most common operator-side fixes by name so the
-    // copy isn't a vague "something went wrong".
-    expect(text.toLowerCase()).toContain("maps embed api");
-    expect(text.toLowerCase()).toContain("allowlist");
-
-    // The "Open in Google Maps" jump that used to live on the embed
-    // wrapper must still be reachable from the error branch — that's
-    // the operator's one-click escape hatch and the task explicitly
-    // requires it to keep working.
-    const errLink = get("property-location-map-error-link") as HTMLAnchorElement | null;
-    expect(errLink).not.toBeNull();
-    const expectedQuery = encodeURIComponent("400 Cedar Blvd, Phoenix, AZ 85001");
-    expect(errLink!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-    expect(errLink!.target).toBe("_blank");
-    expect(errLink!.rel).toContain("noopener");
-
-    // Directions link — rendered below the map area — must also still
-    // work in the error state.
-    const dir = get("property-location-directions-link") as HTMLAnchorElement | null;
-    expect(dir).not.toBeNull();
-    expect(dir!.href).toBe(
-      `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
-    );
-
-    // Address block stays put so the operator still sees what address
-    // failed to render.
-    const addr = get("property-location-address");
-    expect(addr).not.toBeNull();
-    expect(addr!.textContent).toContain("400 Cedar Blvd");
-    expect(addr!.textContent).toContain("Phoenix, AZ 85001");
-
-    // The empty-address and missing-key branches must not be reused
-    // for this case — they say different (and misleading) things.
-    expect(get("property-location-empty")).toBeNull();
-    expect(get("property-location-fallback")).toBeNull();
-  });
-
-  it("does not show the iframe-rejected error before the iframe has actually failed", async () => {
-    // Defends the happy path: the error branch must only appear after
-    // the iframe fires `error` — not on first render. Otherwise every
-    // map would flash the "Google rejected this key" warning even
-    // when the key is fine.
+  it("falls back to Google's built-in DEMO_MAP_ID when no `mapId` prop is given and `/api/config` reports none either", async () => {
+    // Without a Map ID, AdvancedMarkerElement silently refuses to
+    // attach the pin — so the component MUST always pass *some*
+    // value. Mirrors the same fallback in PortfolioMap.
     await render(
       <PropertyLocationMap
         address="100 Oak Way"
         city="Austin"
         state="TX"
         zip="78701"
-        apiKey="test-key-abc"
+        apiKey="test-key"
       />,
     );
+    const canvas = get("property-location-map-canvas");
+    expect(canvas).not.toBeNull();
+    expect(canvas!.getAttribute("data-map-id")).toBe("DEMO_MAP_ID");
 
-    expect(get("property-location-map-iframe")).not.toBeNull();
-    expect(get("property-location-map-error")).toBeNull();
-    expect(get("property-location-map-error-link")).toBeNull();
+    await settle();
+    expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
   });
 
-  it("does not render the iframe-rejected error in the missing-key fallback branch", async () => {
-    // The missing-key branch and the rejected-key branch are
-    // different stories ("set your key" vs "your key was refused").
-    // They must not be conflated — only the friendly fallback should
-    // appear when no key is configured at all.
-    await render(
-      <PropertyLocationMap
-        address="200 Maple Dr"
-        city="Dallas"
-        state="TX"
-        zip="75201"
-        apiKey=""
-      />,
+  it("uses the `googleMapsMapId` from /api/config when no `mapId` prop is given", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "runtime-key",
+          googleMapsMapId: "runtime-map-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
     );
-
-    expect(get("property-location-fallback")).not.toBeNull();
-    expect(get("property-location-map-error")).toBeNull();
-    expect(get("property-location-map-error-link")).toBeNull();
-  });
-
-  it("re-attempts the embed (clears the error state) when the address changes after a previous failure", async () => {
-    // Sticky error state would be a UX trap: rotate the key or fix
-    // the address and the card would still claim Google rejected it.
-    // The component resets `mapStatus` whenever the embed URL
-    // changes, so a fresh address gets a fresh attempt.
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="400 Cedar Blvd"
-            city="Phoenix"
-            state="AZ"
-            zip="85001"
-            apiKey="some-key"
-          />
-        </Wrapper>,
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
       );
-    });
-
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    await act(async () => {
-      fireReactOnError(iframe!);
-    });
-    expect(get("property-location-map-error")).not.toBeNull();
-
-    // Re-render with a different address — same key. The new embed
-    // URL must trigger a fresh attempt rather than staying stuck on
-    // the rejected-key copy.
-    await act(async () => {
-      root!.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="500 Birch Ln"
-            city="Phoenix"
-            state="AZ"
-            zip="85002"
-            apiKey="some-key"
-          />
-        </Wrapper>,
-      );
-    });
-
-    expect(get("property-location-map-error")).toBeNull();
-    expect(get("property-location-map-iframe")).not.toBeNull();
-  });
-
-  // -------------------------------------------------------------------
-  // postMessage-based key-error detection (Task #163)
-  //
-  // Google's Embed iframe loads successfully and then renders a tiny
-  // grey error tile inside itself for the most common key-rejection
-  // failures (RefererNotAllowedMapError, ApiNotActivatedMapError,
-  // InvalidKeyMapError, OverQuotaMapError, …). The iframe `error`
-  // event does NOT fire in those cases, so the tests above (which
-  // exercise the iframe-onError path) would never trigger this code
-  // path. Google publishes the actual failure code as a `postMessage`
-  // from the embed iframe back to the parent window; the component
-  // subscribes to that and switches to a *tailored* error message that
-  // names the concrete fix on the operator's Google Cloud Console.
-  // The tests below cover that wiring end-to-end:
-  //   - happy path: each known code yields the matching tailored copy
-  //   - shape tolerance: the listener accepts both bare-string and
-  //     `{code: "…"}` payloads (Google has shipped both)
-  //   - provenance: messages from any other window are ignored — the
-  //     listener gates on event.source === iframe.contentWindow
-  //   - link integrity: Open in Google Maps + Directions still work
-  //   - reset: rotating the embed URL clears the error state
-  // -------------------------------------------------------------------
-
-  function fireGoogleMapsErrorMessage(
-    iframe: HTMLIFrameElement,
-    payload: unknown,
-  ) {
-    // jsdom fires every iframe up with its own contentWindow; we use
-    // that as the message source so the component's source-equality
-    // check (which is how it tells "this came from our embed" apart
-    // from "this came from anywhere else on the page") accepts it.
-    if (!iframe.contentWindow) {
-      throw new Error(
-        "iframe.contentWindow is null — jsdom should have created one",
-      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      const canvas = get("property-location-map-canvas");
+      expect(canvas!.getAttribute("data-map-id")).toBe("runtime-map-id");
+      await settle();
+      expect(mapsState.map?.options.mapId).toBe("runtime-map-id");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
-    const event = new MessageEvent("message", {
-      data: payload,
-      source: iframe.contentWindow,
-      origin: "https://www.google.com",
-    });
-    window.dispatchEvent(event);
-  }
+  });
 
-  // Mirrors `Object.keys(MAPS_ERROR_MESSAGES)` in the component. Used by
-  // the unknown-code tests below to assert their picked codes really
-  // aren't in the lookup table — guards against someone "fixing" those
-  // tests by adding the synthetic code to the table and turning a
-  // genuine unknown-code test into a tailored-code test by mistake.
-  const KNOWN_KEY_ERROR_CODES: ReadonlyArray<string> = [
-    "RefererNotAllowedMapError",
-    "ApiNotActivatedMapError",
-    "InvalidKeyMapError",
-    "MissingKeyMapError",
-    "ExpiredKeyMapError",
-    "OverQuotaMapError",
-    "RequestDeniedMapError",
-    "DeletedApiProjectMapError",
-    "RetiredVersionMapError",
-  ];
-
-  const TAILORED_CASES: ReadonlyArray<{
-    code: string;
-    mustInclude: ReadonlyArray<string>;
-  }> = [
-    {
-      code: "RefererNotAllowedMapError",
-      mustInclude: ["this domain", "referrer allowlist"],
-    },
-    {
-      code: "ApiNotActivatedMapError",
-      mustInclude: ["maps embed api isn't enabled"],
-    },
-    {
-      code: "InvalidKeyMapError",
-      mustInclude: ["invalid"],
-    },
-    {
-      code: "OverQuotaMapError",
-      mustInclude: ["over its daily", "quota"],
-    },
-    {
-      code: "ExpiredKeyMapError",
-      mustInclude: ["expired"],
-    },
-    {
-      code: "RequestDeniedMapError",
-      mustInclude: ["denied", "api restrictions"],
-    },
-  ];
-
-  for (const { code, mustInclude } of TAILORED_CASES) {
-    it(`shows a tailored error message when Google posts ${code}`, async () => {
-      await render(
-        <PropertyLocationMap
-          address="400 Cedar Blvd"
-          city="Phoenix"
-          state="AZ"
-          zip="85001"
-          apiKey="key-under-test"
-        />,
-      );
-
-      const iframe = get(
-        "property-location-map-iframe",
-      ) as HTMLIFrameElement | null;
-      expect(iframe).not.toBeNull();
-      // Sanity: still in the success branch — no error has been
-      // detected yet, so swapping in the dedicated error surface here
-      // would be a false positive.
-      expect(get("property-location-map-error")).toBeNull();
-
-      await act(async () => {
-        fireGoogleMapsErrorMessage(iframe!, { code });
-      });
-
-      // The success branch is gone (iframe + its wrapping anchor
-      // unmount) and the dedicated error surface has taken over.
-      expect(get("property-location-map-iframe")).toBeNull();
-      expect(get("property-location-map-link")).toBeNull();
-
-      const panel = get("property-location-map-error");
-      expect(panel).not.toBeNull();
-      // Pin down the exact code on the rendered panel so a future
-      // refactor can't quietly route every code through the generic
-      // copy. This is the hook that proves the lookup ran.
-      expect(panel!.getAttribute("data-error-code")).toBe(code);
-
-      const text = (
-        get("property-location-map-error-text")?.textContent ?? ""
-      ).toLowerCase();
-      for (const phrase of mustInclude) {
-        expect(text).toContain(phrase);
-      }
-
-      // The tailored message must NOT be the generic catch-all line.
-      // If it were, the postMessage code would have been ignored and
-      // we'd be back to the pre-Task-#163 behavior of telling every
-      // operator the same vague story regardless of which key
-      // problem they actually have.
-      const GENERIC = "google rejected this maps api key";
-      // "InvalidKeyMapError" and the generic line both contain the
-      // word "rejected", so we use the full unique generic phrase
-      // here — no tailored line repeats it verbatim.
-      expect(text).not.toContain(
-        "google rejected this maps api key. check that the maps embed api",
-      );
-      // Cross-check: the generic constant *would* match if it slipped
-      // through. This guards against the assertion above being
-      // accidentally weakened.
-      expect(GENERIC.length).toBeGreaterThan(0);
-
-      // The "Open in Google Maps" jump must still be reachable from
-      // the error branch — the task explicitly requires it to keep
-      // working in every error case.
-      const errLink = get(
-        "property-location-map-error-link",
-      ) as HTMLAnchorElement | null;
-      expect(errLink).not.toBeNull();
-      const expectedQuery = encodeURIComponent(
-        "400 Cedar Blvd, Phoenix, AZ 85001",
-      );
-      expect(errLink!.href).toBe(
-        `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-      );
-      expect(errLink!.target).toBe("_blank");
-      expect(errLink!.rel).toContain("noopener");
-
-      // Directions link is rendered alongside the address block and
-      // must also remain reachable in the error state.
-      const dir = get(
-        "property-location-directions-link",
-      ) as HTMLAnchorElement | null;
-      expect(dir).not.toBeNull();
-      expect(dir!.href).toBe(
-        `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
-      );
-    });
-  }
-
-  // -------------------------------------------------------------------
-  // Open-in-Google-Cloud-Console deep-link in the in-card error panel
-  // (Task #177)
-  //
-  // Mirrors the toast's per-code action button (Task #173) inside the
-  // in-page error panel so an operator who dismissed the toast — or
-  // landed on a property page after the toast had already fired and
-  // timed out — still gets a single-click jump to the right Console
-  // page (credentials / library / quotas / project picker / …) for
-  // whatever code Google reported. Hard-coding the expected URL per
-  // code keeps the assertions honest: a typo in the lookup table
-  // would silently pass a "table === table" round-trip.
-  // -------------------------------------------------------------------
-  const CONSOLE_LINK_CASES: ReadonlyArray<{
-    code: string;
-    expectedHref: string;
-  }> = [
-    {
-      code: "RefererNotAllowedMapError",
-      expectedHref: "https://console.cloud.google.com/apis/credentials",
-    },
-    {
-      code: "ApiNotActivatedMapError",
-      expectedHref:
-        "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
-    },
-    {
-      code: "OverQuotaMapError",
-      expectedHref:
-        "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas",
-    },
-    {
-      code: "DeletedApiProjectMapError",
-      expectedHref:
-        "https://console.cloud.google.com/projectselector2/home/dashboard",
-    },
-    {
-      code: "RetiredVersionMapError",
-      expectedHref:
-        "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
-    },
-  ];
-
-  for (const { code, expectedHref } of CONSOLE_LINK_CASES) {
-    it(`renders an "Open in Google Cloud Console" link pointing at ${expectedHref} for ${code}`, async () => {
-      await render(
-        <PropertyLocationMap
-          address="400 Cedar Blvd"
-          city="Phoenix"
-          state="AZ"
-          zip="85001"
-          apiKey="key-under-test"
-        />,
-      );
-      const iframe = get(
-        "property-location-map-iframe",
-      ) as HTMLIFrameElement | null;
-      expect(iframe).not.toBeNull();
-
-      await act(async () => {
-        fireGoogleMapsErrorMessage(iframe!, { code });
-      });
-
-      const panel = get("property-location-map-error");
-      expect(panel).not.toBeNull();
-      // The panel's data-error-code must match the code that drives
-      // the Console link, so no future refactor can silently send
-      // the operator to the wrong page.
-      expect(panel!.getAttribute("data-error-code")).toBe(code);
-
-      const link = get(
-        "property-location-map-error-console-link",
-      ) as HTMLAnchorElement | null;
-      expect(link).not.toBeNull();
-      expect(link!.href).toBe(expectedHref);
-      // Cross-check against the helper + table — guarantees the
-      // panel link can't drift from what the toast would surface
-      // for the same code.
-      expect(link!.href).toBe(getMapsKeyConsoleUrl(code));
-      expect(MAPS_KEY_CONSOLE_URLS[code]).toBe(expectedHref);
-      // Opens in a new tab so a click doesn't blow the operator's
-      // current HousingOps view away.
-      expect(link!.target).toBe("_blank");
-      // `noopener` so the opened Console tab can't reach back into
-      // window.opener — same hygiene the toast's action enforces.
-      expect(link!.rel).toContain("noopener");
-      expect(link!.rel).toContain("noreferrer");
-      expect(link!.textContent ?? "").toContain(
-        "Open in Google Cloud Console",
-      );
-    });
-  }
-
-  it("falls back to the credentials list when Google posts a code we don't have a tailored URL for (link is never dead)", async () => {
-    // Same contract as the toast (Task #173): an unknown / brand-new
-    // code must still produce a working button instead of an empty
-    // href, so the operator always has a one-click path even before
-    // we ship a tailored mapping for the new code.
-    const unknownCode = "BrandNewUnknownMapError";
-    expect(MAPS_KEY_CONSOLE_URLS[unknownCode]).toBeUndefined();
-
+  it("renders the pin synchronously from stored `lat`/`lng` and never calls the geocoder", async () => {
     await render(
       <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
       />,
     );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
+    await settle();
+    // The fast-path skips the geocoder entirely.
+    expect(mapsState.pendingGeocodes).toHaveLength(0);
+    // And a marker mounts at exactly the supplied stored coords.
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].position).toEqual({
+      lat: 30.5,
+      lng: -97.5,
     });
+  });
 
+  it("invokes `onGeocoded` exactly once when the live geocoder resolves a fresh point", async () => {
+    const onGeocoded = vi.fn();
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        onGeocoded={onGeocoded}
+      />,
+    );
+    await settle();
+    expect(mapsState.pendingGeocodes).toHaveLength(1);
+    await act(async () => {
+      mapsState.pendingGeocodes[0].cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 1.23, lng: () => 4.56 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+    expect(onGeocoded).toHaveBeenCalledTimes(1);
+    expect(onGeocoded).toHaveBeenCalledWith({ lat: 1.23, lng: 4.56 });
+  });
+
+  it("does NOT call `onGeocoded` when stored coords were used (no live geocode happened)", async () => {
+    const onGeocoded = vi.fn();
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={1}
+        lng={2}
+        onGeocoded={onGeocoded}
+      />,
+    );
+    await settle();
+    expect(onGeocoded).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------
+  // Map overlay link, address footer, directions link
+  // -------------------------------------------------------------------
+
+  it("renders the 'Open in Google Maps' overlay anchor on top of the map canvas with the search URL", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
     const link = get(
-      "property-location-map-error-console-link",
+      "property-location-map-link",
     ) as HTMLAnchorElement | null;
     expect(link).not.toBeNull();
+    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
     expect(link!.href).toBe(
-      "https://console.cloud.google.com/apis/credentials",
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
     );
     expect(link!.target).toBe("_blank");
     expect(link!.rel).toContain("noopener");
   });
 
-  it("does NOT render an Open in Google Cloud Console link when the iframe element fails to load (no code, no guess)", async () => {
-    // The iframe-onError path has no Google-reported code — Google
-    // never told us *why* the embed broke (network blocked, CSP
-    // refused, malformed URL, …). Surfacing a Console deep-link in
-    // that case would just be a guess; the panel's "Open in Google
-    // Maps" escape hatch is the right action and the Console button
-    // should stay hidden until we have a code to act on.
+  it("renders the address footer (street + city/state/zip) and a Directions link to the same address", async () => {
     await render(
       <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
       />,
     );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    await act(async () => {
-      fireReactOnError(iframe!);
-    });
-
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    // No reported code → the data attribute stays empty, and the
-    // Console link is omitted entirely.
-    expect(panel!.getAttribute("data-error-code")).toBe("");
-    expect(get("property-location-map-error-console-link")).toBeNull();
-    // The "Open in Google Maps" link is still there — the only
-    // operator-facing action when we have no code to act on.
-    expect(get("property-location-map-error-link")).not.toBeNull();
-  });
-
-  it("surfaces an unknown `*MapError` code verbatim alongside the generic fix line, instead of silently ignoring it", async () => {
-    // Defends against the silent-failure mode this branch was created
-    // to fix: when Google ships a new error code (or renames an
-    // existing one) that isn't in MAPS_ERROR_MESSAGES, the listener
-    // used to drop it on the floor — the operator stared at Google's
-    // grey error tile inside the embed with no in-app explanation,
-    // and a support ticket couldn't even name which code Google sent.
-    //
-    // The component must instead detect any payload that looks like a
-    // Maps error code (the `*MapError` shape) and switch to the
-    // dedicated error panel showing the raw code alongside the
-    // generic fix line. We pick a code that is intentionally NOT in
-    // the lookup table so this test would catch a regression where
-    // someone "fixed" the test by adding the code to the table.
-    const unknownCode = "TotallyMadeUpFutureMapError";
-    expect(KNOWN_KEY_ERROR_CODES).not.toContain(unknownCode);
-
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
-      />,
-    );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
-    });
-
-    // The success branch yields entirely to the dedicated error
-    // surface — same as the tailored-code cases. Layering a warning
-    // over a still-mounted iframe would let Google's grey tile show
-    // through.
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-link")).toBeNull();
-
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    // The raw code is exposed both as a stable testing hook on the
-    // panel and verbatim in the visible copy — the support-ticket
-    // value of the new branch hinges on the operator being able to
-    // read the actual string Google sent.
-    expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
-    const text = get("property-location-map-error-text")?.textContent ?? "";
-    expect(text).toContain(unknownCode);
-    expect(text.toLowerCase()).toContain("google reported");
-    // Generic fix line still appears so the operator has somewhere to
-    // start even before we ship a tailored message for this code.
-    expect(text).toContain(
-      "Check that the Maps Embed API is enabled and that this domain is on the key's allowlist",
-    );
-
-    // The escape-hatch links must remain intact — same contract as
-    // the tailored-code branch.
-    const errLink = get(
-      "property-location-map-error-link",
-    ) as HTMLAnchorElement | null;
-    expect(errLink).not.toBeNull();
-    const expectedQuery = encodeURIComponent(
-      "400 Cedar Blvd, Phoenix, AZ 85001",
-    );
-    expect(errLink!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-  });
-
-  it("recognizes a bare-string unknown `*MapError` payload too (not just `{code: ...}` objects)", async () => {
-    // Belt-and-braces for the loose detector: Google has shipped error
-    // payloads as bare strings in the past, so an unrecognized code
-    // arriving as a plain string must also be picked up — otherwise
-    // the loose detection would only half-cover the regression case
-    // it's meant to fix.
-    const unknownCode = "BrandNewUnknownMapError";
-    expect(KNOWN_KEY_ERROR_CODES).not.toContain(unknownCode);
-
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
-      />,
-    );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, unknownCode);
-    });
-
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
-    const text = get("property-location-map-error-text")?.textContent ?? "";
-    expect(text).toContain(unknownCode);
-  });
-
-  it("accepts a bare-string postMessage payload, not just `{code: ...}` objects", async () => {
-    // Google has shipped the error in different shapes across versions
-    // of the Embed API — sometimes a structured object, sometimes a
-    // plain string. The extractor must tolerate both so we're not
-    // fragile to either one disappearing.
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
-      />,
-    );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, "RefererNotAllowedMapError");
-    });
-
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-error-code")).toBe(
-      "RefererNotAllowedMapError",
-    );
-  });
-
-  it("ignores postMessage events whose source is not our iframe", async () => {
-    // Provenance check: any frame on the page can fire a postMessage
-    // at the parent window. The component must accept the code only
-    // when the message is from *our* iframe — otherwise an unrelated
-    // embed (a YouTube iframe, an ad, the page itself) could spoof
-    // an error code and put a working map into the error branch.
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
-      />,
-    );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    // Stand up a sibling iframe and post the error code from *that*
-    // iframe's contentWindow. The component must ignore it because
-    // the source is not its own iframe.contentWindow.
-    const decoy = document.createElement("iframe");
-    document.body.appendChild(decoy);
-    try {
-      await act(async () => {
-        const event = new MessageEvent("message", {
-          data: { code: "RefererNotAllowedMapError" },
-          source: decoy.contentWindow,
-          origin: "https://www.google.com",
-        });
-        window.dispatchEvent(event);
-      });
-
-      // Still in the success branch — the message was ignored.
-      expect(get("property-location-map-iframe")).not.toBeNull();
-      expect(get("property-location-map-error")).toBeNull();
-
-      // Also: a message from the parent window itself must be
-      // ignored for the same reason.
-      await act(async () => {
-        const event = new MessageEvent("message", {
-          data: { code: "RefererNotAllowedMapError" },
-          source: window,
-          origin: window.location.origin,
-        });
-        window.dispatchEvent(event);
-      });
-      expect(get("property-location-map-iframe")).not.toBeNull();
-      expect(get("property-location-map-error")).toBeNull();
-    } finally {
-      decoy.remove();
-    }
-  });
-
-  it("ignores postMessage payloads that don't carry a known Google Maps error code", async () => {
-    // Defends against false positives from chatty third-party scripts
-    // that just happen to share the page (analytics, ad SDKs, etc.)
-    // and post unrelated messages from inside the same iframe (which
-    // shouldn't happen, but the noise floor matters either way).
-    await render(
-      <PropertyLocationMap
-        address="400 Cedar Blvd"
-        city="Phoenix"
-        state="AZ"
-        zip="85001"
-        apiKey="key-under-test"
-      />,
-    );
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-
-    for (const noise of [
-      "hello world",
-      { type: "ANALYTICS_PING", visitors: 3 },
-      { code: "SomeUnrelatedThing" },
-      42,
-      null,
-    ]) {
-      await act(async () => {
-        fireGoogleMapsErrorMessage(iframe!, noise);
-      });
-    }
-
-    expect(get("property-location-map-iframe")).not.toBeNull();
-    expect(get("property-location-map-error")).toBeNull();
-  });
-
-  it("keeps the postMessage-reported key error visible after the address changes (session-sticky to match the portfolio map and toast)", async () => {
-    // postMessage error codes the embed reports (RefererNotAllowed /
-    // ApiNotActivated / InvalidKey / quota / …) are *always* about
-    // the key itself — none of them are per-property quirks that
-    // could be cleared by switching addresses. Task #178 routes
-    // those codes through the shared `useGoogleMapsKeyError` store,
-    // which also drives the app-level toast and the portfolio map's
-    // key-rejected panel. Once the shared store knows the key was
-    // rejected, every Maps surface on the page must agree until the
-    // session ends — anything else would let one card pretend the
-    // key is fine while a toast on the same page says otherwise.
-    // This test pins down that session-sticky behavior so a future
-    // refactor that re-introduces a per-card "reset on address
-    // change" branch fails loudly. The complementary "iframe element
-    // failed to load" path (no code, just a network/CSP failure on
-    // the iframe itself) is still per-URL — see the
-    // "re-attempts the embed (clears the error state) when the
-    // address changes after a previous failure" test above.
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="400 Cedar Blvd"
-            city="Phoenix"
-            state="AZ"
-            zip="85001"
-            apiKey="key-under-test"
-          />
-        </Wrapper>,
-      );
-    });
-
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, {
-        code: "RefererNotAllowedMapError",
-      });
-    });
-    expect(get("property-location-map-error")).not.toBeNull();
-
-    await act(async () => {
-      root!.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="500 Birch Ln"
-            city="Phoenix"
-            state="AZ"
-            zip="85002"
-            apiKey="key-under-test"
-          />
-        </Wrapper>,
-      );
-    });
-
-    // The key-rejected panel must still be what's rendered — and
-    // crucially, the embed must NOT re-mount, because a re-mount
-    // would silently re-issue the same Google request that failed
-    // and either flash a broken Google tile or burn quota.
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-error-code")).toBe(
-      "RefererNotAllowedMapError",
-    );
-    expect(get("property-location-map-iframe")).toBeNull();
-    // The address block tracks the new address — it's only the
-    // map area that stays in the error state.
-    expect(get("property-location-address")?.textContent).toContain(
-      "500 Birch Ln",
-    );
-  });
-
-  it("renders only the parts of the address the user has filled in (street present, city/state/zip blank)", async () => {
-    // Partial-address case: street only, no city/state/zip yet. The
-    // card should still embed and link with whatever is filled in
-    // rather than waiting for a fully-formatted address.
-    await render(
-      <PropertyLocationMap
-        address="500 Elm Rd"
-        city=""
-        state=""
-        zip=""
-        apiKey="test-key-abc"
-      />,
-    );
-
-    const expectedQuery = encodeURIComponent("500 Elm Rd");
-    const link = get("property-location-map-link") as HTMLAnchorElement | null;
-    expect(link).not.toBeNull();
-    expect(link!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-
     const addr = get("property-location-address");
     expect(addr).not.toBeNull();
-    expect(addr!.textContent).toContain("500 Elm Rd");
-    // No empty "," from the missing city/state/zip line.
-    expect(addr!.textContent).not.toContain(", ,");
-  });
-});
+    expect(addr!.textContent).toContain("100 Oak Way");
+    expect(addr!.textContent).toContain("Austin, TX 78701");
 
-// ---------------------------------------------------------------------------
-// Runtime-config branch (Task #154): the component fetches the Google Maps
-// key from `/api/config` when no `apiKey` prop is provided. These tests
-// exercise that flow with a mocked global fetch so we can assert the
-// loading placeholder, the eventual embed, and the friendly fallback when
-// the server reports no key — all without spinning up a real server.
-// ---------------------------------------------------------------------------
-
-describe("PropertyLocationMap runtime config", () => {
-  let container: HTMLDivElement;
-  let root: Root | null = null;
-  let originalFetch: typeof fetch;
-
-  beforeEach(() => {
-    // Reset the module-level shared Maps key-error store so a code
-    // reported in a previous test (or a previous suite) can't flip
-    // these tests' components into the key-rejected branch (Task
-    // #178).
-    __resetGoogleMapsKeyErrorForTest();
-    container = document.createElement("div");
-    document.body.appendChild(container);
-    originalFetch = globalThis.fetch;
-  });
-
-  afterEach(async () => {
-    if (root) {
-      const r = root;
-      await act(async () => {
-        r.unmount();
-      });
-      root = null;
-    }
-    container.remove();
-    globalThis.fetch = originalFetch;
-    __resetGoogleMapsKeyErrorForTest();
-  });
-
-  function makeWrapper() {
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
-      },
-    });
-    function Wrapper({ children }: { children: React.ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
-    }
-    return Wrapper;
-  }
-
-  function get(testId: string): HTMLElement | null {
-    return container.querySelector(
-      `[data-testid="${testId}"]`,
-    ) as HTMLElement | null;
-  }
-
-  // React Query schedules its observer notifications via `setTimeout`
-  // and `queueMicrotask`, so a fixed-count microtask drain is not
-  // reliable: the query state can flip *after* we asserted. Instead
-  // we poll a predicate, yielding to both microtasks and macrotasks
-  // inside `act()` between checks. This mirrors the semantics of
-  // `@testing-library/react`'s `waitFor` without taking that
-  // dependency on these tests.
-  async function waitFor(
-    predicate: () => boolean,
-    { timeoutMs = 1000, intervalMs = 5 }: { timeoutMs?: number; intervalMs?: number } = {},
-  ): Promise<void> {
-    const start = Date.now();
-    let lastError: unknown = null;
-    while (Date.now() - start < timeoutMs) {
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, intervalMs));
-      });
-      try {
-        if (predicate()) return;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    if (lastError) throw lastError;
-    throw new Error(
-      `waitFor: predicate did not become true within ${timeoutMs}ms`,
+    const dir = get(
+      "property-location-directions-link",
+    ) as HTMLAnchorElement | null;
+    expect(dir).not.toBeNull();
+    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
+    expect(dir!.href).toBe(
+      `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
     );
-  }
+  });
 
-  it("shows a neutral loading placeholder while /api/config is in flight, then swaps in the embed once the key arrives", async () => {
+  // -------------------------------------------------------------------
+  // Key-rejected branch (driven by the shared key-error store)
+  // -------------------------------------------------------------------
+
+  it("flips into the key-rejected branch when a sibling Maps surface reports an error code via the shared store", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    expect(get("property-location-map-canvas")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+
+    // Map canvas yields entirely to the dedicated error surface.
+    expect(get("property-location-map-canvas")).toBeNull();
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(
+      "InvalidKeyMapError",
+    );
+    // Tailored copy from the shared lookup — not a generic line.
+    const text = (
+      get("property-location-map-error-text")?.textContent ?? ""
+    ).toLowerCase();
+    expect(text).toContain("invalid");
+  });
+
+  it("renders a Console deep-link and the 'Open in Google Maps' escape hatch on the key-rejected panel", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+
+    const consoleLink = get(
+      "property-location-map-error-console-link",
+    ) as HTMLAnchorElement | null;
+    expect(consoleLink).not.toBeNull();
+    expect(consoleLink!.href).toContain("console.cloud.google.com");
+    expect(consoleLink!.target).toBe("_blank");
+
+    const escape = get(
+      "property-location-map-error-link",
+    ) as HTMLAnchorElement | null;
+    expect(escape).not.toBeNull();
+    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
+    expect(escape!.href).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+    );
+  });
+
+  it("renders the in-card Re-check key button on the error panel", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+    const recheck = get(
+      "property-location-map-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    expect((recheck!.textContent ?? "").toLowerCase()).toContain("re-check");
+    expect(recheck!.tagName).toBe("BUTTON");
+  });
+
+  // -------------------------------------------------------------------
+  // Runtime-config branches (loading / fallback / error / recovery)
+  // -------------------------------------------------------------------
+
+  it("shows the loading placeholder while /api/config is in flight, then mounts the canvas once the key arrives", async () => {
     let resolveFetch: ((value: Response) => void) | undefined;
     const fetchMock = vi.fn(
       () =>
@@ -1376,63 +715,44 @@ describe("PropertyLocationMap runtime config", () => {
           resolveFetch = resolve;
         }),
     );
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
       );
-    });
+      expect(get("property-location-map-loading")).not.toBeNull();
+      expect(get("property-location-map-canvas")).toBeNull();
+      expect(get("property-location-fallback")).toBeNull();
 
-    // Loading state: neutral placeholder, no scary "set up your key"
-    // copy, and crucially no iframe yet (the key is unknown).
-    expect(get("property-location-map-loading")).not.toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-fallback")).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const firstCall = fetchMock.mock.calls[0] as unknown as [
+        RequestInfo | URL,
+        ...unknown[],
+      ];
+      expect(String(firstCall[0])).toContain("/api/config");
 
-    // The component must have hit the runtime config endpoint exactly
-    // once. Asserting on the URL guards against a future refactor that
-    // accidentally points at the wrong path.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const firstCall = fetchMock.mock.calls[0] as unknown as [
-      RequestInfo | URL,
-      ...unknown[],
-    ];
-    const requestedUrl = String(firstCall[0]);
-    expect(requestedUrl).toContain("/api/config");
-
-    // Resolve the fetch with a server-provided key.
-    await act(async () => {
-      resolveFetch!(
-        new Response(JSON.stringify({ googleMapsApiKey: "rotated-key-xyz" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-    });
-
-    // Wait for react-query's onSuccess + the resulting React re-render
-    // to flush. We poll on the iframe rather than guessing how many
-    // microtasks the chain takes.
-    await waitFor(() => get("property-location-map-iframe") !== null);
-
-    // Loading placeholder is gone, embed is live with the new key.
-    expect(get("property-location-map-loading")).toBeNull();
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    expect(iframe!.src).toContain("key=rotated-key-xyz");
+      await act(async () => {
+        resolveFetch!(
+          new Response(
+            JSON.stringify({ googleMapsApiKey: "rotated-key-xyz" }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      });
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      expect(get("property-location-map-loading")).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("renders the friendly fallback (not the loading placeholder) when /api/config reports no key configured", async () => {
+  it("renders the fallback (not the loading placeholder) when /api/config reports no key", async () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(JSON.stringify({ googleMapsApiKey: null }), {
@@ -1440,288 +760,255 @@ describe("PropertyLocationMap runtime config", () => {
           headers: { "content-type": "application/json" },
         }),
     );
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="200 Maple Dr"
-            city="Dallas"
-            state="TX"
-            zip="75201"
-          />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap
+          address="200 Maple Dr"
+          city="Dallas"
+          state="TX"
+          zip="75201"
+        />,
       );
-    });
-
-    // Wait for the query to settle (success with null key) and the
-    // fallback to render. Polling avoids races with react-query's
-    // setTimeout-scheduled notifications.
-    await waitFor(() => get("property-location-fallback") !== null);
-
-    expect(get("property-location-map-loading")).toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
-    const fallback = get("property-location-fallback");
-    expect(fallback).not.toBeNull();
-    // Operator-facing copy — must not refer to the retired
-    // build-time env var.
-    expect(fallback!.textContent).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
-  });
-
-  it("picks up a rotated key on the next /api/config refetch and re-points the iframe at the new key without a hard refresh", async () => {
-    // Operators rotate the Maps API key by setting GOOGLE_MAPS_API_KEY
-    // on the api-server and restarting only it. The shared
-    // runtime-config hook fires a periodic refetch so an open tab
-    // swaps in the new key within a bounded window — this test
-    // proves the iframe picks up the rotated value end-to-end.
-    //
-    // We don't wait for the actual refetch interval (would slow the
-    // test down without adding signal); instead we simulate the poll
-    // landing a fresh response by calling QueryClient.invalidateQueries
-    // and changing what `fetch` returns on the second call. That is
-    // what the periodic refetch effectively does — re-fire the
-    // /api/config request and let the new key flow into the iframe's
-    // src URL.
-    let call = 0;
-    const fetchMock = vi.fn(async () => {
-      call += 1;
-      const body =
-        call === 1
-          ? { googleMapsApiKey: "key-A" }
-          : { googleMapsApiKey: "key-B" };
-      return new Response(JSON.stringify(body), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    // Build the wrapper inline so we can reach the QueryClient and
-    // trigger an invalidation from the test body.
-    const client = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
-      },
-    });
-    function LocalWrapper({ children }: { children: React.ReactNode }) {
-      return (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      );
+      await waitFor(() => get("property-location-fallback") !== null);
+      expect(get("property-location-map-loading")).toBeNull();
+      expect(get("property-location-map-canvas")).toBeNull();
+      const fallback = get("property-location-fallback");
+      expect(fallback!.textContent).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
+    } finally {
+      globalThis.fetch = originalFetch;
     }
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <LocalWrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </LocalWrapper>,
-      );
-    });
-
-    // First load: iframe embeds the original key.
-    await waitFor(() => get("property-location-map-iframe") !== null);
-    let iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe!.src).toContain("key=key-A");
-
-    // Trigger a refetch (stand-in for the periodic poll firing while
-    // the tab is open) — the query observer re-calls /api/config and
-    // gets the rotated key.
-    await act(async () => {
-      await client.invalidateQueries();
-    });
-    await waitFor(() => {
-      const f = get("property-location-map-iframe") as HTMLIFrameElement | null;
-      return f !== null && f.src.includes("key=key-B");
-    });
-
-    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
-    iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    expect(iframe!.src).toContain("key=key-B");
-    expect(iframe!.src).not.toContain("key=key-A");
   });
 
-  it("does not call /api/config at all when the address is empty (empty state owns the render)", async () => {
+  it("does not call /api/config when the address is empty (empty state owns the render)", async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap address="" city="" state="" zip="" />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap address="" city="" state="" zip="" />,
       );
-    });
-    // Give react-query a moment in case the `enabled: false` guard
-    // were ever to regress and fire a request anyway.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 20));
-    });
-
-    expect(get("property-location-empty")).not.toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+      // Give react-query a moment in case `enabled: false` were to regress.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+      expect(get("property-location-empty")).not.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("renders an explicit error branch (with Retry) when /api/config rejects, instead of getting stuck on the loading placeholder", async () => {
-    // Pre-Task #170: when `/api/config` errored, react-query left
-    // `data` undefined and `isPending` false, so the component fell
-    // through to the "set up your key" fallback — sending the operator
-    // chasing the wrong fix. The explicit error branch must name
-    // `/api/config` and the api-server so the operator knows where to
-    // look, and must NOT silently render the missing-key fallback or
-    // leave the loading placeholder visible.
+  it("renders the explicit config-error branch (with Retry) when /api/config rejects", async () => {
     const fetchMock = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     });
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
       );
-    });
+      await waitFor(() => get("property-location-map-config-error") !== null);
+      expect(get("property-location-map-loading")).toBeNull();
+      expect(get("property-location-fallback")).toBeNull();
+      expect(get("property-location-map-canvas")).toBeNull();
 
-    await waitFor(() => get("property-location-map-config-error") !== null);
+      const text = get("property-location-map-config-error-text");
+      const copy = text!.textContent ?? "";
+      expect(copy).toContain("/api/config");
+      expect(copy.toLowerCase()).toContain("api-server");
 
-    // Loading placeholder is gone — the operator gets a real signal.
-    expect(get("property-location-map-loading")).toBeNull();
-    // And we did NOT mistake "fetch failed" for "no key configured" —
-    // those are two completely different stories.
-    expect(get("property-location-fallback")).toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
-
-    const text = get("property-location-map-config-error-text");
-    expect(text).not.toBeNull();
-    const copy = text!.textContent ?? "";
-    expect(copy).toContain("/api/config");
-    expect(copy.toLowerCase()).toContain("api-server");
-
-    // The retry affordance is the operator's way out without reloading
-    // the whole page.
-    const retry = get("property-location-map-config-retry") as
-      | HTMLButtonElement
-      | null;
-    expect(retry).not.toBeNull();
+      const retry = get("property-location-map-config-retry") as
+        | HTMLButtonElement
+        | null;
+      expect(retry).not.toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("retries the /api/config fetch and recovers into the embed branch when the operator clicks Retry", async () => {
-    // First call rejects, second resolves — the Retry button should
-    // re-issue the request and let the embed mount once the second
-    // response lands. Without a working retry, an operator hitting a
-    // transient error would have to reload the whole page.
+  it("recovers into the canvas branch when the operator clicks Retry after a transient /api/config failure", async () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ googleMapsApiKey: "recovered-key" }),
+          JSON.stringify({
+            googleMapsApiKey: "recovered-key",
+            googleMapsMapId: "recovered-map-id",
+          }),
           { status: 200, headers: { "content-type": "application/json" } },
         ),
       );
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
       );
-    });
+      await waitFor(() => get("property-location-map-config-error") !== null);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => get("property-location-map-config-error") !== null);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const retry = get("property-location-map-config-retry") as
-      | HTMLButtonElement
-      | null;
-    expect(retry).not.toBeNull();
-    await act(async () => {
-      retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    await waitFor(() => get("property-location-map-iframe") !== null);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(get("property-location-map-config-error")).toBeNull();
-
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe!.src).toContain("key=recovered-key");
+      const retry = get("property-location-map-config-retry") as
+        | HTMLButtonElement
+        | null;
+      await act(async () => {
+        retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(get("property-location-map-config-error")).toBeNull();
+      const canvas = get("property-location-map-canvas");
+      expect(canvas!.getAttribute("data-map-id")).toBe("recovered-map-id");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it("renders the explicit error branch (not the loading placeholder) when /api/config returns a 500", async () => {
-    // A 500 from the api-server still resolves the fetch promise — but
-    // react-query's default `throwOnError` for a non-2xx in the
-    // generated client should flip the query to the error state. The
-    // operator must see the actionable error branch, not be stuck on
-    // an indefinitely-spinning placeholder or be lied to with the
-    // missing-key fallback.
-    const fetchMock = vi.fn(
-      async () =>
-        new Response("internal error", {
-          status: 500,
-          headers: { "content-type": "text/plain" },
-        }),
+  it("flips into the dedicated error panel (and out of the canvas branch) when the SDK script load itself fails", async () => {
+    // Without the local-loader-error gating, an SDK load that
+    // rejects (script blocked by CSP, network refused, …) would
+    // leave the card stuck in the canvas branch with the inner
+    // "Loading map…" overlay forever, and the operator would have
+    // no in-card explanation. Simulate the failure by uninstalling
+    // the fake SDK + replacing the loader promise with a rejected
+    // one *before* the component runs its load effect.
+    const w = window as unknown as {
+      google?: unknown;
+      __housingopsMapsLoader?: Promise<void>;
+    };
+    delete w.google;
+    w.__housingopsMapsLoader = Promise.reject(
+      new Error("Failed to load Google Maps script"),
     );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await settle();
+    expect(get("property-location-map-canvas")).toBeNull();
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    // No code attribution — this is a local SDK failure, not a
+    // key-rejection from Google. The Console deep-link must NOT
+    // render in this case (we'd be guessing which Console page to
+    // send the operator to).
+    expect(panel!.getAttribute("data-error-code")).toBe("");
+    expect(get("property-location-map-error-console-link")).toBeNull();
+    // The Re-check button still appears so the operator can recover
+    // from a transient script-load failure without a tab refresh.
+    expect(get("property-location-map-error-recheck")).not.toBeNull();
+    const errorText = get("property-location-map-error-text")?.textContent ?? "";
+    expect(errorText).toContain("Failed to load Google Maps script");
+  });
 
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
+  it("moves the pin when the address prop changes mid-mount and the new address resolves to different coords", async () => {
+    // Defends against stale-pin carryover when the parent edits the
+    // address fields while the card stays mounted (e.g. an inline
+    // edit on the property-detail page). Without the in-effect reset
+    // of `point`, the marker would sit at the previous address's
+    // coordinates until the new geocode returned.
+    function Wrapper() {
+      const [addr, setAddr] = React.useState("100 Oak Way");
+      return (
+        <div>
+          <button
+            type="button"
+            data-testid="change-address"
+            onClick={() => setAddr("999 New St")}
+          />
           <PropertyLocationMap
-            address="100 Oak Way"
+            address={addr}
             city="Austin"
             state="TX"
             zip="78701"
+            apiKey="test-key"
+            mapId="m"
           />
-        </Wrapper>,
+        </div>
+      );
+    }
+    await render(<Wrapper />);
+    await settle();
+
+    // Resolve the first address.
+    expect(mapsState.pendingGeocodes).toHaveLength(1);
+    expect(mapsState.pendingGeocodes[0].addr).toBe(
+      "100 Oak Way, Austin, TX 78701",
+    );
+    await act(async () => {
+      mapsState.pendingGeocodes[0].cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 1, lng: () => 2 },
+            },
+          },
+        ],
+        "OK",
       );
     });
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].position).toEqual({ lat: 1, lng: 2 });
 
-    await waitFor(() => get("property-location-map-config-error") !== null);
-
-    expect(get("property-location-map-loading")).toBeNull();
-    expect(get("property-location-fallback")).toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
+    // Switch to a different address — the old pin must drop and a
+    // fresh geocode must run for the new value.
+    const btn = container.querySelector(
+      '[data-testid="change-address"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await settle();
+    // While the new geocode is pending, no stale marker remains.
+    expect(mapsState.markers).toHaveLength(0);
+    // And a fresh request was sent for the new address.
+    const fresh = mapsState.pendingGeocodes.find(
+      (g) => g.addr === "999 New St, Austin, TX 78701",
+    );
+    expect(fresh).not.toBeUndefined();
+    await act(async () => {
+      fresh!.cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 9, lng: () => 9 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].position).toEqual({ lat: 9, lng: 9 });
   });
 
   it("flips into the key-rejected branch even while /api/config is still in flight (key-error wins over the loading placeholder)", async () => {
-    // Regression for Task #178: the property-location card's branch
-    // order used to check `isConfigLoading` BEFORE the key-error
-    // branch, so a sibling Maps surface (e.g. the portfolio map's
-    // `gm_authFailure` callback, or another embed iframe's
-    // postMessage) reporting a rejected key while this card's own
-    // /api/config request was still in flight would be silently
-    // hidden — the operator stared at our "Loading map…" placeholder
-    // next to a toast saying the key was rejected, with no in-page
-    // explanation. The branches were re-ordered so the key-error
-    // branch wins; without this test, swapping them back would only
-    // fail at the toast/integration level.
+    // Regression for Task #178 ported to the SDK era: branch order
+    // must check `isMapError` BEFORE `isConfigLoading` so a sibling
+    // Maps surface reporting a rejected key while this card's own
+    // /api/config request is still in flight does not leave the
+    // operator staring at our spinner next to a "key rejected" toast.
     let resolveFetch: ((value: Response) => void) | undefined;
     const fetchMock = vi.fn(
       () =>
@@ -1729,287 +1016,48 @@ describe("PropertyLocationMap runtime config", () => {
           resolveFetch = resolve;
         }),
     );
+    const originalFetch = globalThis.fetch;
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          {/* No `apiKey` prop — the component fetches /api/config and
-              we hold that fetch unresolved below. */}
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
       );
-    });
+      expect(get("property-location-map-loading")).not.toBeNull();
 
-    // Sanity check — with the fetch held in flight, the loading
-    // placeholder is what's currently rendered.
-    expect(get("property-location-map-loading")).not.toBeNull();
-    expect(get("property-location-map-error")).toBeNull();
+      await act(async () => {
+        reportGoogleMapsKeyError("InvalidKeyMapError");
+      });
 
-    // Now simulate a sibling Maps surface (or the JS SDK) reporting
-    // a rejected key while this card's config request is still
-    // pending. Use an embed-iframe code so the test exercises the
-    // realistic cross-surface path described in the task.
-    await act(async () => {
-      reportGoogleMapsKeyError("InvalidKeyMapError");
-    });
-
-    // The loading placeholder must be gone — leaving it visible
-    // would leave the operator staring at a stuck spinner next to a
-    // toast.
-    expect(get("property-location-map-loading")).toBeNull();
-
-    // And the dedicated key-error panel must be what's rendered now,
-    // even though `/api/config` has not yet resolved. The data
-    // attribute carries the code observed by the shared store so
-    // downstream tooling (and humans) can tell which signal flipped
-    // the branch.
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-error-code")).toBe("InvalidKeyMapError");
-    // Tailored copy from the shared lookup — not a generic line.
-    const text = (
-      get("property-location-map-error-text")?.textContent ?? ""
-    ).toLowerCase();
-    expect(text).toContain("invalid");
-
-    // The "Open in Google Maps" jump must still be reachable so the
-    // operator has a one-click escape hatch even before the key is
-    // fixed.
-    const errLink = get(
-      "property-location-map-error-link",
-    ) as HTMLAnchorElement | null;
-    expect(errLink).not.toBeNull();
-    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
-    expect(errLink!.href).toBe(
-      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
-    );
-
-    // Resolve the in-flight fetch so cleanup doesn't hang on the
-    // pending promise. The key-error branch should still win after
-    // the config arrives — a fixed key alone shouldn't paper over
-    // the fact that some surface reported it as rejected.
-    await act(async () => {
-      resolveFetch!(
-        new Response(
-          JSON.stringify({ googleMapsApiKey: "live-key" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
+      expect(get("property-location-map-loading")).toBeNull();
+      const panel = get("property-location-map-error");
+      expect(panel).not.toBeNull();
+      expect(panel!.getAttribute("data-error-code")).toBe(
+        "InvalidKeyMapError",
       );
-    });
-    await waitFor(() => get("property-location-map-error") !== null);
-    expect(get("property-location-map-error")).not.toBeNull();
-    expect(get("property-location-map-iframe")).toBeNull();
-    expect(get("property-location-map-loading")).toBeNull();
-  });
 
-  // ------------------------------------------------------------------
-  // Re-check key affordance (Task #181)
-  //
-  // After fixing the key in Google Cloud Console (enabling the API,
-  // allow-listing this domain, raising the quota, rotating the value,
-  // …) operators used to have to hard-refresh the entire tab to
-  // recover. The in-card error panel now carries a "Re-check key"
-  // button that re-fetches /api/config and, on success, clears the
-  // shared key-error store + local iframe-error state so the panel
-  // disappears and the iframe re-mounts against the (now possibly
-  // fixed) key — without a page refresh.
-  // ------------------------------------------------------------------
-
-  it("renders a Re-check key button on the in-card error panel", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({ googleMapsApiKey: "any-key" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
-      );
-    });
-
-    // Force the card into the error branch via the shared store, the
-    // same way a sibling Maps surface (or the JS SDK) would.
-    await act(async () => {
-      reportGoogleMapsKeyError("RefererNotAllowedMapError");
-    });
-    await waitFor(() => get("property-location-map-error") !== null);
-
-    const recheck = get(
-      "property-location-map-error-recheck",
-    ) as HTMLButtonElement | null;
-    expect(recheck).not.toBeNull();
-    // The label must read clearly so an operator skimming the panel
-    // knows what the button does — a generic refresh icon would be
-    // ambiguous next to the existing "Open in Google Cloud Console"
-    // affordance.
-    expect((recheck!.textContent ?? "").toLowerCase()).toContain(
-      "re-check",
-    );
-    expect(recheck!.tagName).toBe("BUTTON");
-    expect(recheck!.disabled).toBe(false);
-  });
-
-  it("re-fetches /api/config on click and removes the panel + clears the shared store on success", async () => {
-    // Simulate the operator having fixed the key in Cloud Console:
-    // /api/config returns a valid key. Recheck must hit /api/config
-    // and then drop every Maps surface out of the rejected branch.
-    let calls = 0;
-    const fetchMock = vi.fn(async () => {
-      calls += 1;
-      return new Response(
-        JSON.stringify({ googleMapsApiKey: "freshly-fixed-key" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
-      );
-    });
-    // Wait for the initial /api/config response so we can assert the
-    // recheck specifically *issues another* call (rather than racing
-    // the initial mount).
-    await waitFor(() => get("property-location-map-iframe") !== null);
-
-    // Now flip into the rejected branch and verify the panel.
-    await act(async () => {
-      reportGoogleMapsKeyError("InvalidKeyMapError");
-    });
-    await waitFor(() => get("property-location-map-error") !== null);
-    expect(get("property-location-map-error")).not.toBeNull();
-    expect(
-      keyErrorTesting.getNotifiedCodes().has("InvalidKeyMapError"),
-    ).toBe(true);
-
-    const callsBefore = calls;
-    const recheck = get(
-      "property-location-map-error-recheck",
-    ) as HTMLButtonElement | null;
-    expect(recheck).not.toBeNull();
-    await act(async () => {
-      recheck!.click();
-    });
-
-    // Panel must disappear once the recheck succeeds — operators
-    // shouldn't have to hard-refresh the tab.
-    await waitFor(() => get("property-location-map-error") === null);
-    expect(get("property-location-map-error")).toBeNull();
-
-    // Dedupe set must be empty so the *next* failure for the same
-    // code fires a fresh toast instead of being silently swallowed.
-    expect(
-      keyErrorTesting.getNotifiedCodes().has("InvalidKeyMapError"),
-    ).toBe(false);
-
-    // And the recheck did actually re-issue the /api/config request
-    // — guards against a regression where the button merely cleared
-    // the local store without confirming the runtime config.
-    expect(calls).toBeGreaterThan(callsBefore);
-
-    // Bonus: the iframe must re-mount against the (now confirmed)
-    // key, not stay hidden behind a stale local error flag. This
-    // doubles as the regression guard for the
-    // `setIframeLoadError(false)` / `setReportedErrorCode(null)`
-    // resets in `handleRecheck`.
-    await waitFor(() => get("property-location-map-iframe") !== null);
-    expect(get("property-location-map-iframe")).not.toBeNull();
-  });
-
-  it("keeps the rejected panel up when /api/config still rejects on recheck (no false recovery)", async () => {
-    // Click + continued failure → store preserved → panel stays.
-    // Silently dropping the panel here would lie to the operator and
-    // send them chasing the wrong fix.
-    let call = 0;
-    const fetchMock = vi.fn(async () => {
-      call += 1;
-      // First call (initial mount) succeeds so the iframe mounts and
-      // we can flip into the error branch from a "known-good" state.
-      // Second call (the recheck) fails — that's the case under test.
-      if (call === 1) {
-        return new Response(
-          JSON.stringify({ googleMapsApiKey: "initial-key" }),
-          { status: 200, headers: { "content-type": "application/json" } },
+      // Resolve the in-flight fetch so cleanup doesn't hang. The
+      // key-error branch must still win after the config arrives — a
+      // fixed key alone shouldn't paper over a sibling-reported
+      // rejection.
+      await act(async () => {
+        resolveFetch!(
+          new Response(
+            JSON.stringify({ googleMapsApiKey: "live-key" }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
         );
-      }
-      throw new TypeError("Failed to fetch");
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const Wrapper = makeWrapper();
-    await act(async () => {
-      root = createRoot(container);
-      root.render(
-        <Wrapper>
-          <PropertyLocationMap
-            address="100 Oak Way"
-            city="Austin"
-            state="TX"
-            zip="78701"
-          />
-        </Wrapper>,
-      );
-    });
-    await waitFor(() => get("property-location-map-iframe") !== null);
-
-    await act(async () => {
-      reportGoogleMapsKeyError("ApiNotActivatedMapError");
-    });
-    await waitFor(() => get("property-location-map-error") !== null);
-
-    const recheck = get(
-      "property-location-map-error-recheck",
-    ) as HTMLButtonElement | null;
-    expect(recheck).not.toBeNull();
-    await act(async () => {
-      recheck!.click();
-    });
-    // Let react-query's failed refetch + state notification settle.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 30));
-    });
-
-    // Surface stays rejected — same panel, same code, same fix path.
-    const panel = get("property-location-map-error");
-    expect(panel).not.toBeNull();
-    expect(panel!.getAttribute("data-error-code")).toBe(
-      "ApiNotActivatedMapError",
-    );
-    // The dedupe set must still hold the code — we did not silently
-    // reset it (which would have re-fired a duplicate toast for a
-    // failure the operator had already been notified about).
-    expect(
-      keyErrorTesting.getNotifiedCodes().has("ApiNotActivatedMapError"),
-    ).toBe(true);
+      });
+      await settle();
+      expect(get("property-location-map-error")).not.toBeNull();
+      expect(get("property-location-map-canvas")).toBeNull();
+      expect(get("property-location-map-loading")).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

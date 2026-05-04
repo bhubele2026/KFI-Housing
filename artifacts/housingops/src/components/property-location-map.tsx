@@ -9,10 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import {
-  extractGoogleMapsErrorCode,
   getMapsKeyConsoleUrl,
-  getMapsKeyErrorMessage,
-  reportGoogleMapsKeyError,
   useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
 import {
@@ -21,25 +18,29 @@ import {
   useRuntimeConfigStream,
   useRecheckGoogleMapsKey,
 } from "@/hooks/use-runtime-config";
+import { useToast } from "@/hooks/use-toast";
 import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
+import {
+  getCachedGeocode,
+  loadMapsApi,
+  primeGeocodeCache,
+  resolveGeocode,
+  type MapsAdvancedMarkerElement,
+  type MapsMap,
+} from "@/lib/google-maps-sdk";
 
-// Generic operator-facing copy for the dedicated error branch when
-// the iframe's own `error` event fires (network blocked, CSP refused,
-// malformed URL) — i.e. we know the embed is broken but Google never
-// told us *why*.
-//
-// When Google's Embed API does report a specific error code via
-// postMessage (RefererNotAllowedMapError / ApiNotActivatedMapError /
-// InvalidKeyMapError / quota / …) we render the *tailored* line from
-// the shared `getMapsKeyErrorMessage` lookup (imported above, shared
-// with the app-level toast listener and the portfolio map — Task
-// #167) instead of this generic one. Task #163 introduced the
-// lookup; Task #167 hoisted it to a shared module so a key rejection
-// seen anywhere on the page also fires a one-time app-level toast
-// and flips the portfolio map into a matching error state.
-const MAPS_KEY_TROUBLESHOOTING_TEXT =
-  "Google rejected this Maps API key. Check that the Maps Embed API " +
-  "is enabled and that this domain is on the key's allowlist.";
+// NOTE (rebase Task #195 onto Tasks #196/#197): the iframe-only
+// MAPS_KEY_TROUBLESHOOTING_TEXT constant that lived here is gone
+// along with the iframe itself. The JS SDK rewrite has no iframe
+// `error` event to listen for — local script-load failures surface
+// via `loaderError` (see the SDK-load effect below) and Google's
+// rejected-key codes still land on the shared `useGoogleMapsKeyError`
+// store (populated by `gm_authFailure` from `loadMapsApi`, by other
+// surfaces' postMessage handlers, etc). The "single canonical home
+// for the error state" intent from Task #197 is preserved by
+// `isMapError` further down, which now gates on BOTH the shared
+// store code AND the local `loaderError` so every failure source
+// renders through one panel.
 
 interface PropertyLocationMapProps {
   address: string;
@@ -52,7 +53,7 @@ interface PropertyLocationMapProps {
    * runtime config fetch entirely and uses this value directly:
    *   - `undefined` (default) — fetch the key from the api-server
    *     `/api/config` endpoint via react-query
-   *   - `"some-key"`          — render the embed branch with this key
+   *   - `"some-key"`          — render the SDK map branch with this key
    *   - `""` / `null`         — render the friendly fallback branch
    *
    * Production code paths leave this `undefined` so an operator can
@@ -60,6 +61,34 @@ interface PropertyLocationMapProps {
    * bundle (Task #154).
    */
   apiKey?: string | null;
+  /**
+   * Branded Google Map ID. Mirrors `PortfolioMap`'s `mapId` prop —
+   * supplying a value here skips the runtime config field for `mapId`
+   * specifically (tests inject a fixed value to assert the SDK Map was
+   * built with the expected ID), but does NOT by itself trigger or
+   * skip the `/api/config` fetch (that decision still depends solely
+   * on `apiKey`). Production leaves this `undefined` so the value is
+   * read from `/api/config.googleMapsMapId`, which can be rotated by
+   * setting `GOOGLE_MAPS_MAP_ID` on the api-server.
+   */
+  mapId?: string | null;
+  /**
+   * Stored coordinates for the property. When both are numbers the
+   * component skips the geocoder round-trip and renders the pin
+   * synchronously on first paint — same fast-path the portfolio map
+   * uses. Production callers wire these from the property record so
+   * coordinates resolved on a previous mount are reused immediately.
+   */
+  lat?: number | null;
+  lng?: number | null;
+  /**
+   * Called once per address whenever the live geocoder resolves a
+   * fresh point that this caller did not pre-supply. Used by the
+   * property-detail page to persist the resolved coords back onto the
+   * Property record so the next mount renders the pin without hitting
+   * Google again. Mirrors `PortfolioMap.onGeocoded`'s contract.
+   */
+  onGeocoded?: (point: { lat: number; lng: number }) => void;
 }
 
 function formatAddressLines(
@@ -82,12 +111,18 @@ function formatAddressLines(
   return { street, cityStateZip, full };
 }
 
+type LoaderStatus = "idle" | "loading" | "ready" | "error";
+
 export function PropertyLocationMap({
   address,
   city,
   state,
   zip,
   apiKey,
+  mapId,
+  lat,
+  lng,
+  onGeocoded,
 }: PropertyLocationMapProps) {
   const { street, cityStateZip, full } = formatAddressLines(
     address,
@@ -100,78 +135,60 @@ export function PropertyLocationMap({
 
   // Only hit the network when the caller didn't pre-supply a key. Tests
   // pass `apiKey` explicitly so they never fire a real fetch; production
-  // leaves it undefined so we read the key from `/api/config`.
+  // leaves it undefined so we read the key from `/api/config`. We also
+  // skip the fetch when there's no address to render — the empty state
+  // owns the card in that case and the key wouldn't be used anyway.
   //
-  // We also skip the fetch when there's no address to render — the
-  // Location card shows its empty state in that case and the key
-  // wouldn't be used anyway, so there's no reason to wake the api-server
-  // up for it.
   // The shared hook applies the periodic background refetch +
-  // refetch-on-window-focus that lets a rotated GOOGLE_MAPS_API_KEY
-  // propagate into open tabs without a hard refresh. Sharing the
-  // queryKey with the portfolio map means the second consumer to mount
-  // gets the cached response instantly and one periodic poll covers
-  // both. The iframe re-renders with the new key automatically because
-  // the rotated value lands in `embedUrl`.
+  // refetch-on-window-focus that lets a rotated GOOGLE_MAPS_API_KEY /
+  // GOOGLE_MAPS_MAP_ID propagate into open tabs without a hard
+  // refresh. Sharing the queryKey with the portfolio map means the
+  // second consumer to mount gets the cached response instantly and
+  // one periodic poll covers both.
   const shouldFetchConfig = apiKey === undefined && hasAnyAddress;
   const configQuery = useRuntimeConfigQuery(shouldFetchConfig);
   // Subscribe to the SSE push channel so a rotated key lands within
   // seconds of the api-server restart instead of waiting up to a full
   // polling interval. Pushes land in the same react-query cache the
-  // polling hook reads, so the iframe re-renders with the new key the
-  // moment `configQuery.data` updates — no separate consumer wiring.
+  // polling hook reads, so `configQuery.data` updates faster.
   useRuntimeConfigStream(shouldFetchConfig);
-
-  // Track whether the embedded iframe failed to load. Two independent
-  // signals can put the card into the error state:
-  //
-  //   * `iframeLoadError` — the iframe element itself fired its
-  //     `error` event (network blocked, CSP refused, malformed URL).
-  //     We don't get a code in this case, so we fall back to the
-  //     generic troubleshooting copy.
-  //
-  //   * `reportedErrorCode` — Google's Embed API posted a specific
-  //     error code (`RefererNotAllowedMapError`, …) back to the parent
-  //     window via postMessage. This is the case the iframe `error`
-  //     event *misses*: the iframe loads successfully and renders a
-  //     tiny grey error tile inside itself, so onError never fires.
-  //     We use the code to look up a tailored message that names the
-  //     concrete fix on the operator's Google Cloud Console.
-  //
-  // We reset both signals whenever the embed URL changes (new address
-  // or rotated key) so a freshly-valid setup gets a fresh attempt
-  // instead of being stuck in the error branch.
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [iframeLoadError, setIframeLoadError] = useState(false);
-  const [reportedErrorCode, setReportedErrorCode] = useState<string | null>(
-    null,
-  );
 
   // Subscribe to the shared Google Maps key-error store so a code
   // observed *anywhere else on the page* — the portfolio map's
-  // `gm_authFailure` callback, an embed iframe on a sibling card,
-  // etc. — flips this card into its dedicated key-rejected branch
-  // even before the local iframe has had a chance to report anything
-  // (Task #178). Without this subscription, an operator could be
-  // staring at our "Loading map…" placeholder indefinitely while a
-  // toast on the same page was already saying the key was rejected.
+  // `gm_authFailure` callback, an embed iframe on a sibling card, or
+  // this card's own SDK load failing auth — flips this card into its
+  // dedicated key-rejected branch even before our `/api/config` request
+  // has had a chance to return. Without this subscription, an operator
+  // could be staring at our "Loading map…" placeholder indefinitely
+  // while a toast on the same page already said the key was rejected
+  // (Task #178).
   const sharedKeyError = useGoogleMapsKeyError();
 
   // "Re-check key" affordance for the in-card error panel. An operator
   // who fixed their Maps key in Google Cloud Console clicks this and
   // we re-fetch /api/config + clear the shared key-error store so the
-  // card drops out of the rejected branch and re-attempts the embed
-  // against the (now possibly fixed) key — without a hard refresh.
-  // Local error state (`iframeLoadError`, `reportedErrorCode`) is
-  // reset alongside the shared store so the iframe gets a fresh
-  // attempt even when the resolved key value didn't change.
+  // card drops out of the rejected branch and re-attempts the SDK
+  // mount against the (now possibly fixed) key — without a hard
+  // refresh. Local SDK error state (`loaderError`) is reset alongside
+  // the shared store so the map gets a fresh attempt even when the
+  // resolved key value didn't change.
   const { recheck, isRechecking } = useRecheckGoogleMapsKey();
+  const [loaderError, setLoaderError] = useState<string | null>(null);
+  // Bumping this counter forces the SDK-load effect to re-run even
+  // when none of its other deps changed, so an operator who fixed a
+  // local SDK load failure (script blocked, transient network error)
+  // can recover via the in-card Re-check button without needing a key
+  // rotation to flip `resolvedKey`.
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const handleRecheck = () => {
-    setIframeLoadError(false);
-    setReportedErrorCode(null);
+    setLoaderError(null);
+    setLoadAttempt((n) => n + 1);
     void recheck();
   };
 
+  // Empty state owns the card before we touch anything Maps-related —
+  // no SDK load, no /api/config fetch, no geocode. Returning early
+  // keeps the rest of the component free to assume `full` is non-empty.
   if (!hasAnyAddress) {
     return (
       <Card data-testid="card-property-location">
@@ -196,25 +213,44 @@ export function PropertyLocationMap({
     );
   }
 
-  // Resolve the effective key. Test injection wins; otherwise we use the
-  // value from the runtime config endpoint (which can be `null` when the
-  // operator hasn't set GOOGLE_MAPS_API_KEY yet).
+  // Resolve the effective key. Test injection wins; otherwise we use
+  // the value from the runtime config endpoint (which can be `null`
+  // when the operator hasn't set GOOGLE_MAPS_API_KEY yet).
   const fetchedKey =
     configQuery.data?.googleMapsApiKey == null
       ? ""
       : configQuery.data.googleMapsApiKey;
   const resolvedKey = apiKey === undefined ? fetchedKey : (apiKey ?? "");
 
-  // While the config request is in flight we render a neutral placeholder
-  // instead of the "set up your key" copy — we don't yet know whether a
-  // key is configured, and flashing the scary warning before the answer
-  // arrives would mislead the operator.
+  // Prefer (in order): an explicit prop (used by tests), the operator's
+  // configured branded Map ID from runtime config, or Google's built-in
+  // DEMO_MAP_ID as a last-resort fallback. AdvancedMarkerElement
+  // refuses to render the pin without a valid Map ID, so the fallback
+  // is what keeps a fresh workspace from showing an empty canvas.
+  // Mirrors `PortfolioMap`'s resolution exactly so both surfaces use
+  // the same branded style for an operator's deployment.
+  const fetchedMapId =
+    configQuery.data?.googleMapsMapId == null
+      ? ""
+      : configQuery.data.googleMapsMapId;
+  const propMapId = mapId == null ? "" : mapId;
+  const resolvedMapId =
+    propMapId !== ""
+      ? propMapId
+      : fetchedMapId !== ""
+        ? fetchedMapId
+        : "DEMO_MAP_ID";
+
+  // While the config request is in flight we render a neutral
+  // placeholder instead of the "set up your key" copy — we don't yet
+  // know whether a key is configured, and flashing the scary warning
+  // before the answer arrives would mislead the operator.
   const isConfigLoading = shouldFetchConfig && configQuery.isPending;
-  // The runtime config request itself failed (network error, 5xx, etc.).
-  // Without an explicit branch the operator would otherwise see the
-  // "set up your key" fallback (because `data` is undefined when the
-  // query errors), which sends them chasing the wrong fix. Surface the
-  // real cause instead and offer a manual retry.
+  // The runtime config request itself failed (network error, 5xx,
+  // etc.). Without an explicit branch the operator would otherwise see
+  // the "set up your key" fallback (because `data` is undefined when
+  // the query errors), which sends them chasing the wrong fix. Surface
+  // the real cause and offer a manual retry.
   const isConfigError = shouldFetchConfig && configQuery.isError;
   // Sustained-failure warning. Fires once the periodic background
   // refetch has been failing for ≥ RUNTIME_CONFIG_STALE_WARNING_MS
@@ -227,90 +263,240 @@ export function PropertyLocationMap({
     isError: configQuery.isError,
     isSuccess: configQuery.isSuccess,
     data: configQuery.data,
-    // Bridge to the SSE path: every push lands as a `setQueryData`
-    // call on the same cache, which bumps `dataUpdatedAt`. Forwarding
-    // it lets the stale hook treat a healthy push channel as
-    // "refresh is working" even when the polling fallback is failing
-    // (otherwise the warning would fire on a tab that's actually
-    // getting fresh values via SSE).
     dataUpdatedAt: configQuery.dataUpdatedAt,
   });
 
   const encoded = encodeURIComponent(full);
   const searchUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
-  const embedUrl = resolvedKey
-    ? `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(resolvedKey)}&q=${encoded}`
-    : null;
 
-  // Reset the error state if the embed URL changes (new address or
-  // rotated key). Done in an effect rather than a derived value so the
-  // failure detected for one URL doesn't bleed into the next render.
-  useEffect(() => {
-    setIframeLoadError(false);
-    setReportedErrorCode(null);
-  }, [embedUrl]);
-
-  // Subscribe to postMessage events from Google's Embed iframe. Google
-  // dispatches the specific failure code (e.g. RefererNotAllowedMapError)
-  // as a postMessage when the iframe itself loads successfully but the
-  // map can't render — that is, the cases the iframe `error` event
-  // doesn't fire for.
+  // ---------------------------------------------------------------
+  // SDK / map / marker lifecycle
   //
-  // We accept a message only if its `source` is exactly our iframe's
-  // contentWindow. That single check is sufficient: each iframe has a
-  // unique contentWindow, so a message from any other frame on the page
-  // (or from the page itself) cannot impersonate it. We deliberately do
-  // not gate on `event.origin` — Google has shipped Embed responses from
-  // a few different origins over time, and the source-equality check
-  // already establishes provenance.
+  // Mirrors the structure used by `portfolio-map.tsx` so both
+  // surfaces share the exact same loader, geocode cache, and
+  // rotation behavior — see `lib/google-maps-sdk.ts` for the
+  // shared state.
+  // ---------------------------------------------------------------
+  const mapEl = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapsMap | null>(null);
+  const markerRef = useRef<MapsAdvancedMarkerElement | null>(null);
+  const reportedRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
   useEffect(() => {
-    if (!embedUrl) return;
-    function handleMessage(event: MessageEvent) {
-      const iframe = iframeRef.current;
-      if (!iframe || event.source !== iframe.contentWindow) return;
-      const code = extractGoogleMapsErrorCode(event.data);
-      if (code) {
-        setReportedErrorCode(code);
-        // Also feed the shared store so the app-level toast (Task
-        // #167) fires once per code per session and any other Maps
-        // surface mounted on the page can flip into its own
-        // key-rejected state. The app-level postMessage listener
-        // would normally pick the same payload up directly, but
-        // routing through `reportGoogleMapsKeyError` here keeps the
-        // store consistent even on pages that don't yet mount the
-        // app-level listener (e.g. tests of this card in isolation
-        // that opt in to the shared store).
-        reportGoogleMapsKeyError(code);
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [embedUrl]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const onGeocodedRef = useRef(onGeocoded);
+  useEffect(() => {
+    onGeocodedRef.current = onGeocoded;
+  }, [onGeocoded]);
 
-  // Prefer a code observed by *this* iframe over one routed through the
-  // shared store. They normally match (the local listener also feeds
-  // the shared store via `reportGoogleMapsKeyError`), but during the
-  // brief window before the local handler runs — or when the only
-  // signal is a sibling Maps surface reporting an error before our own
-  // `/api/config` request has even returned — the shared store is the
-  // sole source of truth. Either way, surface the same dedicated error
-  // panel rather than the loading/fallback branches (Task #178).
-  const effectiveErrorCode = reportedErrorCode ?? sharedKeyError.code;
-  const isMapError = iframeLoadError || effectiveErrorCode !== null;
-  // Tailored message wins when Google gave us a specific code we
-  // recognize. The shared `getMapsKeyErrorMessage` lookup handles both
-  // the embed-API codes and the synthetic JS-SDK auth-failure code, and
-  // names the raw code verbatim alongside the generic fix line for
-  // anything Google ships that isn't in our table — far better than
-  // silently ignoring it. The plain generic line is reserved for the
-  // "iframe element failed to load and we have no code to act on" case.
-  let errorMessage: string;
-  if (effectiveErrorCode !== null) {
-    errorMessage = getMapsKeyErrorMessage(effectiveErrorCode);
-  } else {
-    errorMessage = MAPS_KEY_TROUBLESHOOTING_TEXT;
-  }
+  const [status, setStatus] = useState<LoaderStatus>("idle");
+  // Resolved coordinate for *this* property's address. `undefined`
+  // means we haven't tried yet (or the SDK isn't ready), `null` means
+  // Google had no result, and an object is the live point. Stored
+  // coords from the parent prime this synchronously below so a
+  // re-mount with persisted lat/lng renders the pin on first paint.
+  const [point, setPoint] = useState<
+    { lat: number; lng: number } | null | undefined
+  >(() => {
+    if (typeof lat === "number" && typeof lng === "number") {
+      return { lat, lng };
+    }
+    return undefined;
+  });
+
+  // Surface a one-time confirmation when a rotated key takes effect.
+  // Same contract as the portfolio map — silent on the very first
+  // load, fires exactly once per successful rotation.
+  const { toast } = useToast();
+
+  // Decide whether to attempt the SDK load: we need a key, and the
+  // shared key-error store must not already be flagged (otherwise we'd
+  // load the script just to have `gm_authFailure` reject it again).
+  const canMountMap = resolvedKey !== "" && sharedKeyError.code === null;
+
+  // Load the SDK + create the Map once we have a key + Map ID. The
+  // effect re-runs on key/mapId rotation; the cleanup tears the map +
+  // marker down so the next run rebuilds against the rotated SDK
+  // (loadMapsApi deletes `window.google` when it detects a rotation).
+  useEffect(() => {
+    if (!canMountMap) return;
+    let cancelled = false;
+    setStatus("loading");
+    setLoaderError(null);
+    loadMapsApi(resolvedKey)
+      .then(({ rotated }) => {
+        if (cancelled) return;
+        if (!mapEl.current) return;
+        const maps = window.google!.maps!;
+        mapRef.current = new maps.Map(mapEl.current, {
+          // Center on the resolved point if we already have it
+          // (stored coords or warm cache); otherwise fall back to a
+          // continental US view so the first paint isn't empty
+          // ocean. `setCenter` below repositions once the geocoder
+          // resolves.
+          center:
+            point && point.lat !== undefined
+              ? { lat: point.lat, lng: point.lng }
+              : { lat: 39.8283, lng: -98.5795 },
+          zoom: point ? 15 : 4,
+          // AdvancedMarkerElement requires a valid Map ID — without
+          // one Google falls back to a raster map and silently
+          // refuses to attach the marker, which is exactly the
+          // failure mode we're migrating away from. Resolves to the
+          // operator's branded ID from `/api/config` in production
+          // (set via `GOOGLE_MAPS_MAP_ID`) and to `"DEMO_MAP_ID"`
+          // on a fresh workspace where no Map ID has been
+          // configured yet.
+          mapId: resolvedMapId,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        setStatus("ready");
+        if (rotated) {
+          toast({
+            title: "Google Maps key updated",
+            description: "Map reloaded against the rotated key.",
+          });
+        }
+      })
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setLoaderError(err.message);
+        setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+      // Tear down marker + map before the next run rebuilds against
+      // the (possibly rotated) SDK so we don't leak the prior
+      // AdvancedMarkerElement or its DOM listeners. Mirrors the
+      // teardown in portfolio-map.tsx.
+      if (markerRef.current) {
+        markerRef.current.map = null;
+        markerRef.current = null;
+      }
+      mapRef.current = null;
+    };
+    // We intentionally do NOT depend on `point` here — re-creating
+    // the Map every time the geocode resolves would wipe pan/zoom
+    // and create a flicker. The marker-sync effect below handles
+    // re-centering when coords land. `loadAttempt` is included so
+    // the in-card Re-check button can force a re-run after a local
+    // SDK load failure even when the key + Map ID didn't change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canMountMap, resolvedKey, resolvedMapId, loadAttempt]);
+
+  // Geocode this property's address once the SDK is ready. Stored
+  // coords from the parent skip the network entirely. The shared
+  // module-level cache covers the case where another surface (the
+  // portfolio map, or a previous mount) already resolved this same
+  // address in the session.
+  useEffect(() => {
+    if (status !== "ready") return;
+    if (!window.google?.maps) return;
+    // Stored coords win — instantly resolves point to the supplied
+    // value (also covers the address-change case where a parent edit
+    // swaps in new stored coords without a remount). The functional
+    // setState bails out when the value is unchanged so this is a
+    // no-op in the common steady-state, but flips the marker to the
+    // new coords if the operator's edit was for a different lat/lng.
+    // We also warm the shared cache so the portfolio map or another
+    // Location card at the same address skips the round-trip.
+    if (typeof lat === "number" && typeof lng === "number") {
+      primeGeocodeCache(full, { lat, lng });
+      setPoint((prev) => {
+        if (prev && prev.lat === lat && prev.lng === lng) return prev;
+        return { lat, lng };
+      });
+      return;
+    }
+    const cached = getCachedGeocode(full);
+    if (cached !== undefined) {
+      setPoint(cached);
+      return;
+    }
+    // Clear any stale pin (e.g. the previous address's coords carried
+    // over when an operator edited the address fields while the card
+    // was mounted) before the live geocoder resolves. Without this,
+    // the marker sits at the wrong location until the new geocode
+    // returns. `setPoint(undefined)` is a no-op when point was
+    // already undefined (Object.is bailout), so the very first run
+    // doesn't churn.
+    setPoint(undefined);
+    const geocoder = new window.google.maps.Geocoder();
+    resolveGeocode(geocoder, full).then((resolved) => {
+      if (!mountedRef.current) return;
+      setPoint(resolved);
+      if (!resolved) return;
+      // One-shot per (address) — `reportedRef` keeps `onGeocoded` from
+      // firing for the same address on every re-render that re-runs
+      // this effect (parent state updates, prop identity churn, …).
+      // Address changes naturally re-arm the report by failing the
+      // equality check below.
+      if (reportedRef.current === full) return;
+      reportedRef.current = full;
+      onGeocodedRef.current?.(resolved);
+    });
+  }, [status, full, lat, lng]);
+
+  // Sync the marker + viewport whenever resolved coords change. We
+  // drop the previous marker and recreate — there's only ever at most
+  // one pin on this card, so the simpler "blow away & rebuild" path
+  // is fine and mirrors the portfolio map's marker-sync structure.
+  useEffect(() => {
+    if (status !== "ready" || !mapRef.current) return;
+    if (!window.google?.maps) return;
+    if (markerRef.current) {
+      markerRef.current.map = null;
+      markerRef.current = null;
+    }
+    if (!point) return;
+    const maps = window.google.maps;
+    markerRef.current = new maps.marker.AdvancedMarkerElement({
+      position: { lat: point.lat, lng: point.lng },
+      map: mapRef.current,
+      title: full,
+      // Decorative: this card has no per-pin click handler — the
+      // overlay anchor below handles "open in Google Maps". Setting
+      // `gmpClickable: false` (the default) keeps the pin from
+      // intercepting pointer events that the overlay should handle.
+    });
+    mapRef.current.setCenter({ lat: point.lat, lng: point.lng });
+    mapRef.current.setZoom(15);
+  }, [status, point, full]);
+
+  // ---------------------------------------------------------------
+  // Branch order matters: the key-rejected branch is checked BEFORE
+  // `isConfigLoading` so a code reported anywhere on the page (e.g.
+  // the portfolio map's `gm_authFailure`, or a sibling Maps surface)
+  // flips this card out of the spinner *immediately* — without this
+  // ordering an operator could be staring at our placeholder
+  // indefinitely while a toast on the same page already said the
+  // key was rejected, with no in-page explanation (Task #178).
+  // ---------------------------------------------------------------
+  // The dedicated error panel must own the card whenever EITHER
+  // signal trips:
+  //   * `effectiveErrorCode` — a key-rejection code observed via the
+  //     shared store (this card's gm_authFailure path, the portfolio
+  //     map, a sibling embed iframe's postMessage, …). Drives the
+  //     Console deep-link below.
+  //   * `loaderError` — a local SDK script-load failure (network
+  //     blocked, CSP rejected the script tag, …). Without this
+  //     gating, an SDK load that throws would leave the card stuck
+  //     in the canvas branch with the inner "Loading map…" overlay
+  //     forever, and the operator would have no in-card explanation
+  //     of why no map is appearing.
+  // The Re-check button below clears both signals + bumps
+  // `loadAttempt` so a recovered SDK load can re-attempt without a
+  // tab refresh.
+  const effectiveErrorCode = sharedKeyError.code;
+  const isMapError = effectiveErrorCode !== null || loaderError !== null;
+  const errorMessage = sharedKeyError.message ?? loaderError ?? "";
 
   return (
     <Card data-testid="card-property-location">
@@ -332,21 +518,25 @@ export function PropertyLocationMap({
         */}
         <RuntimeConfigStaleWarning isStale={isRefreshStale} />
         {isMapError ? (
-          // Single canonical home for the rejected / iframe-load-error
-          // state — every render path that detects a map failure
-          // (iframe `error` event, postMessage error code, or the
-          // shared `useGoogleMapsKeyError` store) lands here. Any
-          // future tweaks to the error panel belong in this branch.
+          // Single canonical home for the failure state — every
+          // render path that detects a map error (the JS SDK's
+          // `gm_authFailure` callback, an embed-iframe code reported
+          // elsewhere on the page, the local SDK script-load
+          // failure) lands here. Any future tweaks to the error
+          // panel belong in this branch.
           //
           // Checked BEFORE `isConfigLoading` so a code reported
           // anywhere on the page (e.g. the portfolio map's
-          // `gm_authFailure`, or a sibling embed iframe's postMessage)
-          // flips this card out of the "Loading map…" placeholder
-          // *immediately* — even if our own `/api/config` request is
-          // still in flight. Without this ordering an operator could
-          // be staring at our spinner indefinitely while a toast on
-          // the same page already said the key was rejected, with no
-          // in-page explanation (Task #178).
+          // `gm_authFailure`, or a sibling embed iframe's
+          // postMessage) flips this card out of the "Loading map…"
+          // placeholder *immediately* — even if our own
+          // `/api/config` request is still in flight. Without this
+          // ordering an operator could be staring at our placeholder
+          // indefinitely while a toast on the same page already said
+          // the key was rejected, with no in-page explanation
+          // (Task #178). Task #197 carved this single canonical
+          // branch out of the previous iframe implementation; the
+          // contract carried forward into the JS SDK rewrite.
           <div
             className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
             data-testid="property-location-map-error"
@@ -370,22 +560,15 @@ export function PropertyLocationMap({
                 Open in Google Maps
               </a>
               {/*
-                Same per-code Google Cloud Console deep-link the
-                app-level toast surfaces (Task #173). Operators who
-                dismissed that toast — or arrived at this card after
-                the toast had already fired and timed out — still get
-                the single-click jump to the right Console page
-                (credentials / quotas / library / …) for whatever code
-                Google reported. Falls back to the credentials list
-                when the code is unrecognized so the link is never
-                dead. Uses `effectiveErrorCode` so a code observed via
-                the shared store (e.g. a sibling Maps surface) also
-                surfaces the Console link, not just one this iframe
-                reported itself (Task #178). When the iframe's own
-                `error` event fires we have no code, so we don't
-                surface a Console link in that case
-                (`effectiveErrorCode` is null then) since we'd just be
-                guessing which page to send the operator to.
+                Per-code Google Cloud Console deep-link the toast and
+                portfolio map's key-error panel also surface (Task
+                #173). Operators who dismissed the toast — or arrived
+                at this card after the toast already timed out —
+                still get the single-click jump to the right Console
+                page (credentials / quotas / library / …) for whatever
+                code Google reported. Falls back to the credentials
+                list when the code is unrecognized so the link is
+                never dead.
               */}
               {effectiveErrorCode !== null && (
                 <a
@@ -400,20 +583,6 @@ export function PropertyLocationMap({
                 </a>
               )}
             </div>
-            {/*
-              "Re-check key" affordance (Task #181). After fixing the
-              key in Google Cloud Console (enabling the API, adding
-              this domain to the referrer allowlist, raising the
-              quota, rotating the value, …) operators previously had
-              to hard-refresh the entire tab to recover. This button
-              re-fetches /api/config and clears the shared key-error
-              store on success so this card — and every other Maps
-              surface on the page — drops out of its rejected branch
-              and re-attempts the embed. If Google still rejects the
-              key the postMessage / `gm_authFailure` paths repopulate
-              the store and the panel + a fresh toast come back, so
-              clicking optimistically is safe.
-            */}
             <Button
               type="button"
               size="sm"
@@ -424,9 +593,7 @@ export function PropertyLocationMap({
             >
               <RefreshCw
                 className={
-                  isRechecking
-                    ? "h-4 w-4 animate-spin"
-                    : "h-4 w-4"
+                  isRechecking ? "h-4 w-4 animate-spin" : "h-4 w-4"
                 }
               />
               {isRechecking ? "Re-checking…" : "Re-check key"}
@@ -470,53 +637,61 @@ export function PropertyLocationMap({
               Retry
             </Button>
           </div>
-        ) : embedUrl ? (
-          // `isMapError` is handled by the top-of-tree branch above, so
-          // by the time we reach this branch we know the embed should
-          // be live.
+        ) : resolvedKey ? (
           <div className="space-y-2">
-            <a
-              href={searchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open ${full} in Google Maps`}
-              className="block relative rounded-lg overflow-hidden border bg-muted group focus:outline-none focus:ring-2 focus:ring-ring w-full max-w-xl"
-              data-testid="property-location-map-link"
-            >
-              <div className="h-40 sm:h-48 w-full">
-                <iframe
-                  ref={iframeRef}
-                  title={`Map of ${full}`}
-                  src={embedUrl}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  className="h-full w-full block pointer-events-none"
-                  data-testid="property-location-map-iframe"
-                  onError={() => setIframeLoadError(true)}
-                />
-              </div>
-              <div className="absolute top-2 right-2 rounded-md bg-background/90 backdrop-blur px-2 py-1 text-xs font-medium shadow-sm border flex items-center gap-1 opacity-90 group-hover:opacity-100">
+            <div className="relative rounded-lg overflow-hidden border bg-muted w-full max-w-xl">
+              <div
+                ref={mapEl}
+                className="aspect-[16/9] w-full"
+                data-testid="property-location-map-canvas"
+                data-map-id={resolvedMapId}
+              />
+              {/*
+                "Open in Google Maps" overlay — sits on top of the map
+                canvas as a small chip in the upper-right corner. The
+                JS SDK owns pointer events on the canvas itself, so
+                wrapping the entire map in an anchor (the way the
+                iframe version did) wouldn't reliably surface as a
+                click. A dedicated overlay link is unambiguous, keeps
+                pan/zoom interactions inside the map working, and
+                gives the operator a one-click jump to Google Maps
+                for the property's address.
+              */}
+              <a
+                href={searchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${full} in Google Maps`}
+                className="absolute top-2 right-2 rounded-md bg-background/90 backdrop-blur px-2 py-1 text-xs font-medium shadow-sm border flex items-center gap-1 hover:bg-background"
+                data-testid="property-location-map-link"
+              >
                 <ExternalLink className="h-3 w-3" />
                 Open in Google Maps
-              </div>
-            </a>
+              </a>
+              {status !== "ready" && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground pointer-events-none"
+                  data-testid="property-location-map-canvas-loading"
+                >
+                  <MapPin className="h-4 w-4 mr-2" />
+                  Loading map…
+                </div>
+              )}
+            </div>
             {/*
-              Task #196: the always-visible "Seeing a Google error?"
-              companion message used to live here. We removed it
-              because it was confusing operators on healthy maps —
-              shouting that the key was rejected next to a perfectly
-              rendered embed made working pages look broken. The real
-              failure modes are already covered by the dedicated error
-              branch (`property-location-map-error`), which is fed by
-              three independent signals: the iframe's own `error`
-              event (network/CSP/malformed URL), Google's postMessage
-              error codes (key/allowlist/quota — Task #163), and the
-              shared `useGoogleMapsKeyError` store populated by
-              `gm_authFailure` on the portfolio map (Task #178). When
-              any of those fires, we flip into the red panel with a
-              tailored message and a Re-check button. The success
-              branch stays clean.
+              Task #196 removed the always-visible "Seeing a Google
+              error?" companion line that used to sit next to a
+              healthy map — it confused operators by shouting that
+              the key was rejected next to a perfectly rendered
+              embed. That contract carries forward into the JS SDK
+              rewrite: the success branch above stays clean and the
+              dedicated error panel (gated by `isMapError`) owns
+              every failure surface — `gm_authFailure` from
+              `loadMapsApi`, codes reported by sibling surfaces via
+              the shared key-error store, and local SDK script-load
+              failures via `loaderError`. (Task #197.)
             */}
+
           </div>
         ) : (
           <div

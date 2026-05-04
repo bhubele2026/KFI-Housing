@@ -734,6 +734,11 @@ export default function PropertyDetail() {
               city={property.city}
               state={property.state}
               zip={property.zip}
+              lat={property.lat ?? null}
+              lng={property.lng ?? null}
+              onGeocoded={(point) =>
+                updateProperty(id, { lat: point.lat, lng: point.lng })
+              }
             />
 
             {/*

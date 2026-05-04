@@ -6,23 +6,25 @@ import { memoryLocation } from "wouter/memory-location";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Pin down that the property-detail page actually integrates the
-// postMessage-driven, tailored-copy error branch of PropertyLocationMap
-// (Task #163). The component-level tests in
-// `src/components/property-location-map.test.tsx` mount the component
-// directly and prove the listener / lookup wiring inside the component.
-// What they CAN'T prove is that the page still hosts that component on
-// the Overview tab — a future refactor that swaps the Location card for
-// a different one, or wraps it in a parent that strips the message
-// source, would silently regress the operator-facing copy without
-// breaking any existing test.
+// shared-store-driven, tailored-copy error branch of PropertyLocationMap
+// (Task #163, ported to the JS Maps SDK in Task #195). The
+// component-level tests in `src/components/property-location-map.test.tsx`
+// mount the component directly and prove the listener / lookup wiring
+// inside the component. What they CAN'T prove is that the page still
+// hosts that component on the Overview tab — a future refactor that
+// swaps the Location card for a different one, or wraps it in a parent
+// that intercepts the shared key-error store, would silently regress
+// the operator-facing copy without breaking any existing test.
 //
 // These tests close that gap. They mount the full Property Detail page
 // against a memory router, let the real PropertyLocationMap render,
-// dispatch a Google Maps `postMessage` against the mounted iframe's
-// contentWindow, and assert that the tailored line for the posted code
-// is visible on the page (not the generic catch-all). Two codes are
-// covered so the lookup-table integration is exercised with more than
-// one entry.
+// drive the shared Google Maps key-error store directly via
+// `reportGoogleMapsKeyError(...)` (the same store the app's
+// gm_authFailure callback and the embed-iframe postMessage listener
+// fire through in production), and assert that the tailored line for
+// the reported code is visible on the page (not the generic catch-all).
+// Two codes are covered so the lookup-table integration is exercised
+// with more than one entry.
 
 const { toastMock, MockRoomInUseError } = vi.hoisted(() => {
   class MockRoomInUseError extends Error {
@@ -41,15 +43,18 @@ vi.mock("@/components/layout/main-layout", () => ({
 // Intentionally NOT mocking `@/components/property-location-map` — the
 // whole point of this file is to exercise the real component as
 // rendered by the page. Instead we mock the runtime-config hook it
-// pulls from `@workspace/api-client-react` so the component synchronously
-// resolves to a non-empty key and renders the embed iframe (which is
-// what the postMessage listener subscribes to). This sidesteps having
-// to stand up a QueryClientProvider + a fake `/api/config` fetch in
+// pulls from `@workspace/api-client-react` so the component
+// synchronously resolves to a non-empty key and renders the SDK map
+// branch (which is what subscribes to the shared key-error store).
+// This sidesteps having to stand up a live `/api/config` fetch in
 // every page-level test setup, while still letting the page's own
 // `<PropertyLocationMap address=... />` code path run end-to-end.
 vi.mock("@workspace/api-client-react", () => ({
   useGetRuntimeConfig: () => ({
-    data: { googleMapsApiKey: "test-key-page-level" },
+    data: {
+      googleMapsApiKey: "test-key-page-level",
+      googleMapsMapId: "test-map-id-page-level",
+    },
     isPending: false,
     isLoading: false,
     isError: false,
@@ -197,7 +202,7 @@ vi.mock("@/components/ui/select", () => {
 
 // ── Mock data store ─────────────────────────────────────────────────────
 // One property with a real address so PropertyLocationMap renders the
-// embed branch (rather than its empty state).
+// SDK map branch (rather than its empty state).
 const seededProperty = {
   id: "p1",
   customerId: "c1",
@@ -258,11 +263,81 @@ vi.mock("@/context/data-store", () => ({
 
 // Imports that consume the mocks above MUST come after vi.mock calls.
 import PropertyDetail from "./property-detail";
-import { __resetGoogleMapsKeyErrorForTest } from "@/hooks/use-google-maps-key-error";
+import {
+  reportGoogleMapsKeyError,
+  __resetGoogleMapsKeyErrorForTest,
+} from "@/hooks/use-google-maps-key-error";
+import { __resetGoogleMapsSdkForTest } from "@/lib/google-maps-sdk";
+
+// Install a minimal fake Google Maps SDK so PropertyLocationMap's load
+// effect resolves synchronously into the canvas branch instead of
+// trying to fetch the real Google script tag from jsdom (which would
+// either hang or noisily fail). We also prime
+// `window.__housingopsMapsLoader` to a resolved promise so the loader
+// short-circuits even if the ready-class detection in `loadMapsApi`
+// regresses. The fake is intentionally tiny — these page-level tests
+// only need the canvas to exist long enough to be replaced by the
+// error panel; they don't drive markers or geocoding.
+function installFakeGoogleMaps() {
+  class FakeMap {
+    constructor(_el: HTMLElement, _options: Record<string, unknown>) {}
+    setCenter() {}
+    setZoom() {}
+    fitBounds() {}
+    addListener() {}
+  }
+  class FakeAdvancedMarkerElement {
+    map: unknown | null = null;
+    constructor(opts: { map: unknown }) {
+      this.map = opts.map ?? null;
+    }
+    addEventListener() {}
+  }
+  class FakeInfoWindow {
+    setContent() {}
+    open() {}
+    close() {}
+    addListener() {}
+  }
+  class FakeGeocoder {
+    geocode() {
+      // No-op — these tests don't drive geocoding.
+    }
+  }
+  class FakeBounds {
+    extend() {}
+    getCenter() {
+      return { lat: () => 0, lng: () => 0 };
+    }
+  }
+  const w = window as unknown as {
+    google?: { maps?: unknown };
+    __housingopsMapsLoader?: Promise<void>;
+  };
+  w.google = {
+    maps: {
+      Map: FakeMap,
+      marker: { AdvancedMarkerElement: FakeAdvancedMarkerElement },
+      Geocoder: FakeGeocoder,
+      LatLngBounds: FakeBounds,
+      InfoWindow: FakeInfoWindow,
+    },
+  };
+  w.__housingopsMapsLoader = Promise.resolve();
+}
+
+function uninstallFakeGoogleMaps() {
+  const w = window as unknown as {
+    google?: unknown;
+    __housingopsMapsLoader?: unknown;
+  };
+  delete w.google;
+  delete w.__housingopsMapsLoader;
+}
 
 function makeHarness(initialPath: string) {
   const memory = memoryLocation({ path: initialPath, record: true });
-  // The PropertyLocationMap renders the Re-check-key affordance from
+  // PropertyLocationMap renders the Re-check-key affordance from
   // Task #181, which calls `useQueryClient()` even though this file
   // mocks `useGetRuntimeConfig` to return a synchronous fixture (no
   // real query). Without a QueryClientProvider in the tree the hook
@@ -288,27 +363,6 @@ function makeHarness(initialPath: string) {
   return { memory, Harness };
 }
 
-// Mirror the helper in src/components/property-location-map.test.tsx —
-// dispatch a `message` event whose source is the mounted iframe's own
-// contentWindow. The component gates on `event.source === iframe.contentWindow`
-// (its single provenance check), so anything else is ignored.
-function fireGoogleMapsErrorMessage(
-  iframe: HTMLIFrameElement,
-  payload: unknown,
-) {
-  if (!iframe.contentWindow) {
-    throw new Error(
-      "iframe.contentWindow is null — jsdom should have created one",
-    );
-  }
-  const event = new MessageEvent("message", {
-    data: payload,
-    source: iframe.contentWindow,
-    origin: "https://www.google.com",
-  });
-  window.dispatchEvent(event);
-}
-
 describe("Property detail — Location map tailored key-error copy on Overview", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
@@ -319,10 +373,12 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     // tests in this file. The shared store is process-wide (so cross-
     // surface error coordination works in production); without an
     // explicit reset, the first test's `RefererNotAllowedMapError`
-    // would persist into later tests and immediately steal the iframe
-    // out of the embed branch — a pre-existing latent bleed exposed
+    // would persist into later tests and immediately steal the canvas
+    // out of the SDK branch — a pre-existing latent bleed exposed
     // once a single test in the file flips the store.
     __resetGoogleMapsKeyErrorForTest();
+    __resetGoogleMapsSdkForTest();
+    installFakeGoogleMaps();
     container = document.createElement("div");
     document.body.appendChild(container);
     // Ensure the page lands on the Overview tab — the page reads the
@@ -339,6 +395,9 @@ describe("Property detail — Location map tailored key-error copy on Overview",
       root = null;
     }
     container.remove();
+    uninstallFakeGoogleMaps();
+    __resetGoogleMapsSdkForTest();
+    __resetGoogleMapsKeyErrorForTest();
   });
 
   async function renderPage() {
@@ -346,6 +405,12 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     await act(async () => {
       root = createRoot(container);
       root.render(<Harness />);
+    });
+    // Drain a microtask + macrotask cycle so the SDK loader's
+    // resolved-promise.then callback commits `setStatus("ready")`
+    // before the test starts asserting on the canvas being mounted.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
     });
   }
 
@@ -355,41 +420,36 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     ) as HTMLElement | null;
   }
 
-  it("swaps the embedded map for the tailored 'add this site to the key's HTTP referrer allowlist' copy when Google posts RefererNotAllowedMapError", async () => {
+  it("swaps the embedded map for the tailored 'add this site to the key's HTTP referrer allowlist' copy when the shared store reports RefererNotAllowedMapError", async () => {
     await renderPage();
 
     // Sanity: the real PropertyLocationMap is mounted on Overview and
-    // is in the embed branch (key resolved, address present), not in
-    // the error / fallback / empty branches. If the page ever stops
+    // is in the SDK canvas branch (key resolved, address present), not
+    // in the error / fallback / empty branches. If the page ever stops
     // hosting the component, or the component starts hiding behind
     // a different default branch, we want this test to fail loudly
-    // before the postMessage step.
+    // before the key-error step.
     expect(get("card-property-location")).not.toBeNull();
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
+    expect(get("property-location-map-canvas")).not.toBeNull();
     expect(get("property-location-map-error")).toBeNull();
     expect(get("property-location-fallback")).toBeNull();
     expect(get("property-location-empty")).toBeNull();
 
     await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, {
-        code: "RefererNotAllowedMapError",
-      });
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
     });
 
-    // Embed surface yields entirely to the dedicated error surface —
+    // SDK canvas yields entirely to the dedicated error surface —
     // a regression that layered the warning over a still-mounted
-    // iframe would still let Google's grey error tile show through.
-    expect(get("property-location-map-iframe")).toBeNull();
+    // canvas would still let Google's grey error tile show through.
+    expect(get("property-location-map-canvas")).toBeNull();
     expect(get("property-location-map-link")).toBeNull();
 
     const panel = get("property-location-map-error");
     expect(panel).not.toBeNull();
     // The data-error-code attribute is the lookup hook — its value
-    // proves the postMessage code reached the panel and was used
-    // to pick the tailored copy (not the generic fallback).
+    // proves the reported code reached the panel and was used to
+    // pick the tailored copy (not the generic fallback).
     expect(panel!.getAttribute("data-error-code")).toBe(
       "RefererNotAllowedMapError",
     );
@@ -404,46 +464,43 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     );
     // And it must NOT be the generic "Google rejected this Maps API
     // key. Check that the Maps Embed API is enabled…" catch-all line —
-    // if it were, the postMessage code would have been ignored and
-    // we'd be back to the pre-Task-#163 behavior.
+    // if it were, the reported code would have been ignored and we'd
+    // be back to the pre-Task-#163 behavior.
     expect(text).not.toContain(
       "Check that the Maps Embed API is enabled and that this domain is on the key's allowlist",
     );
   });
 
-  it("shows the raw code verbatim alongside the generic fix line when Google posts a code we don't recognize (e.g. a newly-introduced or renamed *MapError)", async () => {
-    // Pin down the page-level integration of the unknown-code branch
-    // added to PropertyLocationMap. Without this the page could
-    // silently regress (e.g. swap the Location card for a wrapper that
-    // ate the unknown code) and the operator would be back to staring
-    // at Google's grey error tile with no in-app explanation. Picking
-    // a code that obviously isn't in MAPS_ERROR_MESSAGES guarantees
-    // the assertion is exercising the unknown-code path and not a
-    // tailored line that happens to mention the same word.
+  it("shows the raw code verbatim alongside the generic fix line when the shared store reports a code we don't recognize (e.g. a newly-introduced or renamed *MapError)", async () => {
+    // Pin down the page-level integration of the unknown-code branch.
+    // Without this the page could silently regress (e.g. swap the
+    // Location card for a wrapper that ate the unknown code) and the
+    // operator would be back to staring at an unexplained blank
+    // canvas. Picking a code that obviously isn't in
+    // MAPS_ERROR_MESSAGES guarantees the assertion is exercising the
+    // unknown-code path and not a tailored line that happens to
+    // mention the same word.
     const unknownCode = "BrandNewSurpriseMapError";
     await renderPage();
 
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
+    expect(get("property-location-map-canvas")).not.toBeNull();
     expect(get("property-location-map-error")).toBeNull();
 
     await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
+      reportGoogleMapsKeyError(unknownCode);
     });
 
     const panel = get("property-location-map-error");
     expect(panel).not.toBeNull();
-    // The lookup hook still records the exact code Google sent, so a
+    // The lookup hook still records the exact code reported, so a
     // support ticket can quote it verbatim.
     expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
 
     const text = (
       get("property-location-map-error-text")?.textContent ?? ""
     );
-    // Visible copy names the actual code Google reported plus the
-    // generic fix line — that's the whole point of the new branch.
+    // Visible copy names the actual code reported plus the generic
+    // fix line — that's the whole point of the unknown-code branch.
     expect(text).toContain(unknownCode);
     expect(text).toContain("Google reported");
     expect(text).toContain(
@@ -451,17 +508,14 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     );
   });
 
-  it("shows the tailored 'over its daily Google Maps Embed quota' copy when Google posts OverQuotaMapError, exercising the lookup table with a second code", async () => {
+  it("shows the tailored 'over its daily Google Maps Embed quota' copy when the shared store reports OverQuotaMapError, exercising the lookup table with a second code", async () => {
     await renderPage();
 
-    const iframe = get(
-      "property-location-map-iframe",
-    ) as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
+    expect(get("property-location-map-canvas")).not.toBeNull();
     expect(get("property-location-map-error")).toBeNull();
 
     await act(async () => {
-      fireGoogleMapsErrorMessage(iframe!, { code: "OverQuotaMapError" });
+      reportGoogleMapsKeyError("OverQuotaMapError");
     });
 
     const panel = get("property-location-map-error");

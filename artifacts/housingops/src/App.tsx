@@ -6,6 +6,7 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { useGoogleMapsKeyErrorToastListener } from "@/hooks/use-google-maps-key-error";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -59,6 +60,16 @@ function Router() {
   );
 }
 
+// Tiny render-less child of the QueryClientProvider tree that installs the
+// global Google-Maps-key-error listeners (postMessage + window.gm_authFailure)
+// and pumps the resulting events into the app's toast queue. Lives as its
+// own component so the hook can call useToast without coupling App's body
+// to the toast pipeline (Task #167).
+function MapsKeyErrorToastListener() {
+  useGoogleMapsKeyErrorToastListener();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -79,6 +90,7 @@ function App() {
             </WouterRouter>
           </DataProvider>
         </AuthProvider>
+        <MapsKeyErrorToastListener />
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

@@ -6,6 +6,11 @@ import {
   useGetRuntimeConfig,
   getGetRuntimeConfigQueryKey,
 } from "@workspace/api-client-react";
+import {
+  MAPS_ERROR_MESSAGES,
+  extractGoogleMapsErrorCode,
+  reportGoogleMapsKeyError,
+} from "@/hooks/use-google-maps-key-error";
 
 // Generic operator-facing copy used in two places:
 //   1. The dedicated error branch when the iframe's own `error` event
@@ -19,105 +24,15 @@ import {
 // When Google's Embed API does report a specific error code via
 // postMessage (RefererNotAllowedMapError / ApiNotActivatedMapError /
 // InvalidKeyMapError / quota / …) we render the *tailored* line from
-// MAPS_ERROR_MESSAGES instead of this generic one — see Task #163.
+// MAPS_ERROR_MESSAGES (imported above, shared with the app-level toast
+// listener and the portfolio map — Task #167) instead of this generic
+// one. Task #163 introduced the lookup; Task #167 hoisted it to a
+// shared module so a key rejection seen anywhere on the page also
+// fires a one-time app-level toast and flips the portfolio map into a
+// matching error state.
 const MAPS_KEY_TROUBLESHOOTING_TEXT =
   "Google rejected this Maps API key. Check that the Maps Embed API " +
   "is enabled and that this domain is on the key's allowlist.";
-
-// Tailored, action-oriented copy keyed by the exact error code Google's
-// Maps Embed iframe posts back to the parent window. Each line names
-// the concrete fix on the *operator's* Google Cloud Console — the
-// whole point of subscribing to the postMessage is so we can stop
-// telling everyone the same vague "something failed" story regardless
-// of which key problem they actually have.
-const MAPS_ERROR_MESSAGES: Record<string, string> = {
-  RefererNotAllowedMapError:
-    "This Maps API key isn't allowed on this domain. Add this site to the " +
-    "key's HTTP referrer allowlist in Google Cloud Console.",
-  ApiNotActivatedMapError:
-    "The Maps Embed API isn't enabled for this key. Enable it for this " +
-    "key's project in Google Cloud Console.",
-  InvalidKeyMapError:
-    "Google rejected this Maps API key as invalid. Double-check that the " +
-    "key configured on the server matches one in Google Cloud Console.",
-  MissingKeyMapError:
-    "Google says no Maps API key was supplied with the request. Set the " +
-    "GOOGLE_MAPS_API_KEY secret on the api-server.",
-  ExpiredKeyMapError:
-    "This Maps API key has expired. Issue a new key in Google Cloud " +
-    "Console and update the server.",
-  OverQuotaMapError:
-    "This Maps API key is over its daily Google Maps Embed quota. Raise " +
-    "the quota in Google Cloud Console or wait for it to reset.",
-  RequestDeniedMapError:
-    "Google denied this Maps request. Check the API restrictions on the " +
-    "key in Google Cloud Console.",
-  DeletedApiProjectMapError:
-    "The Google Cloud project this Maps API key belongs to has been " +
-    "deleted. Issue a new key from an active project.",
-  RetiredVersionMapError:
-    "This embed is using a retired version of the Google Maps Embed API. " +
-    "Upgrade the embed URL to a supported version.",
-};
-
-const KNOWN_MAPS_ERROR_CODES = Object.keys(MAPS_ERROR_MESSAGES);
-
-// Loose pattern for "looks like a Google Maps Embed error code". Google's
-// existing codes all share the shape `<PascalCaseName>MapError`
-// (`RefererNotAllowedMapError`, `OverQuotaMapError`, …). Matching that
-// shape lets us surface a useful in-app message when Google ships a new
-// code (or renames an existing one) before we've added a tailored entry
-// to MAPS_ERROR_MESSAGES — instead of silently ignoring it and leaving
-// the operator staring at Google's grey error tile with no clue what
-// code Google sent. Anchored at a word boundary so substrings like
-// "DescriptionMapErrorHandler" won't false-match.
-const MAPS_ERROR_CODE_PATTERN = /\b[A-Z][A-Za-z0-9]*MapError\b/;
-
-function findMapsErrorCodeInString(value: string): string | null {
-  // Known codes win — they preserve the exact spelling the lookup table
-  // is keyed on, even if the surrounding string has extra prose.
-  for (const code of KNOWN_MAPS_ERROR_CODES) {
-    if (value.includes(code)) return code;
-  }
-  const match = value.match(MAPS_ERROR_CODE_PATTERN);
-  return match ? match[0] : null;
-}
-
-// Walk an arbitrary postMessage payload looking for a Google Maps error
-// code. Google does not publish the exact shape of the error message it
-// posts back, and it has changed across versions of the Embed API (the
-// value has been seen as a bare string, as `{ code: "…" }`, and as a
-// nested error object on the JS API). To avoid being brittle to that
-// shape, we look at the obvious string fields and recurse one extra
-// level into nested objects — but bound the recursion so a hostile or
-// pathological payload can't lock the listener up.
-function extractGoogleMapsErrorCode(
-  data: unknown,
-  depth = 0,
-): string | null {
-  if (depth > 3) return null;
-  if (typeof data === "string") {
-    return findMapsErrorCodeInString(data);
-  }
-  if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-    const fields = ["code", "error", "errorCode", "name", "type", "message"];
-    for (const key of fields) {
-      const value = obj[key];
-      if (typeof value === "string") {
-        const found = findMapsErrorCodeInString(value);
-        if (found) return found;
-      }
-    }
-    for (const value of Object.values(obj)) {
-      if (value && typeof value === "object") {
-        const inner = extractGoogleMapsErrorCode(value, depth + 1);
-        if (inner) return inner;
-      }
-    }
-  }
-  return null;
-}
 
 interface PropertyLocationMapProps {
   address: string;
@@ -300,7 +215,19 @@ export function PropertyLocationMap({
       const iframe = iframeRef.current;
       if (!iframe || event.source !== iframe.contentWindow) return;
       const code = extractGoogleMapsErrorCode(event.data);
-      if (code) setReportedErrorCode(code);
+      if (code) {
+        setReportedErrorCode(code);
+        // Also feed the shared store so the app-level toast (Task
+        // #167) fires once per code per session and any other Maps
+        // surface mounted on the page can flip into its own
+        // key-rejected state. The app-level postMessage listener
+        // would normally pick the same payload up directly, but
+        // routing through `reportGoogleMapsKeyError` here keeps the
+        // store consistent even on pages that don't yet mount the
+        // app-level listener (e.g. tests of this card in isolation
+        // that opt in to the shared store).
+        reportGoogleMapsKeyError(code);
+      }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);

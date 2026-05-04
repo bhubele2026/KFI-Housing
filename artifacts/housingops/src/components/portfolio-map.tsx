@@ -6,6 +6,7 @@ import {
   useGetRuntimeConfig,
   getGetRuntimeConfigQueryKey,
 } from "@workspace/api-client-react";
+import { useGoogleMapsKeyError } from "@/hooks/use-google-maps-key-error";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
 // actually call into — installing @types/google.maps just for a handful
@@ -528,6 +529,21 @@ export function PortfolioMap({
   }, []);
   const [status, setStatus] = useState<LoaderStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Subscribe to the shared Maps-key-error store. Two independent signals
+  // can put this map into a "key rejected" state:
+  //   * The JS SDK calling `window.gm_authFailure` after the script
+  //     loads but its key is rejected (referrer not allowed, key
+  //     expired, project disabled, …). We can't tell which of those
+  //     it was — Google's JS API auth-failure callback fires with no
+  //     arguments — so we surface the generic JS-API auth-failure
+  //     message.
+  //   * The Property Location card on the same page (or any other
+  //     Maps embed) reporting a specific code via postMessage. The
+  //     shared store dedupes these across surfaces so the portfolio
+  //     map flips into a clear error panel instead of leaving the
+  //     operator staring at a stuck loading spinner or Google's grey
+  //     error tile (Task #167).
+  const keyError = useGoogleMapsKeyError();
   // Resolved coordinates by property.id. `null` means the property has
   // an address but Google couldn't geocode it — those rows are surfaced
   // in the side panel alongside truly-blank addresses.
@@ -852,6 +868,31 @@ export function PortfolioMap({
               </code>{" "}
               on the api-server (and restart it) to render every
               property as pins on a single portfolio map.
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // A key has been observed as rejected anywhere on the page in this
+  // session — show a dedicated "key rejected" panel here too. Without
+  // this branch the portfolio map would either sit at "Loading map…"
+  // forever (if `gm_authFailure` fired before the SDK considered itself
+  // ready) or render Google's tiny grey error tile inside the canvas
+  // with no operator-facing explanation. Render the same tailored copy
+  // the toast surfaces so the in-page state matches the notification.
+  if (keyError.code) {
+    return (
+      <Card
+        data-testid="portfolio-map-key-error"
+        data-error-code={keyError.code}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span data-testid="portfolio-map-key-error-text">
+              {keyError.message}
             </span>
           </div>
         </CardContent>

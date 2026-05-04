@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
+import { PropertyLocationMap } from "@/components/property-location-map";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -720,6 +721,21 @@ export default function PropertyDetail() {
 
           {/* ── OVERVIEW TAB ── */}
           <TabsContent value="overview" className="space-y-4">
+            {/*
+              Location map — sits at the top of Overview so operators see
+              where a property is the moment they open it. Falls back to a
+              plain "Open in Google Maps" link when the embed API key is
+              not configured, and shows an empty state when the address
+              fields are blank. See PropertyLocationMap for the three
+              render branches.
+            */}
+            <PropertyLocationMap
+              address={property.address}
+              city={property.city}
+              state={property.state}
+              zip={property.zip}
+            />
+
             {/*
               Per-lease rent breakdown. Renders here on Overview (not the
               Leases tab) because it answers a header-level question — "what

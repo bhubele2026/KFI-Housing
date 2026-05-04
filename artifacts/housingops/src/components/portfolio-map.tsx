@@ -724,12 +724,13 @@ export function PortfolioMap({
           <div className="flex items-start gap-2 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              Set{" "}
+              A Google Maps API key isn't configured on the api-server
+              yet, so the portfolio map is hidden. Set{" "}
               <code className="font-mono text-[11px] bg-muted px-1 rounded">
-                VITE_GOOGLE_MAPS_API_KEY
+                GOOGLE_MAPS_API_KEY
               </code>{" "}
-              to render every property as pins on a single portfolio
-              map.
+              on the api-server to render every property as pins on a
+              single portfolio map.
             </span>
           </div>
         </CardContent>

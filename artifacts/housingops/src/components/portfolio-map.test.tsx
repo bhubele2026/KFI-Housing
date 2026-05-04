@@ -856,3 +856,75 @@ describe("PortfolioMap — branded Map ID", () => {
   });
 });
 
+describe("PortfolioMap missing-key fallback copy", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    // No fake Google Maps install — the fallback branch must render
+    // before the loader is even consulted, so no SDK shim is needed.
+    __resetPortfolioMapCachesForTest();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    __resetPortfolioMapCachesForTest();
+  });
+
+  // Pinning the wording of the missing-key fallback so a future
+  // refactor can't reintroduce the retired build-time env var
+  // (`VITE_GOOGLE_MAPS_API_KEY`). The Google Maps key now lives on
+  // the api-server (`GOOGLE_MAPS_API_KEY`) and is fetched by the
+  // property-detail Location card via `/api/config`; rotating the
+  // old VITE_-prefixed var no longer does anything, so naming it in
+  // the operator-facing fallback would send them on a wild goose
+  // chase.
+  it("tells operators to set GOOGLE_MAPS_API_KEY on the api-server (and never the retired VITE_ build-time var)", async () => {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={[
+            {
+              id: "p1",
+              name: "Maple",
+              address: "123 Main St",
+              city: "Austin",
+              state: "TX",
+              zip: "78701",
+            },
+          ]}
+          onPinClick={vi.fn()}
+          apiKey=""
+        />,
+      );
+    });
+
+    const fallback = container.querySelector(
+      '[data-testid="portfolio-map-fallback"]',
+    );
+    expect(fallback).not.toBeNull();
+
+    const text = fallback!.textContent ?? "";
+    // Points operators at the right knob: the server-side env var on
+    // the api-server, matching the property-detail Location card.
+    expect(text).toContain("GOOGLE_MAPS_API_KEY");
+    expect(text.toLowerCase()).toContain("api-server");
+    // And explicitly does NOT name the retired build-time var.
+    expect(text).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
+  });
+});
+

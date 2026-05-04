@@ -179,9 +179,16 @@ function loadMapsApi(apiKey: string): Promise<void> {
       return;
     }
     const s = document.createElement("script");
+    // Intentionally omit `loading=async`: Google's async loader requires
+    // every class (including Geocoder) to be pulled in via
+    // `await google.maps.importLibrary(...)`, but the rest of this
+    // component reaches for `google.maps.Geocoder` / `Marker` /
+    // `LatLngBounds` synchronously right after script load. Sync loading
+    // keeps that contract — when the <script> `load` event fires, all
+    // core classes are bound on `window.google.maps`.
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey,
-    )}&libraries=geocoding&loading=async`;
+    )}`;
     s.async = true;
     s.defer = true;
     s.dataset.housingopsMaps = "1";

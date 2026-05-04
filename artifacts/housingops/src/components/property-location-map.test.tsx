@@ -192,6 +192,33 @@ describe("PropertyLocationMap", () => {
     expect(get("property-location-fallback")).not.toBeNull();
   });
 
+  it("never leaks a literal 'undefined' into the iframe src when the key is missing", async () => {
+    // Defends against a regression anywhere in the key pipeline (the
+    // runtime /api/config fetch, the build-time portfolio-map env
+    // forwarding, or any future source) that could mis-stringify a
+    // missing key as the bare identifier `undefined`. Even then the
+    // component must pick the dashed-fallback branch instead of
+    // emitting an iframe whose src is literally
+    // `…/place?key=undefined&q=…` — which would render a broken Google
+    // error tile and look like the embed is "almost working".
+    await render(
+      <PropertyLocationMap
+        address="300 Pine St"
+        city="Seattle"
+        state="WA"
+        zip="98101"
+        apiKey=""
+      />,
+    );
+
+    // No iframe is rendered at all in the fallback branch.
+    expect(get("property-location-map-iframe")).toBeNull();
+    // And nothing on the rendered page should contain the substring
+    // "key=undefined" — that would be the smoking gun for a bad
+    // key stringification anywhere upstream of the component.
+    expect(container.innerHTML).not.toContain("key=undefined");
+  });
+
   it("renders a friendly empty state instead of a broken/blank map when every address field is empty", async () => {
     await render(
       <PropertyLocationMap

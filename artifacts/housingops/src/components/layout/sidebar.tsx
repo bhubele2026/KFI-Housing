@@ -16,6 +16,7 @@ import {
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
 import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
+import { useGeocodeFailureToasts } from "@/hooks/use-geocode-failure-toasts";
 import { formatGeocodeAddress } from "@/lib/google-maps-sdk";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +70,14 @@ export function Sidebar() {
     }
     return count;
   }, [properties, geocodeFailures]);
+  // Pop a one-shot toast each time a brand-new failure lands in the
+  // shared cache. The badge above only catches the operator's eye if
+  // the sidebar is actually visible — on narrow displays where the
+  // sidebar is tucked off-screen, or when the operator is heads-down
+  // editing a Lease/Bed elsewhere, the toast is what surfaces the
+  // problem in real time. Mounting the listener here (the global
+  // shell) means it's installed regardless of the active route.
+  useGeocodeFailureToasts(properties);
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
   const [demoResetOpen, setDemoResetOpen] = useState(false);

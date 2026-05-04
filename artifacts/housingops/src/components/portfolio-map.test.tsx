@@ -1119,6 +1119,128 @@ describe("PortfolioMap — runtime config", () => {
     expect(get("portfolio-map-config-loading")).toBeNull();
   });
 
+  it("renders an explicit error branch (with Retry) when /api/config rejects, instead of getting stuck on the loading placeholder", async () => {
+    // Pre-Task #170: when `/api/config` errored, react-query left
+    // `data` undefined and `isPending` false, so the component fell
+    // through to the "set up your key" fallback — sending the
+    // operator chasing the wrong fix. The explicit error branch must
+    // name `/api/config` and the api-server so the operator knows
+    // where to look, and must NOT silently render the missing-key
+    // fallback or leave the loading placeholder visible.
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("portfolio-map-config-error") !== null);
+
+    // Loading placeholder is gone — the operator gets a real signal.
+    expect(get("portfolio-map-config-loading")).toBeNull();
+    // And we did NOT mistake "fetch failed" for "no key configured" —
+    // those are two completely different stories.
+    expect(get("portfolio-map-fallback")).toBeNull();
+    expect(get("portfolio-map")).toBeNull();
+
+    const text = get("portfolio-map-config-error-text");
+    expect(text).not.toBeNull();
+    const copy = text!.textContent ?? "";
+    expect(copy).toContain("/api/config");
+    expect(copy.toLowerCase()).toContain("api-server");
+
+    const retry = get("portfolio-map-config-retry") as
+      | HTMLButtonElement
+      | null;
+    expect(retry).not.toBeNull();
+  });
+
+  it("retries the /api/config fetch and recovers into the live map when the operator clicks Retry", async () => {
+    // First call rejects, second resolves — the Retry button should
+    // re-issue the request and let the map mount once the second
+    // response lands. Without a working retry, an operator hitting a
+    // transient error would have to reload the whole page.
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            googleMapsApiKey: "recovered-key",
+            googleMapsMapId: "recovered-map-id",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("portfolio-map-config-error") !== null);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const retry = get("portfolio-map-config-retry") as
+      | HTMLButtonElement
+      | null;
+    expect(retry).not.toBeNull();
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => mapsState.map !== null);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get("portfolio-map-config-error")).toBeNull();
+    expect(mapsState.map?.options.mapId).toBe("recovered-map-id");
+  });
+
+  it("renders the explicit error branch (not the loading placeholder) when /api/config returns a 500", async () => {
+    // A non-2xx response from the api-server still resolves the fetch
+    // promise — but the generated client throws on a non-OK status,
+    // which flips the query to the error state. The operator must see
+    // the actionable error branch, not be lied to with the
+    // missing-key fallback.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("internal error", {
+          status: 500,
+          headers: { "content-type": "text/plain" },
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("portfolio-map-config-error") !== null);
+
+    expect(get("portfolio-map-config-loading")).toBeNull();
+    expect(get("portfolio-map-fallback")).toBeNull();
+    expect(get("portfolio-map")).toBeNull();
+  });
+
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
     const fetchMock = vi.fn(
       async () =>

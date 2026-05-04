@@ -1335,4 +1335,143 @@ describe("PropertyLocationMap runtime config", () => {
     expect(get("property-location-empty")).not.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("renders an explicit error branch (with Retry) when /api/config rejects, instead of getting stuck on the loading placeholder", async () => {
+    // Pre-Task #170: when `/api/config` errored, react-query left
+    // `data` undefined and `isPending` false, so the component fell
+    // through to the "set up your key" fallback — sending the operator
+    // chasing the wrong fix. The explicit error branch must name
+    // `/api/config` and the api-server so the operator knows where to
+    // look, and must NOT silently render the missing-key fallback or
+    // leave the loading placeholder visible.
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("property-location-map-config-error") !== null);
+
+    // Loading placeholder is gone — the operator gets a real signal.
+    expect(get("property-location-map-loading")).toBeNull();
+    // And we did NOT mistake "fetch failed" for "no key configured" —
+    // those are two completely different stories.
+    expect(get("property-location-fallback")).toBeNull();
+    expect(get("property-location-map-iframe")).toBeNull();
+
+    const text = get("property-location-map-config-error-text");
+    expect(text).not.toBeNull();
+    const copy = text!.textContent ?? "";
+    expect(copy).toContain("/api/config");
+    expect(copy.toLowerCase()).toContain("api-server");
+
+    // The retry affordance is the operator's way out without reloading
+    // the whole page.
+    const retry = get("property-location-map-config-retry") as
+      | HTMLButtonElement
+      | null;
+    expect(retry).not.toBeNull();
+  });
+
+  it("retries the /api/config fetch and recovers into the embed branch when the operator clicks Retry", async () => {
+    // First call rejects, second resolves — the Retry button should
+    // re-issue the request and let the embed mount once the second
+    // response lands. Without a working retry, an operator hitting a
+    // transient error would have to reload the whole page.
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ googleMapsApiKey: "recovered-key" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("property-location-map-config-error") !== null);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const retry = get("property-location-map-config-retry") as
+      | HTMLButtonElement
+      | null;
+    expect(retry).not.toBeNull();
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await waitFor(() => get("property-location-map-iframe") !== null);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get("property-location-map-config-error")).toBeNull();
+
+    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe!.src).toContain("key=recovered-key");
+  });
+
+  it("renders the explicit error branch (not the loading placeholder) when /api/config returns a 500", async () => {
+    // A 500 from the api-server still resolves the fetch promise — but
+    // react-query's default `throwOnError` for a non-2xx in the
+    // generated client should flip the query to the error state. The
+    // operator must see the actionable error branch, not be stuck on
+    // an indefinitely-spinning placeholder or be lied to with the
+    // missing-key fallback.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("internal error", {
+          status: 500,
+          headers: { "content-type": "text/plain" },
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+
+    await waitFor(() => get("property-location-map-config-error") !== null);
+
+    expect(get("property-location-map-loading")).toBeNull();
+    expect(get("property-location-fallback")).toBeNull();
+    expect(get("property-location-map-iframe")).toBeNull();
+  });
 });

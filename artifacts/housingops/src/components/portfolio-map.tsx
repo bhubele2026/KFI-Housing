@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AlertCircle, MapPin } from "lucide-react";
 import {
   useGetRuntimeConfig,
@@ -485,6 +486,12 @@ export function PortfolioMap({
   // before the answer arrives would mislead the operator, so render a
   // neutral placeholder instead.
   const isConfigLoading = shouldFetchConfig && configQuery.isPending;
+  // The runtime config request itself failed (network error, 5xx, etc.).
+  // Without an explicit branch the operator would otherwise see the
+  // "set up your key" fallback (because `data` is undefined when the
+  // query errors), which sends them chasing the wrong fix. Surface the
+  // real cause instead and offer a manual retry.
+  const isConfigError = shouldFetchConfig && configQuery.isError;
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
   const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);
@@ -790,6 +797,41 @@ export function PortfolioMap({
           >
             <MapPin className="h-4 w-4 mr-2" />
             Loading map…
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isConfigError) {
+    return (
+      <Card data-testid="portfolio-map-config-error">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-2 text-sm">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+            <div className="space-y-3 flex-1">
+              <p
+                className="text-destructive"
+                data-testid="portfolio-map-config-error-text"
+              >
+                Couldn't load the map config from{" "}
+                <code className="font-mono text-[11px] bg-muted px-1 rounded">
+                  /api/config
+                </code>
+                . Check the api-server logs and try again.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void configQuery.refetch();
+                }}
+                data-testid="portfolio-map-config-retry"
+              >
+                Retry
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

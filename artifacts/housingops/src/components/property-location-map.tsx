@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
 import {
   useGetRuntimeConfig,
@@ -258,6 +259,12 @@ export function PropertyLocationMap({
   // key is configured, and flashing the scary warning before the answer
   // arrives would mislead the operator.
   const isConfigLoading = shouldFetchConfig && configQuery.isPending;
+  // The runtime config request itself failed (network error, 5xx, etc.).
+  // Without an explicit branch the operator would otherwise see the
+  // "set up your key" fallback (because `data` is undefined when the
+  // query errors), which sends them chasing the wrong fix. Surface the
+  // real cause instead and offer a manual retry.
+  const isConfigError = shouldFetchConfig && configQuery.isError;
 
   const encoded = encodeURIComponent(full);
   const searchUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
@@ -337,6 +344,33 @@ export function PropertyLocationMap({
               <MapPin className="h-4 w-4" />
               Loading map…
             </span>
+          </div>
+        ) : isConfigError ? (
+          <div
+            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3"
+            data-testid="property-location-map-config-error"
+          >
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span data-testid="property-location-map-config-error-text">
+                Couldn't load the map config from{" "}
+                <code className="font-mono text-[11px] bg-background/60 px-1 rounded">
+                  /api/config
+                </code>
+                . Check the api-server logs and try again.
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void configQuery.refetch();
+              }}
+              data-testid="property-location-map-config-retry"
+            >
+              Retry
+            </Button>
           </div>
         ) : embedUrl && !isMapError ? (
           <div className="space-y-2">

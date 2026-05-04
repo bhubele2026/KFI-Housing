@@ -644,6 +644,340 @@ describe("PropertyLocationMap", () => {
     expect(get("property-location-map-iframe")).not.toBeNull();
   });
 
+  // -------------------------------------------------------------------
+  // postMessage-based key-error detection (Task #163)
+  //
+  // Google's Embed iframe loads successfully and then renders a tiny
+  // grey error tile inside itself for the most common key-rejection
+  // failures (RefererNotAllowedMapError, ApiNotActivatedMapError,
+  // InvalidKeyMapError, OverQuotaMapError, …). The iframe `error`
+  // event does NOT fire in those cases, so the tests above (which
+  // exercise the iframe-onError path) would never trigger this code
+  // path. Google publishes the actual failure code as a `postMessage`
+  // from the embed iframe back to the parent window; the component
+  // subscribes to that and switches to a *tailored* error message that
+  // names the concrete fix on the operator's Google Cloud Console.
+  // The tests below cover that wiring end-to-end:
+  //   - happy path: each known code yields the matching tailored copy
+  //   - shape tolerance: the listener accepts both bare-string and
+  //     `{code: "…"}` payloads (Google has shipped both)
+  //   - provenance: messages from any other window are ignored — the
+  //     listener gates on event.source === iframe.contentWindow
+  //   - link integrity: Open in Google Maps + Directions still work
+  //   - reset: rotating the embed URL clears the error state
+  // -------------------------------------------------------------------
+
+  function fireGoogleMapsErrorMessage(
+    iframe: HTMLIFrameElement,
+    payload: unknown,
+  ) {
+    // jsdom fires every iframe up with its own contentWindow; we use
+    // that as the message source so the component's source-equality
+    // check (which is how it tells "this came from our embed" apart
+    // from "this came from anywhere else on the page") accepts it.
+    if (!iframe.contentWindow) {
+      throw new Error(
+        "iframe.contentWindow is null — jsdom should have created one",
+      );
+    }
+    const event = new MessageEvent("message", {
+      data: payload,
+      source: iframe.contentWindow,
+      origin: "https://www.google.com",
+    });
+    window.dispatchEvent(event);
+  }
+
+  const TAILORED_CASES: ReadonlyArray<{
+    code: string;
+    mustInclude: ReadonlyArray<string>;
+  }> = [
+    {
+      code: "RefererNotAllowedMapError",
+      mustInclude: ["this domain", "referrer allowlist"],
+    },
+    {
+      code: "ApiNotActivatedMapError",
+      mustInclude: ["maps embed api isn't enabled"],
+    },
+    {
+      code: "InvalidKeyMapError",
+      mustInclude: ["invalid"],
+    },
+    {
+      code: "OverQuotaMapError",
+      mustInclude: ["over its daily", "quota"],
+    },
+    {
+      code: "ExpiredKeyMapError",
+      mustInclude: ["expired"],
+    },
+    {
+      code: "RequestDeniedMapError",
+      mustInclude: ["denied", "api restrictions"],
+    },
+  ];
+
+  for (const { code, mustInclude } of TAILORED_CASES) {
+    it(`shows a tailored error message when Google posts ${code}`, async () => {
+      await render(
+        <PropertyLocationMap
+          address="400 Cedar Blvd"
+          city="Phoenix"
+          state="AZ"
+          zip="85001"
+          apiKey="key-under-test"
+        />,
+      );
+
+      const iframe = get(
+        "property-location-map-iframe",
+      ) as HTMLIFrameElement | null;
+      expect(iframe).not.toBeNull();
+      // Sanity: still in the success branch — no error has been
+      // detected yet, so swapping in the dedicated error surface here
+      // would be a false positive.
+      expect(get("property-location-map-error")).toBeNull();
+
+      await act(async () => {
+        fireGoogleMapsErrorMessage(iframe!, { code });
+      });
+
+      // The success branch is gone (iframe + its wrapping anchor
+      // unmount) and the dedicated error surface has taken over.
+      expect(get("property-location-map-iframe")).toBeNull();
+      expect(get("property-location-map-link")).toBeNull();
+
+      const panel = get("property-location-map-error");
+      expect(panel).not.toBeNull();
+      // Pin down the exact code on the rendered panel so a future
+      // refactor can't quietly route every code through the generic
+      // copy. This is the hook that proves the lookup ran.
+      expect(panel!.getAttribute("data-error-code")).toBe(code);
+
+      const text = (
+        get("property-location-map-error-text")?.textContent ?? ""
+      ).toLowerCase();
+      for (const phrase of mustInclude) {
+        expect(text).toContain(phrase);
+      }
+
+      // The tailored message must NOT be the generic catch-all line.
+      // If it were, the postMessage code would have been ignored and
+      // we'd be back to the pre-Task-#163 behavior of telling every
+      // operator the same vague story regardless of which key
+      // problem they actually have.
+      const GENERIC = "google rejected this maps api key";
+      // "InvalidKeyMapError" and the generic line both contain the
+      // word "rejected", so we use the full unique generic phrase
+      // here — no tailored line repeats it verbatim.
+      expect(text).not.toContain(
+        "google rejected this maps api key. check that the maps embed api",
+      );
+      // Cross-check: the generic constant *would* match if it slipped
+      // through. This guards against the assertion above being
+      // accidentally weakened.
+      expect(GENERIC.length).toBeGreaterThan(0);
+
+      // The "Open in Google Maps" jump must still be reachable from
+      // the error branch — the task explicitly requires it to keep
+      // working in every error case.
+      const errLink = get(
+        "property-location-map-error-link",
+      ) as HTMLAnchorElement | null;
+      expect(errLink).not.toBeNull();
+      const expectedQuery = encodeURIComponent(
+        "400 Cedar Blvd, Phoenix, AZ 85001",
+      );
+      expect(errLink!.href).toBe(
+        `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+      );
+      expect(errLink!.target).toBe("_blank");
+      expect(errLink!.rel).toContain("noopener");
+
+      // Directions link is rendered alongside the address block and
+      // must also remain reachable in the error state.
+      const dir = get(
+        "property-location-directions-link",
+      ) as HTMLAnchorElement | null;
+      expect(dir).not.toBeNull();
+      expect(dir!.href).toBe(
+        `https://www.google.com/maps/dir/?api=1&destination=${expectedQuery}`,
+      );
+    });
+  }
+
+  it("accepts a bare-string postMessage payload, not just `{code: ...}` objects", async () => {
+    // Google has shipped the error in different shapes across versions
+    // of the Embed API — sometimes a structured object, sometimes a
+    // plain string. The extractor must tolerate both so we're not
+    // fragile to either one disappearing.
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, "RefererNotAllowedMapError");
+    });
+
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(
+      "RefererNotAllowedMapError",
+    );
+  });
+
+  it("ignores postMessage events whose source is not our iframe", async () => {
+    // Provenance check: any frame on the page can fire a postMessage
+    // at the parent window. The component must accept the code only
+    // when the message is from *our* iframe — otherwise an unrelated
+    // embed (a YouTube iframe, an ad, the page itself) could spoof
+    // an error code and put a working map into the error branch.
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    // Stand up a sibling iframe and post the error code from *that*
+    // iframe's contentWindow. The component must ignore it because
+    // the source is not its own iframe.contentWindow.
+    const decoy = document.createElement("iframe");
+    document.body.appendChild(decoy);
+    try {
+      await act(async () => {
+        const event = new MessageEvent("message", {
+          data: { code: "RefererNotAllowedMapError" },
+          source: decoy.contentWindow,
+          origin: "https://www.google.com",
+        });
+        window.dispatchEvent(event);
+      });
+
+      // Still in the success branch — the message was ignored.
+      expect(get("property-location-map-iframe")).not.toBeNull();
+      expect(get("property-location-map-error")).toBeNull();
+
+      // Also: a message from the parent window itself must be
+      // ignored for the same reason.
+      await act(async () => {
+        const event = new MessageEvent("message", {
+          data: { code: "RefererNotAllowedMapError" },
+          source: window,
+          origin: window.location.origin,
+        });
+        window.dispatchEvent(event);
+      });
+      expect(get("property-location-map-iframe")).not.toBeNull();
+      expect(get("property-location-map-error")).toBeNull();
+    } finally {
+      decoy.remove();
+    }
+  });
+
+  it("ignores postMessage payloads that don't carry a known Google Maps error code", async () => {
+    // Defends against false positives from chatty third-party scripts
+    // that just happen to share the page (analytics, ad SDKs, etc.)
+    // and post unrelated messages from inside the same iframe (which
+    // shouldn't happen, but the noise floor matters either way).
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    for (const noise of [
+      "hello world",
+      { type: "ANALYTICS_PING", visitors: 3 },
+      { code: "SomeUnrelatedThing" },
+      42,
+      null,
+    ]) {
+      await act(async () => {
+        fireGoogleMapsErrorMessage(iframe!, noise);
+      });
+    }
+
+    expect(get("property-location-map-iframe")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+  });
+
+  it("clears the postMessage-reported error when the embed URL changes", async () => {
+    // Sticky error state would be a UX trap: if the operator fixes
+    // the key (or just navigates to a different property) the card
+    // would still be claiming Google rejected it. Resetting on
+    // embedUrl change gives the new attempt a fresh start.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="400 Cedar Blvd"
+            city="Phoenix"
+            state="AZ"
+            zip="85001"
+            apiKey="key-under-test"
+          />
+        </Wrapper>,
+      );
+    });
+
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, {
+        code: "RefererNotAllowedMapError",
+      });
+    });
+    expect(get("property-location-map-error")).not.toBeNull();
+
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="500 Birch Ln"
+            city="Phoenix"
+            state="AZ"
+            zip="85002"
+            apiKey="key-under-test"
+          />
+        </Wrapper>,
+      );
+    });
+
+    expect(get("property-location-map-error")).toBeNull();
+    expect(get("property-location-map-iframe")).not.toBeNull();
+  });
+
   it("renders only the parts of the address the user has filled in (street present, city/state/zip blank)", async () => {
     // Partial-address case: street only, no city/state/zip yet. The
     // card should still embed and link with whatever is filled in

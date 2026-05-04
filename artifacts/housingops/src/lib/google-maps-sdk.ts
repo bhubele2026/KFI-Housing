@@ -218,6 +218,89 @@ export function loadMapsApi(apiKey: string): Promise<{ rotated: boolean }> {
 // and Google had no result".
 const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 
+// Subscribers notified whenever the cache grows a *failure* entry
+// (`null` value). Used by the Properties page's "addresses Google can't
+// pinpoint" rollup so it picks up failures observed by *any* Maps
+// surface — the portfolio map, a per-property Location card mounted on
+// the property-detail page, etc. — without each surface having to push
+// into a parallel store. Successes don't emit because the rollup only
+// cares about the failure set, and skipping the redundant emit keeps
+// noise out of subscribers' renders.
+type GeocodeFailureListener = (failures: ReadonlySet<string>) => void;
+const geocodeFailureListeners = new Set<GeocodeFailureListener>();
+
+function notifyGeocodeFailureListeners(): void {
+  if (geocodeFailureListeners.size === 0) return;
+  // Snapshot once and hand the same Set to every listener — the
+  // returned Set is documented as read-only, and reusing the
+  // reference lets React's `useState` bail out of redundant renders
+  // when the failure set hasn't actually changed identity.
+  const snapshot = computeFailureSnapshot();
+  for (const l of geocodeFailureListeners) l(snapshot);
+}
+
+function computeFailureSnapshot(): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const [addr, point] of geocodeCache) {
+    if (point === null) out.add(addr);
+  }
+  return out;
+}
+
+/**
+ * Returns a snapshot of every address Google has definitively rejected
+ * this session (cached as `null`). Stable enough to read on render —
+ * each call walks the cache, but the cache stays small (one entry per
+ * unique address the operator has actually viewed). React consumers
+ * should pair this with `subscribeGeocodeFailures` so they re-render as
+ * new failures land.
+ */
+export function getGeocodeFailures(): ReadonlySet<string> {
+  return computeFailureSnapshot();
+}
+
+/**
+ * Subscribe to geocode-failure changes. The listener fires every time a
+ * fresh `null` entry is added to the cache (whether by `resolveGeocode`
+ * receiving an empty result from Google or by `primeGeocodeCache` being
+ * passed `null` directly). Returns an unsubscribe function suitable for
+ * direct return from a `useEffect` cleanup.
+ */
+export function subscribeGeocodeFailures(
+  listener: GeocodeFailureListener,
+): () => void {
+  geocodeFailureListeners.add(listener);
+  return () => {
+    geocodeFailureListeners.delete(listener);
+  };
+}
+
+/**
+ * Joins the four address fields into the canonical string used as the
+ * geocode cache key (e.g. "123 Main St, Austin, TX 78701"). Both the
+ * portfolio map and the per-property Location card produce identical
+ * strings via this helper, so downstream consumers (the "fix these
+ * addresses" rollup, tests priming the cache directly) can match a
+ * property to its cache entry by computing the same string. Returns ""
+ * when every field is blank — callers use that to decide a property
+ * doesn't have an address worth geocoding at all.
+ */
+export function formatGeocodeAddress(parts: {
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+}): string {
+  const street = parts.address.trim();
+  const cityStateZip = [
+    parts.city.trim(),
+    [parts.state.trim(), parts.zip.trim()].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return [street, cityStateZip].filter(Boolean).join(", ");
+}
+
 // In-flight geocode requests — also module-level. Without this, an
 // effect re-running on every parent rerender (which happens after each
 // `onGeocoded` writes back coordinates and the property list updates)
@@ -244,7 +327,14 @@ export function primeGeocodeCache(
   addr: string,
   point: { lat: number; lng: number } | null,
 ): void {
+  // A pre-existing `null` doesn't constitute a *new* failure — only
+  // notify when this write actually adds (or upgrades) a failure
+  // entry, so subscribers don't see redundant updates when stored
+  // coords prime the cache for an already-failed lookup.
+  const isNewFailure =
+    point === null && geocodeCache.get(addr) !== null;
   geocodeCache.set(addr, point);
+  if (isNewFailure) notifyGeocodeFailureListeners();
 }
 
 /**
@@ -274,6 +364,13 @@ export function resolveGeocode(
             : null;
         geocodeCache.set(addr, point);
         inFlightGeocodes.delete(addr);
+        // Surface a fresh `null` to subscribers (the Properties page's
+        // "addresses Google can't pinpoint" rollup) so the panel grows
+        // live as new failures land — both from this surface and from
+        // a per-property Location card sharing the same module-level
+        // cache. Successes don't need to emit because the rollup only
+        // tracks failures.
+        if (point === null) notifyGeocodeFailureListeners();
         resolve(point);
       });
     },
@@ -287,7 +384,11 @@ export function resolveGeocode(
 // site; lives here so tests don't need to dig at private internals.
 // Also clears the rotated-key tracker so a test that loads the SDK with
 // key "A" doesn't trick the next test (which may not call into the SDK
-// at all) into thinking a rotation already happened.
+// at all) into thinking a rotation already happened. Failure listeners
+// are intentionally NOT cleared — production subscribers attach via
+// React effects and detach on unmount, and tests that mount the
+// Properties page will register their own listener that cleanup tears
+// down between cases.
 export function __resetGoogleMapsSdkForTest(): void {
   geocodeCache.clear();
   inFlightGeocodes.clear();

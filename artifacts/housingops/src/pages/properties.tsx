@@ -27,6 +27,8 @@ import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
+import { formatGeocodeAddress } from "@/lib/google-maps-sdk";
+import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft";
@@ -496,6 +498,29 @@ export default function Properties() {
       ? null
       : customerById.get(customerFilter)?.name ?? null;
 
+  // Subscribe to the shared in-session geocode cache. Any address
+  // Google has rejected anywhere in the app — the portfolio map below,
+  // a per-property Location card the operator visited earlier, etc. —
+  // surfaces here so the rollup panel can list every property whose
+  // address Google can't pinpoint without each surface having to push
+  // into a parallel store. The set updates live as new failures land.
+  const geocodeFailures = useGeocodeFailures();
+
+  // Roll up properties whose CURRENT address string matches a cached
+  // failure. Keyed by the same canonical address string the maps use
+  // when calling the geocoder, so editing the address (which changes
+  // the cache key) automatically drops the property out of the list
+  // on the next render. Filtered properties without an address skip
+  // the lookup entirely — they don't have anything for Google to
+  // reject in the first place.
+  const propertiesNeedingAddressFix = useMemo(() => {
+    if (geocodeFailures.size === 0) return [] as Property[];
+    return properties.filter((p) => {
+      const addr = formatGeocodeAddress(p);
+      return addr.length > 0 && geocodeFailures.has(addr);
+    });
+  }, [properties, geocodeFailures]);
+
   // Ids reported back from the map for properties whose address looked
   // valid but Google couldn't actually geocode (typo'd street, removed
   // ZIP, etc). We surface those alongside truly-blank addresses in the
@@ -730,6 +755,92 @@ export default function Properties() {
               </button>
             </Badge>
           </div>
+        )}
+
+        {/*
+          Rolled-up "addresses Google can't pinpoint" panel. Sits above
+          the toolbar/table card so it's visible regardless of view mode
+          (table OR map) and stays put when the operator scrolls down
+          the table — without this the only way to spot bad addresses
+          was to flip into the map view, which most operators don't.
+
+          Driven by `useGeocodeFailures`, which subscribes to the shared
+          module-level geocode cache. Failures land here whether they
+          were observed by the portfolio map below or by a per-property
+          Location card on /properties/:id earlier in the session, so
+          the operator can fix every rejected address in one pass
+          instead of discovering them one detail page at a time.
+
+          The panel is unconditionally hidden when the failure set is
+          empty so a healthy session shows nothing at all — no empty
+          state, no nudge to look for problems that aren't there.
+        */}
+        {propertiesNeedingAddressFix.length > 0 && (
+          <Card
+            className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20"
+            data-testid="addresses-needing-review-panel"
+          >
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <MapPinOff className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-sm font-semibold">
+                  Addresses Google can't pinpoint
+                </h2>
+                <Badge
+                  variant="secondary"
+                  className="text-[11px]"
+                  data-testid="addresses-needing-review-count"
+                >
+                  {propertiesNeedingAddressFix.length}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Google had no result for these addresses this session.
+                Open each property to fix the street, city, or ZIP and
+                the pin will return on the next map view.
+              </p>
+              <ul
+                className="divide-y rounded-md border bg-card"
+                data-testid="addresses-needing-review-list"
+              >
+                {propertiesNeedingAddressFix.map((p) => {
+                  const customer = customerById.get(p.customerId);
+                  // Mirror the address shown on the property-detail
+                  // page so an operator scanning this list recognizes
+                  // exactly what string Google rejected — using the
+                  // same comma-joined form keeps the two views from
+                  // drifting visually.
+                  const addrDisplay = formatGeocodeAddress(p);
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/properties/${p.id}`)}
+                        className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-start gap-2"
+                        data-testid={`address-needing-review-${p.id}`}
+                      >
+                        <Home className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium truncate">
+                            {p.name}
+                          </span>
+                          <span className="block text-xs text-muted-foreground truncate">
+                            {addrDisplay}
+                          </span>
+                          {customer && (
+                            <span className="block text-[11px] text-muted-foreground/80 truncate">
+                              {customer.name}
+                            </span>
+                          )}
+                        </span>
+                        <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
         )}
 
         <Card>

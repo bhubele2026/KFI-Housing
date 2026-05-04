@@ -50,6 +50,7 @@ interface FakeInfoWindowState {
 
 interface FakeMap {
   listeners: Map<string, Array<() => void>>;
+  options: Record<string, unknown>;
 }
 
 interface PendingGeocode {
@@ -92,7 +93,9 @@ function installFakeGoogleMaps() {
 
   class FakeMap {
     listeners = new Map<string, Array<() => void>>();
-    constructor() {
+    options: Record<string, unknown>;
+    constructor(_el: HTMLElement, options: Record<string, unknown>) {
+      this.options = options;
       mapsState.map = this as unknown as FakeMap;
     }
     setCenter() {}
@@ -707,6 +710,149 @@ describe("PortfolioMap geocode deduplication", () => {
 
     expect(mapsState.pendingGeocodes).toHaveLength(0);
     expect(onGeocoded).not.toHaveBeenCalled();
+  });
+});
+
+describe("PortfolioMap — branded Map ID", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    __resetPortfolioMapCachesForTest();
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+    // Defensive: clean up the env override even if a test threw before
+    // its inline cleanup ran, so the next test starts from the same
+    // baseline as production code.
+    delete (
+      import.meta.env as unknown as Record<string, string | undefined>
+    ).VITE_GOOGLE_MAPS_MAP_ID;
+  });
+
+  it("passes the explicit mapId prop straight to google.maps.Map", async () => {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={[makeProperty()]}
+          onPinClick={vi.fn()}
+          apiKey="test-key"
+          mapId="HOUSINGOPS_BRANDED_MAP_ID"
+        />,
+      );
+    });
+    await settle();
+    expect(mapsState.map?.options.mapId).toBe("HOUSINGOPS_BRANDED_MAP_ID");
+  });
+
+  it("uses the VITE_GOOGLE_MAPS_MAP_ID env var when no prop is supplied", async () => {
+    (
+      import.meta.env as unknown as Record<string, string | undefined>
+    ).VITE_GOOGLE_MAPS_MAP_ID = "env-supplied-map-id";
+    try {
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="test-key"
+          />,
+        );
+      });
+      await settle();
+      expect(mapsState.map?.options.mapId).toBe("env-supplied-map-id");
+    } finally {
+      delete (
+        import.meta.env as unknown as Record<string, string | undefined>
+      ).VITE_GOOGLE_MAPS_MAP_ID;
+    }
+  });
+
+  it("falls back to DEMO_MAP_ID when neither prop nor env var is set so AdvancedMarkerElement still renders", async () => {
+    // Sanity-check that no leaked env value influences this test.
+    delete (
+      import.meta.env as unknown as Record<string, string | undefined>
+    ).VITE_GOOGLE_MAPS_MAP_ID;
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={[makeProperty()]}
+          onPinClick={vi.fn()}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+    expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
+  });
+
+  it("ignores a whitespace-only env value and falls back to DEMO_MAP_ID rather than silently breaking the map", async () => {
+    (
+      import.meta.env as unknown as Record<string, string | undefined>
+    ).VITE_GOOGLE_MAPS_MAP_ID = "   ";
+    try {
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="test-key"
+          />,
+        );
+      });
+      await settle();
+      expect(mapsState.map?.options.mapId).toBe("DEMO_MAP_ID");
+    } finally {
+      delete (
+        import.meta.env as unknown as Record<string, string | undefined>
+      ).VITE_GOOGLE_MAPS_MAP_ID;
+    }
+  });
+
+  it("prefers the explicit prop over the env var so tests can override per render", async () => {
+    (
+      import.meta.env as unknown as Record<string, string | undefined>
+    ).VITE_GOOGLE_MAPS_MAP_ID = "env-id";
+    try {
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="test-key"
+            mapId="prop-id"
+          />,
+        );
+      });
+      await settle();
+      expect(mapsState.map?.options.mapId).toBe("prop-id");
+    } finally {
+      delete (
+        import.meta.env as unknown as Record<string, string | undefined>
+      ).VITE_GOOGLE_MAPS_MAP_ID;
+    }
   });
 });
 

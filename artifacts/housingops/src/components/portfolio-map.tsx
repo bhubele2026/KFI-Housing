@@ -152,6 +152,17 @@ interface PortfolioMapProps {
    * without callers having to thread it through every render.
    */
   apiKey?: string;
+  /**
+   * Override the Google Cloud Map ID for tests. Defaults to the
+   * runtime VITE_GOOGLE_MAPS_MAP_ID, which points at the
+   * HousingOps-branded vector map style configured in the team's
+   * Google Cloud Console (custom palette + reduced POI clutter). When
+   * unset, the map falls back to Google's built-in `DEMO_MAP_ID` so
+   * the app still renders pins in dev environments that haven't yet
+   * provisioned a styled Map ID — AdvancedMarkerElement requires
+   * *some* Map ID to render at all.
+   */
+  mapId?: string;
 }
 
 /**
@@ -404,9 +415,21 @@ export function PortfolioMap({
   onUnmappableChange,
   onGeocoded,
   apiKey,
+  mapId,
 }: PortfolioMapProps) {
   const resolvedKey =
     apiKey ?? (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? "";
+  // Prefer (in order): an explicit prop (used by tests), the operator's
+  // configured branded Map ID, or Google's built-in DEMO_MAP_ID as a
+  // last-resort fallback. Trim the env var so an accidental
+  // whitespace-only value doesn't pass the truthy check and break the
+  // map silently. AdvancedMarkerElement refuses to render without a
+  // valid Map ID, so the fallback is what keeps a fresh dev workspace
+  // from showing an empty canvas.
+  const envMapId = (
+    (import.meta.env.VITE_GOOGLE_MAPS_MAP_ID as string | undefined) ?? ""
+  ).trim();
+  const resolvedMapId = mapId ?? (envMapId !== "" ? envMapId : "DEMO_MAP_ID");
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
   const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);
@@ -470,11 +493,16 @@ export function PortfolioMap({
           zoom: 4,
           // AdvancedMarkerElement requires a Map ID — without one
           // Google falls back to a raster map and logs a warning that
-          // the markers will not render. `DEMO_MAP_ID` is Google's
-          // built-in development Map ID and is supported indefinitely
-          // for AdvancedMarkerElement preview/development use without
-          // needing a Cloud Console-issued ID.
-          mapId: "DEMO_MAP_ID",
+          // the markers will not render. In production this points at
+          // a HousingOps-owned Map ID configured in the Google Cloud
+          // Console (custom palette + reduced POI clutter that matches
+          // the rest of the app), supplied via VITE_GOOGLE_MAPS_MAP_ID
+          // so dev and prod can use different IDs without code
+          // changes. When that env var is unset the component falls
+          // back to Google's built-in `DEMO_MAP_ID`, which renders an
+          // unstyled map but at least lets AdvancedMarkerElement
+          // attach pins so a fresh workspace is never blank.
+          mapId: resolvedMapId,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -497,7 +525,7 @@ export function PortfolioMap({
     return () => {
       cancelled = true;
     };
-  }, [resolvedKey]);
+  }, [resolvedKey, resolvedMapId]);
 
   // Geocode any addresses we don't already have cached. Persisted
   // lat/lng coming in on the property object are used directly so the

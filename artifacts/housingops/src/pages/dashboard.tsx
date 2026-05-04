@@ -325,13 +325,13 @@ export default function Dashboard() {
               <CardTitle>Property Performance</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table containerClassName="max-h-[300px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Occupancy</TableHead>
-                    <TableHead className="text-right">Profit/Loss</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">Property</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">Customer</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">Occupancy</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card text-right">Profit/Loss</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

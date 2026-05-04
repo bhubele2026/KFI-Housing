@@ -35,6 +35,7 @@ import type {
   PropertyUpdate,
   Room,
   RoomUpdate,
+  RuntimeConfig,
   Utility,
   UtilityUpdate,
 } from "./api.schemas";
@@ -116,6 +117,89 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns the small set of runtime values the housingops web app needs
+but cannot bake into its bundle — currently just the Google Maps
+Embed API key. The key is exposed deliberately so it can be rotated
+on the server without restarting / rebuilding the web workflow.
+
+This endpoint must NEVER leak any other secret. Add new fields here
+only when they are already safe to ship to the browser.
+
+ * @summary Read non-secret runtime config the web app needs at boot
+ */
+export const getGetRuntimeConfigUrl = () => {
+  return `/api/config`;
+};
+
+export const getRuntimeConfig = async (
+  options?: RequestInit,
+): Promise<RuntimeConfig> => {
+  return customFetch<RuntimeConfig>(getGetRuntimeConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRuntimeConfigQueryKey = () => {
+  return [`/api/config`] as const;
+};
+
+export const getGetRuntimeConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRuntimeConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRuntimeConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRuntimeConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getRuntimeConfig>>
+  > = ({ signal }) => getRuntimeConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRuntimeConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRuntimeConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRuntimeConfig>>
+>;
+export type GetRuntimeConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Read non-secret runtime config the web app needs at boot
+ */
+
+export function useGetRuntimeConfig<
+  TData = Awaited<ReturnType<typeof getRuntimeConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRuntimeConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRuntimeConfigQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

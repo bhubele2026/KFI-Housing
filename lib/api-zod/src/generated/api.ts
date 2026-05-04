@@ -16,6 +16,30 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Returns the small set of runtime values the housingops web app needs
+but cannot bake into its bundle — currently just the Google Maps
+Embed API key. The key is exposed deliberately so it can be rotated
+on the server without restarting / rebuilding the web workflow.
+
+This endpoint must NEVER leak any other secret. Add new fields here
+only when they are already safe to ship to the browser.
+
+ * @summary Read non-secret runtime config the web app needs at boot
+ */
+export const GetRuntimeConfigResponse = zod
+  .object({
+    googleMapsApiKey: zod
+      .string()
+      .nullable()
+      .describe(
+        'Google Maps Embed API key, or `null` when the operator hasn\'t\nconfigured one yet. The web app uses `null` to render its\ngraceful \"Open in Google Maps\" fallback instead of an embed.\n',
+      ),
+  })
+  .describe(
+    "Runtime config the web app fetches once on mount. The Google Maps\nEmbed API key is intentionally exposed (the embed URL puts it on\nthe wire anyway) but no other secret may be added here.\n",
+  );
+
+/**
  * @summary Wipe all data and re-seed with sample data
  */
 export const ResetToSampleDataResponse = zod.object({

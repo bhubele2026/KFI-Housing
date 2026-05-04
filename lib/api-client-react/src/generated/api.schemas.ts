@@ -9,6 +9,23 @@ export interface HealthStatus {
   status: string;
 }
 
+/**
+ * Runtime config the web app fetches once on mount. The Google Maps
+Embed API key is intentionally exposed (the embed URL puts it on
+the wire anyway) but no other secret may be added here.
+
+ */
+export interface RuntimeConfig {
+  /**
+   * Google Maps Embed API key, or `null` when the operator hasn't
+configured one yet. The web app uses `null` to render its
+graceful "Open in Google Maps" fallback instead of an embed.
+
+   * @nullable
+   */
+  googleMapsApiKey: string | null;
+}
+
 export interface Customer {
   id: string;
   name: string;

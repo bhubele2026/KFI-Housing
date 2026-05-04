@@ -14,6 +14,13 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// PropertyLocationMap fetches the Google Maps key from the api-server's
+// `/api/config` endpoint via react-query (Task #154). These tests don't
+// stand up a QueryClientProvider, so render it as a benign placeholder.
+vi.mock("@/components/property-location-map", () => ({
+  PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
+}));
+
 vi.mock("framer-motion", async () => {
   const { createMotionMock } = await import("@/test-utils/framer-motion-mock");
   return createMotionMock();

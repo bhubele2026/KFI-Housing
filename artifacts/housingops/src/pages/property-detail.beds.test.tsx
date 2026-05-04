@@ -26,6 +26,14 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// PropertyLocationMap fetches the Google Maps key from the api-server's
+// `/api/config` endpoint via react-query (Task #154). These tests don't
+// stand up a QueryClientProvider, so render it as a benign placeholder
+// to avoid pulling react-query into every property-detail test setup.
+vi.mock("@/components/property-location-map", () => ({
+  PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
+}));
+
 // framer-motion's `motion.<tag>` becomes a plain element of the same tag,
 // stripping animation-only props. This keeps DOM semantics intact. The
 // shared mock caches one component per tag (see

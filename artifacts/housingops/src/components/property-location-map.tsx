@@ -1,5 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
+import {
+  useGetRuntimeConfig,
+  getGetRuntimeConfigQueryKey,
+} from "@workspace/api-client-react";
 
 interface PropertyLocationMapProps {
   address: string;
@@ -7,11 +11,19 @@ interface PropertyLocationMapProps {
   state: string;
   zip: string;
   /**
-   * Inject the Maps API key for tests. Defaults to the runtime
-   * VITE_GOOGLE_MAPS_API_KEY so production code paths use the real key
-   * without callers having to thread it through every render.
+   * Inject the Maps API key for tests so they don't have to stand up a
+   * fake `/api/config` endpoint. When provided, the component skips the
+   * runtime config fetch entirely and uses this value directly:
+   *   - `undefined` (default) — fetch the key from the api-server
+   *     `/api/config` endpoint via react-query
+   *   - `"some-key"`          — render the embed branch with this key
+   *   - `""` / `null`         — render the friendly fallback branch
+   *
+   * Production code paths leave this `undefined` so an operator can
+   * rotate the key on the api-server side without rebuilding the web
+   * bundle (Task #154).
    */
-  apiKey?: string;
+  apiKey?: string | null;
 }
 
 function formatAddressLines(
@@ -41,8 +53,6 @@ export function PropertyLocationMap({
   zip,
   apiKey,
 }: PropertyLocationMapProps) {
-  const resolvedKey =
-    apiKey ?? (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? "";
   const { street, cityStateZip, full } = formatAddressLines(
     address,
     city,
@@ -51,6 +61,26 @@ export function PropertyLocationMap({
   );
 
   const hasAnyAddress = full.length > 0;
+
+  // Only hit the network when the caller didn't pre-supply a key. Tests
+  // pass `apiKey` explicitly so they never fire a real fetch; production
+  // leaves it undefined so we read the key from `/api/config`.
+  //
+  // We also skip the fetch when there's no address to render — the
+  // Location card shows its empty state in that case and the key
+  // wouldn't be used anyway, so there's no reason to wake the api-server
+  // up for it.
+  const shouldFetchConfig = apiKey === undefined && hasAnyAddress;
+  const configQuery = useGetRuntimeConfig({
+    query: {
+      // Supply queryKey explicitly so TS is happy — the orval-generated
+      // options helper falls back to the same default when omitted, but
+      // react-query v5's `UseQueryOptions` type marks `queryKey` as
+      // required.
+      queryKey: getGetRuntimeConfigQueryKey(),
+      enabled: shouldFetchConfig,
+    },
+  });
 
   if (!hasAnyAddress) {
     return (
@@ -76,6 +106,21 @@ export function PropertyLocationMap({
     );
   }
 
+  // Resolve the effective key. Test injection wins; otherwise we use the
+  // value from the runtime config endpoint (which can be `null` when the
+  // operator hasn't set GOOGLE_MAPS_API_KEY yet).
+  const fetchedKey =
+    configQuery.data?.googleMapsApiKey == null
+      ? ""
+      : configQuery.data.googleMapsApiKey;
+  const resolvedKey = apiKey === undefined ? fetchedKey : (apiKey ?? "");
+
+  // While the config request is in flight we render a neutral placeholder
+  // instead of the "set up your key" copy — we don't yet know whether a
+  // key is configured, and flashing the scary warning before the answer
+  // arrives would mislead the operator.
+  const isConfigLoading = shouldFetchConfig && configQuery.isPending;
+
   const encoded = encodeURIComponent(full);
   const searchUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
@@ -92,7 +137,18 @@ export function PropertyLocationMap({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {embedUrl ? (
+        {isConfigLoading ? (
+          <div
+            className="rounded-lg border bg-muted/30 aspect-[16/9] w-full flex items-center justify-center text-xs text-muted-foreground"
+            data-testid="property-location-map-loading"
+            aria-busy="true"
+          >
+            <span className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Loading map…
+            </span>
+          </div>
+        ) : embedUrl ? (
           <a
             href={searchUrl}
             target="_blank"
@@ -124,8 +180,9 @@ export function PropertyLocationMap({
             <div className="flex items-start gap-2 text-xs text-muted-foreground">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <span>
-                Set <code className="font-mono text-[11px] bg-muted px-1 rounded">VITE_GOOGLE_MAPS_API_KEY</code>{" "}
-                to show an embedded map preview here.
+                A Google Maps API key isn't configured on the server yet, so
+                the embedded preview is hidden. You can still open this
+                address in Google Maps below.
               </span>
             </div>
             <a

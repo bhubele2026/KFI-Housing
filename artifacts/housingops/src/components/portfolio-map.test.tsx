@@ -1675,6 +1675,90 @@ describe("PortfolioMap — runtime config", () => {
     expect(mapsState.infoWindow).not.toBe(oldInfoWindowState);
   });
 
+  it("disposes the map's markers and info window when the component is unmounted, leaving no stale references", async () => {
+    // Tasks #174 and #180 pinned down disposal on the API-key and Map
+    // ID rotation paths, both of which re-run the load effect's
+    // cleanup. The same cleanup also runs on plain unmount (e.g. the
+    // operator navigates away from the portfolio page) — that path
+    // shares the same `return () => { ... }` block today, so it works
+    // in practice, but a future refactor that splits the cleanup into
+    // rotation-only branches could silently leak the
+    // AdvancedMarkerElement instances and the shared InfoWindow's
+    // last-set content node every time the operator visits the
+    // portfolio page. This test makes that regression loud.
+    //
+    // Unmount does NOT reload the SDK script, so this follows the
+    // shape of the Map ID rotation test rather than the more
+    // elaborate key-rotation test.
+    //
+    // Pre-supply lat/lng so a marker is created synchronously and we
+    // don't have to drive the geocoder before unmounting.
+    const propWithCoords = makeProperty({
+      id: "p1",
+      lat: 30.2672,
+      lng: -97.7431,
+    });
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[propWithCoords]}
+            onPinClick={vi.fn()}
+            apiKey="stable-key"
+            mapId="map-A"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Sanity check: the initial map mounted and a marker exists.
+    // Capture both so we can verify they're torn down rather than
+    // just shadowed.
+    expect(mapsState.map).not.toBeNull();
+    expect(mapsState.markers).toHaveLength(1);
+    const capturedMarker = mapsState.markers[0];
+    expect(capturedMarker.map).not.toBeNull();
+
+    // Open the bubble so we can later assert the InfoWindow was
+    // explicitly closed (closeCount goes up). Without opening it
+    // first, closeCount would still be 0 — useful, but a weaker
+    // signal that disposal actually ran.
+    await act(async () => {
+      fireMarkerEvent(capturedMarker, "gmp-click");
+    });
+    expect(mapsState.infoWindow).not.toBeNull();
+    const capturedInfoWindowState = mapsState.infoWindow!;
+    expect(capturedInfoWindowState.isOpen).toBe(true);
+    expect(capturedInfoWindowState.closeCount).toBe(0);
+
+    // Unmount the React tree. The load effect's cleanup must fire,
+    // tearing down both the marker and the info window. Null `root`
+    // out so the suite's afterEach doesn't try to unmount again.
+    const r = root!;
+    await act(async () => {
+      r.unmount();
+    });
+    root = null;
+
+    // Disposal happened: the captured marker has been removed from
+    // its parent map (AdvancedMarkerElement's documented teardown is
+    // assigning `map = null`, which the fake mirrors by also
+    // splicing the marker out of `mapsState.markers`). Without the
+    // cleanup, `capturedMarker.map` would still point at the
+    // unmounted google.maps.Map and the array would still contain
+    // it.
+    expect(capturedMarker.map).toBeNull();
+    expect(mapsState.markers).not.toContain(capturedMarker);
+    // The InfoWindow we captured was explicitly closed by the
+    // cleanup — proves we didn't leave a stale bubble (and its
+    // last-set content node) attached against a vanished marker.
+    expect(capturedInfoWindowState.closeCount).toBeGreaterThan(0);
+  });
+
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
     const fetchMock = vi.fn(
       async () =>

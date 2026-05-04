@@ -47,7 +47,7 @@ import {
   useRecentLeaseUploads,
   type RecentLeaseUpload,
 } from "@/lib/recent-lease-uploads";
-import { INCLUDED_ITEM_SUGGESTIONS, type Lease, type Property } from "@/data/mockData";
+import { type Lease, type Property } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 
 const NEW_PROPERTY_VALUE = "__new_property__";
@@ -79,7 +79,6 @@ interface LeaseDraft {
   // draft so the operator can confirm / edit them in the reviewer dialog
   // before the lease is saved.
   clauses: string;
-  includedItems: string[];
   buyoutAvailable: boolean;
   /** Stored as a string so the input stays controlled and "" means "unset". */
   buyoutCost: string;
@@ -117,32 +116,6 @@ function emptyPropertyDraft(extracted: ExtractedLeaseFromPdf): PropertyDraft {
   };
 }
 
-/**
- * Snap each extracted included item to its canonical capitalisation when it
- * matches one of `INCLUDED_ITEM_SUGGESTIONS` (case-insensitively). That way
- * "water" / "WATER" / "Water" all collapse to "Water" — which matches the
- * checklist on the lease detail page so the chip shows up as already
- * selected — and we drop duplicates / blanks introduced by the LLM.
- */
-function normalizeIncludedItems(items: readonly string[] | null | undefined): string[] {
-  if (!items || items.length === 0) return [];
-  const canonical = new Map(
-    INCLUDED_ITEM_SUGGESTIONS.map((s) => [s.toLowerCase(), s]),
-  );
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of items) {
-    const trimmed = (raw ?? "").trim();
-    if (!trimmed) continue;
-    const lc = trimmed.toLowerCase();
-    const item = canonical.get(lc) ?? trimmed;
-    if (seen.has(item.toLowerCase())) continue;
-    seen.add(item.toLowerCase());
-    out.push(item);
-  }
-  return out;
-}
-
 function leaseDraftFromExtracted(extracted: ExtractedLeaseFromPdf): LeaseDraft {
   return {
     startDate: extracted.startDate ?? "",
@@ -152,7 +125,6 @@ function leaseDraftFromExtracted(extracted: ExtractedLeaseFromPdf): LeaseDraft {
     status: "Active",
     notes: extracted.notes ?? "",
     clauses: extracted.clauses ?? "",
-    includedItems: normalizeIncludedItems(extracted.includedItems),
     buyoutAvailable: extracted.buyoutAvailable ?? false,
     buyoutCost:
       extracted.buyoutAvailable && extracted.buyoutCost != null
@@ -628,7 +600,6 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         // reviewer dialog (task #121). Operators can still tweak anything
         // further on the lease detail page after import.
         clauses: reviewingItem.leaseDraft.clauses,
-        includedItems: reviewingItem.leaseDraft.includedItems,
         buyoutAvailable,
         buyoutCost,
       };

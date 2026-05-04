@@ -198,28 +198,6 @@ export const ALL_FURNISHINGS_COUNT = FURNISHING_CATEGORIES.reduce(
 export const RentFrequencySchema = z.enum(["Weekly", "Bi-Weekly", "Monthly"]);
 export type RentFrequency = z.infer<typeof RentFrequencySchema>;
 
-// Suggested defaults for the lease "Included items" checklist. Operators
-// can also type free-form items, but having a single canonical list of
-// common inclusions on every lease keeps the data importable / filterable
-// (e.g. "show me every lease where Lawn care is included") and matches the
-// quick-pick experience the property's furnishings tab already provides.
-export const INCLUDED_ITEM_SUGGESTIONS: readonly string[] = [
-  "Water",
-  "Electric",
-  "Gas",
-  "Internet",
-  "Cable / TV",
-  "Garbage",
-  "Lawn care",
-  "Snow removal",
-  "Pest control",
-  "Parking",
-  "Furnishings",
-  "Pool access",
-  "Gym access",
-  "Storage",
-] as const;
-
 export const LeaseSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
@@ -235,7 +213,6 @@ export const LeaseSchema = z.object({
   // (the DB columns have defaults), so on the read path the defaults are a
   // no-op — they only matter for legacy import.
   clauses: z.string().optional().default(""),
-  includedItems: z.array(z.string()).optional().default([]),
   buyoutAvailable: z.boolean().optional().default(false),
   buyoutCost: z.number().nullable().optional().default(null),
 });
@@ -782,14 +759,13 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-// Defaults for the four extended lease fields. Spread into every mock lease
-// so the literals stay short while still satisfying the (now wider) Lease
-// type. Real seed data with richer values lives in `api-server/src/lib/seed.ts`
-// — this in-memory mock is only used by tests and storybook surfaces that
+// Defaults for the extended lease fields. Spread into every mock lease so
+// the literals stay short while still satisfying the (now wider) Lease type.
+// Real seed data with richer values lives in `api-server/src/lib/seed.ts` —
+// this in-memory mock is only used by tests and storybook surfaces that
 // don't talk to the API.
 const LEASE_EXTENDED_DEFAULTS = {
   clauses: "",
-  includedItems: [] as string[],
   buyoutAvailable: false,
   buyoutCost: null as number | null,
 };

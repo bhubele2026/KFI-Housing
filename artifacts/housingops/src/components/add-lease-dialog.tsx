@@ -102,7 +102,6 @@ export function AddLeaseDialog({
       // Extended fields default empty here — operators fill them in from the
       // dedicated lease detail page after creation.
       clauses: "",
-      includedItems: [],
       buyoutAvailable: false,
       buyoutCost: null,
     });

@@ -24,11 +24,10 @@ export const ExtractedLeaseSchema = z.object({
   monthlyRent: z.number().nullable(),
   securityDeposit: z.number().nullable(),
   notes: z.string(),
-  // Extended fields surfaced on the lease detail page (clauses tab, included
-  // items checklist, buyout option). Default to empty / false / null when
-  // the PDF doesn't mention them so the reviewer dialog gets a stable shape.
+  // Extended fields surfaced on the lease detail page (clauses tab, buyout
+  // option). Default to empty / false / null when the PDF doesn't mention
+  // them so the reviewer dialog gets a stable shape.
   clauses: z.string().default(""),
-  includedItems: z.array(z.string()).default([]),
   buyoutAvailable: z.boolean().default(false),
   buyoutCost: z.number().nullable().default(null),
   confidence: z.enum(["high", "medium", "low"]),
@@ -54,7 +53,6 @@ markdown fences, no commentary:
   "securityDeposit":  number | null,  // in USD
   "notes":            string,         // 1-3 short sentences summarising notable lease terms; "" if nothing notable
   "clauses":          string,         // notable lease clauses worth surfacing for the operator (see rules)
-  "includedItems":    string[],       // utilities/services included in rent (see rules)
   "buyoutAvailable":  boolean,        // true only when an early-termination buyout is explicitly available
   "buyoutCost":       number | null,  // flat USD buyout fee when stated, else null
   "confidence":       "high" | "medium" | "low"
@@ -69,13 +67,6 @@ Rules:
   early termination, renewal, guests, alterations, etc.). Separate
   individual clauses with blank lines. Use "" if the lease has nothing
   beyond boilerplate worth flagging. Do NOT copy the entire lease verbatim.
-- "includedItems" lists utilities or services the LANDLORD covers as part of
-  rent (NOT items the tenant pays separately). Prefer items from this
-  canonical list when they apply: Water, Electric, Gas, Internet,
-  Cable / TV, Garbage, Lawn care, Snow removal, Pest control, Parking,
-  Furnishings, Pool access, Gym access, Storage. You may add other
-  short, title-cased items (e.g. "Boat slip") if the lease clearly
-  includes them. Use [] if nothing is included or it's unclear.
 - "buyoutAvailable" is true ONLY when the lease explicitly grants the
   tenant the option to terminate early by paying a defined fee
   (sometimes called "buyout", "lease break fee", "early termination fee").

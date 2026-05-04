@@ -249,7 +249,6 @@ function makeFreshState(): State {
         // tests below. l1 has buyout + clauses, l2 below has neither so the
         // filter and badge render code paths are both covered.
         clauses: "Tenant must give 30 days notice.",
-        includedItems: [],
         buyoutAvailable: true,
         buyoutCost: 5000,
       },
@@ -267,7 +266,6 @@ function makeFreshState(): State {
         status: "Active",
         notes: "",
         clauses: "",
-        includedItems: [],
         buyoutAvailable: false,
         buyoutCost: null,
       },

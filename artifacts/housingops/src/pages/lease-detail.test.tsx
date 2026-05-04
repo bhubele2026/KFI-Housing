@@ -290,7 +290,6 @@ function buildLease(over: Record<string, unknown> = {}): Record<string, unknown>
     status: "Active",
     notes: "",
     clauses: "",
-    includedItems: [],
     buyoutAvailable: false,
     buyoutCost: null,
     ...over,

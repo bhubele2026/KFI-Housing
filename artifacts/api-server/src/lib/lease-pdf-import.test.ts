@@ -76,7 +76,6 @@ function makeExtracted(overrides: Partial<ExtractedLease> = {}): ExtractedLease 
     securityDeposit: null,
     notes: "",
     clauses: "",
-    includedItems: [],
     buyoutAvailable: false,
     buyoutCost: null,
     confidence: "medium",

@@ -141,10 +141,6 @@ export const ImportDataBody = zod.object({
         .string()
         .optional()
         .describe("Free-form clause text (additional terms \/ addenda)."),
-      includedItems: zod
-        .array(zod.string())
-        .optional()
-        .describe("Items included in the lease (e.g. utilities, parking)."),
       buyoutAvailable: zod
         .boolean()
         .optional()
@@ -645,10 +641,6 @@ export const ListLeasesResponseItem = zod.object({
     .string()
     .optional()
     .describe("Free-form clause text (additional terms \/ addenda)."),
-  includedItems: zod
-    .array(zod.string())
-    .optional()
-    .describe("Items included in the lease (e.g. utilities, parking)."),
   buyoutAvailable: zod
     .boolean()
     .optional()
@@ -683,10 +675,6 @@ export const CreateLeaseBody = zod.object({
     .string()
     .optional()
     .describe("Free-form clause text (additional terms \/ addenda)."),
-  includedItems: zod
-    .array(zod.string())
-    .optional()
-    .describe("Items included in the lease (e.g. utilities, parking)."),
   buyoutAvailable: zod
     .boolean()
     .optional()
@@ -741,11 +729,6 @@ export const ImportLeasePdfResponse = zod.object({
         .describe(
           "Free-form summary of notable lease clauses (pet policy, late fees, etc.). Empty when none.",
         ),
-      includedItems: zod
-        .array(zod.string())
-        .describe(
-          'Utilities or services included in rent. Canonical strings preferred (e.g. \"Water\").',
-        ),
       buyoutAvailable: zod
         .boolean()
         .describe(
@@ -760,7 +743,7 @@ export const ImportLeasePdfResponse = zod.object({
       confidence: zod.enum(["high", "medium", "low"]),
     })
     .describe(
-      'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` \/\n`[]` \/ `false` for the non-nullable string \/ array \/ boolean fields)\nso the user can fill it in during the review step.\n',
+      'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` \/\n`false` for the non-nullable string \/ boolean fields) so the user can\nfill it in during the review step.\n',
     ),
   topMatch: zod
     .object({
@@ -815,7 +798,6 @@ export const UpdateLeaseBody = zod.object({
   status: zod.enum(["Active", "Expired", "Upcoming"]).optional(),
   notes: zod.string().optional(),
   clauses: zod.string().optional(),
-  includedItems: zod.array(zod.string()).optional(),
   buyoutAvailable: zod.boolean().optional(),
   buyoutCost: zod.number().nullish(),
 });
@@ -840,10 +822,6 @@ export const UpdateLeaseResponse = zod.object({
     .string()
     .optional()
     .describe("Free-form clause text (additional terms \/ addenda)."),
-  includedItems: zod
-    .array(zod.string())
-    .optional()
-    .describe("Items included in the lease (e.g. utilities, parking)."),
   buyoutAvailable: zod
     .boolean()
     .optional()

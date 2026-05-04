@@ -196,7 +196,6 @@ function GlobalLeasesConsumer() {
             status: "Upcoming",
             notes: "added from global page",
             clauses: "",
-            includedItems: [],
             buyoutAvailable: false,
             buyoutCost: null,
           })

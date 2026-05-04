@@ -17,7 +17,6 @@ export interface LeaseUpdate {
   status?: LeaseUpdateStatus;
   notes?: string;
   clauses?: string;
-  includedItems?: string[];
   buyoutAvailable?: boolean;
   /** @nullable */
   buyoutCost?: number | null;

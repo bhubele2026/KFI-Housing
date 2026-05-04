@@ -202,8 +202,6 @@ export interface Lease {
   notes: string;
   /** Free-form clause text (additional terms / addenda). */
   clauses?: string;
-  /** Items included in the lease (e.g. utilities, parking). */
-  includedItems?: string[];
   /** Whether the lease has a buyout option. */
   buyoutAvailable?: boolean;
   /**
@@ -231,7 +229,6 @@ export interface LeaseUpdate {
   status?: LeaseUpdateStatus;
   notes?: string;
   clauses?: string;
-  includedItems?: string[];
   buyoutAvailable?: boolean;
   /** @nullable */
   buyoutCost?: number | null;
@@ -415,8 +412,8 @@ export const LeasePdfExtractedConfidence = {
 /**
  * Lease fields parsed from the uploaded PDF. Any field the LLM could not
 identify with reasonable certainty is returned as `null` (or `""` /
-`[]` / `false` for the non-nullable string / array / boolean fields)
-so the user can fill it in during the review step.
+`false` for the non-nullable string / boolean fields) so the user can
+fill it in during the review step.
 
  */
 export interface LeasePdfExtracted {
@@ -435,8 +432,6 @@ export interface LeasePdfExtracted {
   notes: string;
   /** Free-form summary of notable lease clauses (pet policy, late fees, etc.). Empty when none. */
   clauses: string;
-  /** Utilities or services included in rent. Canonical strings preferred (e.g. "Water"). */
-  includedItems: string[];
   /** True only when the lease explicitly grants an early-termination buyout option. */
   buyoutAvailable: boolean;
   /** Flat USD buyout fee when stated, else null. Always null when `buyoutAvailable` is false. */

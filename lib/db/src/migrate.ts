@@ -2,6 +2,7 @@ import type { PgDatabase } from "drizzle-orm/pg-core";
 import { db, pool } from "./client";
 import * as schema from "./schema";
 import { backfillRoomsIfNeeded } from "./migrations/backfill-rooms";
+import { dropLeaseIncludedItemsIfNeeded } from "./migrations/drop-lease-included-items";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -33,6 +34,11 @@ export async function pushSchemaIfNeeded(
   // Property → Rooms → Beds shape BEFORE drizzle diffs the schema, so the
   // diff afterwards is empty (and free of any data-loss warnings).
   await backfillRoomsIfNeeded(pool, log);
+
+  // Drop the legacy `leases.included_items` column BEFORE drizzle diffs the
+  // schema. Otherwise pushSchema would see the missing column as a drop and
+  // refuse to apply (hasDataLoss). Idempotent — no-op once the column is gone.
+  await dropLeaseIncludedItemsIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

@@ -708,11 +708,11 @@ components:
       example: "2026-05-31"
     Lease:
       type: object
-      # The four extended fields (clauses, includedItems, buyoutAvailable,
-      # buyoutCost) are intentionally NOT required so older import payloads
-      # and pre-extension API clients keep parsing. They are always present
-      # in fresh API responses (the DB columns have defaults) but consumers
-      # that round-trip them must tolerate their absence on the way IN.
+      # The extended fields (clauses, buyoutAvailable, buyoutCost) are
+      # intentionally NOT required so older import payloads and pre-extension
+      # API clients keep parsing. They are always present in fresh API
+      # responses (the DB columns have defaults) but consumers that round-trip
+      # them must tolerate their absence on the way IN.
       required: [id, propertyId, startDate, endDate, monthlyRent, securityDeposit, status, notes]
       properties:
         id: { type: string }
@@ -726,10 +726,6 @@ components:
         clauses:
           type: string
           description: "Free-form clause text (additional terms / addenda)."
-        includedItems:
-          type: array
-          items: { type: string }
-          description: "Items included in the lease (e.g. utilities, parking)."
         buyoutAvailable:
           type: boolean
           description: "Whether the lease has a buyout option."
@@ -747,9 +743,6 @@ components:
         status: { type: string, enum: [Active, Expired, Upcoming] }
         notes: { type: string }
         clauses: { type: string }
-        includedItems:
-          type: array
-          items: { type: string }
         buyoutAvailable: { type: boolean }
         buyoutCost:
           type: ["number", "null"]
@@ -886,15 +879,14 @@ components:
         - securityDeposit
         - notes
         - clauses
-        - includedItems
         - buyoutAvailable
         - buyoutCost
         - confidence
       description: |
         Lease fields parsed from the uploaded PDF. Any field the LLM could not
         identify with reasonable certainty is returned as `null` (or `""` /
-        `[]` / `false` for the non-nullable string / array / boolean fields)
-        so the user can fill it in during the review step.
+        `false` for the non-nullable string / boolean fields) so the user can
+        fill it in during the review step.
       properties:
         propertyName: { type: string, nullable: true }
         propertyAddress: { type: string, nullable: true }
@@ -910,10 +902,6 @@ components:
         clauses:
           type: string
           description: Free-form summary of notable lease clauses (pet policy, late fees, etc.). Empty when none.
-        includedItems:
-          type: array
-          items: { type: string }
-          description: Utilities or services included in rent. Canonical strings preferred (e.g. "Water").
         buyoutAvailable:
           type: boolean
           description: True only when the lease explicitly grants an early-termination buyout option.

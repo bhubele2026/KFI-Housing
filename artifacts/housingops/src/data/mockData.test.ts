@@ -473,9 +473,9 @@ describe("toMonthlyCharge", () => {
 });
 
 describe("LeaseSchema backward compatibility", () => {
-  // The four extended lease fields (clauses, includedItems, buyoutAvailable,
-  // buyoutCost) were added in task #120. Backups exported BEFORE this version
-  // do not contain those keys, and the import path on the data store calls
+  // The extended lease fields (clauses, buyoutAvailable, buyoutCost) were
+  // added in task #120. Backups exported BEFORE this version do not contain
+  // those keys, and the import path on the data store calls
   // `LeaseSchema.parse` on every row. If the schema rejected payloads
   // missing the new keys, every legacy backup would fail to import — which
   // is exactly the regression these tests guard against.
@@ -493,7 +493,6 @@ describe("LeaseSchema backward compatibility", () => {
   it("parses a v1/v2/v3 payload with no extended fields and fills sensible defaults", () => {
     const parsed = LeaseSchema.parse(legacyLease);
     expect(parsed.clauses).toBe("");
-    expect(parsed.includedItems).toEqual([]);
     expect(parsed.buyoutAvailable).toBe(false);
     expect(parsed.buyoutCost).toBeNull();
     // Original fields should round-trip untouched.
@@ -505,12 +504,10 @@ describe("LeaseSchema backward compatibility", () => {
     const parsed = LeaseSchema.parse({
       ...legacyLease,
       clauses: "Pet deposit $500.",
-      includedItems: ["Water", "Garbage"],
       buyoutAvailable: true,
       buyoutCost: 5000,
     });
     expect(parsed.clauses).toBe("Pet deposit $500.");
-    expect(parsed.includedItems).toEqual(["Water", "Garbage"]);
     expect(parsed.buyoutAvailable).toBe(true);
     expect(parsed.buyoutCost).toBe(5000);
   });

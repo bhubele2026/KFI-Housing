@@ -19,8 +19,6 @@ export interface Lease {
   notes: string;
   /** Free-form clause text (additional terms / addenda). */
   clauses?: string;
-  /** Items included in the lease (e.g. utilities, parking). */
-  includedItems?: string[];
   /** Whether the lease has a buyout option. */
   buyoutAvailable?: boolean;
   /**

@@ -118,7 +118,6 @@ function makeCreateDraft(propertyId: string): Lease {
     status: "Upcoming",
     notes: "",
     clauses: "",
-    includedItems: [],
     buyoutAvailable: false,
     buyoutCost: null,
   };

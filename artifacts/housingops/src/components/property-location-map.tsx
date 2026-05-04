@@ -3,10 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
 import {
-  MAPS_ERROR_MESSAGES,
   extractGoogleMapsErrorCode,
   getMapsKeyConsoleUrl,
+  getMapsKeyErrorMessage,
   reportGoogleMapsKeyError,
+  useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
 import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
 
@@ -22,12 +23,12 @@ import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
 // When Google's Embed API does report a specific error code via
 // postMessage (RefererNotAllowedMapError / ApiNotActivatedMapError /
 // InvalidKeyMapError / quota / …) we render the *tailored* line from
-// MAPS_ERROR_MESSAGES (imported above, shared with the app-level toast
-// listener and the portfolio map — Task #167) instead of this generic
-// one. Task #163 introduced the lookup; Task #167 hoisted it to a
-// shared module so a key rejection seen anywhere on the page also
-// fires a one-time app-level toast and flips the portfolio map into a
-// matching error state.
+// the shared `getMapsKeyErrorMessage` lookup (imported above, shared
+// with the app-level toast listener and the portfolio map — Task
+// #167) instead of this generic one. Task #163 introduced the
+// lookup; Task #167 hoisted it to a shared module so a key rejection
+// seen anywhere on the page also fires a one-time app-level toast
+// and flips the portfolio map into a matching error state.
 const MAPS_KEY_TROUBLESHOOTING_TEXT =
   "Google rejected this Maps API key. Check that the Maps Embed API " +
   "is enabled and that this domain is on the key's allowlist.";
@@ -132,6 +133,16 @@ export function PropertyLocationMap({
     null,
   );
 
+  // Subscribe to the shared Google Maps key-error store so a code
+  // observed *anywhere else on the page* — the portfolio map's
+  // `gm_authFailure` callback, an embed iframe on a sibling card,
+  // etc. — flips this card into its dedicated key-rejected branch
+  // even before the local iframe has had a chance to report anything
+  // (Task #178). Without this subscription, an operator could be
+  // staring at our "Loading map…" placeholder indefinitely while a
+  // toast on the same page was already saying the key was rejected.
+  const sharedKeyError = useGoogleMapsKeyError();
+
   if (!hasAnyAddress) {
     return (
       <Card data-testid="card-property-location">
@@ -229,21 +240,26 @@ export function PropertyLocationMap({
     return () => window.removeEventListener("message", handleMessage);
   }, [embedUrl]);
 
-  const isMapError = iframeLoadError || reportedErrorCode !== null;
+  // Prefer a code observed by *this* iframe over one routed through the
+  // shared store. They normally match (the local listener also feeds
+  // the shared store via `reportGoogleMapsKeyError`), but during the
+  // brief window before the local handler runs — or when the only
+  // signal is a sibling Maps surface reporting an error before our own
+  // `/api/config` request has even returned — the shared store is the
+  // sole source of truth. Either way, surface the same dedicated error
+  // panel rather than the loading/fallback branches (Task #178).
+  const effectiveErrorCode = reportedErrorCode ?? sharedKeyError.code;
+  const isMapError = iframeLoadError || effectiveErrorCode !== null;
   // Tailored message wins when Google gave us a specific code we
-  // recognize. When Google posts a code that isn't in MAPS_ERROR_MESSAGES
-  // (e.g. a newly-introduced or renamed error), name the raw code
-  // verbatim alongside the generic fix line so the operator at least
-  // has something concrete to put in a support ticket — far better than
-  // the pre-existing behavior of silently ignoring it. The plain
-  // generic line is reserved for the "iframe element failed to load
-  // and we have no code to act on" case.
+  // recognize. The shared `getMapsKeyErrorMessage` lookup handles both
+  // the embed-API codes and the synthetic JS-SDK auth-failure code, and
+  // names the raw code verbatim alongside the generic fix line for
+  // anything Google ships that isn't in our table — far better than
+  // silently ignoring it. The plain generic line is reserved for the
+  // "iframe element failed to load and we have no code to act on" case.
   let errorMessage: string;
-  if (reportedErrorCode !== null) {
-    const tailored = MAPS_ERROR_MESSAGES[reportedErrorCode];
-    errorMessage =
-      tailored ??
-      `Google reported ${reportedErrorCode} — ${MAPS_KEY_TROUBLESHOOTING_TEXT}`;
+  if (effectiveErrorCode !== null) {
+    errorMessage = getMapsKeyErrorMessage(effectiveErrorCode);
   } else {
     errorMessage = MAPS_KEY_TROUBLESHOOTING_TEXT;
   }
@@ -257,7 +273,72 @@ export function PropertyLocationMap({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isConfigLoading ? (
+        {isMapError ? (
+          // Key-rejected / iframe-load-error branch is checked BEFORE
+          // `isConfigLoading` so a code reported anywhere on the page
+          // (e.g. the portfolio map's `gm_authFailure`, or a sibling
+          // embed iframe's postMessage) flips this card out of the
+          // "Loading map…" placeholder *immediately* — even if our own
+          // `/api/config` request is still in flight. Without this
+          // ordering an operator could be staring at our spinner
+          // indefinitely while a toast on the same page already said
+          // the key was rejected, with no in-page explanation
+          // (Task #178).
+          <div
+            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
+            data-testid="property-location-map-error"
+            data-error-code={effectiveErrorCode ?? ""}
+          >
+            <div className="flex items-start gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span data-testid="property-location-map-error-text">
+                {errorMessage}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <a
+                href={searchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                data-testid="property-location-map-error-link"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open in Google Maps
+              </a>
+              {/*
+                Same per-code Google Cloud Console deep-link the
+                app-level toast surfaces (Task #173). Operators who
+                dismissed that toast — or arrived at this card after
+                the toast had already fired and timed out — still get
+                the single-click jump to the right Console page
+                (credentials / quotas / library / …) for whatever code
+                Google reported. Falls back to the credentials list
+                when the code is unrecognized so the link is never
+                dead. Uses `effectiveErrorCode` so a code observed via
+                the shared store (e.g. a sibling Maps surface) also
+                surfaces the Console link, not just one this iframe
+                reported itself (Task #178). When the iframe's own
+                `error` event fires we have no code, so we don't
+                surface a Console link in that case
+                (`effectiveErrorCode` is null then) since we'd just be
+                guessing which page to send the operator to.
+              */}
+              {effectiveErrorCode !== null && (
+                <a
+                  href={getMapsKeyConsoleUrl(effectiveErrorCode)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  data-testid="property-location-map-error-console-link"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Google Cloud Console
+                </a>
+              )}
+            </div>
+          </div>
+        ) : isConfigLoading ? (
           <div
             className="rounded-lg border bg-muted/30 aspect-[16/9] w-full flex items-center justify-center text-xs text-muted-foreground"
             data-testid="property-location-map-loading"
@@ -295,7 +376,10 @@ export function PropertyLocationMap({
               Retry
             </Button>
           </div>
-        ) : embedUrl && !isMapError ? (
+        ) : embedUrl ? (
+          // `isMapError` is handled by the top-of-tree branch above, so
+          // by the time we reach this branch we know the embed should
+          // be live.
           <div className="space-y-2">
             <a
               href={searchUrl}

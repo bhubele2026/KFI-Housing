@@ -6,6 +6,8 @@ import { PropertyLocationMap } from "./property-location-map";
 import {
   MAPS_KEY_CONSOLE_URLS,
   getMapsKeyConsoleUrl,
+  reportGoogleMapsKeyError,
+  __resetGoogleMapsKeyErrorForTest,
 } from "@/hooks/use-google-maps-key-error";
 
 // These tests pin down the four render branches of the property location
@@ -29,6 +31,12 @@ describe("PropertyLocationMap", () => {
   let root: Root | null = null;
 
   beforeEach(() => {
+    // The component subscribes to the shared Maps key-error store
+    // (Task #178), and that store is module-scoped so a code reported
+    // in one test would otherwise flip subsequent tests' components
+    // straight into the key-rejected branch. Reset before each test
+    // so each one starts with a clean slate.
+    __resetGoogleMapsKeyErrorForTest();
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -42,6 +50,7 @@ describe("PropertyLocationMap", () => {
       root = null;
     }
     container.remove();
+    __resetGoogleMapsKeyErrorForTest();
   });
 
   function makeWrapper() {
@@ -1220,11 +1229,24 @@ describe("PropertyLocationMap", () => {
     expect(get("property-location-map-error")).toBeNull();
   });
 
-  it("clears the postMessage-reported error when the embed URL changes", async () => {
-    // Sticky error state would be a UX trap: if the operator fixes
-    // the key (or just navigates to a different property) the card
-    // would still be claiming Google rejected it. Resetting on
-    // embedUrl change gives the new attempt a fresh start.
+  it("keeps the postMessage-reported key error visible after the address changes (session-sticky to match the portfolio map and toast)", async () => {
+    // postMessage error codes the embed reports (RefererNotAllowed /
+    // ApiNotActivated / InvalidKey / quota / …) are *always* about
+    // the key itself — none of them are per-property quirks that
+    // could be cleared by switching addresses. Task #178 routes
+    // those codes through the shared `useGoogleMapsKeyError` store,
+    // which also drives the app-level toast and the portfolio map's
+    // key-rejected panel. Once the shared store knows the key was
+    // rejected, every Maps surface on the page must agree until the
+    // session ends — anything else would let one card pretend the
+    // key is fine while a toast on the same page says otherwise.
+    // This test pins down that session-sticky behavior so a future
+    // refactor that re-introduces a per-card "reset on address
+    // change" branch fails loudly. The complementary "iframe element
+    // failed to load" path (no code, just a network/CSP failure on
+    // the iframe itself) is still per-URL — see the
+    // "re-attempts the embed (clears the error state) when the
+    // address changes after a previous failure" test above.
     const Wrapper = makeWrapper();
     await act(async () => {
       root = createRoot(container);
@@ -1266,8 +1288,21 @@ describe("PropertyLocationMap", () => {
       );
     });
 
-    expect(get("property-location-map-error")).toBeNull();
-    expect(get("property-location-map-iframe")).not.toBeNull();
+    // The key-rejected panel must still be what's rendered — and
+    // crucially, the embed must NOT re-mount, because a re-mount
+    // would silently re-issue the same Google request that failed
+    // and either flash a broken Google tile or burn quota.
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(
+      "RefererNotAllowedMapError",
+    );
+    expect(get("property-location-map-iframe")).toBeNull();
+    // The address block tracks the new address — it's only the
+    // map area that stays in the error state.
+    expect(get("property-location-address")?.textContent).toContain(
+      "500 Birch Ln",
+    );
   });
 
   it("renders only the parts of the address the user has filled in (street present, city/state/zip blank)", async () => {
@@ -1313,6 +1348,11 @@ describe("PropertyLocationMap runtime config", () => {
   let originalFetch: typeof fetch;
 
   beforeEach(() => {
+    // Reset the module-level shared Maps key-error store so a code
+    // reported in a previous test (or a previous suite) can't flip
+    // these tests' components into the key-rejected branch (Task
+    // #178).
+    __resetGoogleMapsKeyErrorForTest();
     container = document.createElement("div");
     document.body.appendChild(container);
     originalFetch = globalThis.fetch;
@@ -1328,6 +1368,7 @@ describe("PropertyLocationMap runtime config", () => {
     }
     container.remove();
     globalThis.fetch = originalFetch;
+    __resetGoogleMapsKeyErrorForTest();
   });
 
   function makeWrapper() {
@@ -1719,5 +1760,105 @@ describe("PropertyLocationMap runtime config", () => {
     expect(get("property-location-map-loading")).toBeNull();
     expect(get("property-location-fallback")).toBeNull();
     expect(get("property-location-map-iframe")).toBeNull();
+  });
+
+  it("flips into the key-rejected branch even while /api/config is still in flight (key-error wins over the loading placeholder)", async () => {
+    // Regression for Task #178: the property-location card's branch
+    // order used to check `isConfigLoading` BEFORE the key-error
+    // branch, so a sibling Maps surface (e.g. the portfolio map's
+    // `gm_authFailure` callback, or another embed iframe's
+    // postMessage) reporting a rejected key while this card's own
+    // /api/config request was still in flight would be silently
+    // hidden — the operator stared at our "Loading map…" placeholder
+    // next to a toast saying the key was rejected, with no in-page
+    // explanation. The branches were re-ordered so the key-error
+    // branch wins; without this test, swapping them back would only
+    // fail at the toast/integration level.
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          {/* No `apiKey` prop — the component fetches /api/config and
+              we hold that fetch unresolved below. */}
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+
+    // Sanity check — with the fetch held in flight, the loading
+    // placeholder is what's currently rendered.
+    expect(get("property-location-map-loading")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+
+    // Now simulate a sibling Maps surface (or the JS SDK) reporting
+    // a rejected key while this card's config request is still
+    // pending. Use an embed-iframe code so the test exercises the
+    // realistic cross-surface path described in the task.
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+
+    // The loading placeholder must be gone — leaving it visible
+    // would leave the operator staring at a stuck spinner next to a
+    // toast.
+    expect(get("property-location-map-loading")).toBeNull();
+
+    // And the dedicated key-error panel must be what's rendered now,
+    // even though `/api/config` has not yet resolved. The data
+    // attribute carries the code observed by the shared store so
+    // downstream tooling (and humans) can tell which signal flipped
+    // the branch.
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe("InvalidKeyMapError");
+    // Tailored copy from the shared lookup — not a generic line.
+    const text = (
+      get("property-location-map-error-text")?.textContent ?? ""
+    ).toLowerCase();
+    expect(text).toContain("invalid");
+
+    // The "Open in Google Maps" jump must still be reachable so the
+    // operator has a one-click escape hatch even before the key is
+    // fixed.
+    const errLink = get(
+      "property-location-map-error-link",
+    ) as HTMLAnchorElement | null;
+    expect(errLink).not.toBeNull();
+    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
+    expect(errLink!.href).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+    );
+
+    // Resolve the in-flight fetch so cleanup doesn't hang on the
+    // pending promise. The key-error branch should still win after
+    // the config arrives — a fixed key alone shouldn't paper over
+    // the fact that some surface reported it as rejected.
+    await act(async () => {
+      resolveFetch!(
+        new Response(
+          JSON.stringify({ googleMapsApiKey: "live-key" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    await waitFor(() => get("property-location-map-error") !== null);
+    expect(get("property-location-map-error")).not.toBeNull();
+    expect(get("property-location-map-iframe")).toBeNull();
+    expect(get("property-location-map-loading")).toBeNull();
   });
 });

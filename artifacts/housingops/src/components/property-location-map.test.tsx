@@ -1313,6 +1313,83 @@ describe("PropertyLocationMap runtime config", () => {
     expect(fallback!.textContent).not.toContain("VITE_GOOGLE_MAPS_API_KEY");
   });
 
+  it("picks up a rotated key on the next /api/config refetch and re-points the iframe at the new key without a hard refresh", async () => {
+    // Operators rotate the Maps API key by setting GOOGLE_MAPS_API_KEY
+    // on the api-server and restarting only it. The shared
+    // runtime-config hook fires a periodic refetch so an open tab
+    // swaps in the new key within a bounded window — this test
+    // proves the iframe picks up the rotated value end-to-end.
+    //
+    // We don't wait for the actual refetch interval (would slow the
+    // test down without adding signal); instead we simulate the poll
+    // landing a fresh response by calling QueryClient.invalidateQueries
+    // and changing what `fetch` returns on the second call. That is
+    // what the periodic refetch effectively does — re-fire the
+    // /api/config request and let the new key flow into the iframe's
+    // src URL.
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      const body =
+        call === 1
+          ? { googleMapsApiKey: "key-A" }
+          : { googleMapsApiKey: "key-B" };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    // Build the wrapper inline so we can reach the QueryClient and
+    // trigger an invalidation from the test body.
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+      },
+    });
+    function LocalWrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocalWrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </LocalWrapper>,
+      );
+    });
+
+    // First load: iframe embeds the original key.
+    await waitFor(() => get("property-location-map-iframe") !== null);
+    let iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe!.src).toContain("key=key-A");
+
+    // Trigger a refetch (stand-in for the periodic poll firing while
+    // the tab is open) — the query observer re-calls /api/config and
+    // gets the rotated key.
+    await act(async () => {
+      await client.invalidateQueries();
+    });
+    await waitFor(() => {
+      const f = get("property-location-map-iframe") as HTMLIFrameElement | null;
+      return f !== null && f.src.includes("key=key-B");
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    expect(iframe!.src).toContain("key=key-B");
+    expect(iframe!.src).not.toContain("key=key-A");
+  });
+
   it("does not call /api/config at all when the address is empty (empty state owns the render)", async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch;
     globalThis.fetch = fetchMock;

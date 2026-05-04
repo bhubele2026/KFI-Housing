@@ -885,6 +885,15 @@ describe("PortfolioMap — runtime config", () => {
     mapsState.infoWindow = null;
     mapsState.pendingGeocodes = [];
     installFakeGoogleMaps();
+    // Clean up any <script data-housingops-maps> tags a previous test
+    // may have left attached (e.g. the SDK-reload-on-rotation test
+    // appends a real script tag whose `load` event never fires in the
+    // jsdom environment). Without this, that leftover would defeat
+    // the "no script tag yet" precondition the rotation test relies
+    // on to spot the rotation-triggered reload.
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
     container = document.createElement("div");
     document.body.appendChild(container);
     originalFetch = globalThis.fetch;
@@ -901,6 +910,9 @@ describe("PortfolioMap — runtime config", () => {
     container.remove();
     uninstallFakeGoogleMaps();
     __resetPortfolioMapCachesForTest();
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
     globalThis.fetch = originalFetch;
   });
 
@@ -1244,6 +1256,155 @@ describe("PortfolioMap — runtime config", () => {
     expect(get("portfolio-map-config-loading")).toBeNull();
     expect(get("portfolio-map-fallback")).toBeNull();
     expect(get("portfolio-map")).toBeNull();
+  });
+
+  it("picks up a rotated Map ID on the next /api/config refetch and re-creates the map without a hard refresh", async () => {
+    // Operators rotate the branded Map ID by setting GOOGLE_MAPS_MAP_ID
+    // on the api-server and restarting only it. The shared
+    // runtime-config hook fires a periodic refetch so an open browser
+    // tab swaps in the new value within a bounded window — this test
+    // proves that path end-to-end.
+    //
+    // We don't wait for the actual refetch interval (would slow the
+    // test down without adding signal); instead we simulate the poll
+    // landing a fresh response by calling QueryClient.invalidateQueries
+    // and changing what `fetch` returns on the second call. That is
+    // what the periodic refetch effectively does — re-fire the
+    // /api/config request and let the new values flow through.
+    //
+    // We hold the API key constant across both responses on purpose:
+    // a *key* rotation also triggers the JS SDK script reload path
+    // (covered by its own dedicated test below), and that path can't
+    // resolve in jsdom without manually firing a synthetic `load` event
+    // on the appended script. Rotating only the Map ID keeps this
+    // test focused on the periodic-refetch contract it's pinning down.
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      const body =
+        call === 1
+          ? { googleMapsApiKey: "stable-key", googleMapsMapId: "map-A" }
+          : { googleMapsApiKey: "stable-key", googleMapsMapId: "map-B" };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    // Build the wrapper inline so we can reach the QueryClient and
+    // trigger an invalidation from the test body.
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+      },
+    });
+    function LocalWrapper({ children }: { children: React.ReactNode }) {
+      return (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+    }
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocalWrapper>
+          <PortfolioMap properties={[makeProperty()]} onPinClick={vi.fn()} />
+        </LocalWrapper>,
+      );
+    });
+
+    // First load lands the initial values.
+    await waitFor(() => mapsState.map !== null);
+    expect(mapsState.map?.options.mapId).toBe("map-A");
+
+    // Trigger a refetch (stand-in for the periodic poll firing while
+    // the tab is open) — the query observer will re-call /api/config,
+    // get the rotated values, and the map should re-create with the
+    // new Map ID.
+    await act(async () => {
+      await client.invalidateQueries();
+    });
+    await waitFor(() => mapsState.map?.options.mapId === "map-B");
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mapsState.map?.options.mapId).toBe("map-B");
+  });
+
+  it("re-loads the Maps SDK <script> with the rotated key so subsequent SDK calls bill against the new key (not the stale one)", async () => {
+    // The Google Maps JS SDK binds the API key in its <script> URL
+    // at load time. Without a script reload, a rotated key would
+    // never take effect for an open tab — the SDK would keep auth'ing
+    // against whatever key was in the URL at first load, defeating
+    // the no-rebuild rotation flow. This test verifies that on a key
+    // change the old script + global are torn down and a fresh script
+    // pointing at the new key is appended.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="key-A"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+    expect(mapsState.map).not.toBeNull();
+    // The fake bypasses real script loading (the loader promise is
+    // pre-resolved by installFakeGoogleMaps), so no script tag is
+    // attached on the initial mount — only on the rotation path
+    // below. That makes the appearance of the script tag a clean
+    // signal that rotation triggered a reload.
+    expect(
+      document.querySelector('script[data-housingops-maps]'),
+    ).toBeNull();
+
+    // Re-render with the rotated key — the load effect re-runs on
+    // resolvedKey change and detects the rotation.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="key-B"
+          />
+        </Wrapper>,
+      );
+    });
+    await flush();
+
+    // Rotation handler tore down `window.google` and the loader
+    // promise, then the load effect created a fresh script tag
+    // pointing at the new key.
+    const script = document.querySelector(
+      'script[data-housingops-maps]',
+    ) as HTMLScriptElement | null;
+    expect(script).not.toBeNull();
+    expect(script!.src).toContain("key=key-B");
+    expect(script!.src).not.toContain("key=key-A");
+
+    // Resolve the new SDK by re-installing the fake (so the readiness
+    // check inside loadMapsApi's onReady callback finds the classes)
+    // and firing the script's load event manually — there's no real
+    // network in the test environment.
+    installFakeGoogleMaps();
+    await act(async () => {
+      script!.dispatchEvent(new Event("load"));
+    });
+    await settle();
+
+    // The map re-mounts against the freshly-loaded SDK so any
+    // subsequent geocoder / marker calls bill against the new key.
+    expect(mapsState.map).not.toBeNull();
+
+    // Cleanup: the fresh script tag is left on the page since
+    // teardown of the test only removes the container; remove it
+    // here so it doesn't leak into the next test's selectors.
+    script!.remove();
   });
 
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {

@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, MapPin } from "lucide-react";
-import {
-  useGetRuntimeConfig,
-  getGetRuntimeConfigQueryKey,
-} from "@workspace/api-client-react";
 import { useGoogleMapsKeyError } from "@/hooks/use-google-maps-key-error";
+import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
 // actually call into — installing @types/google.maps just for a handful
@@ -200,21 +197,54 @@ function fullAddress(p: MappableProperty): string {
   return [street, cityStateZip].filter(Boolean).join(", ");
 }
 
+// Tracks the API key the currently-loaded SDK script was initialized
+// with. The Google Maps JS SDK binds the API key in its `<script>`
+// URL at load time — every subsequent call into the SDK (geocoding,
+// tile requests, etc.) is auth'd against that key, regardless of any
+// fresher key we've since fetched from `/api/config`. So when the
+// runtime config refetch lands a *different* key, we tear down the
+// existing script + globals so the next `loadMapsApi` call re-loads
+// the SDK against the new key. Without this, a rotated key would only
+// take effect on hard refresh — the operator would have to ask every
+// open tab to reload, defeating much of the no-rebuild rotation flow.
+let loadedApiKey: string | null = null;
+
 /**
- * Loads the Google Maps JS SDK exactly once per page. Subsequent calls
- * return the in-flight or already-resolved promise so toggling the map
- * view repeatedly never injects duplicate <script> tags or re-downloads
- * the SDK.
+ * Loads the Google Maps JS SDK once per page, or re-loads it when the
+ * effective API key has changed since the last load (key rotation).
+ * Subsequent calls with the same key return the in-flight or
+ * already-resolved promise so toggling the map view repeatedly never
+ * injects duplicate <script> tags or re-downloads the SDK.
  */
 function loadMapsApi(apiKey: string): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Google Maps requires a browser environment"));
+  }
+  // Detect a rotated key. If the SDK was previously loaded with a
+  // different key, blow away the old <script> + globals so the next
+  // load below uses the rotated value. The component's load effect
+  // re-runs on `resolvedKey` change, so it'll then create a fresh
+  // `google.maps.Map` against the freshly-loaded SDK.
+  if (loadedApiKey !== null && loadedApiKey !== apiKey) {
+    const stale = document.querySelector<HTMLScriptElement>(
+      'script[data-housingops-maps]',
+    );
+    if (stale) stale.remove();
+    // Drop the SDK namespace so the readiness check below doesn't
+    // short-circuit against the old build. The `delete` operator is
+    // the safe cross-browser way to detach the property — assigning
+    // `undefined` would leave a `google` shape with `maps` missing,
+    // which is fine in practice but reads less clearly.
+    delete (window as { google?: unknown }).google;
+    delete window.__housingopsMapsLoader;
+    loadedApiKey = null;
   }
   // The marker library piggy-backs on the script's `load` event when
   // we list it in `libraries=` (see below), so checking for
   // `AdvancedMarkerElement` is sufficient to know the SDK is fully
   // ready for both the Geocoder and the new marker class.
   if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+    loadedApiKey = apiKey;
     return Promise.resolve();
   }
   if (window.__housingopsMapsLoader) return window.__housingopsMapsLoader;
@@ -225,6 +255,9 @@ function loadMapsApi(apiKey: string): Promise<void> {
         window.google?.maps?.Geocoder &&
         window.google?.maps?.marker?.AdvancedMarkerElement
       ) {
+        // Stamp the key the SDK was loaded with so a subsequent
+        // rotation can detect that the script needs to be reloaded.
+        loadedApiKey = apiKey;
         resolve();
       } else {
         reject(
@@ -420,9 +453,13 @@ function resolveGeocode(
 // Test-only escape hatch — keeps the module-level caches from leaking
 // between Vitest test cases. Not exported through any production import
 // site; lives here so tests don't need to dig at private internals.
+// Also clears the rotated-key tracker so a test that loads the SDK with
+// key "A" doesn't trick the next test (which may not call into the SDK
+// at all) into thinking a rotation already happened.
 export function __resetPortfolioMapCachesForTest(): void {
   geocodeCache.clear();
   inFlightGeocodes.clear();
+  loadedApiKey = null;
 }
 
 type LoaderStatus = "idle" | "loading" | "ready" | "error";
@@ -442,19 +479,14 @@ export function PortfolioMap({
   // them without rebuilding the web bundle. `mapId` follows the same
   // convention — supplying it skips the runtime value for that field
   // only, but does NOT by itself trigger or skip the fetch.
+  // The shared hook applies the periodic background refetch +
+  // refetch-on-window-focus that lets a rotated GOOGLE_MAPS_API_KEY /
+  // GOOGLE_MAPS_MAP_ID propagate into open tabs without a hard
+  // refresh. Sharing the queryKey with the property-detail Location
+  // card means the second consumer to mount gets the cached response
+  // instantly and only one periodic poll fires for both.
   const shouldFetchConfig = apiKey === undefined;
-  const configQuery = useGetRuntimeConfig({
-    query: {
-      // Supply queryKey explicitly so TS is happy — the orval-generated
-      // options helper falls back to the same default when omitted, but
-      // react-query v5's `UseQueryOptions` type marks `queryKey` as
-      // required. Sharing the key with the property-detail Location
-      // card means the second consumer to mount gets the cached
-      // response instantly.
-      queryKey: getGetRuntimeConfigQueryKey(),
-      enabled: shouldFetchConfig,
-    },
-  });
+  const configQuery = useRuntimeConfigQuery(shouldFetchConfig);
 
   // Resolve the effective key. Test injection wins; otherwise we use
   // the value from the runtime config endpoint (which can be `null`
@@ -620,7 +652,15 @@ export function PortfolioMap({
   // `onGeocoded` so the parent can persist them on the server.
   useEffect(() => {
     if (status !== "ready") return;
-    const maps = window.google!.maps!;
+    // Defensive guard for the brief render between a key-rotation
+    // tear-down (loadMapsApi deleted `window.google` so the next load
+    // can use the rotated key) and `setStatus("loading")` actually
+    // committing — they happen in the same React commit, so this
+    // effect can fire one more time with stale `status === "ready"`
+    // but no SDK left to call into. Bailing out here lets the
+    // load effect's subsequent re-run drive things forward.
+    if (!window.google?.maps) return;
+    const maps = window.google.maps;
     const geocoder = new maps.Geocoder();
 
     const next = new Map<string, { lat: number; lng: number } | null>();
@@ -697,7 +737,13 @@ export function PortfolioMap({
   // beats tracking per-id marker diffs.
   useEffect(() => {
     if (status !== "ready" || !mapRef.current) return;
-    const maps = window.google!.maps!;
+    // Same defensive guard as the geocode effect above — the
+    // key-rotation tear-down briefly leaves `window.google` undefined
+    // while `setStatus("loading")` is still committing, and we'd
+    // otherwise crash trying to construct a fresh InfoWindow /
+    // AdvancedMarkerElement off the deleted SDK namespace.
+    if (!window.google?.maps) return;
+    const maps = window.google.maps;
 
     // AdvancedMarkerElement removes itself from the map by setting its
     // `map` property to null — there's no `setMap()` method anymore.

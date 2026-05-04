@@ -3,14 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
 import {
-  useGetRuntimeConfig,
-  getGetRuntimeConfigQueryKey,
-} from "@workspace/api-client-react";
-import {
   MAPS_ERROR_MESSAGES,
   extractGoogleMapsErrorCode,
   reportGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
+import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
 
 // Generic operator-facing copy used in two places:
 //   1. The dedicated error branch when the iframe's own `error` event
@@ -99,17 +96,15 @@ export function PropertyLocationMap({
   // Location card shows its empty state in that case and the key
   // wouldn't be used anyway, so there's no reason to wake the api-server
   // up for it.
+  // The shared hook applies the periodic background refetch +
+  // refetch-on-window-focus that lets a rotated GOOGLE_MAPS_API_KEY
+  // propagate into open tabs without a hard refresh. Sharing the
+  // queryKey with the portfolio map means the second consumer to mount
+  // gets the cached response instantly and one periodic poll covers
+  // both. The iframe re-renders with the new key automatically because
+  // the rotated value lands in `embedUrl`.
   const shouldFetchConfig = apiKey === undefined && hasAnyAddress;
-  const configQuery = useGetRuntimeConfig({
-    query: {
-      // Supply queryKey explicitly so TS is happy — the orval-generated
-      // options helper falls back to the same default when omitted, but
-      // react-query v5's `UseQueryOptions` type marks `queryKey` as
-      // required.
-      queryKey: getGetRuntimeConfigQueryKey(),
-      enabled: shouldFetchConfig,
-    },
-  });
+  const configQuery = useRuntimeConfigQuery(shouldFetchConfig);
 
   // Track whether the embedded iframe failed to load. Two independent
   // signals can put the card into the error state:

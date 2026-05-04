@@ -516,13 +516,13 @@ export function PropertyLocationMap({
 
   return (
     <Card data-testid="card-property-location">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <MapPin className="h-4 w-4" />
           Location
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2">
         {/*
           Sustained-failure warning. Lives at the top of CardContent
           (rather than above the Card) so it stays visually inside
@@ -617,7 +617,7 @@ export function PropertyLocationMap({
           </div>
         ) : isConfigLoading ? (
           <div
-            className="rounded-lg border bg-muted/30 aspect-[16/9] w-full flex items-center justify-center text-xs text-muted-foreground"
+            className="rounded-lg border bg-muted/30 aspect-[5/2] w-full max-w-md flex items-center justify-center text-xs text-muted-foreground"
             data-testid="property-location-map-loading"
             aria-busy="true"
           >
@@ -655,10 +655,10 @@ export function PropertyLocationMap({
           </div>
         ) : resolvedKey ? (
           <div className="space-y-2">
-            <div className="relative rounded-lg overflow-hidden border bg-muted w-full max-w-xl">
+            <div className="relative rounded-lg overflow-hidden border bg-muted w-full max-w-md">
               <div
                 ref={mapEl}
-                className="aspect-[16/9] w-full"
+                className="aspect-[5/2] w-full"
                 data-testid="property-location-map-canvas"
                 data-map-id={resolvedMapId}
               />

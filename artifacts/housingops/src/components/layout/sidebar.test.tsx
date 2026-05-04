@@ -21,7 +21,9 @@ vi.mock("@/hooks/use-auth", () => ({
 // Mutable mock data so individual tests can rename / delete the active
 // scoped customer between renders and verify the badge reacts.
 const resetToSampleDataMock =
-  vi.fn<(opts?: { onSuccess?: () => void }) => void>();
+  vi.fn<
+    (opts?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void }) => void
+  >();
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;
@@ -208,6 +210,7 @@ describe("Sidebar customer scope badge", () => {
     resetToSampleDataMock.mockReset();
     resetToSampleDataMock.mockImplementation((opts) => {
       opts?.onSuccess?.();
+      opts?.onSettled?.();
     });
     toastMock.mockReset();
     try {
@@ -236,6 +239,56 @@ describe("Sidebar customer scope badge", () => {
       expect(toastMock).toHaveBeenCalledTimes(1);
       const arg = toastMock.mock.calls[0][0];
       expect(arg.title).toBe("Demo data reset");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("guards against duplicate clicks while the reset is still in flight", async () => {
+    // Simulates an operator double-clicking Confirm before the async reset
+    // mutation finishes. The handler holds isResetting=true until the
+    // mutation's onSettled fires, so the second click should be a no-op.
+    vi.stubEnv("DEV", true);
+    resetToSampleDataMock.mockReset();
+    let releaseSettled: (() => void) | null = null;
+    resetToSampleDataMock.mockImplementation((opts) => {
+      // Don't fire onSettled yet — mimic an in-flight network request.
+      releaseSettled = () => {
+        opts?.onSuccess?.();
+        opts?.onSettled?.();
+      };
+    });
+    toastMock.mockReset();
+    try {
+      await renderAt("/dashboard");
+
+      const openBtn = container.querySelector(
+        '[data-testid="button-reset-demo-data"]',
+      ) as HTMLButtonElement;
+      await act(async () => {
+        openBtn.click();
+      });
+
+      const confirmBtn = document.querySelector(
+        '[data-testid="button-reset-demo-confirm"]',
+      ) as HTMLButtonElement;
+      expect(confirmBtn).not.toBeNull();
+
+      // Two rapid clicks while the mutation hasn't settled.
+      await act(async () => {
+        confirmBtn.click();
+        confirmBtn.click();
+      });
+
+      expect(resetToSampleDataMock).toHaveBeenCalledTimes(1);
+
+      // Release the pending mutation. Now subsequent clicks would be allowed
+      // again — but only after the dialog is reopened, which is the safe
+      // intended UX.
+      await act(async () => {
+        releaseSettled?.();
+      });
+      expect(toastMock).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllEnvs();
     }

@@ -450,7 +450,7 @@ interface DataStore {
   updateUtility: (id: string, updates: Partial<Utility>) => void;
   addUtility: (utility: Utility) => void;
   deleteUtility: (id: string) => void;
-  resetToSampleData: (callbacks?: { onSuccess?: () => void; onError?: () => void }) => void;
+  resetToSampleData: (callbacks?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void }) => void;
   exportData: () => ExportPayload;
   importData: (input: unknown | ImportPreview, mode?: ImportMode) => ImportResult;
 }
@@ -754,7 +754,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const resetToSampleData = (
-    callbacks?: { onSuccess?: () => void; onError?: () => void },
+    callbacks?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void },
   ) => {
     resetMut.mutate(undefined, {
       onSuccess: () => callbacks?.onSuccess?.(),
@@ -762,7 +762,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         notifySaveError("reset to sample data");
         callbacks?.onError?.();
       },
-      onSettled: invalidateAll,
+      onSettled: () => {
+        invalidateAll();
+        callbacks?.onSettled?.();
+      },
     });
   };
 

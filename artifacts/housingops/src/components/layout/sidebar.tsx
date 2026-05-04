@@ -60,10 +60,20 @@ export function Sidebar() {
 
   const [isResetting, setIsResetting] = useState(false);
   const [isDemoResetting, setIsDemoResetting] = useState(false);
+  // Refs back the in-flight guards so two synchronous double-clicks both
+  // see the locked state — `useState` updates would batch and let the
+  // second click sneak through with the stale `false` value.
+  const isResettingRef = useRef(false);
+  const isDemoResettingRef = useRef(false);
 
   const handleConfirmReset = () => {
-    if (isResetting) return;
+    if (isResettingRef.current) return;
+    isResettingRef.current = true;
     setIsResetting(true);
+    // Keep the click guard armed (and the dialog open) until the reset
+    // mutation actually settles. Releasing the guard synchronously after
+    // dispatch defeated duplicate-click protection because the mutation
+    // is async — operators could fire two resets back to back.
     resetToSampleData({
       onSuccess: () => {
         toast({
@@ -71,13 +81,17 @@ export function Sidebar() {
           description: "All saved changes were cleared and the demo data was reloaded.",
         });
       },
+      onSettled: () => {
+        setResetOpen(false);
+        setIsResetting(false);
+        isResettingRef.current = false;
+      },
     });
-    setResetOpen(false);
-    setIsResetting(false);
   };
 
   const handleConfirmDemoReset = () => {
-    if (isDemoResetting) return;
+    if (isDemoResettingRef.current) return;
+    isDemoResettingRef.current = true;
     setIsDemoResetting(true);
     resetToSampleData({
       onSuccess: () => {
@@ -86,9 +100,12 @@ export function Sidebar() {
           description: "Edits cleared and the demo dataset was reseeded. Ready for the next take.",
         });
       },
+      onSettled: () => {
+        setDemoResetOpen(false);
+        setIsDemoResetting(false);
+        isDemoResettingRef.current = false;
+      },
     });
-    setDemoResetOpen(false);
-    setIsDemoResetting(false);
   };
 
   const handleExport = () => {

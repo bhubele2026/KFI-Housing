@@ -27,7 +27,7 @@ import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
-import { formatGeocodeAddress } from "@/lib/google-maps-sdk";
+import { dismissGeocodeFailure, formatGeocodeAddress } from "@/lib/google-maps-sdk";
 import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
 
 type SortDir = "asc" | "desc" | null;
@@ -812,11 +812,21 @@ export default function Properties() {
                   // drifting visually.
                   const addrDisplay = formatGeocodeAddress(p);
                   return (
-                    <li key={p.id}>
+                    // Row is a flex container with TWO independently
+                    // clickable controls — the main "open property"
+                    // button and the "Dismiss" button — instead of a
+                    // single wrapping <button>. Native <button>s can't
+                    // nest, and a click on Dismiss must NOT also fire
+                    // navigation, so the two affordances live as
+                    // siblings sharing a hover state on the parent.
+                    <li
+                      key={p.id}
+                      className="flex items-stretch hover:bg-muted/50 transition-colors"
+                    >
                       <button
                         type="button"
                         onClick={() => navigate(`/properties/${p.id}`)}
-                        className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-start gap-2"
+                        className="flex-1 min-w-0 text-left px-3 py-2 flex items-start gap-2"
                         data-testid={`address-needing-review-${p.id}`}
                       >
                         <Home className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
@@ -834,6 +844,28 @@ export default function Properties() {
                           )}
                         </span>
                         <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      </button>
+                      {/*
+                        Dismiss the row for the rest of the session.
+                        Calls into the shared SDK module so any other
+                        Maps surface subscribed to the failure cache
+                        (e.g. a per-property Location card open in
+                        another tab — though uncommon) sees the
+                        same suppression. Re-flagging the same
+                        address via a future geocode attempt clears
+                        the dismissal automatically (see
+                        `dismissGeocodeFailure` jsdoc).
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => dismissGeocodeFailure(addrDisplay)}
+                        className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1"
+                        aria-label={`Dismiss ${p.name} from addresses needing review`}
+                        title="Hide this row for the rest of the session"
+                        data-testid={`dismiss-address-needing-review-${p.id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Dismiss
                       </button>
                     </li>
                   );

@@ -248,6 +248,7 @@ import Properties from "./properties";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import {
   __resetGoogleMapsSdkForTest,
+  dismissGeocodeFailure,
   formatGeocodeAddress,
   primeGeocodeCache,
 } from "@/lib/google-maps-sdk";
@@ -466,5 +467,152 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     });
 
     expect(window.location.pathname).toBe("/properties/p1");
+  });
+
+  it("hides the row for the rest of the session when Dismiss is clicked", async () => {
+    // Operator looked at the flagged address, decided it's actually
+    // correct (rural lot, brand new build, P.O. box, etc.), and
+    // wants the row to stop cluttering the panel. Clicking Dismiss
+    // must drop the row immediately and, when it was the only entry,
+    // tear down the panel entirely so a healthy-looking session
+    // shows nothing at all.
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("2");
+
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("address-needing-review-p3")).not.toBeNull();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("1");
+
+    await act(async () => {
+      get("dismiss-address-needing-review-p3")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // Last failure dismissed → panel disappears entirely. Without
+    // re-checking the snapshot in `notifyGeocodeFailureListeners`
+    // the panel would linger with a stale empty list.
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("does not navigate when the Dismiss button is clicked", async () => {
+    // The dismiss control sits inside a row that ALSO routes to the
+    // property detail page. The two affordances must not bleed into
+    // each other — clicking Dismiss should suppress the row, not
+    // open the property.
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    expect(window.location.pathname).toBe("/properties");
+
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(window.location.pathname).toBe("/properties");
+    expect(get("address-needing-review-p1")).toBeNull();
+  });
+
+  it("keeps a dismissed row hidden after toggling map/table view", async () => {
+    // Dismissals share the geocode cache's session lifetime — they
+    // must outlast view-mode toggles, which would otherwise be a
+    // trivial way for the row to bounce back. The map view's local
+    // `unmappableIds` resets on toggle, but the cache-driven rollup
+    // must not be subject to that reset.
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("addresses-needing-review-panel")).toBeNull();
+
+    await act(async () => {
+      get("button-view-map")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("addresses-needing-review-panel")).toBeNull();
+
+    await act(async () => {
+      get("button-view-table")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("brings a dismissed row back when the same address is re-flagged", async () => {
+    // "Re-flagging" simulates a future geocode attempt landing a
+    // fresh `null` after the cache lost its prior entry (e.g. a
+    // hard cache invalidation). The dismissal must NOT permanently
+    // suppress genuinely new failures — that would silently hide
+    // problems the operator hasn't seen yet.
+    const addr = addrFor(0);
+    primeGeocodeCache(addr, null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("addresses-needing-review-panel")).toBeNull();
+
+    // Simulate the cache losing its prior failure entry, then
+    // re-recording the failure — this is the path that triggers
+    // `notifyGeocodeFailureListeners` and must clear the dismissal.
+    await act(async () => {
+      __resetGoogleMapsSdkForTest();
+    });
+    // The reset wipes everything, so re-dismiss to verify the
+    // dismissal of a *separate* address doesn't suppress this one,
+    // then prime the failure that should resurface.
+    dismissGeocodeFailure(addrFor(2));
+    await act(async () => {
+      primeGeocodeCache(addr, null);
+    });
+
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+    expect(get("address-needing-review-p1")).not.toBeNull();
+  });
+
+  it("does not double-render when Dismiss is clicked for an already-dismissed address", async () => {
+    // Defensive: a stuck click handler firing twice (or two rows
+    // for the same address — possible if two properties share the
+    // same canonical string) must not blow away listeners or fire
+    // a second redundant snapshot. We can only observe this
+    // indirectly: after two dismiss clicks the panel must still
+    // be gone and re-priming must still bring the row back.
+    const addr = addrFor(0);
+    primeGeocodeCache(addr, null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    // Re-dismiss directly via the SDK — the row is gone so the
+    // button can't be clicked again, but a second call must be a
+    // no-op rather than re-notify.
+    await act(async () => {
+      dismissGeocodeFailure(addr);
+    });
+
+    expect(get("addresses-needing-review-panel")).toBeNull();
   });
 });

@@ -229,6 +229,18 @@ const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 type GeocodeFailureListener = (failures: ReadonlySet<string>) => void;
 const geocodeFailureListeners = new Set<GeocodeFailureListener>();
 
+// Addresses the operator has explicitly acknowledged via the
+// "Dismiss" affordance on the Properties page rollup. Lives at module
+// scope alongside `geocodeCache` so it shares the same in-session
+// lifetime — survives view-mode toggles, page navigation, and
+// re-mounts of the rollup, but resets on a hard refresh just like
+// the cache itself. Kept separate from `geocodeCache` (rather than
+// stamping a "dismissed" flag on each entry) so a fresh `null` for
+// the same address — landing from any subsequent geocode attempt —
+// can undismiss it without us having to reach back into per-entry
+// state. See `notifyGeocodeFailureListeners` for the undismiss path.
+const dismissedFailures = new Set<string>();
+
 function notifyGeocodeFailureListeners(): void {
   if (geocodeFailureListeners.size === 0) return;
   // Snapshot once and hand the same Set to every listener — the
@@ -242,9 +254,36 @@ function notifyGeocodeFailureListeners(): void {
 function computeFailureSnapshot(): ReadonlySet<string> {
   const out = new Set<string>();
   for (const [addr, point] of geocodeCache) {
-    if (point === null) out.add(addr);
+    // A dismissed address is one the operator has already triaged
+    // ("rural lot, brand-new build, P.O. box, etc."). Exclude it
+    // from the snapshot so the rollup row vanishes for the rest of
+    // the session — but a future fresh failure for the same address
+    // will undismiss it (see `primeGeocodeCache` / `resolveGeocode`).
+    if (point === null && !dismissedFailures.has(addr)) out.add(addr);
   }
   return out;
+}
+
+/**
+ * Acknowledge a flagged address so the Properties page rollup hides
+ * its row for the rest of the session. Intended for the "Dismiss"
+ * affordance: the operator looked at the address (rural lot, brand
+ * new build, P.O. box, etc.) and decided no fix is needed, so the
+ * row stops cluttering the panel.
+ *
+ * Dismissals are session-scoped — they share the in-memory lifetime
+ * of `geocodeCache`, so they survive view-mode toggles and SPA
+ * navigation but reset on hard refresh. Re-flagging the same address
+ * (a subsequent geocode attempt landing a fresh `null`) clears the
+ * dismissal so genuinely new failures aren't suppressed silently.
+ */
+export function dismissGeocodeFailure(addr: string): void {
+  if (dismissedFailures.has(addr)) return;
+  dismissedFailures.add(addr);
+  // Notify even though the cache itself didn't change — the snapshot
+  // shape did, and subscribers (the rollup panel) need the updated
+  // set to drop the row from their render.
+  notifyGeocodeFailureListeners();
 }
 
 /**
@@ -334,7 +373,17 @@ export function primeGeocodeCache(
   const isNewFailure =
     point === null && geocodeCache.get(addr) !== null;
   geocodeCache.set(addr, point);
-  if (isNewFailure) notifyGeocodeFailureListeners();
+  if (isNewFailure) {
+    // Re-flagging an address that the operator previously dismissed
+    // brings the row back: a fresh failure is genuinely new
+    // information ("Google rejected this again"), so the dismissal
+    // shouldn't suppress it. Clearing here covers the case where the
+    // cache lost its prior entry between dismissal and re-flag (e.g.
+    // a __resetGoogleMapsSdkForTest in tests, or a manual cache
+    // invalidation we may add later).
+    dismissedFailures.delete(addr);
+    notifyGeocodeFailureListeners();
+  }
 }
 
 /**
@@ -369,8 +418,13 @@ export function resolveGeocode(
         // live as new failures land — both from this surface and from
         // a per-property Location card sharing the same module-level
         // cache. Successes don't need to emit because the rollup only
-        // tracks failures.
-        if (point === null) notifyGeocodeFailureListeners();
+        // tracks failures. A re-attempted geocode that lands `null`
+        // also clears any prior dismissal for this address — see the
+        // matching comment in `primeGeocodeCache` above.
+        if (point === null) {
+          dismissedFailures.delete(addr);
+          notifyGeocodeFailureListeners();
+        }
         resolve(point);
       });
     },
@@ -392,5 +446,9 @@ export function resolveGeocode(
 export function __resetGoogleMapsSdkForTest(): void {
   geocodeCache.clear();
   inFlightGeocodes.clear();
+  // Dismissals share the cache's in-session lifetime in production —
+  // reset them between tests for the same reason we reset the cache,
+  // so a dismissal in one test doesn't suppress a failure in the next.
+  dismissedFailures.clear();
   loadedApiKey = null;
 }

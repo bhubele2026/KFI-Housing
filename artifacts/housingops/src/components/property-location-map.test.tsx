@@ -333,28 +333,22 @@ describe("PropertyLocationMap", () => {
     expect(link!.href).not.toContain("#");
   });
 
-  it("renders the troubleshooting message inline with the embed (always visible, not gated on detection)", async () => {
-    // Why this test exists: the iframe `onError` handler only fires
-    // when the iframe element itself fails (network blocked, CSP
-    // refused, malformed URL). Google's Embed API renders its
-    // `RefererNotAllowedMapError` / `ApiNotActivatedMapError` /
-    // `InvalidKeyMapError` / quota-exhausted screens as Google content
-    // *inside* the iframe, which is cross-origin from the host page —
-    // browsers don't expose those to the parent's onError. So for the
-    // most common real-world failures the dedicated error branch
-    // (`property-location-map-error`) will not trigger.
-    //
-    // To make the requested operator-facing message reliably visible
-    // in those cases, the troubleshooting copy is rendered
-    // unconditionally below the embed in the success branch — not
-    // hidden behind a click or a flaky detection heuristic. When
-    // Google shows its grey error tile inside the iframe, the
-    // operator sees the plain-English fix list right next to it.
-    // This test pins down (a) the message is present whenever the
-    // embed is, (b) the visible copy lists the exact two key-side
-    // fixes (Maps Embed API / allowlist), and (c) it never appears
-    // in branches where it would be misleading (loading, empty,
-    // missing-key, error — covered by the dedicated test below).
+  it("does not render the always-on troubleshooting hint in the healthy success branch (Task #196)", async () => {
+    // Why this test exists: a previous iteration of this card kept a
+    // permanent "Seeing a Google error in the map?…" companion line
+    // pinned under the embed even when the map was rendering fine,
+    // which made every healthy property-detail page look like the
+    // key had been rejected. Task #196 removed that always-on line
+    // because the real failure modes are already covered by the
+    // dedicated error branch (`property-location-map-error`), which
+    // is fed by three independent signals: the iframe's own `error`
+    // event (network/CSP/malformed URL), Google's postMessage error
+    // codes (Task #163), and the shared `useGoogleMapsKeyError`
+    // store populated by `gm_authFailure` on the portfolio map
+    // (Task #178). This test pins down that the hint never appears
+    // in the healthy success branch — the address block, the
+    // "Open in Google Maps" overlay, and the Directions link are
+    // the only chrome around the working embed.
     await render(
       <PropertyLocationMap
         address="100 Oak Way"
@@ -365,79 +359,32 @@ describe("PropertyLocationMap", () => {
       />,
     );
 
-    const note = get("property-location-map-troubleshoot");
-    expect(note).not.toBeNull();
+    // Embed is rendered (we're in the healthy success branch), and
+    // the dedicated error panel is NOT rendered.
+    expect(get("property-location-map-iframe")).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
 
-    const text = get("property-location-map-troubleshoot-text");
-    expect(text).not.toBeNull();
-    // Crucially, the message must be visible immediately — no <details>
-    // wrapper, no `hidden` attribute, no required user interaction.
-    // This is what distinguishes "shown when Google rejects the key"
-    // from "discoverable when Google rejects the key".
-    expect(note!.closest("details")).toBeNull();
-    expect(note!.hasAttribute("hidden")).toBe(false);
+    // The always-on troubleshooting hint and its inner text node
+    // must both be absent — neither the wrapper nor the copy may
+    // sneak back into the healthy branch under any test id.
+    expect(get("property-location-map-troubleshoot")).toBeNull();
+    expect(get("property-location-map-troubleshoot-text")).toBeNull();
 
-    const copy = (text!.textContent ?? "").toLowerCase();
-    expect(copy).toContain("google");
-    expect(copy).toContain("api key");
-    expect(copy).toContain("maps embed api");
-    expect(copy).toContain("allowlist");
+    // And the literal opening phrase from the removed companion
+    // message must not appear anywhere in the healthy card — this
+    // catches a regression that re-introduces the copy under a
+    // different test id or wrapper element.
+    expect(container.textContent ?? "").not.toContain(
+      "Seeing a Google error in the map?",
+    );
   });
 
-  it("uses the same troubleshooting copy in the inline note and the error branch (no drift)", async () => {
-    // Both surfaces describe the same operator-side fix. If they ever
-    // drift, we'd be telling operators two different stories about
-    // the same key problem. The implementation sources both from a
-    // shared constant; this test pins down the shared substring so
-    // the two surfaces can't accidentally diverge.
-    const SHARED_FIX_LINE =
-      "Google rejected this Maps API key. Check that the Maps Embed " +
-      "API is enabled and that this domain is on the key's allowlist.";
-
-    await render(
-      <PropertyLocationMap
-        address="100 Oak Way"
-        city="Austin"
-        state="TX"
-        zip="78701"
-        apiKey="test-key-abc"
-      />,
-    );
-    const inlineCopy =
-      get("property-location-map-troubleshoot-text")?.textContent ?? "";
-    expect(inlineCopy).toContain(SHARED_FIX_LINE);
-
-    // Re-render in the error state in a fresh tree to read its copy.
-    await act(async () => {
-      root!.unmount();
-      root = null;
-    });
-    await render(
-      <PropertyLocationMap
-        address="100 Oak Way"
-        city="Austin"
-        state="TX"
-        zip="78701"
-        apiKey="test-key-abc"
-      />,
-    );
-    const iframe = get("property-location-map-iframe") as HTMLIFrameElement | null;
-    expect(iframe).not.toBeNull();
-    await act(async () => {
-      fireReactOnError(iframe!);
-    });
-    const errorPanel = get("property-location-map-error");
-    expect(errorPanel).not.toBeNull();
-    expect(errorPanel!.textContent).toContain(SHARED_FIX_LINE);
-  });
-
-  it("does not render the troubleshooting disclosure in the loading, empty, missing-key, or error branches", async () => {
-    // The disclosure is only meaningful when the embed is actually
-    // mounted. In the empty/missing-key states there's no iframe to
-    // troubleshoot; in the loading state we don't yet know whether
-    // the key is configured; and in the error state the same copy
-    // is already visible, so showing the collapsible disclosure on
-    // top of it would be redundant noise.
+  it("does not render the troubleshooting hint in the loading, empty, missing-key, or error branches", async () => {
+    // The hint is gone in every branch now (Task #196 removed the
+    // always-on companion message from the success branch too), so
+    // none of these branches should render it either. Kept as a
+    // separate test so a regression in any one branch surfaces
+    // cleanly instead of getting lumped into the success-branch test.
     await render(
       <PropertyLocationMap
         address=""

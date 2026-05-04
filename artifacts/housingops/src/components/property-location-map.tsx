@@ -23,14 +23,10 @@ import {
 } from "@/hooks/use-runtime-config";
 import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
 
-// Generic operator-facing copy used in two places:
-//   1. The dedicated error branch when the iframe's own `error` event
-//      fires (network blocked, CSP refused, malformed URL) — i.e. we
-//      know the embed is broken but Google never told us *why*.
-//   2. The persistent companion disclosure rendered alongside the
-//      success branch for the failure modes we still cannot detect
-//      (extremely old browsers, postMessage stripped by an ad-blocker,
-//      etc.).
+// Generic operator-facing copy for the dedicated error branch when
+// the iframe's own `error` event fires (network blocked, CSP refused,
+// malformed URL) — i.e. we know the embed is broken but Google never
+// told us *why*.
 //
 // When Google's Embed API does report a specific error code via
 // postMessage (RefererNotAllowedMapError / ApiNotActivatedMapError /
@@ -500,31 +496,22 @@ export function PropertyLocationMap({
               </div>
             </a>
             {/*
-              Always-visible companion message. Why this is rendered
-              unconditionally next to the embed — not as a collapsible
-              disclosure and not gated on detection:
-              Although Task #163 wires up postMessage detection so most
-              key-rejection failures now flip us to the dedicated error
-              branch with a tailored message, postMessage isn't a
-              guarantee — older browsers, ad-blockers, restrictive CSPs,
-              and any future change to Google's embed protocol can all
-              suppress it. Keeping this generic disclosure visible in
-              the success branch means the operator still has a path
-              to "I see Google's grey error tile, here's the fix" even
-              when detection fails. We accept the small amount of
-              permanent UI weight in the success case as the cost of
-              having a no-false-negatives fallback.
+              Task #196: the always-visible "Seeing a Google error?"
+              companion message used to live here. We removed it
+              because it was confusing operators on healthy maps —
+              shouting that the key was rejected next to a perfectly
+              rendered embed made working pages look broken. The real
+              failure modes are already covered by the dedicated error
+              branch (`property-location-map-error`), which is fed by
+              three independent signals: the iframe's own `error`
+              event (network/CSP/malformed URL), Google's postMessage
+              error codes (key/allowlist/quota — Task #163), and the
+              shared `useGoogleMapsKeyError` store populated by
+              `gm_authFailure` on the portfolio map (Task #178). When
+              any of those fires, we flip into the red panel with a
+              tailored message and a Re-check button. The success
+              branch stays clean.
             */}
-            <p
-              className="text-xs text-muted-foreground flex items-start gap-1.5"
-              data-testid="property-location-map-troubleshoot"
-            >
-              <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
-              <span data-testid="property-location-map-troubleshoot-text">
-                Seeing a Google error in the map?{" "}
-                {MAPS_KEY_TROUBLESHOOTING_TEXT}
-              </span>
-            </p>
           </div>
         ) : embedUrl && isMapError ? (
           <div

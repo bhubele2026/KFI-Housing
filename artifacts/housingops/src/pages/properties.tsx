@@ -519,6 +519,49 @@ export default function Properties() {
     });
   }, []);
 
+  // Pre-compute total/occupied/vacant bed counts per property so both
+  // the table cells AND the map's info bubble pull from the same source
+  // — the bubble would otherwise have to re-filter `beds` for every
+  // pin, and the two views could drift out of sync if the table's
+  // counting logic ever changed.
+  const bedStatsByPropertyId = useMemo(() => {
+    const map = new Map<
+      string,
+      { total: number; occupied: number; vacant: number }
+    >();
+    for (const b of beds) {
+      const cur =
+        map.get(b.propertyId) ?? { total: 0, occupied: 0, vacant: 0 };
+      cur.total += 1;
+      if (b.status === "Occupied") cur.occupied += 1;
+      else cur.vacant += 1;
+      map.set(b.propertyId, cur);
+    }
+    return map;
+  }, [beds]);
+
+  const toMappable = useCallback(
+    (p: Property): MappableProperty => {
+      const stats = bedStatsByPropertyId.get(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        address: p.address,
+        city: p.city,
+        state: p.state,
+        zip: p.zip,
+        customerName: customerById.get(p.customerId)?.name,
+        // Always populate bed stats — properties with no beds get all
+        // zeros, which the bubble renders as "0 beds" so the operator
+        // sees we know about the property but it isn't bedded yet.
+        totalBeds: stats?.total ?? 0,
+        occupied: stats?.occupied ?? 0,
+        vacant: stats?.vacant ?? 0,
+      };
+    },
+    [bedStatsByPropertyId, customerById],
+  );
+
   // Split the filtered list for the map view: properties with at least
   // one address field go on the map; the rest go in the side panel so
   // the operator can see they exist (and click through to fix them)
@@ -532,21 +575,13 @@ export default function Properties() {
         `${p.address}${p.city}${p.state}${p.zip}`.trim().length > 0;
       const isGeocodeFailure = unmappableIds.has(p.id);
       if (hasAnyAddress && !isGeocodeFailure) {
-        withAddr.push({
-          id: p.id,
-          name: p.name,
-          address: p.address,
-          city: p.city,
-          state: p.state,
-          zip: p.zip,
-          customerName: customerById.get(p.customerId)?.name,
-        });
+        withAddr.push(toMappable(p));
       } else {
         without.push(p);
       }
     }
     return { mappableProperties: withAddr, propertiesWithoutAddress: without };
-  }, [filtered, customerById, unmappableIds]);
+  }, [filtered, unmappableIds, toMappable]);
 
   // The map needs the full set of address-bearing properties so it can
   // try to geocode every one — geocode failures only get pushed to the
@@ -554,16 +589,8 @@ export default function Properties() {
   const mapInputProperties = useMemo<MappableProperty[]>(() => {
     return filtered
       .filter((p) => `${p.address}${p.city}${p.state}${p.zip}`.trim().length > 0)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        address: p.address,
-        city: p.city,
-        state: p.state,
-        zip: p.zip,
-        customerName: customerById.get(p.customerId)?.name,
-      }));
-  }, [filtered, customerById]);
+      .map(toMappable);
+  }, [filtered, toMappable]);
 
   const handleDownloadCsv = () => {
     const rows = filtered.map((property) => {

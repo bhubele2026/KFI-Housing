@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   RUNTIME_CONFIG_REFETCH_INTERVAL_MS,
   RUNTIME_CONFIG_STALE_TIME_MS,
+  RUNTIME_CONFIG_STALE_WARNING_MS,
 } from "./use-runtime-config";
 
 // These constants are the contract that lets a rotated
@@ -32,6 +33,20 @@ describe("runtime config refetch budget", () => {
     // open tabs would never see the rotation.
     expect(RUNTIME_CONFIG_STALE_TIME_MS).toBeLessThanOrEqual(
       RUNTIME_CONFIG_REFETCH_INTERVAL_MS,
+    );
+  });
+
+  it("only raises the stale-refresh warning after a sustained failure window — strictly more than one missed refetch but still within minutes", () => {
+    // The warning is meant to ride out a single transient blip and
+    // *only* fire when the operator's tab has truly been unable to
+    // see new config values. A threshold ≤ one refetch interval
+    // would cry wolf on every transient hiccup; a threshold beyond
+    // ~5 minutes would defeat the point of warning at all.
+    expect(RUNTIME_CONFIG_STALE_WARNING_MS).toBeGreaterThan(
+      RUNTIME_CONFIG_REFETCH_INTERVAL_MS,
+    );
+    expect(RUNTIME_CONFIG_STALE_WARNING_MS).toBeLessThanOrEqual(
+      5 * 60_000,
     );
   });
 });

@@ -9,7 +9,11 @@ import {
   reportGoogleMapsKeyError,
   useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
-import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
+import {
+  useRuntimeConfigQuery,
+  useRuntimeConfigRefreshStale,
+} from "@/hooks/use-runtime-config";
+import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
 
 // Generic operator-facing copy used in two places:
 //   1. The dedicated error branch when the iframe's own `error` event
@@ -187,6 +191,14 @@ export function PropertyLocationMap({
   // query errors), which sends them chasing the wrong fix. Surface the
   // real cause instead and offer a manual retry.
   const isConfigError = shouldFetchConfig && configQuery.isError;
+  // Sustained-failure warning. Fires once the periodic background
+  // refetch has been failing for ≥ RUNTIME_CONFIG_STALE_WARNING_MS
+  // *after* at least one successful fetch landed in this session, so
+  // the operator knows a freshly-rotated GOOGLE_MAPS_API_KEY may not
+  // be reaching this tab. Hidden when the caller pre-supplied an
+  // `apiKey` (no fetch happens), and a no-op until the threshold is
+  // crossed.
+  const isRefreshStale = useRuntimeConfigRefreshStale(configQuery);
 
   const encoded = encodeURIComponent(full);
   const searchUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
@@ -273,6 +285,16 @@ export function PropertyLocationMap({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {/*
+          Sustained-failure warning. Lives at the top of CardContent
+          (rather than above the Card) so it stays visually inside
+          the Location card the operator is already looking at —
+          there's no other "Location"-shaped affordance on the
+          property-detail page for the warning to dock against. The
+          component is a no-op while `isRefreshStale` is false, so
+          rendering it unconditionally costs nothing (Task #175).
+        */}
+        <RuntimeConfigStaleWarning isStale={isRefreshStale} />
         {isMapError ? (
           // Key-rejected / iframe-load-error branch is checked BEFORE
           // `isConfigLoading` so a code reported anywhere on the page

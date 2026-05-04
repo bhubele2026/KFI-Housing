@@ -6,8 +6,12 @@ import {
   getMapsKeyConsoleUrl,
   useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
-import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
+import {
+  useRuntimeConfigQuery,
+  useRuntimeConfigRefreshStale,
+} from "@/hooks/use-runtime-config";
 import { useToast } from "@/hooks/use-toast";
+import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
 // actually call into — installing @types/google.maps just for a handful
@@ -542,6 +546,14 @@ export function PortfolioMap({
   // query errors), which sends them chasing the wrong fix. Surface the
   // real cause instead and offer a manual retry.
   const isConfigError = shouldFetchConfig && configQuery.isError;
+  // Sustained-failure warning. Fires once the periodic background
+  // refetch has been failing for ≥ RUNTIME_CONFIG_STALE_WARNING_MS
+  // *after* at least one successful fetch landed in this session, so
+  // the operator knows a freshly-rotated GOOGLE_MAPS_API_KEY /
+  // GOOGLE_MAPS_MAP_ID may not be reaching this tab. Hidden when the
+  // caller pre-supplied an `apiKey` (no fetch happens), and a no-op
+  // until the threshold is crossed.
+  const isRefreshStale = useRuntimeConfigRefreshStale(configQuery);
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
   const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);
@@ -911,6 +923,17 @@ export function PortfolioMap({
     onUnmappableChange(unmappable);
   }, [coords, properties, onUnmappableChange]);
 
+  // Sustained-failure banner — rendered above whichever Card branch
+  // wins below. The banner itself is a no-op when `isRefreshStale` is
+  // false, so we can hoist it above the early returns without each
+  // branch having to opt in. Placed outside the Card on purpose: the
+  // Card boundary should still represent "this is the map (or its
+  // error / placeholder)", and the warning is about the surrounding
+  // refresh pipeline, not the map itself (Task #175).
+  const staleBanner = (
+    <RuntimeConfigStaleWarning isStale={isRefreshStale} />
+  );
+
   // A key has been observed as rejected anywhere on the page in this
   // session — show a dedicated "key rejected" panel here too. Without
   // this branch the portfolio map would either sit at "Loading map…"
@@ -939,35 +962,38 @@ export function PortfolioMap({
     // no actionable button (Task #177).
     const consoleUrl = getMapsKeyConsoleUrl(keyError.code);
     return (
-      <Card
-        data-testid="portfolio-map-key-error"
-        data-error-code={keyError.code}
-      >
-        <CardContent className="p-6 space-y-3">
-          <div className="flex items-start gap-2 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span data-testid="portfolio-map-key-error-text">
-              {keyError.message}
-            </span>
-          </div>
-          <Button
-            asChild
-            type="button"
-            size="sm"
-            variant="outline"
-            data-testid="portfolio-map-key-error-console-link"
-          >
-            <a
-              href={consoleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+      <>
+        {staleBanner}
+        <Card
+          data-testid="portfolio-map-key-error"
+          data-error-code={keyError.code}
+        >
+          <CardContent className="p-6 space-y-3">
+            <div className="flex items-start gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span data-testid="portfolio-map-key-error-text">
+                {keyError.message}
+              </span>
+            </div>
+            <Button
+              asChild
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="portfolio-map-key-error-console-link"
             >
-              <ExternalLink className="h-4 w-4" />
-              Open in Google Cloud Console
-            </a>
-          </Button>
-        </CardContent>
-      </Card>
+              <a
+                href={consoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open in Google Cloud Console
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
@@ -978,102 +1004,114 @@ export function PortfolioMap({
   // property-detail Location card's behavior.
   if (isConfigLoading) {
     return (
-      <Card data-testid="portfolio-map-config-loading">
-        <CardContent className="p-0 relative">
-          <div
-            className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-muted flex items-center justify-center text-sm text-muted-foreground"
-            aria-busy="true"
-          >
-            <MapPin className="h-4 w-4 mr-2" />
-            Loading map…
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        {staleBanner}
+        <Card data-testid="portfolio-map-config-loading">
+          <CardContent className="p-0 relative">
+            <div
+              className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-muted flex items-center justify-center text-sm text-muted-foreground"
+              aria-busy="true"
+            >
+              <MapPin className="h-4 w-4 mr-2" />
+              Loading map…
+            </div>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
   if (isConfigError) {
     return (
-      <Card data-testid="portfolio-map-config-error">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-2 text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-            <div className="space-y-3 flex-1">
-              <p
-                className="text-destructive"
-                data-testid="portfolio-map-config-error-text"
-              >
-                Couldn't load the map config from{" "}
-                <code className="font-mono text-[11px] bg-muted px-1 rounded">
-                  /api/config
-                </code>
-                . Check the api-server logs and try again.
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  void configQuery.refetch();
-                }}
-                data-testid="portfolio-map-config-retry"
-              >
-                Retry
-              </Button>
+      <>
+        {staleBanner}
+        <Card data-testid="portfolio-map-config-error">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-2 text-sm">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+              <div className="space-y-3 flex-1">
+                <p
+                  className="text-destructive"
+                  data-testid="portfolio-map-config-error-text"
+                >
+                  Couldn't load the map config from{" "}
+                  <code className="font-mono text-[11px] bg-muted px-1 rounded">
+                    /api/config
+                  </code>
+                  . Check the api-server logs and try again.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void configQuery.refetch();
+                  }}
+                  data-testid="portfolio-map-config-retry"
+                >
+                  Retry
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
   if (!resolvedKey) {
     return (
-      <Card data-testid="portfolio-map-fallback">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-2 text-sm text-muted-foreground">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>
-              A Google Maps API key isn't configured on the api-server
-              yet, so the portfolio map is hidden. Set{" "}
-              <code className="font-mono text-[11px] bg-muted px-1 rounded">
-                GOOGLE_MAPS_API_KEY
-              </code>{" "}
-              on the api-server (and restart it) to render every
-              property as pins on a single portfolio map.
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        {staleBanner}
+        <Card data-testid="portfolio-map-fallback">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                A Google Maps API key isn't configured on the api-server
+                yet, so the portfolio map is hidden. Set{" "}
+                <code className="font-mono text-[11px] bg-muted px-1 rounded">
+                  GOOGLE_MAPS_API_KEY
+                </code>{" "}
+                on the api-server (and restart it) to render every
+                property as pins on a single portfolio map.
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
   return (
-    <Card data-testid="portfolio-map">
-      <CardContent className="p-0 relative">
-        <div
-          ref={mapEl}
-          className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-muted"
-          data-testid="portfolio-map-canvas"
-        />
-        {status === "loading" && (
+    <>
+      {staleBanner}
+      <Card data-testid="portfolio-map">
+        <CardContent className="p-0 relative">
           <div
-            className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground pointer-events-none"
-            data-testid="portfolio-map-loading"
-          >
-            <MapPin className="h-4 w-4 mr-2" />
-            Loading map…
-          </div>
-        )}
-        {status === "error" && (
-          <div
-            className="absolute inset-0 flex items-center justify-center text-sm text-destructive p-4 text-center"
-            data-testid="portfolio-map-error"
-          >
-            {errorMsg ?? "Couldn't load the map."}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            ref={mapEl}
+            className="aspect-[16/9] w-full rounded-lg overflow-hidden bg-muted"
+            data-testid="portfolio-map-canvas"
+          />
+          {status === "loading" && (
+            <div
+              className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground pointer-events-none"
+              data-testid="portfolio-map-loading"
+            >
+              <MapPin className="h-4 w-4 mr-2" />
+              Loading map…
+            </div>
+          )}
+          {status === "error" && (
+            <div
+              className="absolute inset-0 flex items-center justify-center text-sm text-destructive p-4 text-center"
+              data-testid="portfolio-map-error"
+            >
+              {errorMsg ?? "Couldn't load the map."}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }

@@ -1481,4 +1481,137 @@ describe("PropertyLocationMap", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("rebuilds the SDK Map against a rotated Map ID delivered via SSE without reloading the SDK script (key unchanged)", async () => {
+    // Operators rotate `GOOGLE_MAPS_MAP_ID` independently of
+    // `GOOGLE_MAPS_API_KEY` — a Map-ID-only change does NOT reload
+    // the SDK script (`loadMapsApi` short-circuits on a matching
+    // key), but the load effect's dep list still includes
+    // `resolvedMapId` so it re-runs and rebuilds the FakeMap with
+    // the new branding. The portfolio map pins the disposal half of
+    // this contract via prop injection (`portfolio-map.test.tsx` —
+    // "disposes the previous map's markers and info window when the
+    // Map ID is rotated"), and Task #199 covers the *key*-rotation
+    // half of the SSE-push path on this card; this test fills in the
+    // remaining cell of that 2x2 grid: a Map-ID-only rotation pushed
+    // over SSE on the per-property Location card. A regression that
+    // dropped `resolvedMapId` from the load-effect deps here would
+    // silently keep the old branding rendered until a hard refresh,
+    // and this test would fail loudly.
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "stable-key",
+          googleMapsMapId: "map-A",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      // Pre-supply lat/lng so a marker is created synchronously and
+      // we don't have to drive the geocoder before the rotation —
+      // mirrors the portfolio map's Map-ID-rotation test setup so
+      // the disposal assertion below has a captured marker to
+      // observe.
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+          lat={30.27}
+          lng={-97.74}
+        />,
+      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      await settle();
+
+      // Sanity: initial map mounted against map-A, with a single
+      // marker attached at the supplied coords. The fake SDK is
+      // pre-installed in beforeEach so the first loadMapsApi call
+      // short-circuits before injecting any <script> tag — that
+      // absence is what makes the *continued* absence of a tag
+      // below a clean signal that a Map-ID-only rotation does NOT
+      // trigger an SDK reload.
+      expect(mapsState.map).not.toBeNull();
+      expect(mapsState.map?.options.mapId).toBe("map-A");
+      expect(mapsState.markers).toHaveLength(1);
+      const originalMap = mapsState.map;
+      const originalMarker = mapsState.markers[0];
+      expect(originalMarker.map).not.toBeNull();
+      expect(
+        document.querySelector('script[data-housingops-maps]'),
+      ).toBeNull();
+
+      // The component subscribed to /api/config/stream — exactly
+      // one EventSource was opened. Without `useRuntimeConfigStream`
+      // wired into the component, this array would be empty and the
+      // rotation path below would have no channel to deliver the
+      // new Map ID.
+      expect(fakeEventSources).toHaveLength(1);
+      expect(fakeEventSources[0].url).toContain("/api/config/stream");
+
+      // Push a Map-ID-only rotation: same key, new branded ID. The
+      // hook writes the new payload into the same react-query cache
+      // the component reads, so `resolvedMapId` flips on the next
+      // render and the SDK-load effect re-fires. Because the key
+      // didn't change, `loadMapsApi` short-circuits against the
+      // still-mounted fake SDK — no script reload, no need to drive
+      // an `onReady` event manually.
+      await act(async () => {
+        fakeEventSources[0].emit(
+          "config",
+          JSON.stringify({
+            googleMapsApiKey: "stable-key",
+            googleMapsMapId: "map-B",
+          }),
+        );
+      });
+      await settle();
+
+      // The smoking gun: no SDK <script> tag was injected. A
+      // regression in `loadMapsApi` that re-loaded the script on
+      // every Map-ID change (or a load effect that bumped the key
+      // somehow) would leave a tag here. The cleanup in
+      // `beforeEach`/`afterEach` keeps a leftover tag from a
+      // previous test from masking this assertion.
+      expect(
+        document.querySelector('script[data-housingops-maps]'),
+      ).toBeNull();
+
+      // The FakeMap was reconstructed: a brand-new instance now
+      // sits in `mapsState.map`, distinct from the one captured
+      // before the rotation, and carries the freshly-rotated Map
+      // ID. If the load effect had skipped the rebuild (e.g. its
+      // dep list lost `resolvedMapId`), `mapsState.map` would
+      // still point at `originalMap` with options.mapId === "map-A".
+      expect(mapsState.map).not.toBeNull();
+      expect(mapsState.map).not.toBe(originalMap);
+      expect(mapsState.map?.options.mapId).toBe("map-B");
+
+      // The previously-attached marker was disposed during the
+      // rebuild — the load effect's cleanup sets `marker.map = null`,
+      // and the FakeAdvancedMarkerElement setter splices the
+      // marker out of `mapsState.markers` in response. Mirrors the
+      // portfolio map's Map-ID-rotation disposal contract
+      // (`portfolio-map.test.tsx` — "disposes the previous map's
+      // markers and info window when the Map ID is rotated").
+      // Without disposal, `originalMarker.map` would still point at
+      // the vanished `originalMap` and the array would contain it
+      // dangling against a map that is no longer in the DOM.
+      expect(originalMarker.map).toBeNull();
+      expect(mapsState.markers).not.toContain(originalMarker);
+
+      // A Map-ID-only rotation is not a key rotation, so no
+      // "Google Maps key updated" toast should fire — the
+      // confirmation copy is specifically about the key swap. A
+      // toast here would mislead an operator who only rotated the
+      // branded ID.
+      expect(toastCalls).toHaveLength(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

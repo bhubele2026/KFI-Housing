@@ -17,6 +17,31 @@ import {
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// Capture every `toast(...)` invocation triggered by the component so
+// the rotation-confirmation tests below can assert on the title /
+// description without standing up the real <Toaster /> tree (which
+// would also require driving its internal queue + open animations).
+// All tests in this file go through the same module-level mock — the
+// non-toast tests simply ignore `toastCalls`, which stays empty for
+// them because the only place the component fires a toast is the
+// rotation success path that requires a previously-loaded key.
+type ToastCall = {
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  variant?: string;
+};
+const toastCalls: ToastCall[] = [];
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({
+    toasts: [],
+    toast: (arg: ToastCall) => {
+      toastCalls.push(arg);
+      return { id: "x", dismiss: () => {}, update: () => {} };
+    },
+    dismiss: () => {},
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Hand-rolled Google Maps SDK shim
 // ---------------------------------------------------------------------------
@@ -1947,5 +1972,146 @@ describe("PortfolioMap — key-rejected branch", () => {
     );
     expect(link!.target).toBe("_blank");
     expect(link!.rel).toContain("noopener");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rotation-confirmation toast (Task #179): when the operator rotates
+// GOOGLE_MAPS_API_KEY on the api-server, the SDK silently tears down and
+// reloads against the new key. Without an in-tab signal, operators have to
+// inspect the network tab (or wait for the old key to start failing) to
+// know the swap was actually picked up. These tests pin down the contract
+// that a "Google Maps key updated" toast fires exactly once on rotation
+// success — and stays silent on the very first load (no rotation has
+// happened yet).
+// ---------------------------------------------------------------------------
+describe("PortfolioMap — rotation-confirmation toast", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    toastCalls.length = 0;
+    __resetPortfolioMapCachesForTest();
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    // Same precondition the SDK-reload rotation test relies on — wipe
+    // any leftover <script> from a previous test so the fresh-key
+    // reload path is observable end-to-end.
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
+    toastCalls.length = 0;
+  });
+
+  it("does not fire a toast on the very first map load (no rotation has happened yet)", async () => {
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="initial-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Fresh tab — `loadedApiKey` was null, so loadMapsApi reports
+    // `rotated: false` and the success path skips the toast. A toast
+    // here would mean an operator opening a fresh tab gets a
+    // confusing "key updated" popup before any rotation occurred.
+    expect(mapsState.map).not.toBeNull();
+    expect(toastCalls).toHaveLength(0);
+  });
+
+  it("fires the rotation-confirmation toast exactly once when a rotated key successfully reloads the SDK", async () => {
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="key-A"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+    // Sanity check — initial load did not toast (covered by the test
+    // above, but re-asserted here so the post-rotation count is
+    // unambiguous).
+    expect(toastCalls).toHaveLength(0);
+
+    // Rotate. The load effect re-runs on `resolvedKey` change,
+    // loadMapsApi tears down the old SDK + script, and a fresh script
+    // tag is appended pointing at the new key.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="key-B"
+          />
+        </Wrapper>,
+      );
+    });
+    await flush();
+
+    // Fresh script tag for key-B is now in the DOM, but the toast
+    // must NOT fire until the rotated SDK actually resolves — until
+    // that point the operator has no proof the new key works.
+    expect(toastCalls).toHaveLength(0);
+
+    // Drive the rotated SDK to readiness (jsdom doesn't run real
+    // network fetches, so we re-install the fake namespace and
+    // dispatch the script's `load` event manually).
+    const script = document.querySelector(
+      'script[data-housingops-maps]',
+    ) as HTMLScriptElement | null;
+    expect(script).not.toBeNull();
+    installFakeGoogleMaps();
+    await act(async () => {
+      script!.dispatchEvent(new Event("load"));
+    });
+    await settle();
+
+    // Exactly one toast, with copy that names the change so the
+    // operator can tell it apart from unrelated notifications.
+    expect(toastCalls).toHaveLength(1);
+    expect(toastCalls[0].title).toBe("Google Maps key updated");
+    expect(toastCalls[0].description).toBe(
+      "Map reloaded against the rotated key.",
+    );
+
+    // Cleanup: leftover script would defeat the "no tag yet"
+    // precondition any subsequent test relies on.
+    script!.remove();
   });
 });

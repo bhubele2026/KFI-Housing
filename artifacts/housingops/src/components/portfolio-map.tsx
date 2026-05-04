@@ -7,6 +7,7 @@ import {
   useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
 import { useRuntimeConfigQuery } from "@/hooks/use-runtime-config";
+import { useToast } from "@/hooks/use-toast";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
 // actually call into — installing @types/google.maps just for a handful
@@ -218,8 +219,14 @@ let loadedApiKey: string | null = null;
  * Subsequent calls with the same key return the in-flight or
  * already-resolved promise so toggling the map view repeatedly never
  * injects duplicate <script> tags or re-downloads the SDK.
+ *
+ * The resolved value reports whether this load was triggered by a key
+ * rotation (`rotated: true`) versus the very first load in this tab
+ * (`rotated: false`). Callers use that flag to surface a one-time toast
+ * confirming the rotated key actually took effect, while staying silent
+ * on fresh tabs where no rotation has occurred yet.
  */
-function loadMapsApi(apiKey: string): Promise<void> {
+function loadMapsApi(apiKey: string): Promise<{ rotated: boolean }> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Google Maps requires a browser environment"));
   }
@@ -227,8 +234,13 @@ function loadMapsApi(apiKey: string): Promise<void> {
   // different key, blow away the old <script> + globals so the next
   // load below uses the rotated value. The component's load effect
   // re-runs on `resolvedKey` change, so it'll then create a fresh
-  // `google.maps.Map` against the freshly-loaded SDK.
-  if (loadedApiKey !== null && loadedApiKey !== apiKey) {
+  // `google.maps.Map` against the freshly-loaded SDK. We snapshot the
+  // detection result so the caller can react (e.g. toast confirming
+  // the rotation took effect) once the new SDK is actually ready —
+  // checking `loadedApiKey` again at resolve time would race against
+  // a third rotation that lands while this one is in flight.
+  const isRotation = loadedApiKey !== null && loadedApiKey !== apiKey;
+  if (isRotation) {
     const stale = document.querySelector<HTMLScriptElement>(
       'script[data-housingops-maps]',
     );
@@ -248,9 +260,11 @@ function loadMapsApi(apiKey: string): Promise<void> {
   // ready for both the Geocoder and the new marker class.
   if (window.google?.maps?.marker?.AdvancedMarkerElement) {
     loadedApiKey = apiKey;
-    return Promise.resolve();
+    return Promise.resolve({ rotated: isRotation });
   }
-  if (window.__housingopsMapsLoader) return window.__housingopsMapsLoader;
+  if (window.__housingopsMapsLoader) {
+    return window.__housingopsMapsLoader.then(() => ({ rotated: isRotation }));
+  }
 
   const promise = new Promise<void>((resolve, reject) => {
     const onReady = () => {
@@ -303,7 +317,7 @@ function loadMapsApi(apiKey: string): Promise<void> {
     document.head.appendChild(s);
   });
   window.__housingopsMapsLoader = promise;
-  return promise;
+  return promise.then(() => ({ rotated: isRotation }));
 }
 
 /**
@@ -579,6 +593,15 @@ export function PortfolioMap({
   //     operator staring at a stuck loading spinner or Google's grey
   //     error tile (Task #167).
   const keyError = useGoogleMapsKeyError();
+  // Surface a one-time confirmation when a rotated key successfully
+  // takes effect — without this, an operator who set a fresh
+  // GOOGLE_MAPS_API_KEY on the api-server has to inspect the network
+  // tab (or wait for the old key to start failing) to know the swap
+  // was actually picked up. The toast fires only on the rotation
+  // success path inside the load effect below; it stays silent on the
+  // very first load because `loadMapsApi` reports `rotated: false`
+  // when there was no previously-loaded key.
+  const { toast } = useToast();
   // Resolved coordinates by property.id. `null` means the property has
   // an address but Google couldn't geocode it — those rows are surfaced
   // in the side panel alongside truly-blank addresses.
@@ -594,7 +617,7 @@ export function PortfolioMap({
     let cancelled = false;
     setStatus("loading");
     loadMapsApi(resolvedKey)
-      .then(() => {
+      .then(({ rotated }) => {
         if (cancelled) return;
         if (!mapEl.current) return;
         const maps = window.google!.maps!;
@@ -632,6 +655,21 @@ export function PortfolioMap({
           if (infoWindowRef.current) infoWindowRef.current.close();
         });
         setStatus("ready");
+        // Confirm the rotation took effect. `loadMapsApi` only reports
+        // `rotated: true` when a previously-loaded key was swapped for
+        // a different one and the freshly-loaded SDK has now resolved,
+        // so this fires exactly once per successful rotation and stays
+        // silent on the first load (when there's no prior key to
+        // rotate from). Without this, an operator who rotated
+        // GOOGLE_MAPS_API_KEY on the api-server has no in-tab signal
+        // that the swap actually landed — they'd have to inspect the
+        // network tab or wait for the old key to start failing.
+        if (rotated) {
+          toast({
+            title: "Google Maps key updated",
+            description: "Map reloaded against the rotated key.",
+          });
+        }
       })
       .catch((err: Error) => {
         if (cancelled) return;

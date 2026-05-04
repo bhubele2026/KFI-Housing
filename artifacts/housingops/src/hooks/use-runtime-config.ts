@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import {
   useGetRuntimeConfig,
   getGetRuntimeConfigQueryKey,
@@ -15,12 +16,13 @@ import {
  * operator would have to ask everyone to hard-refresh — defeating
  * much of the point of a "no rebuild, no web restart" rotation flow.
  *
- * One minute is the bounded window inside which a rotated value is
- * guaranteed to land in any open tab. It's frequent enough that an
- * operator who restarts the api-server right after rotating sees the
- * new value land within ~a minute, and infrequent enough that idle
- * tabs don't pound `/api/config` (which is itself a cheap endpoint,
- * but there's no reason to be wasteful).
+ * One minute is the bounded fallback window inside which a rotated
+ * value is guaranteed to land in any open tab even when the SSE push
+ * channel (`/api/config/stream` — see {@link useRuntimeConfigStream})
+ * is unavailable. On the happy path the SSE feed delivers the rotated
+ * key in seconds because the api-server restart drops every open
+ * EventSource and the browser auto-reconnects with a fresh initial
+ * `config` event; the poll exists purely as a safety net.
  */
 export const RUNTIME_CONFIG_REFETCH_INTERVAL_MS = 60_000;
 
@@ -46,7 +48,8 @@ export const RUNTIME_CONFIG_STALE_TIME_MS = 30_000;
  *
  * Refetch triggers, in addition to the initial mount:
  *   - `refetchInterval` — the periodic poll above; the bounded window
- *     for picking up a rotation in an idle tab.
+ *     for picking up a rotation in an idle tab when the SSE push
+ *     channel is unavailable.
  *   - `refetchOnWindowFocus` — when the operator switches back to the
  *     tab after rotating the key in another tab/window, we re-check
  *     immediately rather than waiting up to a full interval.
@@ -57,6 +60,11 @@ export const RUNTIME_CONFIG_STALE_TIME_MS = 30_000;
  * The default `QueryClient` in `App.tsx` disables `refetchOnWindowFocus`
  * globally (it would be noisy for the data-store's CRUD queries), so
  * we re-enable it here on the runtime-config query specifically.
+ *
+ * SSE pushes from {@link useRuntimeConfigStream} land in this same
+ * react-query cache via `setQueryData`, so consumers don't need to
+ * subscribe to anything new — the existing `data` field just updates
+ * faster.
  */
 export function useRuntimeConfigQuery(enabled: boolean) {
   return useGetRuntimeConfig({
@@ -66,7 +74,8 @@ export function useRuntimeConfigQuery(enabled: boolean) {
       // though the orval-generated options helper falls back to the
       // same default. Sharing this key across mount sites is what
       // gives us the "second consumer gets the cache for free"
-      // property described above.
+      // property described above — and what lets the SSE hook below
+      // push fresh values into the same cache via setQueryData.
       queryKey: getGetRuntimeConfigQueryKey(),
       enabled,
       staleTime: RUNTIME_CONFIG_STALE_TIME_MS,
@@ -75,6 +84,98 @@ export function useRuntimeConfigQuery(enabled: boolean) {
       refetchOnReconnect: true,
     },
   });
+}
+
+/**
+ * URL of the api-server's Server-Sent Events feed. Path-based-routed
+ * to the api-server (which serves `/api/*`) by the workspace router,
+ * so a relative URL works in dev and prod alike.
+ */
+const RUNTIME_CONFIG_STREAM_URL = "/api/config/stream";
+
+/**
+ * Subscribes to the `/api/config/stream` SSE feed and pushes every
+ * delivered payload into the same react-query cache the polling hook
+ * reads. The end result for consumers is identical to the polling
+ * path — `useRuntimeConfigQuery().data` just updates faster — so no
+ * component code has to know whether a particular value arrived via
+ * push or poll.
+ *
+ * Why this exists: without push, a rotated `GOOGLE_MAPS_API_KEY` /
+ * `GOOGLE_MAPS_MAP_ID` could take up to a full
+ * `RUNTIME_CONFIG_REFETCH_INTERVAL_MS` window to land in an
+ * already-open tab. The api-server restart that ships the new value
+ * drops every open EventSource; the browser then auto-reconnects
+ * (default ~3s back-off in the EventSource spec) and the very first
+ * `config` event of the new connection delivers the rotated key —
+ * down from "up to a minute" to "within seconds".
+ *
+ * The polling fallback in {@link useRuntimeConfigQuery} is unchanged.
+ * Browsers without `EventSource` (a very small slice today, but the
+ * `typeof` guard keeps SSR / test harnesses without it from crashing),
+ * environments that strip event-stream responses (some CSP-restricted
+ * iframes, certain corporate proxies), and the brief reconnect window
+ * itself all keep working through the existing 60s poll. The
+ * sustained-failure warning fires when *neither* push nor poll has
+ * delivered for ≥ {@link RUNTIME_CONFIG_STALE_WARNING_MS} because the
+ * stale hook resets its failure streak whenever react-query's
+ * `dataUpdatedAt` advances — which it does on every SSE push too,
+ * not just on every successful poll.
+ *
+ * Pass `enabled = false` (e.g. tests injecting the key explicitly,
+ * or the empty-address branch of the Location card) to skip opening
+ * the EventSource entirely.
+ */
+export function useRuntimeConfigStream(enabled: boolean): void {
+  // Read the QueryClient via the context directly (rather than through
+  // `useQueryClient()`, which throws when no provider is mounted) so
+  // call sites that don't stand up a `QueryClientProvider` — notably
+  // page-level tests that mock `useGetRuntimeConfig` to bypass
+  // react-query entirely (see e.g.
+  // `pages/property-detail.location-map-errors.test.tsx`) — keep
+  // working. Without a client we have no cache to push into; the
+  // polling fallback in `useRuntimeConfigQuery` covers production
+  // anyway, so silently no-op'ing here is the right behavior.
+  const queryClient = useContext(QueryClientContext);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (!queryClient) return;
+    if (typeof window === "undefined") return;
+    if (typeof EventSource === "undefined") return;
+
+    let es: EventSource;
+    try {
+      es = new EventSource(RUNTIME_CONFIG_STREAM_URL);
+    } catch {
+      // Some environments throw synchronously on construction (e.g.
+      // CSP `connect-src` violations). Treat that the same as "SSE
+      // unavailable" — the polling fallback covers us.
+      return;
+    }
+
+    const onConfig = (e: MessageEvent) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(e.data);
+      } catch {
+        // A malformed payload shouldn't poison the cache or crash
+        // the page — just skip it and wait for the next event.
+        return;
+      }
+      // Push into the same cache the polling query reads. Consumers
+      // see this exactly the same way they see a successful poll
+      // result: `data` updates and `dataUpdatedAt` bumps, which the
+      // sustained-failure warning hook uses to reset its streak.
+      queryClient.setQueryData(getGetRuntimeConfigQueryKey(), parsed);
+    };
+    es.addEventListener("config", onConfig as EventListener);
+
+    return () => {
+      es.removeEventListener("config", onConfig as EventListener);
+      es.close();
+    };
+  }, [enabled, queryClient]);
 }
 
 /**
@@ -105,32 +206,51 @@ export const RUNTIME_CONFIG_STALE_WARNING_MS = 2 * 60_000;
 const STALE_WARNING_TICK_MS = 15_000;
 
 /**
- * Detects when the background `/api/config` refetch has been failing for
- * a sustained window. The return value flips to `true` once the current
- * failure streak has been continuous for at least
- * {@link RUNTIME_CONFIG_STALE_WARNING_MS}, and back to `false` as soon as
- * any refetch succeeds.
+ * Detects when *both* the SSE push channel and the polling fallback
+ * have been failing to deliver fresh runtime config for a sustained
+ * window. The return value flips to `true` once the current failure
+ * streak has been continuous for at least
+ * {@link RUNTIME_CONFIG_STALE_WARNING_MS}, and back to `false` as soon
+ * as either a successful poll lands or an SSE push pumps a new value
+ * into the cache.
  *
  * The hook intentionally only fires once at least one successful fetch
- * has landed in this session (we keep a ref because react-query clears
+ * has landed in this session (we keep state because react-query clears
  * `data` after a long enough gap, but operators care about "we *had* a
  * working config and the refresh has since stopped working", which the
- * ref captures). When the very first fetch is still failing, the
- * components already render their dedicated `isConfigError` branch with
- * a Retry affordance — adding a second warning on top would be noise.
+ * sticky flag captures). When the very first fetch is still failing,
+ * the components already render their dedicated `isConfigError` branch
+ * with a Retry affordance — adding a second warning on top would be
+ * noise.
  *
  * Pass the result of {@link useRuntimeConfigQuery} (or any other call
  * site sharing the same query key) directly. The hook only reads the
- * three fields it needs, which keeps it cheap to call from multiple
+ * fields it needs, which keeps it cheap to call from multiple
  * components without each one taking an explicit dependency on
  * react-query's `UseQueryResult` shape.
+ *
+ * `dataUpdatedAt` is the bridge to the SSE push path: react-query
+ * bumps that field on *any* cache write, including the
+ * `setQueryData` calls the SSE listener uses. Treating an advance in
+ * `dataUpdatedAt` as a recovery means a healthy push channel keeps the
+ * warning silent even if the polling fallback has been continuously
+ * erroring — which is exactly the right behavior, since the operator
+ * is in fact getting fresh values.
  */
 export function useRuntimeConfigRefreshStale(query: {
   isError: boolean;
   isSuccess: boolean;
   data: unknown;
+  /**
+   * react-query's wall-clock timestamp of the last successful cache
+   * write for this query (poll *or* `setQueryData`). Optional so
+   * existing call sites and tests that don't pass it keep working
+   * unchanged — when omitted, the hook falls back to its prior
+   * behavior of resetting the streak only on `isError === false`.
+   */
+  dataUpdatedAt?: number;
 }): boolean {
-  const { isError, isSuccess, data } = query;
+  const { isError, isSuccess, data, dataUpdatedAt } = query;
 
   // "Have we ever seen a successful response in this session?" — sticky.
   // We can't just look at `data !== undefined` because react-query may
@@ -148,14 +268,33 @@ export function useRuntimeConfigRefreshStale(query: {
   // — a streak that recovers and then re-enters the error state should
   // get the full warning window again, not be treated as "still failing
   // since the original streak."
+  //
+  // We *also* reset to null when react-query's `dataUpdatedAt` advances
+  // past the streak start, even while `isError` is still true. SSE
+  // pushes (via `setQueryData` from `useRuntimeConfigStream`) bump
+  // `dataUpdatedAt` without changing `isError`, so without this branch
+  // a tab whose polling fallback was permanently failing — but whose
+  // SSE channel was healthy and delivering fresh values every few
+  // seconds — would still raise the "your tab might be using outdated
+  // map settings" warning, which would be flatly wrong.
   const [streakStart, setStreakStart] = useState<number | null>(null);
   useEffect(() => {
     if (!isError) {
       setStreakStart(null);
       return;
     }
-    setStreakStart((prev) => prev ?? Date.now());
-  }, [isError]);
+    setStreakStart((prev) => {
+      if (prev !== null && dataUpdatedAt && dataUpdatedAt > prev) {
+        // Treat the SSE-driven cache write as a recovery: clear the
+        // streak. The very next render (if `isError` is still true)
+        // will set a fresh `Date.now()` anchor below, restarting the
+        // full warning window — which is correct behavior, the SSE
+        // push is the moral equivalent of a successful poll.
+        return null;
+      }
+      return prev ?? Date.now();
+    });
+  }, [isError, dataUpdatedAt]);
 
   // Re-check the elapsed time on a timer so we transition into the
   // warning state at the threshold even when no other render is pending.

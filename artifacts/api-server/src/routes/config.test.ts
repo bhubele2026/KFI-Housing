@@ -214,6 +214,220 @@ describe("GET /api/config", () => {
     expect(body.googleMapsApiKey).toBeNull();
   });
 
+  // ---------------------------------------------------------------
+  // GET /api/config/stream — Server-Sent Events feed.
+  //
+  // The SSE endpoint exists so a rotated GOOGLE_MAPS_API_KEY /
+  // GOOGLE_MAPS_MAP_ID lands in already-open tabs within seconds of
+  // the api-server restart instead of waiting up to a full polling
+  // interval. The api-server restart drops every open EventSource;
+  // the browser auto-reconnects and the very first `config` event of
+  // the new connection delivers the rotated value. These tests pin
+  // down the contract the client relies on:
+  //   • text/event-stream headers + no-cache
+  //   • initial `config` event with the current values on connect
+  //   • a fresh `config` event when the env vars change between ticks
+  //   • heartbeat comments while values are unchanged (so proxies
+  //     don't close the idle connection)
+  //   • clean shutdown: the per-connection interval is cleared and
+  //     the response ends when the client disconnects (no leaked
+  //     timers across tests).
+  // ---------------------------------------------------------------
+
+  // Helper: connect to the stream and accumulate decoded chunks until
+  // the test calls `stop()`. Uses fetch + AbortController so we can
+  // cleanly hang up — EventSource isn't available in Node's vitest
+  // runner and we don't need its auto-reconnect behavior here, only
+  // the wire format the client will read.
+  async function openStream(): Promise<{
+    chunks: string[];
+    waitForEvent: (predicate: (text: string) => boolean, timeoutMs?: number) => Promise<string>;
+    stop: () => Promise<void>;
+  }> {
+    const controller = new AbortController();
+    const res = await fetch(`${baseUrl}/api/config/stream`, {
+      signal: controller.signal,
+      headers: { Accept: "text/event-stream" },
+    });
+    if (!res.body) {
+      controller.abort();
+      throw new Error("SSE response had no body");
+    }
+    expect(res.headers.get("content-type")).toMatch(/^text\/event-stream/);
+    const cacheControl = res.headers.get("cache-control") ?? "";
+    expect(cacheControl).toContain("no-cache");
+    expect(cacheControl).toContain("no-transform");
+
+    const chunks: string[] = [];
+    let buffer = "";
+    // Tracked as a tuple so TS doesn't lose the narrowing across the
+    // `await reader.read()` boundary (we reassign `resolveNext = null`
+    // after invoking it, which otherwise widens the captured local
+    // back to `(() => void) | null` before the call).
+    const waiters: Array<() => void> = [];
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    const pump = (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          buffer += text;
+          chunks.push(text);
+          // Drain every waiter once new bytes land so all pending
+          // `waitForEvent` calls re-check their predicate.
+          while (waiters.length > 0) {
+            const r = waiters.shift();
+            if (r) r();
+          }
+        }
+      } catch {
+        // AbortController hangs up — expected when the test calls stop().
+      }
+    })();
+
+    return {
+      chunks,
+      async waitForEvent(predicate, timeoutMs = 2_000) {
+        const deadline = Date.now() + timeoutMs;
+        while (true) {
+          if (predicate(buffer)) return buffer;
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            throw new Error(
+              `Timed out waiting for SSE event. Buffer so far:\n${buffer}`,
+            );
+          }
+          await Promise.race([
+            new Promise<void>((r) => {
+              waiters.push(r);
+            }),
+            new Promise<void>((r) => setTimeout(r, remaining)),
+          ]);
+        }
+      },
+      async stop() {
+        controller.abort();
+        try {
+          await reader.cancel();
+        } catch {
+          // already aborted
+        }
+        await pump;
+      },
+    };
+  }
+
+  // Pull every `event: config\ndata: …\n\n` block out of the buffer
+  // and return their parsed payloads, in order.
+  function parseConfigEvents(buffer: string): ConfigBody[] {
+    const out: ConfigBody[] = [];
+    const re = /event: config\ndata: (.+)\n\n/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(buffer)) !== null) {
+      out.push(JSON.parse(match[1]) as ConfigBody);
+    }
+    return out;
+  }
+
+  describe("GET /api/config/stream", () => {
+    const originalInterval = process.env.CONFIG_STREAM_INTERVAL_MS;
+    afterEach(() => {
+      if (originalInterval === undefined) {
+        delete process.env.CONFIG_STREAM_INTERVAL_MS;
+      } else {
+        process.env.CONFIG_STREAM_INTERVAL_MS = originalInterval;
+      }
+    });
+
+    it("delivers the current config in a `config` event the moment a client connects (this is the path that makes a rotated key land in seconds — api-server restart → reconnect → initial event)", async () => {
+      process.env.GOOGLE_MAPS_API_KEY = "live-key-123";
+      process.env.GOOGLE_MAPS_MAP_ID = "branded-map";
+      // Long interval so this test doesn't see anything but the
+      // initial event — keeps the assertion narrow.
+      process.env.CONFIG_STREAM_INTERVAL_MS = "60000";
+
+      const stream = await openStream();
+      try {
+        await stream.waitForEvent((b) => parseConfigEvents(b).length >= 1);
+        const events = parseConfigEvents(stream.chunks.join(""));
+        expect(events[0]).toEqual({
+          googleMapsApiKey: "live-key-123",
+          googleMapsMapId: "branded-map",
+        });
+      } finally {
+        await stream.stop();
+      }
+    });
+
+    it("emits a fresh `config` event when GOOGLE_MAPS_API_KEY rotates between ticks (covers the rare in-process rotation case; the more common api-server-restart path is exercised on the client by EventSource auto-reconnect)", async () => {
+      process.env.GOOGLE_MAPS_API_KEY = "old-key";
+      // Short interval so the test doesn't have to wait long for the
+      // tick-driven change detection inside the SSE handler.
+      process.env.CONFIG_STREAM_INTERVAL_MS = "25";
+
+      const stream = await openStream();
+      try {
+        // Wait for the initial event first so we know the handler is
+        // running and has captured the "old" baseline.
+        await stream.waitForEvent((b) => parseConfigEvents(b).length >= 1);
+
+        process.env.GOOGLE_MAPS_API_KEY = "new-rotated-key";
+
+        await stream.waitForEvent(
+          (b) =>
+            parseConfigEvents(b).some(
+              (e) => e.googleMapsApiKey === "new-rotated-key",
+            ),
+        );
+        const events = parseConfigEvents(stream.chunks.join(""));
+        // Both events present, in order.
+        expect(events[0].googleMapsApiKey).toBe("old-key");
+        expect(events.at(-1)?.googleMapsApiKey).toBe("new-rotated-key");
+      } finally {
+        await stream.stop();
+      }
+    });
+
+    it("sends a heartbeat comment between change events so proxies don't close the idle connection", async () => {
+      process.env.GOOGLE_MAPS_API_KEY = "stable-key";
+      process.env.CONFIG_STREAM_INTERVAL_MS = "25";
+
+      const stream = await openStream();
+      try {
+        await stream.waitForEvent((b) => b.includes(":hb"));
+        // The heartbeat is a true SSE comment (line starts with `:`),
+        // not an event — clients with `addEventListener("config", …)`
+        // must NOT see a delivery.
+        const events = parseConfigEvents(stream.chunks.join(""));
+        expect(events).toHaveLength(1);
+      } finally {
+        await stream.stop();
+      }
+    });
+
+    it("clears the per-connection interval and ends the response when the client disconnects (no leaked timers across reconnects)", async () => {
+      process.env.GOOGLE_MAPS_API_KEY = "stable-key";
+      process.env.CONFIG_STREAM_INTERVAL_MS = "10";
+
+      const stream = await openStream();
+      // Wait for the first heartbeat so we know the interval is
+      // running, then hang up. If the interval weren't cleared, a
+      // later `res.write` against an ended response would throw and
+      // surface in unhandledRejection — vitest fails the suite on
+      // those, so this test relies on that side-effect for coverage.
+      await stream.waitForEvent((b) => b.includes(":hb"));
+      await stream.stop();
+
+      // Give the would-be-leaked interval a few cycles to misbehave.
+      await new Promise((r) => setTimeout(r, 50));
+      // If we got here without an unhandled error, teardown was clean.
+      expect(true).toBe(true);
+    });
+  });
+
   it("does not expose any other environment variable through the response shape", async () => {
     // Belt-and-suspenders against a future copy-paste that adds a
     // sibling secret to the route. The zod response schema also

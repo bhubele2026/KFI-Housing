@@ -9,6 +9,7 @@ import {
 import {
   useRuntimeConfigQuery,
   useRuntimeConfigRefreshStale,
+  useRuntimeConfigStream,
 } from "@/hooks/use-runtime-config";
 import { useToast } from "@/hooks/use-toast";
 import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
@@ -508,6 +509,14 @@ export function PortfolioMap({
   // instantly and only one periodic poll fires for both.
   const shouldFetchConfig = apiKey === undefined;
   const configQuery = useRuntimeConfigQuery(shouldFetchConfig);
+  // Subscribe to the SSE push channel so a rotated key lands within
+  // seconds (api-server restart drops the EventSource → browser
+  // reconnects → first `config` event delivers the rotated value)
+  // instead of waiting up to a full polling interval. Pushes land in
+  // the same react-query cache `useRuntimeConfigQuery` reads, so
+  // `configQuery.data` / `dataUpdatedAt` just update faster — no
+  // separate consumer wiring.
+  useRuntimeConfigStream(shouldFetchConfig);
 
   // Resolve the effective key. Test injection wins; otherwise we use
   // the value from the runtime config endpoint (which can be `null`
@@ -553,7 +562,18 @@ export function PortfolioMap({
   // GOOGLE_MAPS_MAP_ID may not be reaching this tab. Hidden when the
   // caller pre-supplied an `apiKey` (no fetch happens), and a no-op
   // until the threshold is crossed.
-  const isRefreshStale = useRuntimeConfigRefreshStale(configQuery);
+  const isRefreshStale = useRuntimeConfigRefreshStale({
+    isError: configQuery.isError,
+    isSuccess: configQuery.isSuccess,
+    data: configQuery.data,
+    // Bridge to the SSE path: every push lands as a `setQueryData`
+    // call on the same cache, which bumps `dataUpdatedAt`. Forwarding
+    // it lets the stale hook treat a healthy push channel as
+    // "refresh is working" even when the polling fallback is failing
+    // (otherwise the warning would fire on a tab that's actually
+    // getting fresh values via SSE).
+    dataUpdatedAt: configQuery.dataUpdatedAt,
+  });
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
   const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);

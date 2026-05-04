@@ -12,6 +12,7 @@ import {
 import {
   useRuntimeConfigQuery,
   useRuntimeConfigRefreshStale,
+  useRuntimeConfigStream,
 } from "@/hooks/use-runtime-config";
 import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
 
@@ -111,6 +112,12 @@ export function PropertyLocationMap({
   // the rotated value lands in `embedUrl`.
   const shouldFetchConfig = apiKey === undefined && hasAnyAddress;
   const configQuery = useRuntimeConfigQuery(shouldFetchConfig);
+  // Subscribe to the SSE push channel so a rotated key lands within
+  // seconds of the api-server restart instead of waiting up to a full
+  // polling interval. Pushes land in the same react-query cache the
+  // polling hook reads, so the iframe re-renders with the new key the
+  // moment `configQuery.data` updates — no separate consumer wiring.
+  useRuntimeConfigStream(shouldFetchConfig);
 
   // Track whether the embedded iframe failed to load. Two independent
   // signals can put the card into the error state:
@@ -198,7 +205,18 @@ export function PropertyLocationMap({
   // be reaching this tab. Hidden when the caller pre-supplied an
   // `apiKey` (no fetch happens), and a no-op until the threshold is
   // crossed.
-  const isRefreshStale = useRuntimeConfigRefreshStale(configQuery);
+  const isRefreshStale = useRuntimeConfigRefreshStale({
+    isError: configQuery.isError,
+    isSuccess: configQuery.isSuccess,
+    data: configQuery.data,
+    // Bridge to the SSE path: every push lands as a `setQueryData`
+    // call on the same cache, which bumps `dataUpdatedAt`. Forwarding
+    // it lets the stale hook treat a healthy push channel as
+    // "refresh is working" even when the polling fallback is failing
+    // (otherwise the warning would fire on a tab that's actually
+    // getting fresh values via SSE).
+    dataUpdatedAt: configQuery.dataUpdatedAt,
+  });
 
   const encoded = encodeURIComponent(full);
   const searchUrl = `https://www.google.com/maps/search/?api=1&query=${encoded}`;

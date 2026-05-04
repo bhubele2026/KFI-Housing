@@ -36,6 +36,7 @@ interface QueryShape {
   isError: boolean;
   isSuccess: boolean;
   data: unknown;
+  dataUpdatedAt?: number;
 }
 
 function Harness({
@@ -216,6 +217,106 @@ describe("useRuntimeConfigRefreshStale", () => {
     expect(lastValue).toBe(false);
 
     await advance(2_000);
+    expect(lastValue).toBe(true);
+  });
+
+  // SSE-push behavior — Task #182.
+  //
+  // The stream hook (`useRuntimeConfigStream`) lands rotated values
+  // into the same react-query cache as the polling fallback by calling
+  // `setQueryData`. That bumps `dataUpdatedAt` *without* clearing
+  // `isError` (the last polled refetch can still be in an error state).
+  //
+  // The contract these tests pin down: an SSE push that advances
+  // `dataUpdatedAt` past the start of the current failure streak must
+  // be treated as a recovery. Otherwise a tab whose polling fallback
+  // is permanently failing — but whose push channel is healthy and
+  // delivering fresh values every few seconds — would still raise the
+  // "your tab might be using outdated map settings" warning, which
+  // would be flatly wrong.
+  it("treats an SSE push (`dataUpdatedAt` advancing while `isError` stays true) as a recovery so the warning doesn't fire while the push channel keeps delivering values", async () => {
+    // Anchor every `dataUpdatedAt` value to the fake clock's *current*
+    // wall time. `vi.useFakeTimers()` defaults to the real Date.now()
+    // at install, so a small literal like `1_000` would always be
+    // *less* than the streak start the hook captures internally, and
+    // the recovery branch (which fires only when dataUpdatedAt > prev
+    // streak start) would never trigger — the test would pass for the
+    // wrong reason or fail outright.
+    const t0 = Date.now();
+    await renderWith({
+      isError: false,
+      isSuccess: true,
+      data: { googleMapsApiKey: "key-A" },
+      dataUpdatedAt: t0,
+    });
+    expect(lastValue).toBe(false);
+
+    // Now the polling fallback enters a permanent failure streak. The
+    // hook captures `Date.now()` (== t0 at this moment) as the streak
+    // anchor on this render's effect.
+    await rerenderWith({
+      isError: true,
+      isSuccess: false,
+      data: { googleMapsApiKey: "key-A" },
+      dataUpdatedAt: t0,
+    });
+    expect(lastValue).toBe(false);
+
+    // Advance to just under the warning threshold to set up the
+    // "would otherwise fire imminently" precondition.
+    await advance(RUNTIME_CONFIG_STALE_WARNING_MS - 1_000);
+    expect(lastValue).toBe(false);
+
+    // SSE push lands: setQueryData bumps `dataUpdatedAt` to a value
+    // strictly newer than the streak anchor (the hook compares
+    // dataUpdatedAt to the captured streak start). The polled refetch
+    // is still in `isError: true`. Without the recovery branch the
+    // warning would flip true within the next second.
+    await rerenderWith({
+      isError: true,
+      isSuccess: false,
+      data: { googleMapsApiKey: "key-B" },
+      dataUpdatedAt: Date.now() + 1,
+    });
+
+    // Walk well past the original threshold; the warning must stay
+    // silent because the push reset the streak.
+    await advance(2_000);
+    expect(lastValue).toBe(false);
+
+    // A fresh push every cycle keeps the warning permanently silent
+    // even though `isError` never clears.
+    for (let i = 1; i <= 3; i++) {
+      await advance(RUNTIME_CONFIG_STALE_WARNING_MS / 2);
+      await rerenderWith({
+        isError: true,
+        isSuccess: false,
+        data: { googleMapsApiKey: `key-push-${i}` },
+        dataUpdatedAt: Date.now() + 1,
+      });
+      expect(lastValue).toBe(false);
+    }
+  });
+
+  it("still flips to true when *neither* SSE push nor poll lands for the warning window — the fallback signal must not be defeated by the new field being present-but-stale", async () => {
+    const t0 = Date.now();
+    await renderWith({
+      isError: false,
+      isSuccess: true,
+      data: { googleMapsApiKey: "key-A" },
+      dataUpdatedAt: t0,
+    });
+    // Polling errors, and crucially `dataUpdatedAt` does NOT advance —
+    // because nothing has delivered a fresh value (neither poll nor
+    // push). This is exactly the sustained-failure case the warning
+    // is for.
+    await rerenderWith({
+      isError: true,
+      isSuccess: false,
+      data: { googleMapsApiKey: "key-A" },
+      dataUpdatedAt: t0,
+    });
+    await advance(RUNTIME_CONFIG_STALE_WARNING_MS + 5_000);
     expect(lastValue).toBe(true);
   });
 });

@@ -1565,6 +1565,116 @@ describe("PortfolioMap — runtime config", () => {
     script!.remove();
   });
 
+  it("disposes the previous map's markers and info window when the Map ID is rotated, leaving no stale references", async () => {
+    // Operators rotate `GOOGLE_MAPS_MAP_ID` independently of the API
+    // key — the load effect's deps include `resolvedMapId`, so a Map
+    // ID change re-runs the same cleanup the key-rotation path uses.
+    // The disposal logic is shared in a single `return () => { ... }`
+    // block today, so this case is already covered in practice — but
+    // there's no test pinning that down. A future refactor that
+    // splits cleanup into key-only and map-id-only branches could
+    // silently regress this path; this test makes that regression
+    // loud.
+    //
+    // Unlike the key-rotation test above, a Map ID change does NOT
+    // tear down `window.google` or re-load the SDK script. The
+    // existing `loadedApiKey` matches, so `loadMapsApi` resolves
+    // synchronously against the still-mounted fake SDK and the new
+    // Map is built right away — no manual script `load` dispatch
+    // needed.
+    //
+    // Pre-supply lat/lng so a marker is created synchronously and we
+    // don't have to drive the geocoder before the rotation.
+    const propWithCoords = makeProperty({
+      id: "p1",
+      lat: 30.2672,
+      lng: -97.7431,
+    });
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[propWithCoords]}
+            onPinClick={vi.fn()}
+            apiKey="stable-key"
+            mapId="map-A"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Sanity check: the initial map mounted with map-A and a marker
+    // exists. Capture both so we can verify they're torn down rather
+    // than just shadowed by fresh ones.
+    expect(mapsState.map?.options.mapId).toBe("map-A");
+    expect(mapsState.markers).toHaveLength(1);
+    const oldMarker = mapsState.markers[0];
+    expect(oldMarker.map).not.toBeNull();
+
+    // Open the bubble so we can later assert the OLD InfoWindow was
+    // explicitly closed (closeCount goes up). Without opening it
+    // first, closeCount would still be 0 — useful, but a weaker
+    // signal that disposal actually ran. The captured state object
+    // survives even after a new InfoWindow is constructed, because
+    // new instances reassign `mapsState.infoWindow` to a fresh
+    // object rather than mutating the old one.
+    await act(async () => {
+      fireMarkerEvent(oldMarker, "gmp-click");
+    });
+    expect(mapsState.infoWindow).not.toBeNull();
+    const oldInfoWindowState = mapsState.infoWindow!;
+    expect(oldInfoWindowState.isOpen).toBe(true);
+    expect(oldInfoWindowState.closeCount).toBe(0);
+
+    // Rotate only the Map ID — same API key, so no SDK reload. The
+    // load effect's cleanup must still fire because `resolvedMapId`
+    // is in its deps.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[propWithCoords]}
+            onPinClick={vi.fn()}
+            apiKey="stable-key"
+            mapId="map-B"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Disposal happened: the captured marker has been removed from
+    // its parent map (AdvancedMarkerElement's documented teardown is
+    // assigning `map = null`, which the fake mirrors by also
+    // splicing the marker out of `mapsState.markers`). Without the
+    // cleanup, `oldMarker.map` would still point at the previous
+    // google.maps.Map and the array would still contain it alongside
+    // the new map's marker.
+    expect(oldMarker.map).toBeNull();
+    expect(mapsState.markers).not.toContain(oldMarker);
+    // The InfoWindow we captured was explicitly closed by the
+    // cleanup — proves we didn't leave a stale bubble (and its
+    // last-set content node) attached against a vanished marker.
+    expect(oldInfoWindowState.closeCount).toBeGreaterThan(0);
+
+    // The freshly-built map mounted against map-B with a brand-new
+    // marker and a brand-new InfoWindow — none of them are the
+    // captured references from before the rotation. If disposal had
+    // been a no-op, the re-built marker effect would have appended
+    // a *second* marker alongside the old (still-attached) one and
+    // we'd see length 2 here.
+    expect(mapsState.map?.options.mapId).toBe("map-B");
+    expect(mapsState.markers).toHaveLength(1);
+    const newMarker = mapsState.markers[0];
+    expect(newMarker).not.toBe(oldMarker);
+    expect(mapsState.infoWindow).not.toBeNull();
+    expect(mapsState.infoWindow).not.toBe(oldInfoWindowState);
+  });
+
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
     const fetchMock = vi.fn(
       async () =>

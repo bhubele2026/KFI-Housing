@@ -1,9 +1,10 @@
-import { useContext, useEffect, useState } from "react";
-import { QueryClientContext } from "@tanstack/react-query";
+import { useCallback, useContext, useEffect, useState } from "react";
+import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
 import {
   useGetRuntimeConfig,
   getGetRuntimeConfigQueryKey,
 } from "@workspace/api-client-react";
+import { clearGoogleMapsKeyError } from "./use-google-maps-key-error";
 
 /**
  * How often the runtime config (Google Maps API key + Map ID, exposed
@@ -32,7 +33,7 @@ export const RUNTIME_CONFIG_REFETCH_INTERVAL_MS = 60_000;
  * reads the config) inside this window reuse the cached value rather
  * than firing a fresh request, while still inheriting the periodic
  * refetch above. Half the refetch interval keeps the cache useful
- * without ever masking a rotation that's already due to land.
+ * without ever masking a rotation that is already due to land.
  */
 export const RUNTIME_CONFIG_STALE_TIME_MS = 30_000;
 
@@ -55,10 +56,10 @@ export const RUNTIME_CONFIG_STALE_TIME_MS = 30_000;
  *     immediately rather than waiting up to a full interval.
  *   - `refetchOnReconnect` — same idea after the network drops; if
  *     they rotated while offline, we want the new value as soon as
- *     we're back online.
+ *     we are back online.
  *
  * The default `QueryClient` in `App.tsx` disables `refetchOnWindowFocus`
- * globally (it would be noisy for the data-store's CRUD queries), so
+ * globally (it would be noisy for the data-store s CRUD queries), so
  * we re-enable it here on the runtime-config query specifically.
  *
  * SSE pushes from {@link useRuntimeConfigStream} land in this same
@@ -69,7 +70,7 @@ export const RUNTIME_CONFIG_STALE_TIME_MS = 30_000;
 export function useRuntimeConfigQuery(enabled: boolean) {
   return useGetRuntimeConfig({
     query: {
-      // Supply queryKey explicitly so TS is happy — react-query v5's
+      // Supply queryKey explicitly so TS is happy — react-query v5 s
       // `UseQueryOptions` type marks `queryKey` as required even
       // though the orval-generated options helper falls back to the
       // same default. Sharing this key across mount sites is what
@@ -181,7 +182,7 @@ export function useRuntimeConfigStream(enabled: boolean): void {
 /**
  * How long the periodic `/api/config` refetch must keep failing before we
  * raise an in-page warning. The refetch interval above is one minute, so
- * two minutes corresponds to ≥2 consecutive failed background refreshes —
+ * two minutes corresponds to >=2 consecutive failed background refreshes —
  * enough to rule out a single transient blip while still alerting an
  * operator quickly enough that a stuck rotation is actionable.
  *
@@ -196,7 +197,7 @@ export const RUNTIME_CONFIG_STALE_WARNING_MS = 2 * 60_000;
 
 /**
  * Polling cadence for the in-component clock that drives the
- * stale-refresh warning's transition. Independent of the refetch
+ * stale-refresh warning s transition. Independent of the refetch
  * interval — react-query updates the query state itself on every
  * refetch attempt, but the *threshold* is "elapsed time since the
  * failure streak began", which only ticks if we re-render. Polling
@@ -253,8 +254,8 @@ export function useRuntimeConfigRefreshStale(query: {
   const { isError, isSuccess, data, dataUpdatedAt } = query;
 
   // "Have we ever seen a successful response in this session?" — sticky.
-  // We can't just look at `data !== undefined` because react-query may
-  // reset `data` if the cache is GC'd between observers, which would
+  // We cannot just look at `data !== undefined` because react-query may
+  // reset `data` if the cache is GC d between observers, which would
   // suppress the warning even though the operator did briefly have a
   // working config. Using a state setter (rather than a ref) so the
   // component re-renders the moment it flips on.
@@ -298,7 +299,7 @@ export function useRuntimeConfigRefreshStale(query: {
 
   // Re-check the elapsed time on a timer so we transition into the
   // warning state at the threshold even when no other render is pending.
-  // Only run while we're actually accumulating a failure streak — no
+  // Only run while we are actually accumulating a failure streak — no
   // reason to keep the timer alive in the success/loading branches.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -310,4 +311,80 @@ export function useRuntimeConfigRefreshStale(query: {
 
   if (!isError || !hasEverSucceeded || streakStart === null) return false;
   return now - streakStart >= RUNTIME_CONFIG_STALE_WARNING_MS;
+}
+
+/**
+ * "Re-check Maps API key" affordance for the Google Maps key-error UI.
+ *
+ * An operator who fixes their Maps key in Google Cloud Console (enables
+ * the API, adds this domain to the referrer allowlist, raises the quota,
+ * issues a fresh key, …) should not have to hard-refresh the whole tab
+ * to recover. They click "Re-check key" on the in-card error panel, this
+ * hook re-fetches `/api/config` so any rotated value lands immediately
+ * (instead of waiting up to a full RUNTIME_CONFIG_REFETCH_INTERVAL_MS
+ * for the periodic poll), and on success clears the shared key-error
+ * store so every Maps surface drops out of its rejected branch and
+ * re-attempts the embed against the (now possibly fixed) key. If Google
+ * still rejects it, the normal postMessage / `gm_authFailure` paths
+ * repopulate the store and the panels + a fresh toast come back —
+ * resetting `notifiedCodes` inside `clearGoogleMapsKeyError` is what
+ * re-arms that "fresh toast on next failure" behavior.
+ *
+ * What this cannot fix: the Google Maps JS SDK s `gm_authFailure`
+ * callback only fires once per script load, so if Cloud Console was
+ * fixed but the operator s underlying Maps API key value did not change,
+ * the SDK is still in its broken auth state and will not re-call
+ * `gm_authFailure` to confirm. The Embed-iframe path does not have this
+ * limitation — each iframe is a fresh request — so the recheck reliably
+ * recovers the property-detail Location card and any portfolio-map page
+ * where the operator rotated the key value.
+ *
+ * `recheck()` swallows refetch errors so a transient `/api/config`
+ * blip does not blow up the calling component. Instead, when the
+ * refetch ends in an error state we leave the existing key-error
+ * panels alone so the operator is not lied to about whether the key
+ * was reconfirmed; clicking again retries.
+ */
+export function useRecheckGoogleMapsKey(): {
+  recheck: () => Promise<void>;
+  isRechecking: boolean;
+} {
+  const queryClient = useQueryClient();
+  const [isRechecking, setIsRechecking] = useState(false);
+
+  const recheck = useCallback(async () => {
+    setIsRechecking(true);
+    try {
+      const queryKey = getGetRuntimeConfigQueryKey();
+      // `refetchQueries` resolves once every matching query has
+      // settled (success or error). We do not need to inspect the
+      // returned data — the next render of any Maps surface will
+      // pick up `configQuery.data` from the cache directly.
+      //
+      // `type: "all"` (vs. the default `"active"`) is important: a
+      // Maps surface can be mounted with an explicit `apiKey` prop
+      // (test injection, or any future caller that already has a
+      // resolved key in hand), in which case its `useGetRuntimeConfig`
+      // observer is `enabled: false` — and react-query treats
+      // disabled-only observers as *inactive*, so the default
+      // `refetchQueries` would silently skip the refetch and we would
+      // clear the key-error store without ever re-confirming the
+      // runtime config. Including inactive queries here means recheck
+      // re-fires /api/config regardless of how the calling surface
+      // happens to be configured.
+      await queryClient.refetchQueries({ queryKey, type: "all" });
+      // Do not clear the shared key-error store if /api/config itself
+      // is broken — the api-server being down is a different problem
+      // from the Maps key being bad, and dropping the key-error
+      // panels in that case would silently send the operator chasing
+      // the wrong fix.
+      const state = queryClient.getQueryState(queryKey);
+      if (state?.status === "error") return;
+      clearGoogleMapsKeyError();
+    } finally {
+      setIsRechecking(false);
+    }
+  }, [queryClient]);
+
+  return { recheck, isRechecking };
 }

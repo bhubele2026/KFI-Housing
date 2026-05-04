@@ -13,6 +13,7 @@ import {
   MAPS_AUTH_FAILURE_CODE,
   MAPS_KEY_CONSOLE_URLS,
   getMapsKeyConsoleUrl,
+  __testing as keyErrorTesting,
 } from "@/hooks/use-google-maps-key-error";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -2271,6 +2272,225 @@ describe("PortfolioMap — key-rejected branch", () => {
     );
     expect(link!.target).toBe("_blank");
     expect(link!.rel).toContain("noopener");
+  });
+
+  // ------------------------------------------------------------------
+  // Re-check key affordance (Task #181)
+  //
+  // Operators who fix their Maps key in Google Cloud Console (enabling
+  // the API, allow-listing this domain, raising the quota, rotating
+  // the value, …) used to have to hard-refresh the entire tab to
+  // recover. The in-card error panel now carries a "Re-check key"
+  // button that re-fetches /api/config and, on success, clears the
+  // shared key-error store so the panel disappears and the map re-
+  // attempts to render — without a page refresh.
+  //
+  // These tests pin down the two halves of that contract:
+  //   1) Click + successful refetch → store cleared → panel gone.
+  //   2) Click + continued failure → store preserved → panel stays.
+  // ------------------------------------------------------------------
+
+  it("renders a Re-check key button on the in-card error panel", async () => {
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+    await act(async () => {
+      reportGoogleMapsKeyError(MAPS_AUTH_FAILURE_CODE);
+    });
+
+    const recheck = get(
+      "portfolio-map-key-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    // The label must read clearly so an operator skimming the panel
+    // knows what the button does — a generic "Retry" or unlabeled
+    // refresh icon would be ambiguous next to the existing "Open in
+    // Google Cloud Console" affordance.
+    expect((recheck!.textContent ?? "").toLowerCase()).toContain(
+      "re-check",
+    );
+    // It's a real button (not asChild-wrapping an anchor), so it
+    // doesn't navigate away from the page when clicked.
+    expect(recheck!.tagName).toBe("BUTTON");
+    expect(recheck!.disabled).toBe(false);
+  });
+
+  it("re-fetches /api/config on click and removes the panel + clears the shared store on success", async () => {
+    // Simulate the operator having fixed the key in Cloud Console:
+    // /api/config now returns a valid configured key. The recheck
+    // must hit /api/config and then drop every Maps surface out of
+    // the rejected branch by clearing the shared store.
+    //
+    // Note: we mount WITHOUT an apiKey prop so the runtime config
+    // observer is `enabled: true` and react-query can drive a real
+    // refetch through the queryFn. With an explicit apiKey prop the
+    // observer is `enabled: false` and react-query treats it as
+    // inactive — even `type: "all"` filters can be brittle around
+    // never-fetched disabled observers, and the production case is
+    // always observer-enabled (the App always reads the key from
+    // /api/config).
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          googleMapsApiKey: "freshly-fixed-key",
+          googleMapsMapId: null,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+          />
+        </Wrapper>,
+      );
+    });
+    // Wait for the initial /api/config response to settle so the
+    // recheck assertion below can compare against a stable
+    // `callsBefore` baseline (instead of racing the initial mount).
+    await waitFor(() => calls >= 1);
+    await settle();
+
+    // Flip into the rejected branch using the JS-SDK auth-failure
+    // path — the panel should be visible.
+    await act(async () => {
+      reportGoogleMapsKeyError(MAPS_AUTH_FAILURE_CODE);
+    });
+    expect(get("portfolio-map-key-error")).not.toBeNull();
+    // Sanity: the dedupe set has the code so we can later confirm
+    // the clear reset it.
+    expect(
+      keyErrorTesting.getNotifiedCodes().has(MAPS_AUTH_FAILURE_CODE),
+    ).toBe(true);
+
+    const callsBefore = calls;
+    const recheck = get(
+      "portfolio-map-key-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+
+    // The panel must disappear once the recheck succeeds — operators
+    // shouldn't have to hard-refresh the tab. Polling tolerates
+    // react-query's setTimeout-scheduled state notifications.
+    await waitFor(() => get("portfolio-map-key-error") === null);
+    expect(get("portfolio-map-key-error")).toBeNull();
+
+    // The shared dedupe set must be empty so the *next* failure for
+    // the same code fires a fresh toast (instead of being silently
+    // swallowed because we'd already toasted that code earlier).
+    expect(
+      keyErrorTesting.getNotifiedCodes().has(MAPS_AUTH_FAILURE_CODE),
+    ).toBe(false);
+
+    // And the recheck did actually hit /api/config — guards against
+    // a regression where the button merely cleared the local store
+    // without actually re-confirming the runtime config.
+    expect(calls).toBeGreaterThan(callsBefore);
+    const lastCall = fetchMock.mock.calls.at(-1) as unknown as [
+      RequestInfo | URL,
+      ...unknown[],
+    ];
+    expect(String(lastCall[0])).toContain("/api/config");
+  });
+
+  it("keeps the rejected panel up when /api/config still rejects on recheck (no false recovery)", async () => {
+    // When the operator clicks Re-check key but the key is still
+    // bad — or more precisely, when /api/config itself still errors
+    // — we must NOT silently drop the panel and pretend the key is
+    // fixed. Doing so would lie to the operator and send them
+    // chasing the wrong fix. The panel stays up; clicking again
+    // retries.
+    //
+    // First mount-fetch must succeed (so the map enters the live
+    // branch and we can flip into the rejected branch from a
+    // known-good state); the second fetch (the recheck) fails —
+    // that's the case under test.
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        return new Response(
+          JSON.stringify({ googleMapsApiKey: "initial-key" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+          />
+        </Wrapper>,
+      );
+    });
+    // Wait for the initial /api/config response so the canvas is
+    // mounted before we flip into the rejected branch.
+    await waitFor(() => call >= 1);
+    await settle();
+
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+    expect(get("portfolio-map-key-error")).not.toBeNull();
+
+    const recheck = get(
+      "portfolio-map-key-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+    // Wait for the recheck's failed refetch to actually fire and
+    // settle. Asserting on `call >= 2` is the precise signal — a
+    // fixed-duration sleep would race react-query's macrotask
+    // scheduling.
+    await waitFor(() => call >= 2);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    // Surface stays rejected — same panel, same code, same fix path.
+    const panel = get("portfolio-map-key-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(
+      "InvalidKeyMapError",
+    );
+    // And the dedupe set must still hold the code — we did not
+    // silently reset it, which would have re-fired a duplicate toast
+    // for a failure the operator had already been notified about.
+    expect(
+      keyErrorTesting.getNotifiedCodes().has("InvalidKeyMapError"),
+    ).toBe(true);
   });
 });
 

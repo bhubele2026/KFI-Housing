@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, ExternalLink, MapPin } from "lucide-react";
+import { AlertCircle, ExternalLink, MapPin, RefreshCw } from "lucide-react";
 import {
   getMapsKeyConsoleUrl,
   useGoogleMapsKeyError,
 } from "@/hooks/use-google-maps-key-error";
 import {
+  useRecheckGoogleMapsKey,
   useRuntimeConfigQuery,
   useRuntimeConfigRefreshStale,
   useRuntimeConfigStream,
@@ -634,6 +635,16 @@ export function PortfolioMap({
   // very first load because `loadMapsApi` reports `rotated: false`
   // when there was no previously-loaded key.
   const { toast } = useToast();
+
+  // "Re-check key" affordance for the in-card error panel (Task #181).
+  // Re-fetches /api/config and clears the shared key-error store on
+  // success so the operator doesn't have to hard-refresh after fixing
+  // the key in Google Cloud Console. See the panel's inline comment
+  // and `useRecheckGoogleMapsKey`'s docs for the full behaviour.
+  const { recheck: recheckKey, isRechecking } = useRecheckGoogleMapsKey();
+  const handleRecheckKey = () => {
+    void recheckKey();
+  };
   // Resolved coordinates by property.id. `null` means the property has
   // an address but Google couldn't geocode it — those rows are surfaced
   // in the side panel alongside truly-blank addresses.
@@ -995,22 +1006,65 @@ export function PortfolioMap({
                 {keyError.message}
               </span>
             </div>
-            <Button
-              asChild
-              type="button"
-              size="sm"
-              variant="outline"
-              data-testid="portfolio-map-key-error-console-link"
-            >
-              <a
-                href={consoleUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            <div className="flex flex-wrap gap-2">
+              <Button
+                asChild
+                type="button"
+                size="sm"
+                variant="outline"
+                data-testid="portfolio-map-key-error-console-link"
               >
-                <ExternalLink className="h-4 w-4" />
-                Open in Google Cloud Console
-              </a>
-            </Button>
+                <a
+                  href={consoleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open in Google Cloud Console
+                </a>
+              </Button>
+              {/*
+                "Re-check key" affordance (Task #181). After fixing the
+                key in Google Cloud Console (enabling the API, allow-
+                listing this domain, raising the quota, rotating the
+                value, …) operators previously had to hard-refresh the
+                entire tab to recover. This button re-fetches
+                /api/config and clears the shared key-error store on
+                success so this card — and every other Maps surface on
+                the page — drops out of its rejected branch and re-
+                attempts to render. If Google still rejects the key the
+                gm_authFailure / postMessage paths repopulate the store
+                and the panel + a fresh toast come back, so clicking
+                optimistically is safe.
+
+                Caveat: the Google Maps JS SDK only fires
+                `gm_authFailure` once per script load, so if the key
+                *value* didn't change, the SDK won't re-confirm
+                rejection on the next attempt. Recheck remains effective
+                because (a) any key rotation forces a fresh script load
+                via the `loadedApiKey !== apiKey` guard inside
+                `loadMapsApi`, and (b) embed-iframe surfaces (the per-
+                property Location card) are unaffected — each iframe is
+                a fresh request to Google.
+              */}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleRecheckKey}
+                disabled={isRechecking}
+                data-testid="portfolio-map-key-error-recheck"
+              >
+                <RefreshCw
+                  className={
+                    isRechecking
+                      ? "h-4 w-4 animate-spin"
+                      : "h-4 w-4"
+                  }
+                />
+                {isRechecking ? "Re-checking…" : "Re-check key"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </>

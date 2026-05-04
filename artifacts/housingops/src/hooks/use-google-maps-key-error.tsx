@@ -237,6 +237,15 @@ let latestCode: string | null = null;
 const subscribers = new Set<() => void>();
 type ToastSink = (code: string, message: string) => void;
 const toastSinks = new Set<ToastSink>();
+// Callbacks invoked when the shared store is *cleared* (typically by an
+// operator clicking "Re-check key" after fixing the key in Cloud
+// Console). Distinct from the `subscribers` set — those re-render to the
+// new latest-code value (now `null`), but they don't know about side
+// effects like "dismiss the still-visible toast that was warning about
+// the old code." The toast listener registers an on-clear callback that
+// dismisses its most recent toast handle so the operator doesn't see a
+// stale "key rejected" toast lingering after a successful re-check.
+const onClearSubscribers = new Set<() => void>();
 
 function emit(code: string): void {
   latestCode = code;
@@ -260,14 +269,42 @@ export function reportGoogleMapsKeyError(code: string): void {
   for (const sink of toastSinks) sink(code, message);
 }
 
+/**
+ * Clear the shared Google Maps key-error store: forget the latest code,
+ * reset the per-session toast dedupe set, and dismiss any still-visible
+ * key-error toast. Safe to call when the store is already empty (no-op).
+ *
+ * Used by the "Re-check key" affordance on the in-card error panels — an
+ * operator who just fixed the key in Google Cloud Console clicks it,
+ * `useRecheckGoogleMapsKey` re-fetches `/api/config`, and on success this
+ * is invoked so every Maps surface drops out of its key-rejected branch
+ * and re-attempts the embed against the (now possibly fixed) key. If
+ * Google still rejects it, a fresh code repopulates the store via the
+ * normal postMessage / `gm_authFailure` paths and a new toast fires —
+ * resetting `notifiedCodes` here is what re-arms that "fresh toast on
+ * next failure" behavior, instead of silently swallowing the second
+ * rejection because we'd already toasted that code earlier in the
+ * session.
+ */
+export function clearGoogleMapsKeyError(): void {
+  // Bail when there's literally nothing to clear so we don't churn
+  // subscribers / dismiss-callbacks for a no-op recheck.
+  if (latestCode === null && notifiedCodes.size === 0) return;
+  notifiedCodes.clear();
+  latestCode = null;
+  for (const fn of subscribers) fn();
+  for (const fn of onClearSubscribers) fn();
+}
+
 // Test-only escape hatch — keeps module-level state from leaking between
 // Vitest test cases. Not imported by any production code path.
 export function __resetGoogleMapsKeyErrorForTest(): void {
   notifiedCodes.clear();
   latestCode = null;
-  // Subscribers and toastSinks are owned by mounted components / the app
-  // listener and are cleaned up on unmount; clearing them here would leave
-  // dangling references in still-mounted trees.
+  // Subscribers, toastSinks, and onClearSubscribers are owned by mounted
+  // components / the app listener and are cleaned up on unmount;
+  // clearing them here would leave dangling references in still-mounted
+  // trees.
 }
 
 // ---------------------------------------------------------------------------
@@ -342,9 +379,16 @@ export function useGoogleMapsKeyErrorToastListener(): void {
   const { toast } = useToast();
 
   useEffect(() => {
+    // Track the dismiss handle for the most recent key-error toast we
+    // emitted, so a successful "Re-check key" click (which calls
+    // `clearGoogleMapsKeyError`) can take down the still-visible toast
+    // — leaving it up after the operator just confirmed the key looks
+    // OK would be confusing and contradict every other Maps surface
+    // that just dropped out of its rejected branch.
+    let lastDismiss: (() => void) | undefined;
     const sink: ToastSink = (code, message) => {
       const consoleUrl = getMapsKeyConsoleUrl(code);
-      toast({
+      const handle = toast({
         variant: "destructive",
         title: "Google Maps key rejected",
         description: message,
@@ -360,11 +404,18 @@ export function useGoogleMapsKeyErrorToastListener(): void {
           </ToastAction>
         ),
       });
+      lastDismiss = handle.dismiss;
+    };
+    const onClear = () => {
+      lastDismiss?.();
+      lastDismiss = undefined;
     };
     toastSinks.add(sink);
+    onClearSubscribers.add(onClear);
     installGlobalListeners();
     return () => {
       toastSinks.delete(sink);
+      onClearSubscribers.delete(onClear);
       uninstallGlobalListeners();
     };
   }, [toast]);

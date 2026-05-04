@@ -3,6 +3,7 @@ import React, { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Switch, Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Pin down that the property-detail page actually integrates the
 // postMessage-driven, tailored-copy error branch of PropertyLocationMap
@@ -257,16 +258,31 @@ vi.mock("@/context/data-store", () => ({
 
 // Imports that consume the mocks above MUST come after vi.mock calls.
 import PropertyDetail from "./property-detail";
+import { __resetGoogleMapsKeyErrorForTest } from "@/hooks/use-google-maps-key-error";
 
 function makeHarness(initialPath: string) {
   const memory = memoryLocation({ path: initialPath, record: true });
+  // The PropertyLocationMap renders the Re-check-key affordance from
+  // Task #181, which calls `useQueryClient()` even though this file
+  // mocks `useGetRuntimeConfig` to return a synchronous fixture (no
+  // real query). Without a QueryClientProvider in the tree the hook
+  // throws on mount. The client itself is never used here — the
+  // mocked config short-circuits the runtime fetch — so a bare
+  // default-options client is enough.
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+    },
+  });
   function Harness() {
     return (
-      <Router hook={memory.hook}>
-        <Switch>
-          <Route path="/properties/:id" component={PropertyDetail} />
-        </Switch>
-      </Router>
+      <QueryClientProvider client={queryClient}>
+        <Router hook={memory.hook}>
+          <Switch>
+            <Route path="/properties/:id" component={PropertyDetail} />
+          </Switch>
+        </Router>
+      </QueryClientProvider>
     );
   }
   return { memory, Harness };
@@ -299,6 +315,14 @@ describe("Property detail — Location map tailored key-error copy on Overview",
 
   beforeEach(() => {
     toastMock.mockReset();
+    // Reset the module-level Google Maps key-error store between
+    // tests in this file. The shared store is process-wide (so cross-
+    // surface error coordination works in production); without an
+    // explicit reset, the first test's `RefererNotAllowedMapError`
+    // would persist into later tests and immediately steal the iframe
+    // out of the embed branch — a pre-existing latent bleed exposed
+    // once a single test in the file flips the store.
+    __resetGoogleMapsKeyErrorForTest();
     container = document.createElement("div");
     document.body.appendChild(container);
     // Ensure the page lands on the Overview tab — the page reads the

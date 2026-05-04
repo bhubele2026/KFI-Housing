@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, Navigation, ExternalLink, AlertCircle } from "lucide-react";
+import {
+  MapPin,
+  Navigation,
+  ExternalLink,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
 import {
   extractGoogleMapsErrorCode,
   getMapsKeyConsoleUrl,
@@ -13,6 +19,7 @@ import {
   useRuntimeConfigQuery,
   useRuntimeConfigRefreshStale,
   useRuntimeConfigStream,
+  useRecheckGoogleMapsKey,
 } from "@/hooks/use-runtime-config";
 import { RuntimeConfigStaleWarning } from "@/components/runtime-config-stale-warning";
 
@@ -153,6 +160,21 @@ export function PropertyLocationMap({
   // staring at our "Loading map…" placeholder indefinitely while a
   // toast on the same page was already saying the key was rejected.
   const sharedKeyError = useGoogleMapsKeyError();
+
+  // "Re-check key" affordance for the in-card error panel. An operator
+  // who fixed their Maps key in Google Cloud Console clicks this and
+  // we re-fetch /api/config + clear the shared key-error store so the
+  // card drops out of the rejected branch and re-attempts the embed
+  // against the (now possibly fixed) key — without a hard refresh.
+  // Local error state (`iframeLoadError`, `reportedErrorCode`) is
+  // reset alongside the shared store so the iframe gets a fresh
+  // attempt even when the resolved key value didn't change.
+  const { recheck, isRechecking } = useRecheckGoogleMapsKey();
+  const handleRecheck = () => {
+    setIframeLoadError(false);
+    setReportedErrorCode(null);
+    void recheck();
+  };
 
   if (!hasAnyAddress) {
     return (
@@ -377,6 +399,37 @@ export function PropertyLocationMap({
                 </a>
               )}
             </div>
+            {/*
+              "Re-check key" affordance (Task #181). After fixing the
+              key in Google Cloud Console (enabling the API, adding
+              this domain to the referrer allowlist, raising the
+              quota, rotating the value, …) operators previously had
+              to hard-refresh the entire tab to recover. This button
+              re-fetches /api/config and clears the shared key-error
+              store on success so this card — and every other Maps
+              surface on the page — drops out of its rejected branch
+              and re-attempts the embed. If Google still rejects the
+              key the postMessage / `gm_authFailure` paths repopulate
+              the store and the panel + a fresh toast come back, so
+              clicking optimistically is safe.
+            */}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleRecheck}
+              disabled={isRechecking}
+              data-testid="property-location-map-error-recheck"
+            >
+              <RefreshCw
+                className={
+                  isRechecking
+                    ? "h-4 w-4 animate-spin"
+                    : "h-4 w-4"
+                }
+              />
+              {isRechecking ? "Re-checking…" : "Re-check key"}
+            </Button>
           </div>
         ) : isConfigLoading ? (
           <div

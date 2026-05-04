@@ -8,6 +8,7 @@ import {
   getMapsKeyConsoleUrl,
   reportGoogleMapsKeyError,
   __resetGoogleMapsKeyErrorForTest,
+  __testing as keyErrorTesting,
 } from "@/hooks/use-google-maps-key-error";
 
 // These tests pin down the four render branches of the property location
@@ -1860,5 +1861,208 @@ describe("PropertyLocationMap runtime config", () => {
     expect(get("property-location-map-error")).not.toBeNull();
     expect(get("property-location-map-iframe")).toBeNull();
     expect(get("property-location-map-loading")).toBeNull();
+  });
+
+  // ------------------------------------------------------------------
+  // Re-check key affordance (Task #181)
+  //
+  // After fixing the key in Google Cloud Console (enabling the API,
+  // allow-listing this domain, raising the quota, rotating the value,
+  // …) operators used to have to hard-refresh the entire tab to
+  // recover. The in-card error panel now carries a "Re-check key"
+  // button that re-fetches /api/config and, on success, clears the
+  // shared key-error store + local iframe-error state so the panel
+  // disappears and the iframe re-mounts against the (now possibly
+  // fixed) key — without a page refresh.
+  // ------------------------------------------------------------------
+
+  it("renders a Re-check key button on the in-card error panel", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ googleMapsApiKey: "any-key" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+
+    // Force the card into the error branch via the shared store, the
+    // same way a sibling Maps surface (or the JS SDK) would.
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+    await waitFor(() => get("property-location-map-error") !== null);
+
+    const recheck = get(
+      "property-location-map-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    // The label must read clearly so an operator skimming the panel
+    // knows what the button does — a generic refresh icon would be
+    // ambiguous next to the existing "Open in Google Cloud Console"
+    // affordance.
+    expect((recheck!.textContent ?? "").toLowerCase()).toContain(
+      "re-check",
+    );
+    expect(recheck!.tagName).toBe("BUTTON");
+    expect(recheck!.disabled).toBe(false);
+  });
+
+  it("re-fetches /api/config on click and removes the panel + clears the shared store on success", async () => {
+    // Simulate the operator having fixed the key in Cloud Console:
+    // /api/config returns a valid key. Recheck must hit /api/config
+    // and then drop every Maps surface out of the rejected branch.
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ googleMapsApiKey: "freshly-fixed-key" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+    // Wait for the initial /api/config response so we can assert the
+    // recheck specifically *issues another* call (rather than racing
+    // the initial mount).
+    await waitFor(() => get("property-location-map-iframe") !== null);
+
+    // Now flip into the rejected branch and verify the panel.
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+    await waitFor(() => get("property-location-map-error") !== null);
+    expect(get("property-location-map-error")).not.toBeNull();
+    expect(
+      keyErrorTesting.getNotifiedCodes().has("InvalidKeyMapError"),
+    ).toBe(true);
+
+    const callsBefore = calls;
+    const recheck = get(
+      "property-location-map-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+
+    // Panel must disappear once the recheck succeeds — operators
+    // shouldn't have to hard-refresh the tab.
+    await waitFor(() => get("property-location-map-error") === null);
+    expect(get("property-location-map-error")).toBeNull();
+
+    // Dedupe set must be empty so the *next* failure for the same
+    // code fires a fresh toast instead of being silently swallowed.
+    expect(
+      keyErrorTesting.getNotifiedCodes().has("InvalidKeyMapError"),
+    ).toBe(false);
+
+    // And the recheck did actually re-issue the /api/config request
+    // — guards against a regression where the button merely cleared
+    // the local store without confirming the runtime config.
+    expect(calls).toBeGreaterThan(callsBefore);
+
+    // Bonus: the iframe must re-mount against the (now confirmed)
+    // key, not stay hidden behind a stale local error flag. This
+    // doubles as the regression guard for the
+    // `setIframeLoadError(false)` / `setReportedErrorCode(null)`
+    // resets in `handleRecheck`.
+    await waitFor(() => get("property-location-map-iframe") !== null);
+    expect(get("property-location-map-iframe")).not.toBeNull();
+  });
+
+  it("keeps the rejected panel up when /api/config still rejects on recheck (no false recovery)", async () => {
+    // Click + continued failure → store preserved → panel stays.
+    // Silently dropping the panel here would lie to the operator and
+    // send them chasing the wrong fix.
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      // First call (initial mount) succeeds so the iframe mounts and
+      // we can flip into the error branch from a "known-good" state.
+      // Second call (the recheck) fails — that's the case under test.
+      if (call === 1) {
+        return new Response(
+          JSON.stringify({ googleMapsApiKey: "initial-key" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new TypeError("Failed to fetch");
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PropertyLocationMap
+            address="100 Oak Way"
+            city="Austin"
+            state="TX"
+            zip="78701"
+          />
+        </Wrapper>,
+      );
+    });
+    await waitFor(() => get("property-location-map-iframe") !== null);
+
+    await act(async () => {
+      reportGoogleMapsKeyError("ApiNotActivatedMapError");
+    });
+    await waitFor(() => get("property-location-map-error") !== null);
+
+    const recheck = get(
+      "property-location-map-error-recheck",
+    ) as HTMLButtonElement | null;
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+    // Let react-query's failed refetch + state notification settle.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+    // Surface stays rejected — same panel, same code, same fix path.
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(
+      "ApiNotActivatedMapError",
+    );
+    // The dedupe set must still hold the code — we did not silently
+    // reset it (which would have re-fired a duplicate toast for a
+    // failure the operator had already been notified about).
+    expect(
+      keyErrorTesting.getNotifiedCodes().has("ApiNotActivatedMapError"),
+    ).toBe(true);
   });
 });

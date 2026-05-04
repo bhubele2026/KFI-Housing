@@ -5,6 +5,7 @@ import {
   useGoogleMapsKeyError,
   useGoogleMapsKeyErrorToastListener,
   reportGoogleMapsKeyError,
+  clearGoogleMapsKeyError,
   extractGoogleMapsErrorCode,
   getMapsKeyConsoleUrl,
   MAPS_ERROR_MESSAGES,
@@ -114,6 +115,13 @@ describe("useGoogleMapsKeyError", () => {
               data-action-href={actionHref}
               data-action-alt={actionAlt}
               data-has-action={t.action ? "true" : "false"}
+              // `open` flips to false when the toast is dismissed (the
+              // hook keeps dismissed toasts in the queue for ~16
+              // minutes before garbage-collecting them, so length-of-
+              // queue is not a reliable "is anything visible?" signal —
+              // the open flag is). Default to "true" since the toast
+              // primitive treats missing `open` as visible.
+              data-open={String(t.open ?? true)}
             />
           );
         })}
@@ -145,6 +153,7 @@ describe("useGoogleMapsKeyError", () => {
     actionHref: string;
     actionAlt: string;
     hasAction: boolean;
+    open: boolean;
   }> {
     const els = container.querySelectorAll('[data-testid="toast"]');
     return Array.from(els).map((el) => ({
@@ -154,6 +163,7 @@ describe("useGoogleMapsKeyError", () => {
       actionHref: el.getAttribute("data-action-href") ?? "",
       actionAlt: el.getAttribute("data-action-alt") ?? "",
       hasAction: el.getAttribute("data-has-action") === "true",
+      open: el.getAttribute("data-open") !== "false",
     }));
   }
 
@@ -500,5 +510,137 @@ describe("useGoogleMapsKeyError", () => {
     await mount(<SubscriberProbe />);
     expect(readProbe().code).toBe("InvalidKeyMapError");
     expect(readProbe().message).toBe(MAPS_ERROR_MESSAGES.InvalidKeyMapError);
+  });
+
+  // --------------------------------------------------------------------
+  // clearGoogleMapsKeyError — the "Re-check key" affordance (Task #181)
+  //
+  // After an operator fixes their Maps key in Google Cloud Console (or
+  // /api/config returns a rotated value), the in-card recheck button
+  // re-fetches /api/config and on success calls
+  // `clearGoogleMapsKeyError` to drop every Maps surface out of its
+  // rejected branch. The contract this section pins down:
+  //   1) The latest-code subscribers see `null` (panels disappear).
+  //   2) The per-session dedupe set is reset, so a *next* failure for
+  //      the same code fires a fresh toast instead of being silently
+  //      swallowed because we'd already toasted that code earlier.
+  //   3) Any still-visible toast from the previous error is dismissed
+  //      so the operator isn't lied to with a stale "key rejected"
+  //      banner sitting next to a Maps surface that just recovered.
+  // --------------------------------------------------------------------
+  it("clearGoogleMapsKeyError: subscribers see the code go back to null after a clear", async () => {
+    await mount(
+      <>
+        <ListenerProbe />
+        <SubscriberProbe />
+      </>,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+    expect(readProbe().code).toBe("RefererNotAllowedMapError");
+
+    await act(async () => {
+      clearGoogleMapsKeyError();
+    });
+    // Subscribers must re-render with the cleared state — leaving them
+    // pinned to the old code would mean the panels stay up even after
+    // recheck succeeded.
+    expect(readProbe().code).toBe("");
+    expect(readProbe().message).toBe("");
+  });
+
+  it("clearGoogleMapsKeyError: resets the per-session dedupe set so the *next* failure fires a fresh toast", async () => {
+    await mount(
+      <>
+        <ListenerProbe />
+        <ToastReader />
+      </>,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("OverQuotaMapError");
+    });
+    // First failure toasts, dedupe set remembers the code.
+    expect(__testing.getNotifiedCodes().has("OverQuotaMapError")).toBe(true);
+
+    await act(async () => {
+      clearGoogleMapsKeyError();
+    });
+    // The dedupe set must be empty again — otherwise a second
+    // OverQuotaMapError after a failed recheck would be silently
+    // swallowed and the operator would have no notification of the
+    // continued failure (the panel would re-appear, but the toast
+    // wouldn't, which would defeat the "fresh signal on next failure"
+    // contract documented on the export).
+    expect(__testing.getNotifiedCodes().size).toBe(0);
+
+    // Now report the same code again — it must fire a NEW toast.
+    await act(async () => {
+      reportGoogleMapsKeyError("OverQuotaMapError");
+    });
+    expect(__testing.getNotifiedCodes().has("OverQuotaMapError")).toBe(true);
+  });
+
+  it("clearGoogleMapsKeyError: dismisses the still-visible key-error toast", async () => {
+    await mount(
+      <>
+        <ListenerProbe />
+        <ToastReader />
+      </>,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+    // The toast is up and visible (open=true).
+    const before = readToasts();
+    expect(before).toHaveLength(1);
+    expect(before[0].open).toBe(true);
+    expect(before[0].description).toBe(
+      MAPS_ERROR_MESSAGES.InvalidKeyMapError,
+    );
+
+    await act(async () => {
+      clearGoogleMapsKeyError();
+    });
+
+    // The toast hook keeps dismissed toasts in its queue (open=false)
+    // for a long timeout before garbage-collecting them, so the queue
+    // *length* isn't a reliable "is anything visible?" signal — the
+    // open flag is. After clear, every key-error toast must be
+    // closed so the operator doesn't see a stale "key rejected"
+    // banner sitting next to a Maps surface that just recovered.
+    const after = readToasts();
+    for (const t of after) {
+      expect(t.open).toBe(false);
+    }
+  });
+
+  it("clearGoogleMapsKeyError: is a safe no-op when the store is already empty", async () => {
+    await mount(
+      <>
+        <ListenerProbe />
+        <SubscriberProbe />
+        <ToastReader />
+      </>,
+    );
+    // No error reported — the shared store starts empty.
+    expect(readProbe().code).toBe("");
+
+    // The useToast hook keeps a module-scoped queue that survives
+    // across tests (the reducer's `memoryState` is intentionally
+    // long-lived so toasts persist across re-renders), so we can't
+    // assert "queue is exactly empty" here without leaking ordering
+    // assumptions from previous tests. Snapshot the count BEFORE the
+    // clear and assert that calling clear on an empty store didn't
+    // *add* anything — that's the actual contract.
+    const toastCountBefore = readToasts().length;
+
+    // Should not throw and should leave the probe at empty.
+    await act(async () => {
+      clearGoogleMapsKeyError();
+    });
+
+    expect(readProbe().code).toBe("");
+    expect(readToasts().length).toBe(toastCountBefore);
   });
 });

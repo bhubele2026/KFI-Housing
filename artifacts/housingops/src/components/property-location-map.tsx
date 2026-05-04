@@ -98,10 +98,10 @@ export function PropertyLocationMap({
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Open ${full} in Google Maps`}
-            className="block relative rounded-lg overflow-hidden border bg-muted group focus:outline-none focus:ring-2 focus:ring-ring"
+            className="block relative rounded-lg overflow-hidden border bg-muted group focus:outline-none focus:ring-2 focus:ring-ring w-full max-w-xl"
             data-testid="property-location-map-link"
           >
-            <div className="aspect-[16/9] w-full">
+            <div className="h-40 sm:h-48 w-full">
               <iframe
                 title={`Map of ${full}`}
                 src={embedUrl}

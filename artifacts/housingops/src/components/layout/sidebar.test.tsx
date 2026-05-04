@@ -26,12 +26,20 @@ const resetToSampleDataMock =
   >();
 const mockData: {
   customers: { id: string; name: string }[];
+  properties: Array<{
+    id: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+  }>;
   isLoading: boolean;
   resetToSampleData: typeof resetToSampleDataMock;
   exportData: () => unknown;
   importData: () => unknown;
 } = {
   customers: [],
+  properties: [],
   isLoading: false,
   resetToSampleData: resetToSampleDataMock,
   exportData: vi.fn(),
@@ -71,6 +79,7 @@ describe("Sidebar customer scope badge", () => {
       { id: "c1", name: "Acme Co" },
       { id: "c2", name: "Globex" },
     ];
+    mockData.properties = [];
     mockData.isLoading = false;
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/dashboard");
@@ -310,5 +319,170 @@ describe("Sidebar customer scope badge", () => {
     expect(
       new URLSearchParams(window.location.search).get("customer"),
     ).toBeNull();
+  });
+});
+
+// ── Geocode-failure badge on the Properties nav link ────────────────────
+//
+// These tests pin down the small numeric badge that appears next to the
+// "Properties" link in the sidebar whenever the shared in-session
+// geocode cache contains addresses Google can't pinpoint that match a
+// real property. The badge mirrors the rollup panel rendered on
+// /properties so an operator sees a problem the moment it lands —
+// without needing to navigate to /properties to discover the badge.
+//
+// We drive the cache via the real `@/lib/google-maps-sdk` module
+// (priming entries with `null` to record a failure) so the subscription
+// path is exercised end-to-end.
+
+import {
+  __resetGoogleMapsSdkForTest,
+  formatGeocodeAddress,
+  primeGeocodeCache,
+} from "@/lib/google-maps-sdk";
+
+const NAV_BADGE = "badge-properties-needing-address-fix";
+
+function baseProp(over: {
+  id: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+}): {
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+} {
+  return {
+    address: "123 Main St",
+    city: "Austin",
+    state: "TX",
+    zip: "78701",
+    ...over,
+  };
+}
+
+describe("Sidebar Properties nav — addresses-needing-fix badge", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    mockData.customers = [{ id: "c1", name: "Acme Co" }];
+    mockData.properties = [
+      baseProp({ id: "p1", address: "999 Nonexistent Way", city: "Nowhere", state: "ZZ", zip: "00000" }),
+      baseProp({ id: "p2" }),
+      baseProp({ id: "p3", address: "12 Bad Lane", city: "Errortown", state: "XY", zip: "11111" }),
+      // Blank-address property — has nothing for Google to reject in
+      // the first place, so it must NOT contribute to the badge count
+      // even if a stray empty entry somehow lands in the cache.
+      baseProp({ id: "p4", address: "", city: "", state: "", zip: "" }),
+    ];
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    // Reset the shared module-level cache so a previous test's failures
+    // don't leak into this one.
+    __resetGoogleMapsSdkForTest();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    __resetGoogleMapsSdkForTest();
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<SidebarUnderTest />);
+    });
+  }
+
+  function navBadge(): HTMLElement | null {
+    return container.querySelector(`[data-testid="${NAV_BADGE}"]`);
+  }
+
+  function addrFor(idx: number): string {
+    return formatGeocodeAddress(mockData.properties[idx]);
+  }
+
+  it("hides the badge in a healthy session with no cached failures", async () => {
+    await render();
+    expect(navBadge()).toBeNull();
+  });
+
+  it("renders the badge with the count when a failure is cached on mount", async () => {
+    // Operator visited a property-detail page earlier in the session
+    // and that surface recorded a failure into the shared cache. The
+    // badge must reflect that the moment the sidebar mounts on any
+    // route — not just after navigating to /properties.
+    primeGeocodeCache(addrFor(0), null);
+
+    await render();
+
+    const badgeEl = navBadge();
+    expect(badgeEl).not.toBeNull();
+    expect(badgeEl!.textContent).toBe("1");
+  });
+
+  it("grows the badge live as new failures land in the cache", async () => {
+    await render();
+    expect(navBadge()).toBeNull();
+
+    // Simulate a per-property Location card recording a failure
+    // mid-session. Without the live subscription the badge would
+    // stay empty until the operator navigated away and back.
+    await act(async () => {
+      primeGeocodeCache(addrFor(0), null);
+    });
+    expect(navBadge()?.textContent).toBe("1");
+
+    await act(async () => {
+      primeGeocodeCache(addrFor(2), null);
+    });
+    expect(navBadge()?.textContent).toBe("2");
+  });
+
+  it("ignores cached failures that don't match any current property address", async () => {
+    // The blank-address property has no formatted address at all, so
+    // even if some random failure lands in the cache it must not bump
+    // the badge — the badge only counts addresses that an operator
+    // can actually go fix on a real property.
+    primeGeocodeCache("totally unrelated address", null);
+
+    await render();
+
+    expect(navBadge()).toBeNull();
+  });
+
+  it("disappears once the failing property's address is edited away from the failure", async () => {
+    primeGeocodeCache(addrFor(0), null);
+
+    await render();
+    expect(navBadge()?.textContent).toBe("1");
+
+    // Mutate the failing property's address to a fresh string the
+    // cache doesn't know about. The cache is keyed by the formatted
+    // address so the new address misses, the count goes to zero, and
+    // the badge must disappear entirely (not render a "0").
+    mockData.properties = mockData.properties.map((p) =>
+      p.id === "p1" ? { ...p, address: "1 New Street" } : p,
+    );
+    await act(async () => {
+      root!.render(<SidebarUnderTest />);
+    });
+
+    expect(navBadge()).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X } from "lucide-react";
 import kfiLogoUrl from "@assets/kfi-staffing-logo.png";
@@ -15,6 +15,8 @@ import {
 } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
+import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
+import { formatGeocodeAddress } from "@/lib/google-maps-sdk";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -43,12 +45,30 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { resetToSampleData, exportData, importData, customers } = useData();
+  const { resetToSampleData, exportData, importData, customers, properties } = useData();
   const { customerId, setCustomerId } = useCustomerScope();
   const activeScopedCustomer =
     customerId !== ALL_CUSTOMERS
       ? customers.find((c) => c.id === customerId)
       : undefined;
+
+  // Subscribe to the shared in-session geocode cache so the Properties
+  // nav badge alerts operators the moment Google rejects a property's
+  // address — even when the failure was recorded by a sibling surface
+  // like a per-property Location card. We mirror the rollup panel's
+  // logic exactly (count properties whose CURRENT formatted address
+  // matches a cached failure) so the badge and the panel always agree.
+  const geocodeFailures = useGeocodeFailures();
+  const addressesNeedingFixCount = useMemo(() => {
+    if (geocodeFailures.size === 0) return 0;
+    if (!properties) return 0;
+    let count = 0;
+    for (const p of properties) {
+      const addr = formatGeocodeAddress(p);
+      if (addr.length > 0 && geocodeFailures.has(addr)) count += 1;
+    }
+    return count;
+  }, [properties, geocodeFailures]);
   const { toast } = useToast();
   const [resetOpen, setResetOpen] = useState(false);
   const [demoResetOpen, setDemoResetOpen] = useState(false);
@@ -268,6 +288,8 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 px-3 py-6 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = location === item.href;
+          const showAddressBadge =
+            item.href === "/properties" && addressesNeedingFixCount > 0;
           return (
             <Link key={item.href} href={item.href}>
               <span
@@ -285,7 +307,22 @@ export function Sidebar() {
                   )}
                   aria-hidden="true"
                 />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {showAddressBadge ? (
+                  <span
+                    className={cn(
+                      "ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+                      isActive
+                        ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
+                        : "bg-destructive/15 text-destructive"
+                    )}
+                    aria-label={`${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`}
+                    title={`${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`}
+                    data-testid="badge-properties-needing-address-fix"
+                  >
+                    {addressesNeedingFixCount}
+                  </span>
+                ) : null}
               </span>
             </Link>
           );

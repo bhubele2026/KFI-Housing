@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 // ---------------------------------------------------------------------------
 // Tailored, action-oriented copy keyed by the exact error code Google's
@@ -87,6 +88,64 @@ export const KNOWN_MAPS_ERROR_CODES = Object.keys(MAPS_ERROR_MESSAGES);
 const MAPS_KEY_TROUBLESHOOTING_TEXT =
   "Google rejected this Maps API key. Check that the Maps Embed API " +
   "is enabled and that this domain is on the key's allowlist.";
+
+// ---------------------------------------------------------------------------
+// Google Cloud Console deep-links keyed by the same code table as the
+// messages above (Task #173). The toast's "Open in Google Cloud Console"
+// action button uses these so the operator lands one click away from the
+// concrete fix the message describes — instead of having to log in,
+// hunt through the menu, and find the right project/page themselves.
+//
+// The URLs intentionally don't include a `project=` query string: we have
+// no way to know which Google Cloud project owns the operator's key, and
+// pinning a wrong project would silently send them to the wrong place.
+// Console preserves the operator's last-used project across pages, so
+// landing on credentials/quotas in their current project is the right
+// behavior for the overwhelmingly common case.
+// ---------------------------------------------------------------------------
+const GOOGLE_CONSOLE_CREDENTIALS_URL =
+  "https://console.cloud.google.com/apis/credentials";
+const GOOGLE_CONSOLE_MAPS_EMBED_LIBRARY_URL =
+  "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com";
+const GOOGLE_CONSOLE_MAPS_EMBED_QUOTAS_URL =
+  "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas";
+const GOOGLE_CONSOLE_PROJECT_SELECTOR_URL =
+  "https://console.cloud.google.com/projectselector2/home/dashboard";
+
+export const MAPS_KEY_CONSOLE_URLS: Record<string, string> = {
+  // Referrer allowlist lives on the key's credential page.
+  RefererNotAllowedMapError: GOOGLE_CONSOLE_CREDENTIALS_URL,
+  // The operator needs to enable the Maps Embed API for the key's project.
+  ApiNotActivatedMapError: GOOGLE_CONSOLE_MAPS_EMBED_LIBRARY_URL,
+  // Wrong/typo'd key — credentials list is where they pick the right one.
+  InvalidKeyMapError: GOOGLE_CONSOLE_CREDENTIALS_URL,
+  // Same — they'll need to copy a key from the credentials list.
+  MissingKeyMapError: GOOGLE_CONSOLE_CREDENTIALS_URL,
+  // Expired keys are managed (re-issued / rotated) from the credentials list.
+  ExpiredKeyMapError: GOOGLE_CONSOLE_CREDENTIALS_URL,
+  // Quotas page — exactly the lever they need.
+  OverQuotaMapError: GOOGLE_CONSOLE_MAPS_EMBED_QUOTAS_URL,
+  // API restrictions are configured on the key's credential page.
+  RequestDeniedMapError: GOOGLE_CONSOLE_CREDENTIALS_URL,
+  // Project no longer exists — the project picker is the only useful start.
+  DeletedApiProjectMapError: GOOGLE_CONSOLE_PROJECT_SELECTOR_URL,
+  // The fix is a code change, but the Embed API library page is at least
+  // where the operator can confirm which versions are supported and that
+  // the API is still enabled.
+  RetiredVersionMapError: GOOGLE_CONSOLE_MAPS_EMBED_LIBRARY_URL,
+  // JS SDK auth failures are usually a referrer/restriction problem on the
+  // key — credentials list is the most useful first stop.
+  [MAPS_AUTH_FAILURE_CODE]: GOOGLE_CONSOLE_CREDENTIALS_URL,
+};
+
+/**
+ * Resolve the Google Cloud Console URL most relevant to a Maps key error
+ * code. Falls back to the credentials list so the toast's action button
+ * is never dead, even when Google ships a code we haven't mapped yet.
+ */
+export function getMapsKeyConsoleUrl(code: string): string {
+  return MAPS_KEY_CONSOLE_URLS[code] ?? GOOGLE_CONSOLE_CREDENTIALS_URL;
+}
 
 // Loose pattern for "looks like a Google Maps Embed error code". Google's
 // existing codes all share the shape `<PascalCaseName>MapError`
@@ -273,17 +332,33 @@ function uninstallGlobalListeners(): void {
  *
  * The toast itself has no UI of its own — it uses the shared `useToast`
  * pipeline so it sits in the same Toaster viewport as every other in-app
- * notification.
+ * notification. Each toast carries an "Open in Google Cloud Console"
+ * action button that deep-links to the page most likely to hold the fix
+ * for the reported code (Task #173) — credentials, the Maps Embed library
+ * page, the quotas page, etc. — so operators don't have to hunt through
+ * the console menu themselves.
  */
 export function useGoogleMapsKeyErrorToastListener(): void {
   const { toast } = useToast();
 
   useEffect(() => {
-    const sink: ToastSink = (_code, message) => {
+    const sink: ToastSink = (code, message) => {
+      const consoleUrl = getMapsKeyConsoleUrl(code);
       toast({
         variant: "destructive",
         title: "Google Maps key rejected",
         description: message,
+        action: (
+          <ToastAction altText="Open in Google Cloud Console" asChild>
+            <a
+              href={consoleUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Google Cloud Console
+            </a>
+          </ToastAction>
+        ),
       });
     };
     toastSinks.add(sink);

@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import React, { act } from "react";
+import React, { act, isValidElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
   useGoogleMapsKeyError,
   useGoogleMapsKeyErrorToastListener,
   reportGoogleMapsKeyError,
   extractGoogleMapsErrorCode,
+  getMapsKeyConsoleUrl,
   MAPS_ERROR_MESSAGES,
+  MAPS_KEY_CONSOLE_URLS,
   MAPS_AUTH_FAILURE_CODE,
   __resetGoogleMapsKeyErrorForTest,
   __testing,
@@ -77,15 +79,44 @@ describe("useGoogleMapsKeyError", () => {
     const { toasts } = useToast();
     return (
       <div data-testid="toast-count" data-count={String(toasts.length)}>
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            data-testid="toast"
-            data-title={String(t.title ?? "")}
-            data-description={String(t.description ?? "")}
-            data-variant={String(t.variant ?? "default")}
-          />
-        ))}
+        {toasts.map((t) => {
+          // Pull the action-button href out of the React element tree
+          // without rendering it: ToastAction is a Radix primitive that
+          // expects a Toast.Root context, but the action's href is a
+          // straightforward prop on the <a> child we pass in. Walking
+          // the element tree avoids needing a full Toast provider just
+          // to assert the deep-link target.
+          const actionHref = (() => {
+            if (!t.action || !isValidElement(t.action)) return "";
+            const actionEl = t.action as ReactElement<{
+              children?: unknown;
+              altText?: string;
+            }>;
+            const child = actionEl.props.children;
+            if (!isValidElement(child)) return "";
+            const anchorEl = child as ReactElement<{ href?: string }>;
+            return anchorEl.props.href ?? "";
+          })();
+          const actionAlt =
+            isValidElement(t.action) &&
+            typeof (t.action as ReactElement<{ altText?: string }>).props
+              .altText === "string"
+              ? (t.action as ReactElement<{ altText?: string }>).props
+                  .altText ?? ""
+              : "";
+          return (
+            <div
+              key={t.id}
+              data-testid="toast"
+              data-title={String(t.title ?? "")}
+              data-description={String(t.description ?? "")}
+              data-variant={String(t.variant ?? "default")}
+              data-action-href={actionHref}
+              data-action-alt={actionAlt}
+              data-has-action={t.action ? "true" : "false"}
+            />
+          );
+        })}
       </div>
     );
   }
@@ -111,12 +142,18 @@ describe("useGoogleMapsKeyError", () => {
     title: string;
     description: string;
     variant: string;
+    actionHref: string;
+    actionAlt: string;
+    hasAction: boolean;
   }> {
     const els = container.querySelectorAll('[data-testid="toast"]');
     return Array.from(els).map((el) => ({
       title: el.getAttribute("data-title") ?? "",
       description: el.getAttribute("data-description") ?? "",
       variant: el.getAttribute("data-variant") ?? "",
+      actionHref: el.getAttribute("data-action-href") ?? "",
+      actionAlt: el.getAttribute("data-action-alt") ?? "",
+      hasAction: el.getAttribute("data-has-action") === "true",
     }));
   }
 
@@ -165,6 +202,134 @@ describe("useGoogleMapsKeyError", () => {
     // future copy edits don't require keeping this assertion in sync.
     expect(toasts[0].description).toBe(
       MAPS_ERROR_MESSAGES.RefererNotAllowedMapError,
+    );
+  });
+
+  // --------------------------------------------------------------------
+  // Open-in-Google-Cloud-Console action button (Task #173)
+  //
+  // The toast carries an action button that deep-links to the page in
+  // Google Cloud Console most relevant to the reported code, so the
+  // operator doesn't have to hunt through the menu themselves. The
+  // mapping is exercised both at the function level (for codes that
+  // never need to flow through the listener — fallback, JS auth) and at
+  // the toast level (for the codes the listener is most likely to see).
+  // --------------------------------------------------------------------
+  it("getMapsKeyConsoleUrl: maps each known code to its most-relevant console page", () => {
+    // Per-code expectations are the contract: the URL has to actually
+    // be the right page for the fix the message names. Hard-coding the
+    // expected URLs here (instead of just round-tripping through
+    // MAPS_KEY_CONSOLE_URLS) keeps the assertion honest — a typo in the
+    // table would silently pass a "table === table" check.
+    expect(getMapsKeyConsoleUrl("RefererNotAllowedMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("ApiNotActivatedMapError")).toBe(
+      "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    );
+    expect(getMapsKeyConsoleUrl("InvalidKeyMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("MissingKeyMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("ExpiredKeyMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("OverQuotaMapError")).toBe(
+      "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas",
+    );
+    expect(getMapsKeyConsoleUrl("RequestDeniedMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("DeletedApiProjectMapError")).toBe(
+      "https://console.cloud.google.com/projectselector2/home/dashboard",
+    );
+    expect(getMapsKeyConsoleUrl("RetiredVersionMapError")).toBe(
+      "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    );
+    expect(getMapsKeyConsoleUrl(MAPS_AUTH_FAILURE_CODE)).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+  });
+
+  it("getMapsKeyConsoleUrl: every code with a tailored message also has a tailored console URL", () => {
+    // The table-completeness check — if anyone adds a new
+    // MAPS_ERROR_MESSAGES entry without the matching URL, this fails
+    // loudly instead of silently falling back to credentials.
+    for (const code of Object.keys(MAPS_ERROR_MESSAGES)) {
+      expect(MAPS_KEY_CONSOLE_URLS[code]).toBeDefined();
+    }
+    // The synthetic JS-SDK code lives outside MAPS_ERROR_MESSAGES but
+    // still needs an explicit mapping.
+    expect(MAPS_KEY_CONSOLE_URLS[MAPS_AUTH_FAILURE_CODE]).toBeDefined();
+  });
+
+  it("getMapsKeyConsoleUrl: unknown codes fall back to the credentials list (action is never dead)", () => {
+    expect(getMapsKeyConsoleUrl("SomeBrandNewMapError")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+    expect(getMapsKeyConsoleUrl("")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+  });
+
+  it.each([
+    [
+      "RefererNotAllowedMapError",
+      "https://console.cloud.google.com/apis/credentials",
+    ],
+    [
+      "ApiNotActivatedMapError",
+      "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    ],
+    [
+      "OverQuotaMapError",
+      "https://console.cloud.google.com/apis/api/maps-embed-backend.googleapis.com/quotas",
+    ],
+    [
+      "DeletedApiProjectMapError",
+      "https://console.cloud.google.com/projectselector2/home/dashboard",
+    ],
+    [
+      "RetiredVersionMapError",
+      "https://console.cloud.google.com/apis/library/maps-embed-backend.googleapis.com",
+    ],
+  ])(
+    "the toast for %s carries an action button linking to %s",
+    async (code, expectedHref) => {
+      await mount(
+        <>
+          <ListenerProbe />
+          <ToastReader />
+        </>,
+      );
+      await act(async () => {
+        reportGoogleMapsKeyError(code);
+      });
+      const toasts = readToasts();
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0].hasAction).toBe(true);
+      expect(toasts[0].actionAlt).toBe("Open in Google Cloud Console");
+      expect(toasts[0].actionHref).toBe(expectedHref);
+    },
+  );
+
+  it("the toast for an unknown code still carries an action button (fallback href)", async () => {
+    await mount(
+      <>
+        <ListenerProbe />
+        <ToastReader />
+      </>,
+    );
+    await act(async () => {
+      reportGoogleMapsKeyError("BrandNewUnseenMapError");
+    });
+    const toasts = readToasts();
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].hasAction).toBe(true);
+    expect(toasts[0].actionHref).toBe(
+      "https://console.cloud.google.com/apis/credentials",
     );
   });
 

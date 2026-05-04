@@ -332,16 +332,21 @@ export function PropertyLocationMap({
         */}
         <RuntimeConfigStaleWarning isStale={isRefreshStale} />
         {isMapError ? (
-          // Key-rejected / iframe-load-error branch is checked BEFORE
-          // `isConfigLoading` so a code reported anywhere on the page
-          // (e.g. the portfolio map's `gm_authFailure`, or a sibling
-          // embed iframe's postMessage) flips this card out of the
-          // "Loading map…" placeholder *immediately* — even if our own
-          // `/api/config` request is still in flight. Without this
-          // ordering an operator could be staring at our spinner
-          // indefinitely while a toast on the same page already said
-          // the key was rejected, with no in-page explanation
-          // (Task #178).
+          // Single canonical home for the rejected / iframe-load-error
+          // state — every render path that detects a map failure
+          // (iframe `error` event, postMessage error code, or the
+          // shared `useGoogleMapsKeyError` store) lands here. Any
+          // future tweaks to the error panel belong in this branch.
+          //
+          // Checked BEFORE `isConfigLoading` so a code reported
+          // anywhere on the page (e.g. the portfolio map's
+          // `gm_authFailure`, or a sibling embed iframe's postMessage)
+          // flips this card out of the "Loading map…" placeholder
+          // *immediately* — even if our own `/api/config` request is
+          // still in flight. Without this ordering an operator could
+          // be staring at our spinner indefinitely while a toast on
+          // the same page already said the key was rejected, with no
+          // in-page explanation (Task #178).
           <div
             className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
             data-testid="property-location-map-error"
@@ -512,58 +517,6 @@ export function PropertyLocationMap({
               tailored message and a Re-check button. The success
               branch stays clean.
             */}
-          </div>
-        ) : embedUrl && isMapError ? (
-          <div
-            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
-            data-testid="property-location-map-error"
-            data-error-code={reportedErrorCode ?? ""}
-          >
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-              <span data-testid="property-location-map-error-text">
-                {errorMessage}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <a
-                href={searchUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                data-testid="property-location-map-error-link"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Open in Google Maps
-              </a>
-              {/*
-                Same per-code Google Cloud Console deep-link the
-                app-level toast surfaces (Task #173). Operators who
-                dismissed that toast — or arrived at this card after
-                the toast had already fired and timed out — still get
-                the single-click jump to the right Console page
-                (credentials / quotas / library / …) for whatever code
-                Google reported. Falls back to the credentials list
-                when the code is unrecognized so the link is never
-                dead. Uses the iframe-reported code only — when the
-                iframe's own `error` event fires we have no code, so
-                we don't surface a Console link in that case
-                (`reportedErrorCode` is null then) since we'd just be
-                guessing which page to send the operator to.
-              */}
-              {reportedErrorCode !== null && (
-                <a
-                  href={getMapsKeyConsoleUrl(reportedErrorCode)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                  data-testid="property-location-map-error-console-link"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open in Google Cloud Console
-                </a>
-              )}
-            </div>
           </div>
         ) : (
           <div

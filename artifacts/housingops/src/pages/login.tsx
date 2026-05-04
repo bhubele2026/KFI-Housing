@@ -10,7 +10,6 @@ import kfiLogoUrl from "@assets/kfi-staffing-logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [, setLocation] = useLocation();
   const { login } = useAuth();
 
@@ -57,26 +56,13 @@ export default function Login() {
                   className="bg-white dark:bg-zinc-900"
                 />
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="bg-white dark:bg-zinc-900"
-                />
-              </div>
               <Button type="submit" className="w-full mt-6" size="lg">
                 Sign in
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-center border-t py-4 text-sm text-zinc-500 dark:text-zinc-400">
-            Any email and password will work for demo.
+            Any email will work for the demo — no password required.
           </CardFooter>
         </Card>
       </motion.div>

@@ -688,6 +688,23 @@ describe("PropertyLocationMap", () => {
     window.dispatchEvent(event);
   }
 
+  // Mirrors `Object.keys(MAPS_ERROR_MESSAGES)` in the component. Used by
+  // the unknown-code tests below to assert their picked codes really
+  // aren't in the lookup table — guards against someone "fixing" those
+  // tests by adding the synthetic code to the table and turning a
+  // genuine unknown-code test into a tailored-code test by mistake.
+  const KNOWN_KEY_ERROR_CODES: ReadonlyArray<string> = [
+    "RefererNotAllowedMapError",
+    "ApiNotActivatedMapError",
+    "InvalidKeyMapError",
+    "MissingKeyMapError",
+    "ExpiredKeyMapError",
+    "OverQuotaMapError",
+    "RequestDeniedMapError",
+    "DeletedApiProjectMapError",
+    "RetiredVersionMapError",
+  ];
+
   const TAILORED_CASES: ReadonlyArray<{
     code: string;
     mustInclude: ReadonlyArray<string>;
@@ -806,6 +823,112 @@ describe("PropertyLocationMap", () => {
       );
     });
   }
+
+  it("surfaces an unknown `*MapError` code verbatim alongside the generic fix line, instead of silently ignoring it", async () => {
+    // Defends against the silent-failure mode this branch was created
+    // to fix: when Google ships a new error code (or renames an
+    // existing one) that isn't in MAPS_ERROR_MESSAGES, the listener
+    // used to drop it on the floor — the operator stared at Google's
+    // grey error tile inside the embed with no in-app explanation,
+    // and a support ticket couldn't even name which code Google sent.
+    //
+    // The component must instead detect any payload that looks like a
+    // Maps error code (the `*MapError` shape) and switch to the
+    // dedicated error panel showing the raw code alongside the
+    // generic fix line. We pick a code that is intentionally NOT in
+    // the lookup table so this test would catch a regression where
+    // someone "fixed" the test by adding the code to the table.
+    const unknownCode = "TotallyMadeUpFutureMapError";
+    expect(KNOWN_KEY_ERROR_CODES).not.toContain(unknownCode);
+
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
+    });
+
+    // The success branch yields entirely to the dedicated error
+    // surface — same as the tailored-code cases. Layering a warning
+    // over a still-mounted iframe would let Google's grey tile show
+    // through.
+    expect(get("property-location-map-iframe")).toBeNull();
+    expect(get("property-location-map-link")).toBeNull();
+
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    // The raw code is exposed both as a stable testing hook on the
+    // panel and verbatim in the visible copy — the support-ticket
+    // value of the new branch hinges on the operator being able to
+    // read the actual string Google sent.
+    expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
+    const text = get("property-location-map-error-text")?.textContent ?? "";
+    expect(text).toContain(unknownCode);
+    expect(text.toLowerCase()).toContain("google reported");
+    // Generic fix line still appears so the operator has somewhere to
+    // start even before we ship a tailored message for this code.
+    expect(text).toContain(
+      "Check that the Maps Embed API is enabled and that this domain is on the key's allowlist",
+    );
+
+    // The escape-hatch links must remain intact — same contract as
+    // the tailored-code branch.
+    const errLink = get(
+      "property-location-map-error-link",
+    ) as HTMLAnchorElement | null;
+    expect(errLink).not.toBeNull();
+    const expectedQuery = encodeURIComponent(
+      "400 Cedar Blvd, Phoenix, AZ 85001",
+    );
+    expect(errLink!.href).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+    );
+  });
+
+  it("recognizes a bare-string unknown `*MapError` payload too (not just `{code: ...}` objects)", async () => {
+    // Belt-and-braces for the loose detector: Google has shipped error
+    // payloads as bare strings in the past, so an unrecognized code
+    // arriving as a plain string must also be picked up — otherwise
+    // the loose detection would only half-cover the regression case
+    // it's meant to fix.
+    const unknownCode = "BrandNewUnknownMapError";
+    expect(KNOWN_KEY_ERROR_CODES).not.toContain(unknownCode);
+
+    await render(
+      <PropertyLocationMap
+        address="400 Cedar Blvd"
+        city="Phoenix"
+        state="AZ"
+        zip="85001"
+        apiKey="key-under-test"
+      />,
+    );
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, unknownCode);
+    });
+
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
+    const text = get("property-location-map-error-text")?.textContent ?? "";
+    expect(text).toContain(unknownCode);
+  });
 
   it("accepts a bare-string postMessage payload, not just `{code: ...}` objects", async () => {
     // Google has shipped the error in different shapes across versions

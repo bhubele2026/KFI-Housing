@@ -387,6 +387,46 @@ describe("Property detail — Location map tailored key-error copy on Overview",
     );
   });
 
+  it("shows the raw code verbatim alongside the generic fix line when Google posts a code we don't recognize (e.g. a newly-introduced or renamed *MapError)", async () => {
+    // Pin down the page-level integration of the unknown-code branch
+    // added to PropertyLocationMap. Without this the page could
+    // silently regress (e.g. swap the Location card for a wrapper that
+    // ate the unknown code) and the operator would be back to staring
+    // at Google's grey error tile with no in-app explanation. Picking
+    // a code that obviously isn't in MAPS_ERROR_MESSAGES guarantees
+    // the assertion is exercising the unknown-code path and not a
+    // tailored line that happens to mention the same word.
+    const unknownCode = "BrandNewSurpriseMapError";
+    await renderPage();
+
+    const iframe = get(
+      "property-location-map-iframe",
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    expect(get("property-location-map-error")).toBeNull();
+
+    await act(async () => {
+      fireGoogleMapsErrorMessage(iframe!, { code: unknownCode });
+    });
+
+    const panel = get("property-location-map-error");
+    expect(panel).not.toBeNull();
+    // The lookup hook still records the exact code Google sent, so a
+    // support ticket can quote it verbatim.
+    expect(panel!.getAttribute("data-error-code")).toBe(unknownCode);
+
+    const text = (
+      get("property-location-map-error-text")?.textContent ?? ""
+    );
+    // Visible copy names the actual code Google reported plus the
+    // generic fix line — that's the whole point of the new branch.
+    expect(text).toContain(unknownCode);
+    expect(text).toContain("Google reported");
+    expect(text).toContain(
+      "Check that the Maps Embed API is enabled and that this domain is on the key's allowlist",
+    );
+  });
+
   it("shows the tailored 'over its daily Google Maps Embed quota' copy when Google posts OverQuotaMapError, exercising the lookup table with a second code", async () => {
     await renderPage();
 

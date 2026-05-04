@@ -61,25 +61,42 @@ const MAPS_ERROR_MESSAGES: Record<string, string> = {
 
 const KNOWN_MAPS_ERROR_CODES = Object.keys(MAPS_ERROR_MESSAGES);
 
-// Walk an arbitrary postMessage payload looking for one of the known
-// Google Maps error codes. Google does not publish the exact shape of
-// the error message it posts back, and it has changed across versions
-// of the Embed API (the value has been seen as a bare string, as
-// `{ code: "…" }`, and as a nested error object on the JS API). To
-// avoid being brittle to that shape, we look at the obvious string
-// fields and recurse one extra level into nested objects — but bound
-// the recursion so a hostile or pathological payload can't lock the
-// listener up.
+// Loose pattern for "looks like a Google Maps Embed error code". Google's
+// existing codes all share the shape `<PascalCaseName>MapError`
+// (`RefererNotAllowedMapError`, `OverQuotaMapError`, …). Matching that
+// shape lets us surface a useful in-app message when Google ships a new
+// code (or renames an existing one) before we've added a tailored entry
+// to MAPS_ERROR_MESSAGES — instead of silently ignoring it and leaving
+// the operator staring at Google's grey error tile with no clue what
+// code Google sent. Anchored at a word boundary so substrings like
+// "DescriptionMapErrorHandler" won't false-match.
+const MAPS_ERROR_CODE_PATTERN = /\b[A-Z][A-Za-z0-9]*MapError\b/;
+
+function findMapsErrorCodeInString(value: string): string | null {
+  // Known codes win — they preserve the exact spelling the lookup table
+  // is keyed on, even if the surrounding string has extra prose.
+  for (const code of KNOWN_MAPS_ERROR_CODES) {
+    if (value.includes(code)) return code;
+  }
+  const match = value.match(MAPS_ERROR_CODE_PATTERN);
+  return match ? match[0] : null;
+}
+
+// Walk an arbitrary postMessage payload looking for a Google Maps error
+// code. Google does not publish the exact shape of the error message it
+// posts back, and it has changed across versions of the Embed API (the
+// value has been seen as a bare string, as `{ code: "…" }`, and as a
+// nested error object on the JS API). To avoid being brittle to that
+// shape, we look at the obvious string fields and recurse one extra
+// level into nested objects — but bound the recursion so a hostile or
+// pathological payload can't lock the listener up.
 function extractGoogleMapsErrorCode(
   data: unknown,
   depth = 0,
 ): string | null {
   if (depth > 3) return null;
   if (typeof data === "string") {
-    for (const code of KNOWN_MAPS_ERROR_CODES) {
-      if (data.includes(code)) return code;
-    }
-    return null;
+    return findMapsErrorCodeInString(data);
   }
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
@@ -87,9 +104,8 @@ function extractGoogleMapsErrorCode(
     for (const key of fields) {
       const value = obj[key];
       if (typeof value === "string") {
-        for (const code of KNOWN_MAPS_ERROR_CODES) {
-          if (value === code || value.includes(code)) return code;
-        }
+        const found = findMapsErrorCodeInString(value);
+        if (found) return found;
       }
     }
     for (const value of Object.values(obj)) {
@@ -284,14 +300,23 @@ export function PropertyLocationMap({
   }, [embedUrl]);
 
   const isMapError = iframeLoadError || reportedErrorCode !== null;
-  // Tailored message wins when Google gave us a specific code; the
-  // generic line is the catch-all for "iframe element failed to load
-  // and we have no code to act on".
-  const errorMessage =
-    reportedErrorCode !== null
-      ? (MAPS_ERROR_MESSAGES[reportedErrorCode] ??
-        MAPS_KEY_TROUBLESHOOTING_TEXT)
-      : MAPS_KEY_TROUBLESHOOTING_TEXT;
+  // Tailored message wins when Google gave us a specific code we
+  // recognize. When Google posts a code that isn't in MAPS_ERROR_MESSAGES
+  // (e.g. a newly-introduced or renamed error), name the raw code
+  // verbatim alongside the generic fix line so the operator at least
+  // has something concrete to put in a support ticket — far better than
+  // the pre-existing behavior of silently ignoring it. The plain
+  // generic line is reserved for the "iframe element failed to load
+  // and we have no code to act on" case.
+  let errorMessage: string;
+  if (reportedErrorCode !== null) {
+    const tailored = MAPS_ERROR_MESSAGES[reportedErrorCode];
+    errorMessage =
+      tailored ??
+      `Google reported ${reportedErrorCode} — ${MAPS_KEY_TROUBLESHOOTING_TEXT}`;
+  } else {
+    errorMessage = MAPS_KEY_TROUBLESHOOTING_TEXT;
+  }
 
   return (
     <Card data-testid="card-property-location">

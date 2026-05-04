@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
+import { shortPropertyName } from "@/lib/property-name";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,7 +100,7 @@ export default function Occupants() {
                 <SelectContent>
                   <SelectItem value="All">All Properties</SelectItem>
                   {properties.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>{shortPropertyName(p.name)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

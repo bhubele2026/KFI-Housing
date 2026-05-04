@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, RATING_CATEGORIES, type RatingCategoryKey } from "@/data/mockData";
+import { computeOverallRating, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -87,13 +87,20 @@ export default function Dashboard() {
       ? "Overall"
       : RATING_CATEGORIES.find((c) => c.key === topRatingSort)?.label ?? "Overall";
 
+  // Carry the property id through chartData so downstream lookups (customer
+  // name, occupancy %, row keys) don't depend on `name` — two properties can
+  // share a name in the demo data, which would otherwise mis-map rows. The
+  // `name` field is kept purely for display via the chart tickFormatter.
+  // Lease cost sums every Active lease for the property — picking just the
+  // first match silently under-reports rent (matches finance.tsx behavior).
   const chartData = useMemo(
     () =>
       scopedProperties.map((p) => {
         const revenue = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
-        const leaseCost = scopedLeases.find((l) => l.propertyId === p.id && l.status === "Active")?.monthlyRent || 0;
+        const leaseCost = sumActiveRent(scopedLeases, p.id);
         const utilCost = scopedUtilities.filter((u) => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
         return {
+          id: p.id,
           name: p.name,
           Revenue: revenue,
           Cost: leaseCost + utilCost,
@@ -287,17 +294,27 @@ export default function Dashboard() {
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
-                    dataKey="name"
+                    dataKey="id"
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => formatPropertyName(value).primary}
+                    tickFormatter={(value) => {
+                      const row = chartData.find((d) => d.id === value);
+                      return row ? formatPropertyName(row.name).primary : value;
+                    }}
                   />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                  <Tooltip formatter={(value) => `$${value}`} cursor={{fill: 'transparent'}} />
+                  <Tooltip
+                    formatter={(value) => `$${value}`}
+                    labelFormatter={(label) => {
+                      const row = chartData.find((d) => d.id === label);
+                      return row?.name ?? String(label);
+                    }}
+                    cursor={{fill: 'transparent'}}
+                  />
                   <Legend />
-                  <Bar dataKey="Revenue" fill="#0f172a" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Cost" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Revenue" fill="hsl(217 71% 21%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Cost" fill="hsl(217 25% 65%)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -341,17 +358,24 @@ export default function Dashboard() {
                     />
                   ) : (
                     chartData.map((data) => {
-                      const property = scopedProperties.find(p => p.name === data.name);
+                      const property = scopedProperties.find(p => p.id === data.id);
                       const customer = property ? customers.find(c => c.id === property.customerId) : undefined;
+                      // Derive occupancy from the actual bed rows for this
+                      // property — the static `totalBeds` field on the
+                      // property record can drift from reality (or be 0),
+                      // which previously inflated occupancy past 100%.
+                      const propBeds = scopedBeds.filter(b => b.propertyId === data.id);
+                      const propOccupied = propBeds.filter(b => b.status === "Occupied").length;
+                      const occupancyPct = propBeds.length > 0
+                        ? Math.round((propOccupied / propBeds.length) * 100)
+                        : 0;
                       return (
-                        <TableRow key={data.name} data-testid={`row-perf-${property?.id ?? data.name}`}>
+                        <TableRow key={data.id} data-testid={`row-perf-${data.id}`}>
                           <TableCell><PropertyNameCell name={data.name} /></TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {customer?.name ?? <span className="italic">—</span>}
                           </TableCell>
-                          <TableCell>
-                            {Math.round((scopedBeds.filter(b => b.propertyId === property?.id && b.status === "Occupied").length / (property?.totalBeds || 1)) * 100)}%
-                          </TableCell>
+                          <TableCell>{occupancyPct}%</TableCell>
                           <TableCell className="text-right">
                             <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
                               ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}

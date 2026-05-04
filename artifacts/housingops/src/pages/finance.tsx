@@ -162,10 +162,23 @@ export default function Finance() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={financialData} margin={{ top: 8, right: 16, left: 8, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                <XAxis dataKey="shortName" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="id"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value) => {
+                    const row = financialData.find((d) => d.id === value);
+                    return row?.shortName ?? String(value);
+                  }}
+                />
                 <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
                   formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                  labelFormatter={(label) => {
+                    const row = financialData.find((d) => d.id === label);
+                    return row?.name ?? String(label);
+                  }}
                   contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", fontSize: "12px" }}
                   cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
                 />

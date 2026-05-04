@@ -424,3 +424,127 @@ describe("Dashboard customer filter back/forward navigation", () => {
     expect(getFilterSelect().getAttribute("data-current")).toBe("All");
   });
 });
+
+describe("Dashboard Property Performance correctness", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  function getProfitLossText(propertyId: string): string {
+    const row = container.querySelector(`[data-testid="row-perf-${propertyId}"]`);
+    if (!row) throw new Error(`Could not find row-perf-${propertyId}`);
+    return row.textContent ?? "";
+  }
+
+  it("sums every Active lease per property (does not stop at the first)", async () => {
+    // Property p1 has TWO active leases ($1,000 + $2,000 = $3,000 total
+    // monthly cost). The old `find(...)` code would have only counted the
+    // first $1,000 lease and reported a $1,500 profit; the correct sum
+    // produces a $500 profit instead.
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 500, totalBeds: 5, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.beds = [
+      { id: "b1", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b2", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b3", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b4", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b5", propertyId: "p1", status: "Occupied", roomId: "r1" },
+    ];
+    mockData.leases = [
+      { id: "l1", propertyId: "p1", status: "Active", monthlyRent: 1000 },
+      { id: "l2", propertyId: "p1", status: "Active", monthlyRent: 2000 },
+      // An expired lease must NOT count toward cost.
+      { id: "l3", propertyId: "p1", status: "Expired", monthlyRent: 9999 },
+    ];
+    mockData.utilities = [];
+
+    await render();
+
+    const text = getProfitLossText("p1");
+    // Revenue = 5 occupied * $500 = $2,500. Cost = $3,000. Loss = $500.
+    expect(text).toContain("$500");
+    expect(text).toContain("Loss");
+  });
+
+  it("keys rows by property id so duplicate names don't mis-map", async () => {
+    // Two distinct properties share the SAME display name. The old code
+    // looked them up with `find(p => p.name === data.name)` which would
+    // bind both rows to the first property — corrupting the customer
+    // and occupancy columns. Using `id` keeps them distinct.
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Lakeside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.beds = [
+      { id: "b1", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b2", propertyId: "p2", status: "Vacant", roomId: "r2" },
+    ];
+    mockData.leases = [];
+    mockData.utilities = [];
+
+    await render();
+
+    const row1 = container.querySelector('[data-testid="row-perf-p1"]');
+    const row2 = container.querySelector('[data-testid="row-perf-p2"]');
+    expect(row1).toBeTruthy();
+    expect(row2).toBeTruthy();
+    // Distinct customer columns prove rows resolved to distinct properties.
+    expect(row1?.textContent).toContain("Acme Co");
+    expect(row2?.textContent).toContain("Globex");
+    // Distinct occupancies (100% vs 0%) prove bed lookups went to the
+    // correct property id, not the duplicate name.
+    expect(row1?.textContent).toContain("100%");
+    expect(row2?.textContent).toContain("0%");
+  });
+
+  it("derives occupancy from real bed rows, not the static totalBeds field", async () => {
+    // The property record claims totalBeds=99 but only 2 real beds exist.
+    // The old `occupied / (totalBeds || 1)` math would print 1% (1/99).
+    // The correct math uses the actual bed count and prints 50% (1/2).
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 99, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.beds = [
+      { id: "b1", propertyId: "p1", status: "Occupied", roomId: "r1" },
+      { id: "b2", propertyId: "p1", status: "Vacant", roomId: "r1" },
+    ];
+    mockData.leases = [];
+    mockData.utilities = [];
+
+    await render();
+
+    const row = container.querySelector('[data-testid="row-perf-p1"]');
+    expect(row?.textContent).toContain("50%");
+  });
+});

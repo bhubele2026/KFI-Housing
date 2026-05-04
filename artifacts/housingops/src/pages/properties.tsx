@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -16,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home } from "lucide-react";
+import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff } from "lucide-react";
+import { PortfolioMap, type MappableProperty } from "@/components/portfolio-map";
 import { EmptyStateRow } from "@/components/empty-state";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -31,6 +32,7 @@ type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft";
 type MinRating = "any" | "3" | "4" | "5";
 type RatingSortKey = "overall" | RatingCategoryKey;
+type ViewMode = "table" | "map";
 
 const RATING_SORT_OPTIONS: { key: RatingSortKey; label: string }[] = [
   { key: "overall", label: "Overall" },
@@ -64,6 +66,7 @@ const VALID_SORT_DIRS = new Set<Exclude<SortDir, null>>(["asc", "desc"]);
 const VALID_RATING_SORT_KEYS = new Set<RatingSortKey>(
   RATING_SORT_OPTIONS.map((o) => o.key),
 );
+const VALID_VIEW_MODES = new Set<ViewMode>(["table", "map"]);
 
 interface PersistedPrefs {
   statusFilter?: string;
@@ -71,6 +74,7 @@ interface PersistedPrefs {
   sortKey?: SortKey;
   sortDir?: Exclude<SortDir, null>;
   ratingSortCategory?: RatingSortKey;
+  viewMode?: ViewMode;
 }
 
 function readPersistedPrefs(): PersistedPrefs {
@@ -103,6 +107,12 @@ function readPersistedPrefs(): PersistedPrefs {
     ) {
       out.ratingSortCategory = parsed.ratingSortCategory as RatingSortKey;
     }
+    if (
+      typeof parsed.viewMode === "string" &&
+      VALID_VIEW_MODES.has(parsed.viewMode as ViewMode)
+    ) {
+      out.viewMode = parsed.viewMode as ViewMode;
+    }
     return out;
   } catch {
     return {};
@@ -115,6 +125,7 @@ function writePersistedPrefs(prefs: {
   sortKey: SortKey | null;
   sortDir: SortDir;
   ratingSortCategory: RatingSortKey;
+  viewMode: ViewMode;
 }): void {
   if (typeof window === "undefined") return;
   try {
@@ -136,6 +147,7 @@ function writePersistedPrefs(prefs: {
     ) {
       cleaned.ratingSortCategory = prefs.ratingSortCategory;
     }
+    if (prefs.viewMode !== "table") cleaned.viewMode = prefs.viewMode;
     if (Object.keys(cleaned).length === 0) {
       window.localStorage.removeItem(PROPERTIES_PREFS_STORAGE_KEY);
     } else {
@@ -209,6 +221,9 @@ export default function Properties() {
   const [ratingSortCategory, setRatingSortCategory] = useState<RatingSortKey>(
     () => initialPrefs.ratingSortCategory ?? "overall",
   );
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    () => initialPrefs.viewMode ?? "table",
+  );
 
   // Persist toolbar prefs whenever they change. writePersistedPrefs
   // strips defaults and removes the storage key entirely when the user
@@ -221,8 +236,9 @@ export default function Properties() {
       sortKey,
       sortDir,
       ratingSortCategory,
+      viewMode,
     });
-  }, [statusFilter, minRating, sortKey, sortDir, ratingSortCategory]);
+  }, [statusFilter, minRating, sortKey, sortDir, ratingSortCategory, viewMode]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(EMPTY_PROPERTY_DRAFT);
@@ -480,6 +496,75 @@ export default function Properties() {
       ? null
       : customerById.get(customerFilter)?.name ?? null;
 
+  // Ids reported back from the map for properties whose address looked
+  // valid but Google couldn't actually geocode (typo'd street, removed
+  // ZIP, etc). We surface those alongside truly-blank addresses in the
+  // side panel so a bad address never silently disappears.
+  const [unmappableIds, setUnmappableIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Reset whenever the user leaves the map view so a stale list from a
+  // previous filter set doesn't leak into the table view's state.
+  useEffect(() => {
+    if (viewMode !== "map") setUnmappableIds(new Set());
+  }, [viewMode]);
+  const handleUnmappableChange = useCallback((ids: string[]) => {
+    setUnmappableIds((prev) => {
+      // Bail out if the set is unchanged so we don't trigger a render
+      // loop with the map's effect.
+      if (prev.size === ids.length && ids.every((id) => prev.has(id))) {
+        return prev;
+      }
+      return new Set(ids);
+    });
+  }, []);
+
+  // Split the filtered list for the map view: properties with at least
+  // one address field go on the map; the rest go in the side panel so
+  // the operator can see they exist (and click through to fix them)
+  // even though we have nothing to drop a pin on. Geocode failures
+  // reported back from the map join the side panel too.
+  const { mappableProperties, propertiesWithoutAddress } = useMemo(() => {
+    const withAddr: MappableProperty[] = [];
+    const without: Property[] = [];
+    for (const p of filtered) {
+      const hasAnyAddress =
+        `${p.address}${p.city}${p.state}${p.zip}`.trim().length > 0;
+      const isGeocodeFailure = unmappableIds.has(p.id);
+      if (hasAnyAddress && !isGeocodeFailure) {
+        withAddr.push({
+          id: p.id,
+          name: p.name,
+          address: p.address,
+          city: p.city,
+          state: p.state,
+          zip: p.zip,
+          customerName: customerById.get(p.customerId)?.name,
+        });
+      } else {
+        without.push(p);
+      }
+    }
+    return { mappableProperties: withAddr, propertiesWithoutAddress: without };
+  }, [filtered, customerById, unmappableIds]);
+
+  // The map needs the full set of address-bearing properties so it can
+  // try to geocode every one — geocode failures only get pushed to the
+  // side panel after they're reported back via onUnmappableChange.
+  const mapInputProperties = useMemo<MappableProperty[]>(() => {
+    return filtered
+      .filter((p) => `${p.address}${p.city}${p.state}${p.zip}`.trim().length > 0)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        address: p.address,
+        city: p.city,
+        state: p.state,
+        zip: p.zip,
+        customerName: customerById.get(p.customerId)?.name,
+      }));
+  }, [filtered, customerById]);
+
   const handleDownloadCsv = () => {
     const rows = filtered.map((property) => {
       const propBeds = beds.filter((b) => b.propertyId === property.id);
@@ -536,6 +621,40 @@ export default function Properties() {
             <p className="text-muted-foreground mt-1">Select a property to manage it</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Table/Map toggle. Persisted with the rest of the toolbar
+                prefs so the operator's last choice survives refresh and
+                back-navigation. */}
+            <div
+              className="inline-flex rounded-md border overflow-hidden"
+              role="group"
+              aria-label="Properties view"
+              data-testid="properties-view-toggle"
+            >
+              <Button
+                type="button"
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none border-0"
+                onClick={() => setViewMode("table")}
+                aria-pressed={viewMode === "table"}
+                data-testid="button-view-table"
+              >
+                <TableIcon className="mr-2 h-4 w-4" />
+                Table
+              </Button>
+              <Button
+                type="button"
+                variant={viewMode === "map" ? "default" : "ghost"}
+                size="sm"
+                className="rounded-none border-0"
+                onClick={() => setViewMode("map")}
+                aria-pressed={viewMode === "map"}
+                data-testid="button-view-map"
+              >
+                <MapIcon className="mr-2 h-4 w-4" />
+                Map
+              </Button>
+            </div>
             <Button
               variant="outline"
               onClick={handleDownloadCsv}
@@ -619,6 +738,103 @@ export default function Properties() {
               </div>
             </div>
 
+            {viewMode === "map" ? (
+              <div
+                className="p-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
+                data-testid="properties-map-view"
+              >
+                <div className="min-w-0">
+                  {isLoading ? (
+                    <div
+                      className="aspect-[16/9] w-full rounded-lg border bg-muted animate-pulse"
+                      data-testid="portfolio-map-skeleton"
+                    />
+                  ) : mappableProperties.length === 0 &&
+                    propertiesWithoutAddress.length === 0 ? (
+                    <div
+                      className="rounded-lg border bg-muted/30 p-8 text-center text-sm text-muted-foreground"
+                      data-testid="empty-map-view"
+                    >
+                      <Home className="mx-auto h-6 w-6 mb-2 opacity-50" />
+                      No properties match the current filters.
+                    </div>
+                  ) : (
+                    <PortfolioMap
+                      properties={mapInputProperties}
+                      onPinClick={(id) => navigate(`/properties/${id}`)}
+                      onUnmappableChange={handleUnmappableChange}
+                    />
+                  )}
+                  {!isLoading && mappableProperties.length === 0 &&
+                    propertiesWithoutAddress.length > 0 && (
+                      <p
+                        className="mt-3 text-xs text-muted-foreground"
+                        data-testid="map-view-no-mapped-note"
+                      >
+                        None of the {propertiesWithoutAddress.length}{" "}
+                        {propertiesWithoutAddress.length === 1
+                          ? "property"
+                          : "properties"}{" "}
+                        in view has an address yet — see the side panel.
+                      </p>
+                    )}
+                </div>
+                <aside
+                  className="rounded-lg border bg-card"
+                  data-testid="properties-without-address-panel"
+                  aria-label="Properties without an address"
+                >
+                  <div className="p-3 border-b flex items-center gap-2">
+                    <MapPinOff className="h-4 w-4 text-muted-foreground" />
+                    <h2 className="text-sm font-semibold">Missing address</h2>
+                    <Badge
+                      variant="secondary"
+                      className="ml-auto text-[11px]"
+                      data-testid="properties-without-address-count"
+                    >
+                      {propertiesWithoutAddress.length}
+                    </Badge>
+                  </div>
+                  {propertiesWithoutAddress.length === 0 ? (
+                    <p
+                      className="p-3 text-xs text-muted-foreground"
+                      data-testid="properties-without-address-empty"
+                    >
+                      Every property in view has an address. Pins on the
+                      map cover them all.
+                    </p>
+                  ) : (
+                    <ul className="divide-y max-h-[28rem] overflow-y-auto">
+                      {propertiesWithoutAddress.map((p) => {
+                        const customer = customerById.get(p.customerId);
+                        return (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/properties/${p.id}`)}
+                              className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors flex items-start gap-2"
+                              data-testid={`property-without-address-${p.id}`}
+                            >
+                              <Home className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium truncate">
+                                  {p.name}
+                                </span>
+                                {customer && (
+                                  <span className="block text-xs text-muted-foreground truncate">
+                                    {customer.name}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </aside>
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -953,6 +1169,7 @@ export default function Properties() {
                 )}
               </TableBody>
             </Table>
+            )}
           </CardContent>
         </Card>
       </motion.div>

@@ -7,6 +7,11 @@ import {
   __resetPortfolioMapCachesForTest,
   type MappableProperty,
 } from "./portfolio-map";
+import {
+  reportGoogleMapsKeyError,
+  __resetGoogleMapsKeyErrorForTest,
+  MAPS_AUTH_FAILURE_CODE,
+} from "@/hooks/use-google-maps-key-error";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -1270,5 +1275,163 @@ describe("PortfolioMap — runtime config", () => {
 
     await waitFor(() => mapsState.map !== null);
     expect(mapsState.map?.options.mapId).toBe("prop-wins");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Key-rejected branch (Task #167): when the shared Google Maps key-error
+// store reports a code — either because the JS SDK called
+// `window.gm_authFailure` after rejecting our key, or because a sibling
+// embed (the per-property location card) observed a postMessage error code
+// — the portfolio map flips out of its loading/canvas branch into a
+// dedicated "key rejected" panel. Without these tests, a refactor that
+// drops the `useGoogleMapsKeyError` subscription, swaps the panel's test
+// id, or short-circuits the branch wouldn't fail any portfolio-map test
+// (the branch is only covered indirectly by the hook tests).
+// ---------------------------------------------------------------------------
+describe("PortfolioMap — key-rejected branch", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    // Reset BOTH module-level stores so a code reported in one test
+    // can't leak into the next (the key-error store is keyed by code,
+    // not by component instance, so unmounting alone wouldn't clear it).
+    __resetPortfolioMapCachesForTest();
+    __resetGoogleMapsKeyErrorForTest();
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+    __resetGoogleMapsKeyErrorForTest();
+  });
+
+  function get(testId: string): HTMLElement | null {
+    return container.querySelector(
+      `[data-testid="${testId}"]`,
+    ) as HTMLElement | null;
+  }
+
+  it("flips into the key-rejected panel when the JS SDK reports gm_authFailure (synthetic MapsJsAuthFailure code)", async () => {
+    // Mount the map first so the canvas branch is what's rendered, then
+    // simulate the JS SDK rejecting our key. The component subscribes
+    // to the shared store via `useGoogleMapsKeyError`, so the report
+    // should trigger a re-render into the dedicated panel without
+    // anyone unmounting the component.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Sanity check — the canvas is what's rendered before the error.
+    expect(get("portfolio-map")).not.toBeNull();
+    expect(get("portfolio-map-key-error")).toBeNull();
+
+    // Simulate `window.gm_authFailure` by feeding the same synthetic
+    // code the global listener would emit. Calling
+    // `reportGoogleMapsKeyError` directly (vs. invoking
+    // `window.gm_authFailure`) lets the test exercise the branch
+    // without also having to mount the app-level toast listener that
+    // installs the global handler.
+    await act(async () => {
+      reportGoogleMapsKeyError(MAPS_AUTH_FAILURE_CODE);
+    });
+
+    // The canvas must be gone — operators should not still see a stale
+    // map next to a "key rejected" message.
+    expect(get("portfolio-map")).toBeNull();
+
+    const panel = get("portfolio-map-key-error");
+    expect(panel).not.toBeNull();
+    // The code attribute must be set and non-empty so downstream
+    // tooling (and humans) can tell which signal flipped the branch.
+    const code = panel!.getAttribute("data-error-code");
+    expect(code).not.toBeNull();
+    expect(code).not.toBe("");
+    expect(code).toBe(MAPS_AUTH_FAILURE_CODE);
+
+    // The panel renders the tailored copy from the shared lookup
+    // table — not a generic "something failed" string.
+    const text = get("portfolio-map-key-error-text");
+    expect(text).not.toBeNull();
+    const copy = (text!.textContent ?? "").toLowerCase();
+    expect(copy).toContain("google");
+    expect(copy).toContain("rejected");
+  });
+
+  it("flips into the same key-rejected panel when an embed-iframe code is reported elsewhere on the page (cross-surface sharing)", async () => {
+    // The per-property location card also feeds the shared store when
+    // it observes a postMessage code from the Google Maps Embed
+    // iframe. The portfolio map shouldn't care which surface saw the
+    // error first — it must flip into the same panel either way.
+    // Without this assertion, a refactor that breaks the cross-surface
+    // sharing (e.g. each component getting its own private store)
+    // would silently regress the unified UX.
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[makeProperty()]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    expect(get("portfolio-map-key-error")).toBeNull();
+
+    // Use a real embed-iframe code (the kind the Embed API posts back
+    // via window.postMessage) — proves the portfolio map honors codes
+    // observed by *other* surfaces, not just the JS-SDK auth failure.
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+
+    expect(get("portfolio-map")).toBeNull();
+    const panel = get("portfolio-map-key-error");
+    expect(panel).not.toBeNull();
+    const code = panel!.getAttribute("data-error-code");
+    expect(code).not.toBeNull();
+    expect(code).not.toBe("");
+    expect(code).toBe("RefererNotAllowedMapError");
+
+    // The tailored copy for RefererNotAllowedMapError names the
+    // concrete fix (HTTP referrer allowlist) — the whole point of
+    // having per-code messages is so the panel tells the operator
+    // exactly what to do, not a generic line.
+    const text = get("portfolio-map-key-error-text");
+    expect(text).not.toBeNull();
+    const copy = (text!.textContent ?? "").toLowerCase();
+    expect(copy).toContain("referrer");
   });
 });

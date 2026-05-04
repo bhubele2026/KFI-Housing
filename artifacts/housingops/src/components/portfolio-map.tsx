@@ -3,9 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, MapPin } from "lucide-react";
 
 // Minimal hand-rolled shape for the parts of the Google Maps JS SDK we
-// actually call into — installing @types/google.maps just for two
-// classes is overkill, and the surface area below is small enough that
-// keeping it inline is clearer than adding a dev dep.
+// actually call into — installing @types/google.maps just for a handful
+// of classes is overkill, and the surface area below is small enough
+// that keeping it inline is clearer than adding a dev dep.
 interface MapsLatLng {
   lat: () => number;
   lng: () => number;
@@ -20,13 +20,25 @@ interface MapsMap {
   fitBounds: (b: MapsLatLngBounds, padding?: number) => void;
   addListener: (event: string, cb: () => void) => void;
 }
-interface MapsMarker {
-  setMap: (m: MapsMap | null) => void;
-  addListener: (event: string, cb: () => void) => void;
+// AdvancedMarkerElement is a custom HTMLElement, so DOM-style
+// addEventListener is the right way to subscribe to its events. Google
+// also still exposes the legacy `addListener` MVCObject method, but the
+// DOM API works for both `gmp-click` (the marker's own event) and
+// native pointer events like `mouseover` that bubble out of the pin.
+interface MapsAdvancedMarkerElement {
+  // `map = null` removes the marker from the map. Property assignment
+  // replaces the old `setMap(null)` API on google.maps.Marker.
+  map: MapsMap | null;
+  addEventListener: (event: string, cb: () => void) => void;
 }
 interface MapsInfoWindow {
   setContent: (content: string | HTMLElement) => void;
-  open: (opts: { map: MapsMap; anchor: MapsMarker } | MapsMap, anchor?: MapsMarker) => void;
+  open: (
+    opts:
+      | { map: MapsMap; anchor: MapsAdvancedMarkerElement }
+      | MapsMap,
+    anchor?: MapsAdvancedMarkerElement,
+  ) => void;
   close: () => void;
   addListener: (event: string, cb: () => void) => void;
 }
@@ -41,16 +53,22 @@ interface MapsGeocoder {
     ) => void,
   ) => void;
 }
+interface MapsMarkerLibrary {
+  // Per Google's docs, `gmpClickable: true` is required for the
+  // `gmp-click` event to fire — without it the marker is purely
+  // decorative. We always pass it so the pins behave like buttons.
+  AdvancedMarkerElement: new (opts: {
+    position: { lat: number; lng: number };
+    map: MapsMap;
+    title?: string;
+    gmpClickable?: boolean;
+  }) => MapsAdvancedMarkerElement;
+}
 interface MapsApi {
   Map: new (
     el: HTMLElement,
     opts: Record<string, unknown>,
   ) => MapsMap;
-  Marker: new (opts: {
-    position: { lat: number; lng: number };
-    map: MapsMap;
-    title?: string;
-  }) => MapsMarker;
   Geocoder: new () => MapsGeocoder;
   LatLngBounds: new () => MapsLatLngBounds;
   InfoWindow: new (opts?: {
@@ -58,6 +76,9 @@ interface MapsApi {
     maxWidth?: number;
     ariaLabel?: string;
   }) => MapsInfoWindow;
+  // Loaded by adding `libraries=marker` to the loader URL — see
+  // `loadMapsApi` below.
+  marker: MapsMarkerLibrary;
 }
 
 declare global {
@@ -160,13 +181,29 @@ function loadMapsApi(apiKey: string): Promise<void> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Google Maps requires a browser environment"));
   }
-  if (window.google?.maps?.Geocoder) return Promise.resolve();
+  // The marker library piggy-backs on the script's `load` event when
+  // we list it in `libraries=` (see below), so checking for
+  // `AdvancedMarkerElement` is sufficient to know the SDK is fully
+  // ready for both the Geocoder and the new marker class.
+  if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+    return Promise.resolve();
+  }
   if (window.__housingopsMapsLoader) return window.__housingopsMapsLoader;
 
   const promise = new Promise<void>((resolve, reject) => {
     const onReady = () => {
-      if (window.google?.maps?.Geocoder) resolve();
-      else reject(new Error("Google Maps loaded but Geocoder is unavailable"));
+      if (
+        window.google?.maps?.Geocoder &&
+        window.google?.maps?.marker?.AdvancedMarkerElement
+      ) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            "Google Maps loaded but required classes are unavailable",
+          ),
+        );
+      }
     };
     const existing = document.querySelector<HTMLScriptElement>(
       'script[data-housingops-maps]',
@@ -180,15 +217,17 @@ function loadMapsApi(apiKey: string): Promise<void> {
     }
     const s = document.createElement("script");
     // Intentionally omit `loading=async`: Google's async loader requires
-    // every class (including Geocoder) to be pulled in via
-    // `await google.maps.importLibrary(...)`, but the rest of this
-    // component reaches for `google.maps.Geocoder` / `Marker` /
-    // `LatLngBounds` synchronously right after script load. Sync loading
-    // keeps that contract — when the <script> `load` event fires, all
-    // core classes are bound on `window.google.maps`.
+    // every class (including Geocoder and AdvancedMarkerElement) to be
+    // pulled in via `await google.maps.importLibrary(...)`, but the rest
+    // of this component reaches for `google.maps.Geocoder` /
+    // `marker.AdvancedMarkerElement` / `LatLngBounds` synchronously
+    // right after script load. Sync loading + an explicit
+    // `libraries=marker` parameter keeps that contract — when the
+    // <script> `load` event fires, all classes (including the marker
+    // library) are bound on `window.google.maps`.
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
       apiKey,
-    )}`;
+    )}&libraries=marker`;
     s.async = true;
     s.defer = true;
     s.dataset.housingopsMaps = "1";
@@ -370,7 +409,7 @@ export function PortfolioMap({
     apiKey ?? (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? "";
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapsMap | null>(null);
-  const markersRef = useRef<MapsMarker[]>([]);
+  const markersRef = useRef<MapsAdvancedMarkerElement[]>([]);
   // One InfoWindow shared across every marker — Google's API closes any
   // previously-open instance when you call open() on a new anchor, so a
   // single window keeps the UX clean (no two bubbles open at once) and
@@ -429,6 +468,13 @@ export function PortfolioMap({
           // overrides this once we have at least one pin.
           center: { lat: 39.8283, lng: -98.5795 },
           zoom: 4,
+          // AdvancedMarkerElement requires a Map ID — without one
+          // Google falls back to a raster map and logs a warning that
+          // the markers will not render. `DEMO_MAP_ID` is Google's
+          // built-in development Map ID and is supported indefinitely
+          // for AdvancedMarkerElement preview/development use without
+          // needing a Cloud Console-issued ID.
+          mapId: "DEMO_MAP_ID",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -544,7 +590,9 @@ export function PortfolioMap({
     if (status !== "ready" || !mapRef.current) return;
     const maps = window.google!.maps!;
 
-    for (const m of markersRef.current) m.setMap(null);
+    // AdvancedMarkerElement removes itself from the map by setting its
+    // `map` property to null — there's no `setMap()` method anymore.
+    for (const m of markersRef.current) m.map = null;
     markersRef.current = [];
 
     // Lazily allocate the shared InfoWindow on the first marker render
@@ -563,15 +611,26 @@ export function PortfolioMap({
     for (const p of properties) {
       const c = coords.get(p.id);
       if (!c) continue;
-      const marker = new maps.Marker({
+      const marker = new maps.marker.AdvancedMarkerElement({
         position: c,
         map: mapRef.current,
         title: p.name,
+        // Required for `gmp-click` to fire — without it the marker is
+        // a purely decorative overlay and the operator can't open the
+        // info bubble at all.
+        gmpClickable: true,
       });
       // Hover and click both open the bubble. Operators scanning for
       // clusters use mouseover; click is the keyboard/touch fallback
       // and also matches operators who treat the pin as a button.
       // Navigation now happens via the bubble's "View details" link.
+      //
+      // AdvancedMarkerElement is itself a custom HTMLElement, so we
+      // subscribe with the standard DOM `addEventListener` rather than
+      // the legacy `addListener` MVCObject API. `gmp-click` is the
+      // marker's purpose-built click event (regular `click` does not
+      // fire on advanced markers); `mouseover` bubbles up from the
+      // pin's underlying DOM as normal.
       const open = () => {
         if (!mapRef.current) return;
         infoWindow.setContent(
@@ -579,8 +638,8 @@ export function PortfolioMap({
         );
         infoWindow.open({ map: mapRef.current, anchor: marker });
       };
-      marker.addListener("mouseover", open);
-      marker.addListener("click", open);
+      marker.addEventListener("mouseover", open);
+      marker.addEventListener("gmp-click", open);
       markersRef.current.push(marker);
       bounds.extend(c);
       added++;

@@ -24,12 +24,20 @@ import {
 // Each test gets a fresh shim and we record every call that would have
 // hit Google's geocoder so we can assert dedup.
 
+// AdvancedMarkerElement is a custom HTMLElement; the fake mirrors that
+// shape closely enough for our component to drive it. It exposes:
+//   • a `map` property (assignment is how AdvancedMarkerElement is
+//     added to / removed from a Map — there's no setMap any more), and
+//   • `addEventListener`, recorded in `listeners` so tests can fire
+//     `gmp-click` and `mouseover` directly without simulating DOM
+//     dispatch.
 interface FakeMarker {
   position: { lat: number; lng: number };
   title?: string;
+  gmpClickable?: boolean;
+  map: unknown | null;
   listeners: Map<string, Array<() => void>>;
-  setMap: (m: unknown | null) => void;
-  addListener: (event: string, cb: () => void) => void;
+  addEventListener: (event: string, cb: () => void) => void;
 }
 
 interface FakeInfoWindowState {
@@ -96,25 +104,38 @@ function installFakeGoogleMaps() {
       this.listeners.set(event, cur);
     }
   }
-  class FakeMarker {
+  class FakeAdvancedMarkerElement {
     position: { lat: number; lng: number };
     title?: string;
+    gmpClickable?: boolean;
     listeners = new Map<string, Array<() => void>>();
+    // Backing field for the `map` property setter below. Mirrors
+    // AdvancedMarkerElement, which removes itself from the parent map
+    // when its `map` property is set to null.
+    private _map: unknown | null = null;
     constructor(opts: {
       position: { lat: number; lng: number };
+      map: unknown;
       title?: string;
+      gmpClickable?: boolean;
     }) {
       this.position = opts.position;
       this.title = opts.title;
+      this.gmpClickable = opts.gmpClickable;
+      this._map = opts.map ?? null;
       mapsState.markers.push(this as unknown as FakeMarker);
     }
-    setMap(m: unknown | null) {
+    get map() {
+      return this._map;
+    }
+    set map(m: unknown | null) {
+      this._map = m;
       if (m === null) {
         const idx = mapsState.markers.indexOf(this as unknown as FakeMarker);
         if (idx !== -1) mapsState.markers.splice(idx, 1);
       }
     }
-    addListener(event: string, cb: () => void) {
+    addEventListener(event: string, cb: () => void) {
       const cur = this.listeners.get(event) ?? [];
       cur.push(cb);
       this.listeners.set(event, cur);
@@ -171,7 +192,11 @@ function installFakeGoogleMaps() {
   w.google = {
     maps: {
       Map: FakeMap,
-      Marker: FakeMarker,
+      // The marker library lives under `google.maps.marker` and is
+      // pulled in by adding `libraries=marker` to the loader URL.
+      // Mirrors the real SDK's namespace so the component can call
+      // `new maps.marker.AdvancedMarkerElement({...})`.
+      marker: { AdvancedMarkerElement: FakeAdvancedMarkerElement },
       Geocoder: FakeGeocoder,
       LatLngBounds: FakeBounds,
       InfoWindow: FakeInfoWindow,
@@ -303,7 +328,7 @@ describe("PortfolioMap — pin info bubble", () => {
     const marker = mapsState.markers[0];
 
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
 
     expect(onPinClick).not.toHaveBeenCalled();
@@ -341,7 +366,7 @@ describe("PortfolioMap — pin info bubble", () => {
     const { onPinClick } = await renderMap();
     const marker = mapsState.markers[0];
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
 
     const content = mapsState.infoWindow?.content as HTMLElement | null;
@@ -360,7 +385,7 @@ describe("PortfolioMap — pin info bubble", () => {
     await renderMap();
     const marker = mapsState.markers[0];
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
     expect(mapsState.infoWindow?.isOpen).toBe(true);
 
@@ -375,7 +400,7 @@ describe("PortfolioMap — pin info bubble", () => {
     await renderMap();
     const marker = mapsState.markers[0];
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
     expect(mapsState.infoWindow?.isOpen).toBe(true);
 
@@ -398,10 +423,10 @@ describe("PortfolioMap — pin info bubble", () => {
 
     const [m1, m2] = mapsState.markers;
     await act(async () => {
-      fireMarkerEvent(m1, "click");
+      fireMarkerEvent(m1, "gmp-click");
     });
     await act(async () => {
-      fireMarkerEvent(m2, "click");
+      fireMarkerEvent(m2, "gmp-click");
     });
 
     expect(mapsState.infoWindow?.openCount).toBe(2);
@@ -455,7 +480,7 @@ describe("PortfolioMap — pin info bubble", () => {
 
     const marker = mapsState.markers[0];
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
     const content = mapsState.infoWindow?.content as HTMLElement | null;
     const view = content?.querySelector(
@@ -480,7 +505,7 @@ describe("PortfolioMap — pin info bubble", () => {
     await renderMap({ properties: [minimal] });
     const marker = mapsState.markers[0];
     await act(async () => {
-      fireMarkerEvent(marker, "click");
+      fireMarkerEvent(marker, "gmp-click");
     });
     const content = mapsState.infoWindow?.content as HTMLElement | null;
     expect(content!.textContent).toContain("Tiny");

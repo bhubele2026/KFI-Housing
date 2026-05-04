@@ -1407,6 +1407,137 @@ describe("PortfolioMap — runtime config", () => {
     script!.remove();
   });
 
+  it("disposes the previous map's markers and info window when the API key is rotated, leaving no stale references", async () => {
+    // The Maps SDK script reload (covered above) is only half the
+    // rotation story. Before this test was added, the load effect
+    // simply overwrote `mapRef.current` with the freshly-built Map —
+    // the previous map's AdvancedMarkerElement pins and the shared
+    // InfoWindow stayed reachable through `markersRef` /
+    // `infoWindowRef`, with their pin-level event listeners and the
+    // last-set bubble content node still attached. For the rare
+    // operator who rotates keys multiple times in a single tab,
+    // those leaks compound on every rotation.
+    //
+    // The fix is to dispose the prior map instance + markers + info
+    // window in the load effect's cleanup, before the new SDK takes
+    // over. This test pins that contract down by:
+    //   1. mounting against key-A and capturing the marker /
+    //      InfoWindow created against it,
+    //   2. rotating to key-B,
+    //   3. asserting the captured marker has been removed from the
+    //      old map (`map === null`) and is no longer in the live
+    //      marker registry, and the captured InfoWindow has had
+    //      `close()` called on it,
+    //   4. resolving the rotated SDK and asserting the freshly-built
+    //      map ends up with brand-new marker + InfoWindow instances
+    //      (i.e. nothing was reused across the rotation boundary).
+    //
+    // Pre-supply lat/lng so a marker is created synchronously and we
+    // don't need to drive the geocoder before the rotation.
+    const propWithCoords = makeProperty({
+      id: "p1",
+      lat: 30.2672,
+      lng: -97.7431,
+    });
+
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[propWithCoords]}
+            onPinClick={vi.fn()}
+            apiKey="key-A"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Sanity check: the initial marker + InfoWindow exist against
+    // key-A. Capture them so we can verify they're torn down by the
+    // rotation rather than just shadowed by fresh ones.
+    expect(mapsState.markers).toHaveLength(1);
+    const oldMarker = mapsState.markers[0];
+    expect(oldMarker.map).not.toBeNull();
+
+    // Open the bubble so we can later assert the OLD InfoWindow was
+    // explicitly closed (closeCount goes up). Without opening it
+    // first, closeCount would simply still be 0 — useful, but a
+    // weaker signal that disposal actually ran. The captured state
+    // object survives even after a new InfoWindow is constructed,
+    // because new instances reassign `mapsState.infoWindow` to a
+    // fresh object rather than mutating the old one.
+    await act(async () => {
+      fireMarkerEvent(oldMarker, "gmp-click");
+    });
+    expect(mapsState.infoWindow).not.toBeNull();
+    const oldInfoWindowState = mapsState.infoWindow!;
+    expect(oldInfoWindowState.isOpen).toBe(true);
+    expect(oldInfoWindowState.closeCount).toBe(0);
+
+    // Rotate the key. The load effect's cleanup must fire before
+    // the next render commits a fresh `setStatus("loading")` — that
+    // cleanup is where disposal happens.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[propWithCoords]}
+            onPinClick={vi.fn()}
+            apiKey="key-B"
+          />
+        </Wrapper>,
+      );
+    });
+    await flush();
+
+    // Disposal happened: the captured marker has been removed from
+    // its parent map (AdvancedMarkerElement's documented teardown is
+    // assigning `map = null`, which the fake mirrors by also
+    // splicing the marker out of `mapsState.markers`). Without the
+    // cleanup, `oldMarker.map` would still point at the previous
+    // google.maps.Map and the array would still contain it.
+    expect(oldMarker.map).toBeNull();
+    expect(mapsState.markers).not.toContain(oldMarker);
+    // The InfoWindow we captured was explicitly closed by the
+    // cleanup — proves we didn't leave a stale bubble (and its
+    // last-set content node) attached against a vanished marker.
+    expect(oldInfoWindowState.closeCount).toBeGreaterThan(0);
+
+    // Drive the rotated SDK to readiness (jsdom won't fire `load`
+    // for a real network fetch, so re-install the fake namespace and
+    // dispatch the load event manually) and let the marker effect
+    // re-run against the freshly-built map.
+    const script = document.querySelector(
+      'script[data-housingops-maps]',
+    ) as HTMLScriptElement | null;
+    expect(script).not.toBeNull();
+    installFakeGoogleMaps();
+    await act(async () => {
+      script!.dispatchEvent(new Event("load"));
+    });
+    await settle();
+
+    // The new map mounted with a brand-new marker and a brand-new
+    // InfoWindow — none of them are the captured references from
+    // before the rotation. If disposal had been a no-op, the
+    // re-built marker effect would have appended a *second* marker
+    // alongside the old (still-attached) one and we'd see length 2
+    // here.
+    expect(mapsState.markers).toHaveLength(1);
+    const newMarker = mapsState.markers[0];
+    expect(newMarker).not.toBe(oldMarker);
+    expect(mapsState.infoWindow).not.toBeNull();
+    expect(mapsState.infoWindow).not.toBe(oldInfoWindowState);
+
+    // Cleanup: the fresh script tag is left on the page since
+    // teardown of the test only removes the container; remove it
+    // here so it doesn't leak into the next test's selectors.
+    script!.remove();
+  });
+
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
     const fetchMock = vi.fn(
       async () =>

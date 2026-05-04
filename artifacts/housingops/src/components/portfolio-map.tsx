@@ -637,6 +637,32 @@ export function PortfolioMap({
       });
     return () => {
       cancelled = true;
+      // Explicitly tear down the previous map instance + markers +
+      // info window before a key rotation (or unmount) so we don't
+      // leak the old AdvancedMarkerElement instances and their
+      // pin-level event listeners. The next effect run will replace
+      // `mapRef.current` with a fresh Map built against the rotated
+      // SDK; without this teardown the old map's markers (and the
+      // closures held by their `mouseover` / `gmp-click` listeners)
+      // would stay reachable through the marker array even though
+      // mapRef itself was overwritten — and the shared InfoWindow
+      // would still be holding the prior `setContent` HTMLElement.
+      // For the rare operator who rotates keys multiple times in a
+      // single tab, those leaks compound on every rotation.
+      //
+      // AdvancedMarkerElement removes itself from a map by setting
+      // `map = null`; that's the documented teardown path (the old
+      // `setMap(null)` API on google.maps.Marker no longer exists on
+      // the advanced marker class).
+      for (const m of markersRef.current) {
+        m.map = null;
+      }
+      markersRef.current = [];
+      if (infoWindowRef.current) {
+        infoWindowRef.current.close();
+        infoWindowRef.current = null;
+      }
+      mapRef.current = null;
     };
   }, [resolvedKey, resolvedMapId]);
 

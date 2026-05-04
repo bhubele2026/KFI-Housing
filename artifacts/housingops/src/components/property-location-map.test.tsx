@@ -541,6 +541,107 @@ describe("PropertyLocationMap", () => {
     expect(onGeocoded).toHaveBeenCalledWith({ lat: 1.23, lng: 4.56 });
   });
 
+  it("shows the 'Couldn't pinpoint this address' banner when the live geocoder returns no result for an address with no stored coords", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await settle();
+    // No banner before the geocoder has answered — `point` is still
+    // `undefined`, not `null`, so the address might still resolve.
+    expect(get("property-location-map-stale-warning")).toBeNull();
+
+    // Geocoder returns ZERO_RESULTS / null for this address.
+    expect(mapsState.pendingGeocodes).toHaveLength(1);
+    await act(async () => {
+      mapsState.pendingGeocodes[0].cb(null, "ZERO_RESULTS");
+    });
+    await settle();
+
+    // Banner now surfaces inside the canvas branch with the
+    // operator-facing copy pointing at the address fields.
+    const banner = get("property-location-map-stale-warning");
+    expect(banner).not.toBeNull();
+    const copy = (banner!.textContent ?? "").toLowerCase();
+    expect(copy).toContain("couldn't pinpoint this address");
+    expect(copy).toContain("street");
+    expect(copy).toContain("city");
+    expect(copy).toContain("zip");
+
+    // Canvas itself is still rendered (not replaced) so the
+    // "Open in Google Maps" overlay anchor remains the operator's
+    // escape hatch.
+    expect(get("property-location-map-canvas")).not.toBeNull();
+    const escape = get(
+      "property-location-map-link",
+    ) as HTMLAnchorElement | null;
+    expect(escape).not.toBeNull();
+    const expectedQuery = encodeURIComponent("100 Oak Way, Austin, TX 78701");
+    expect(escape!.href).toBe(
+      `https://www.google.com/maps/search/?api=1&query=${expectedQuery}`,
+    );
+
+    // No marker was attached for the failed geocode.
+    expect(mapsState.markers).toHaveLength(0);
+  });
+
+  it("does NOT show the 'Couldn't pinpoint this address' banner when stored coords were used (no live geocode happened)", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
+      />,
+    );
+    await settle();
+    // Stored coords short-circuit the geocoder entirely, so the
+    // banner branch must stay hidden — the address can't be a
+    // "couldn't pinpoint" failure if we have a known-good lat/lng.
+    expect(mapsState.pendingGeocodes).toHaveLength(0);
+    expect(get("property-location-map-stale-warning")).toBeNull();
+  });
+
+  it("does NOT show the 'Couldn't pinpoint this address' banner when the live geocoder resolves a fresh point", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+      />,
+    );
+    await settle();
+    expect(mapsState.pendingGeocodes).toHaveLength(1);
+    await act(async () => {
+      mapsState.pendingGeocodes[0].cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30.27, lng: () => -97.74 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    expect(get("property-location-map-stale-warning")).toBeNull();
+  });
+
   it("does NOT call `onGeocoded` when stored coords were used (no live geocode happened)", async () => {
     const onGeocoded = vi.fn();
     await render(

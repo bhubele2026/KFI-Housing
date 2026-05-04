@@ -444,6 +444,22 @@ export function PropertyLocationMap({
     });
   }, [status, full, lat, lng]);
 
+  // Whether the live geocoder definitively returned no result for the
+  // current address AND the parent didn't pre-supply stored coords.
+  // `point === null` is only ever set after a live geocode attempt
+  // (the stored-coords fast-path above writes `{lat,lng}` instead, and
+  // the in-flight state is `undefined`), so this captures exactly the
+  // "we asked Google, Google had nothing, and we have no fallback"
+  // case the operator needs an explanation for. The `hasStoredCoords`
+  // guard is belt-and-suspenders: the geocoder isn't even invoked
+  // when stored coords exist, but a hypothetical regression that
+  // somehow flipped `point` to null while stored coords were present
+  // would still hide the banner — the address can't be a "couldn't
+  // pinpoint" failure if we have a known-good lat/lng for it.
+  const hasStoredCoords =
+    typeof lat === "number" && typeof lng === "number";
+  const showCouldNotPinpoint = !hasStoredCoords && point === null;
+
   // Sync the marker + viewport whenever resolved coords change. We
   // drop the previous marker and recreate — there's only ever at most
   // one pin on this card, so the simpler "blow away & rebuild" path
@@ -675,6 +691,32 @@ export function PropertyLocationMap({
                 >
                   <MapPin className="h-4 w-4 mr-2" />
                   Loading map…
+                </div>
+              )}
+              {/*
+                Geocoder said "no result" for this address and the
+                parent didn't pre-supply stored coords, so the canvas
+                above has no pin to show. Without an explanation the
+                operator would be staring at a blank continental-US
+                view with no hint about why the pin is missing —
+                surface the same kind of in-card warning the portfolio
+                map gives when geocoding repeatedly fails, but pointed
+                at this property's specific address (Task #198).
+                Positioned at the bottom so it doesn't cover the
+                "Open in Google Maps" overlay link in the top-right
+                corner, which remains the operator's escape hatch.
+              */}
+              {showCouldNotPinpoint && (
+                <div
+                  className="absolute left-2 right-2 bottom-2 rounded-md border border-amber-500/40 bg-amber-50/95 dark:bg-amber-950/90 dark:border-amber-500/30 px-2 py-1.5 text-xs text-amber-900 dark:text-amber-100 flex items-start gap-1.5 shadow-sm"
+                  data-testid="property-location-map-stale-warning"
+                  role="status"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    Couldn't pinpoint this address — verify the
+                    street/city/zip.
+                  </span>
                 </div>
               )}
             </div>

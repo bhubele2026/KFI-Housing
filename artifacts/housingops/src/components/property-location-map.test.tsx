@@ -181,6 +181,71 @@ function uninstallFakeGoogleMaps() {
   delete w.__housingopsMapsLoader;
 }
 
+// ---------------------------------------------------------------------------
+// Hand-rolled EventSource shim — captures the SSE channel that
+// `useRuntimeConfigStream` opens so the rotation tests below can dispatch a
+// synthetic `config` event mid-render to mimic an api-server restart that
+// pushed a freshly-rotated GOOGLE_MAPS_API_KEY without standing up a real
+// SSE feed. jsdom does not ship EventSource by default — `useRuntimeConfigStream`
+// relies on `typeof EventSource === "undefined"` to silently no-op in that
+// environment, so installing this shim in `beforeEach` is what flips the
+// SSE-subscription branch on for the whole describe block.
+// ---------------------------------------------------------------------------
+const fakeEventSources: FakeEventSource[] = [];
+
+class FakeEventSource {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSED = 2;
+  CONNECTING = 0;
+  OPEN = 1;
+  CLOSED = 2;
+  url: string;
+  readyState = 1;
+  closed = false;
+  private listeners = new Map<string, Array<(e: MessageEvent) => void>>();
+  constructor(url: string | URL) {
+    this.url = String(url);
+    fakeEventSources.push(this);
+  }
+  addEventListener(event: string, cb: (e: MessageEvent) => void): void {
+    const cur = this.listeners.get(event) ?? [];
+    cur.push(cb);
+    this.listeners.set(event, cur);
+  }
+  removeEventListener(event: string, cb: (e: MessageEvent) => void): void {
+    const cur = this.listeners.get(event);
+    if (!cur) return;
+    const idx = cur.indexOf(cb);
+    if (idx !== -1) cur.splice(idx, 1);
+  }
+  close(): void {
+    this.closed = true;
+    this.readyState = 2;
+  }
+  /** Test-only helper: fire a `config` (or other named) event on this stream. */
+  emit(event: string, data: string): void {
+    const evt = new MessageEvent(event, { data });
+    (this.listeners.get(event) ?? []).forEach((cb) => cb(evt));
+  }
+}
+
+let originalEventSource: unknown;
+function installFakeEventSource() {
+  fakeEventSources.length = 0;
+  originalEventSource = (globalThis as { EventSource?: unknown }).EventSource;
+  (globalThis as { EventSource?: unknown }).EventSource = FakeEventSource;
+}
+function uninstallFakeEventSource() {
+  if (originalEventSource === undefined) {
+    delete (globalThis as { EventSource?: unknown }).EventSource;
+  } else {
+    (globalThis as { EventSource?: unknown }).EventSource =
+      originalEventSource;
+  }
+  fakeEventSources.length = 0;
+}
+
 function makeWrapper() {
   const client = new QueryClient({
     defaultOptions: {
@@ -239,8 +304,15 @@ describe("PropertyLocationMap", () => {
     mapsState.markers = [];
     mapsState.pendingGeocodes = [];
     installFakeGoogleMaps();
+    installFakeEventSource();
     __resetGoogleMapsSdkForTest();
     __resetGoogleMapsKeyErrorForTest();
+    // Wipe any leftover loader script from a previous test so the
+    // SSE-rotation tests below can rely on "no script tag yet" as a
+    // clean signal that an SDK reload was triggered.
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -255,8 +327,14 @@ describe("PropertyLocationMap", () => {
     }
     container.remove();
     uninstallFakeGoogleMaps();
+    uninstallFakeEventSource();
     __resetGoogleMapsSdkForTest();
     __resetGoogleMapsKeyErrorForTest();
+    // Same precondition the rotation tests rely on — never let a
+    // freshly-appended <script> leak into the next test's selectors.
+    document
+      .querySelectorAll('script[data-housingops-maps]')
+      .forEach((s) => s.remove());
   });
 
   async function render(node: React.ReactElement) {
@@ -1200,6 +1278,205 @@ describe("PropertyLocationMap", () => {
       expect(get("property-location-map-error")).not.toBeNull();
       expect(get("property-location-map-canvas")).toBeNull();
       expect(get("property-location-map-loading")).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // SSE-driven key rotation (Task #199)
+  //
+  // The portfolio map already pins the rotation contract via prop
+  // injection (see `portfolio-map.test.tsx` — "re-loads the Maps SDK
+  // <script> with the rotated key …" and the rotation-confirmation
+  // toast tests). The per-property Location card shares the same
+  // `loadMapsApi` rotation path, but until now had no equivalent test
+  // exercising the *push* side of that wiring:
+  //   useRuntimeConfigStream → setQueryData → resolvedKey change →
+  //   load effect re-runs → loadMapsApi tears down + rebuilds the SDK.
+  // A regression that drops the `useRuntimeConfigStream` call here, or
+  // swaps the load effect's dep list, would let a freshly-rotated
+  // GOOGLE_MAPS_API_KEY land on every other surface but silently fail
+  // to reach this card. These tests catch that.
+  // -------------------------------------------------------------------
+
+  it("rebuilds the SDK Map against a rotated key when an SSE push delivers a new key, without a page refresh", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "initial-key",
+          googleMapsMapId: "branded-map-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
+      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      await settle();
+
+      // Sanity: initial map mounted against the pre-rotation key. The
+      // fake SDK is pre-installed in beforeEach so the first
+      // loadMapsApi call short-circuits before injecting any <script>
+      // tag — that absence is what makes the appearance of a fresh
+      // tag below a clean signal that rotation triggered an actual
+      // SDK reload (rather than a no-op short-circuit on the second
+      // call too).
+      expect(mapsState.map).not.toBeNull();
+      const originalMap = mapsState.map;
+      expect(
+        document.querySelector('script[data-housingops-maps]'),
+      ).toBeNull();
+
+      // The component subscribed to /api/config/stream — exactly one
+      // EventSource was opened. Without `useRuntimeConfigStream` in
+      // the component, this array would be empty and the rotation
+      // path below would have no channel to deliver the new key.
+      expect(fakeEventSources).toHaveLength(1);
+      expect(fakeEventSources[0].url).toContain("/api/config/stream");
+
+      // Simulate the api-server pushing a rotated key over SSE. The
+      // hook writes the new payload into the same react-query cache
+      // the component reads, so `resolvedKey` flips on the next
+      // render and the SDK-load effect re-fires against the rotated
+      // value — no /api/config refetch, no page refresh.
+      await act(async () => {
+        fakeEventSources[0].emit(
+          "config",
+          JSON.stringify({
+            googleMapsApiKey: "rotated-key",
+            googleMapsMapId: "branded-map-id",
+          }),
+        );
+      });
+      await flush();
+
+      // loadMapsApi tore down `window.google` + appended a fresh
+      // script tag pointing at the rotated key — the smoking gun
+      // that the SSE push actually re-entered the loader's rotation
+      // path (rather than short-circuiting against the still-loaded
+      // SDK).
+      const script = document.querySelector(
+        'script[data-housingops-maps]',
+      ) as HTMLScriptElement | null;
+      expect(script).not.toBeNull();
+      expect(script!.src).toContain("key=rotated-key");
+      expect(script!.src).not.toContain("key=initial-key");
+
+      // Drive the rotated SDK to readiness — jsdom doesn't fetch the
+      // real script, so re-install the fake namespace and dispatch
+      // the load event manually so onReady runs and the load effect's
+      // success branch can rebuild the Map.
+      installFakeGoogleMaps();
+      await act(async () => {
+        script!.dispatchEvent(new Event("load"));
+      });
+      await settle();
+
+      // The FakeMap was reconstructed: a brand-new instance now sits
+      // in `mapsState.map`, distinct from the one captured before
+      // the rotation. If the load effect had skipped the rebuild
+      // (e.g. its dep list lost `resolvedKey`), `mapsState.map`
+      // would still point at `originalMap`.
+      expect(mapsState.map).not.toBeNull();
+      expect(mapsState.map).not.toBe(originalMap);
+      // The branded Map ID came along on the same SSE payload, so
+      // the freshly-built Map carries it through to its options.
+      expect(mapsState.map?.options.mapId).toBe("branded-map-id");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("fires the 'Google Maps key updated' toast exactly once on an SSE-driven rotation, and stays silent on the very first load", async () => {
+    // Mirrors the rotation-confirmation toast contract pinned down on
+    // the portfolio map (Task #179) but driven via the SSE push path
+    // instead of a prop change: silent on a fresh tab where no
+    // rotation has happened yet, and exactly one toast once a rotated
+    // key has been observed and the SDK reloaded against it. A
+    // regression that toasted on first load would surprise an
+    // operator opening the page for the first time; a regression
+    // that swallowed the rotation toast would leave the operator
+    // with no in-tab confirmation that the swap took effect.
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "initial-key",
+          googleMapsMapId: "branded-map-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
+      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      await settle();
+
+      // First load is silent — `loadedApiKey` was null, so loadMapsApi
+      // reports `rotated: false` and the success path skips the
+      // toast. A toast here would mean an operator opening a fresh
+      // tab gets a confusing "key updated" popup before any rotation
+      // has actually occurred.
+      expect(toastCalls).toHaveLength(0);
+      expect(fakeEventSources).toHaveLength(1);
+
+      // SSE-push the rotated key to mimic an api-server restart that
+      // shipped a new GOOGLE_MAPS_API_KEY.
+      await act(async () => {
+        fakeEventSources[0].emit(
+          "config",
+          JSON.stringify({
+            googleMapsApiKey: "rotated-key",
+            googleMapsMapId: "branded-map-id",
+          }),
+        );
+      });
+      await flush();
+
+      // Until the freshly-loaded SDK actually resolves, the toast
+      // must NOT fire — an early toast would lie about the new key
+      // working before we have any proof.
+      expect(toastCalls).toHaveLength(0);
+
+      // Drive the rotated SDK to readiness so the load effect's
+      // success path can run.
+      const script = document.querySelector(
+        'script[data-housingops-maps]',
+      ) as HTMLScriptElement | null;
+      expect(script).not.toBeNull();
+      installFakeGoogleMaps();
+      await act(async () => {
+        script!.dispatchEvent(new Event("load"));
+      });
+      await settle();
+
+      // Exactly one toast, with copy that names the change so the
+      // operator can tell it apart from unrelated notifications.
+      // Same wording the portfolio map uses (Task #179) so an
+      // operator looking at both surfaces sees consistent copy.
+      expect(toastCalls).toHaveLength(1);
+      expect(toastCalls[0].title).toBe("Google Maps key updated");
+      expect(toastCalls[0].description).toBe(
+        "Map reloaded against the rotated key.",
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }

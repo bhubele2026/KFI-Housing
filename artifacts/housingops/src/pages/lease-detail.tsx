@@ -4,15 +4,14 @@ import { useUnsavedChangesPrompt } from "@/hooks/use-unsaved-changes-prompt";
 import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
-  Building2, FileText, ListChecks, CalendarPlus, DollarSign, Trash2,
-  CheckCircle2, Plus, Save,
+  Building2, FileText, CalendarPlus, DollarSign, Trash2,
+  Save,
 } from "lucide-react";
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import {
   getRenewalInfo,
-  INCLUDED_ITEM_SUGGESTIONS,
   type Lease,
   type RentFrequency,
 } from "@/data/mockData";
@@ -88,160 +87,6 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 // every lease field on this page commits with the same save-on-blur +
 // optimistic-update pattern that operators are already used to.
 import { InlineEdit, NotesEditor } from "@/pages/property-detail";
-
-// ── Included-items editor ──────────────────────────────────────────────
-// Hybrid checklist + free-form. The checklist surfaces the curated
-// `INCLUDED_ITEM_SUGGESTIONS` (Water, Electric, Lawn care, …) so the most
-// common cases are one click; anything not on the canonical list can still
-// be typed in via the free-form input below — those custom items render in
-// their own "Custom" row so they're easy to spot and remove.
-//
-// Both paths funnel into a single `onChange(string[])` so the caller wires
-// straight into the optimistic `updateLease` helper exactly once per edit.
-function IncludedItemsEditor({
-  value,
-  onChange,
-}: {
-  value: readonly string[];
-  onChange: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-
-  // Case-insensitive set of selected items so toggle/dedupe checks don't
-  // care about how the operator typed something originally.
-  const selectedSet = useMemo(
-    () => new Set(value.map((v) => v.toLowerCase())),
-    [value],
-  );
-  const suggestionSet = useMemo(
-    () => new Set(INCLUDED_ITEM_SUGGESTIONS.map((s) => s.toLowerCase())),
-    [],
-  );
-  // Custom items = anything in `value` that isn't part of the canonical
-  // suggestion list. Preserves the operator's original casing so display
-  // matches what they typed.
-  const customItems = useMemo(
-    () => value.filter((v) => !suggestionSet.has(v.toLowerCase())),
-    [value, suggestionSet],
-  );
-
-  const toggleSuggestion = (item: string) => {
-    if (selectedSet.has(item.toLowerCase())) {
-      onChange(value.filter((v) => v.toLowerCase() !== item.toLowerCase()));
-    } else {
-      onChange([...value, item]);
-    }
-  };
-
-  const remove = (item: string) => {
-    onChange(value.filter((v) => v !== item));
-  };
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    // Avoid duplicates (case-insensitive) so the same item can't be added
-    // twice via the free-form input or stomp on a checklist toggle.
-    if (!selectedSet.has(trimmed.toLowerCase())) {
-      onChange([...value, trimmed]);
-    }
-    setDraft("");
-  };
-
-  return (
-    <div className="space-y-3" data-testid="included-items-editor">
-      {/* Checklist: curated suggestions render as toggleable chips, mirroring
-          the property's furnishings tab so the interaction model is familiar. */}
-      <div className="flex flex-wrap gap-1.5" data-testid="included-items-checklist">
-        {INCLUDED_ITEM_SUGGESTIONS.map((item) => {
-          const isOn = selectedSet.has(item.toLowerCase());
-          return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => toggleSuggestion(item)}
-              data-testid={`included-suggestion-${item}`}
-              data-checked={isOn ? "true" : "false"}
-              aria-pressed={isOn}
-              className={
-                "px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1 " +
-                (isOn
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                  : "bg-white text-muted-foreground border-border hover:bg-muted hover:text-foreground")
-              }
-            >
-              {isOn ? (
-                <CheckCircle2 className="h-3 w-3" />
-              ) : (
-                <Plus className="h-3 w-3 opacity-60" />
-              )}
-              {item}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Free-form additions, separated visually so operators can tell the
-          difference between curated picks and one-off entries. */}
-      <div className="space-y-1.5">
-        <p className="text-xs text-muted-foreground">
-          Anything else? Add a custom item below.
-        </p>
-        <div className="flex items-center gap-2">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              }
-            }}
-            placeholder="e.g. Boat slip, EV charger…"
-            className="h-8 text-sm"
-            data-testid="input-add-included-item"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={commit}
-            disabled={draft.trim().length === 0}
-            data-testid="button-add-included-item"
-          >
-            Add
-          </Button>
-        </div>
-        {customItems.length > 0 && (
-          <div
-            className="flex flex-wrap gap-1.5 pt-1.5"
-            data-testid="included-items-custom"
-          >
-            {customItems.map((item) => (
-              <Badge
-                key={item}
-                variant="secondary"
-                className="gap-1.5 pl-2 pr-1"
-                data-testid={`chip-included-${item}`}
-              >
-                {item}
-                <button
-                  type="button"
-                  aria-label={`Remove ${item}`}
-                  onClick={() => remove(item)}
-                  className="rounded-full p-0.5 hover:bg-background/60"
-                  data-testid={`button-remove-included-${item}`}
-                >
-                  <span aria-hidden="true">×</span>
-                </button>
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Build the initial draft for the create-mode page (`/leases/new`). All
@@ -970,22 +815,6 @@ export default function LeaseDetail() {
                 value={lease.clauses ?? ""}
                 className="text-sm min-h-[120px] font-mono"
                 onSave={(v) => applyUpdate( { clauses: v })}
-              />
-            </CardContent>
-          </Card>
-
-          {/* ── Included Items ── */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ListChecks className="h-4 w-4" />
-                Included Items
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <IncludedItemsEditor
-                value={lease.includedItems ?? []}
-                onChange={(next) => applyUpdate( { includedItems: next })}
               />
             </CardContent>
           </Card>

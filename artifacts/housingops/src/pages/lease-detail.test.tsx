@@ -461,115 +461,6 @@ describe("LeaseDetail — buyout toggle", () => {
   });
 });
 
-describe("LeaseDetail — included items (checklist + free-form)", () => {
-  it("appends a free-form (non-suggestion) item and calls updateLease with the new array", () => {
-    // "Boat slip" is intentionally NOT in INCLUDED_ITEM_SUGGESTIONS so we
-    // exercise the free-form input path. A regression that swapped the
-    // input out for suggestion-only buttons would silently lose the
-    // ability to record one-off inclusions.
-    dataState.leases = [buildLease({ includedItems: ["Boat slip"] })];
-    dataState.properties = [buildProperty()];
-    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
-
-    mountAt("/leases/lease-1");
-
-    // Existing custom item renders as a removable chip in the "Custom" row.
-    expect(
-      container.querySelector('[data-testid="chip-included-Boat slip"]'),
-    ).not.toBeNull();
-
-    const input = container.querySelector(
-      '[data-testid="input-add-included-item"]',
-    ) as HTMLInputElement;
-    const addBtn = container.querySelector(
-      '[data-testid="button-add-included-item"]',
-    ) as HTMLButtonElement;
-
-    // Type "EV charger" (also non-suggestion) then click Add.
-    act(() => {
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )?.set;
-      setter?.call(input, "EV charger");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    act(() => addBtn.click());
-
-    expect(updateLeaseMock).toHaveBeenCalledWith("lease-1", {
-      includedItems: ["Boat slip", "EV charger"],
-    });
-  });
-
-  it("removes an existing custom chip and calls updateLease with the filtered array", () => {
-    dataState.leases = [
-      buildLease({ includedItems: ["Boat slip", "EV charger"] }),
-    ];
-    dataState.properties = [buildProperty()];
-    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
-
-    mountAt("/leases/lease-1");
-
-    const removeBtn = container.querySelector(
-      '[data-testid="button-remove-included-Boat slip"]',
-    ) as HTMLButtonElement;
-    act(() => removeBtn.click());
-
-    expect(updateLeaseMock).toHaveBeenCalledWith("lease-1", {
-      includedItems: ["EV charger"],
-    });
-  });
-
-  it("toggles a curated suggestion ON via the checklist and calls updateLease with the appended array", () => {
-    // "Water" is a known curated suggestion. Clicking the chip toggles it
-    // on and writes the new array — no need to type anything in the
-    // free-form input. This is the primary path for the most common
-    // inclusions, so the suggestion buttons must be wired into the same
-    // optimistic save as the rest of the page.
-    dataState.leases = [buildLease({ includedItems: [] })];
-    dataState.properties = [buildProperty()];
-    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
-
-    mountAt("/leases/lease-1");
-
-    const waterBtn = container.querySelector(
-      '[data-testid="included-suggestion-Water"]',
-    ) as HTMLButtonElement;
-    expect(waterBtn).not.toBeNull();
-    expect(waterBtn.getAttribute("data-checked")).toBe("false");
-
-    act(() => waterBtn.click());
-
-    expect(updateLeaseMock).toHaveBeenCalledWith("lease-1", {
-      includedItems: ["Water"],
-    });
-  });
-
-  it("toggles a curated suggestion OFF via the checklist and calls updateLease with the filtered array", () => {
-    // The reverse of the above: clicking an already-on suggestion removes
-    // it from the array. Without this the operator would have no way to
-    // unset a curated inclusion they'd previously selected.
-    dataState.leases = [
-      buildLease({ includedItems: ["Water", "Boat slip"] }),
-    ];
-    dataState.properties = [buildProperty()];
-    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
-
-    mountAt("/leases/lease-1");
-
-    const waterBtn = container.querySelector(
-      '[data-testid="included-suggestion-Water"]',
-    ) as HTMLButtonElement;
-    expect(waterBtn.getAttribute("data-checked")).toBe("true");
-
-    act(() => waterBtn.click());
-
-    expect(updateLeaseMock).toHaveBeenCalledWith("lease-1", {
-      includedItems: ["Boat slip"],
-    });
-  });
-});
-
 describe("LeaseDetail — origin-aware back link", () => {
   it("defaults the back link to /leases when no `?from=` is present", () => {
     dataState.leases = [buildLease()];
@@ -859,15 +750,15 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
     expect(useUnsavedChangesPromptCalls.length).toBeGreaterThan(0);
     expect(useUnsavedChangesPromptCalls.every((v) => v === false)).toBe(true);
 
-    // Toggle a curated included-item suggestion — that's a single click
-    // that funnels through `applyUpdate`, the same path every other field
+    // Toggle the buyout-available switch — that's a single click that
+    // funnels through `applyUpdate`, the same path every other field
     // editor on this page uses to commit changes. applyUpdate flips
     // isDirty, which re-renders the page with `when=true`.
-    const waterBtn = container.querySelector(
-      '[data-testid="included-suggestion-Water"]',
+    const buyoutSwitch = container.querySelector(
+      '[data-testid="switch-buyout-available"]',
     ) as HTMLButtonElement;
-    expect(waterBtn).not.toBeNull();
-    act(() => waterBtn.click());
+    expect(buyoutSwitch).not.toBeNull();
+    act(() => buyoutSwitch.click());
 
     // The guard must now be armed — at least one render reported `when=true`.
     expect(useUnsavedChangesPromptCalls.some((v) => v === true)).toBe(true);

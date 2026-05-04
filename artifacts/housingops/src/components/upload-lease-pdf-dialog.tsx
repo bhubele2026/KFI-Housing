@@ -23,7 +23,6 @@ import {
   DollarSign,
   FileText,
   FileUp,
-  ListChecks,
   Loader2,
   Plus,
   RotateCcw,
@@ -1054,21 +1053,6 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold flex items-center gap-1.5">
-                  <ListChecks className="h-4 w-4" />
-                  Included items
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Utilities or services covered by the landlord. Tap a chip to
-                  remove or add a custom one below.
-                </p>
-                <PdfIncludedItemsEditor
-                  value={reviewingItem.leaseDraft.includedItems}
-                  onChange={(next) => updateReviewingLeaseDraft({ includedItems: next })}
-                />
-              </div>
-
               <div className="space-y-2">
                 <Label className="text-sm font-semibold flex items-center gap-1.5">
                   <DollarSign className="h-4 w-4" />
@@ -1174,144 +1158,6 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Compact included-items editor used inside the PDF reviewer dialog.
- *
- * Mirrors the canonical-suggestion + free-form pattern from the lease
- * detail page (`IncludedItemsEditor`) so what the operator sees here lines
- * up with what they'll see after import — but trimmed for the dialog (no
- * separate "Custom" subgroup; everything renders in one chip row).
- */
-function PdfIncludedItemsEditor({
-  value,
-  onChange,
-}: {
-  value: readonly string[];
-  onChange: (next: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const selectedSet = useMemo(
-    () => new Set(value.map((v) => v.toLowerCase())),
-    [value],
-  );
-
-  const toggleSuggestion = (item: string) => {
-    if (selectedSet.has(item.toLowerCase())) {
-      onChange(value.filter((v) => v.toLowerCase() !== item.toLowerCase()));
-    } else {
-      onChange([...value, item]);
-    }
-  };
-
-  const removeItem = (item: string) => {
-    onChange(value.filter((v) => v !== item));
-  };
-
-  const commitDraft = () => {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    if (!selectedSet.has(trimmed.toLowerCase())) {
-      onChange([...value, trimmed]);
-    }
-    setDraft("");
-  };
-
-  // Custom items = anything in `value` that isn't part of the canonical
-  // suggestion list. Surfaced as removable chips below the checklist so the
-  // operator can see what the LLM added beyond the curated set.
-  const suggestionSet = useMemo(
-    () => new Set(INCLUDED_ITEM_SUGGESTIONS.map((s) => s.toLowerCase())),
-    [],
-  );
-  const customItems = useMemo(
-    () => value.filter((v) => !suggestionSet.has(v.toLowerCase())),
-    [value, suggestionSet],
-  );
-
-  return (
-    <div className="space-y-2" data-testid="pdf-included-items-editor">
-      <div className="flex flex-wrap gap-1.5" data-testid="pdf-included-items-checklist">
-        {INCLUDED_ITEM_SUGGESTIONS.map((item) => {
-          const isOn = selectedSet.has(item.toLowerCase());
-          return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => toggleSuggestion(item)}
-              data-testid={`pdf-included-suggestion-${item}`}
-              data-checked={isOn ? "true" : "false"}
-              aria-pressed={isOn}
-              className={cn(
-                "px-2.5 py-1 rounded-full text-xs font-medium border transition-all flex items-center gap-1",
-                isOn
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                  : "bg-white text-muted-foreground border-border hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {isOn ? (
-                <CheckCircle2 className="h-3 w-3" />
-              ) : (
-                <Plus className="h-3 w-3 opacity-60" />
-              )}
-              {item}
-            </button>
-          );
-        })}
-      </div>
-
-      {customItems.length > 0 && (
-        <div className="flex flex-wrap gap-1.5" data-testid="pdf-included-items-custom">
-          {customItems.map((item) => (
-            <Badge
-              key={item}
-              variant="secondary"
-              className="gap-1.5 pl-2 pr-1"
-              data-testid={`pdf-chip-included-${item}`}
-            >
-              {item}
-              <button
-                type="button"
-                aria-label={`Remove ${item}`}
-                onClick={() => removeItem(item)}
-                className="rounded-full p-0.5 hover:bg-background/60"
-                data-testid={`pdf-button-remove-included-${item}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitDraft();
-            }
-          }}
-          placeholder="Add a custom item — e.g. Boat slip, EV charger…"
-          className="h-8 text-sm"
-          data-testid="input-pdf-add-included-item"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={commitDraft}
-          disabled={draft.trim().length === 0}
-          data-testid="button-pdf-add-included-item"
-        >
-          Add
-        </Button>
-      </div>
-    </div>
   );
 }
 

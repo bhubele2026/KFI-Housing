@@ -195,7 +195,7 @@ const NEW_CUSTOMER_VALUE = "__new__";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const { properties, beds, leases, rooms, customers, addProperty, addCustomer, isLoading } = useData();
+  const { properties, beds, leases, rooms, customers, addProperty, addCustomer, updateProperty, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -557,6 +557,8 @@ export default function Properties() {
         totalBeds: stats?.total ?? 0,
         occupied: stats?.occupied ?? 0,
         vacant: stats?.vacant ?? 0,
+        lat: p.lat ?? null,
+        lng: p.lng ?? null,
       };
     },
     [bedStatsByPropertyId, customerById],
@@ -586,11 +588,25 @@ export default function Properties() {
   // The map needs the full set of address-bearing properties so it can
   // try to geocode every one — geocode failures only get pushed to the
   // side panel after they're reported back via onUnmappableChange.
+  // Stored lat/lng go along for the ride so the map can render those
+  // pins synchronously without burning a Google round-trip.
   const mapInputProperties = useMemo<MappableProperty[]>(() => {
     return filtered
       .filter((p) => `${p.address}${p.city}${p.state}${p.zip}`.trim().length > 0)
       .map(toMappable);
   }, [filtered, toMappable]);
+
+  // Persist freshly-resolved coordinates back onto the property so the
+  // next time anyone visits the map view we paint pins instantly with
+  // no geocode round-trip. The map component only fires this for
+  // properties that arrived without stored coords, so we never write
+  // back the same value we just read.
+  const handleGeocoded = useCallback(
+    (id: string, point: { lat: number; lng: number }) => {
+      updateProperty(id, { lat: point.lat, lng: point.lng });
+    },
+    [updateProperty],
+  );
 
   const handleDownloadCsv = () => {
     const rows = filtered.map((property) => {
@@ -790,6 +806,7 @@ export default function Properties() {
                       properties={mapInputProperties}
                       onPinClick={(id) => navigate(`/properties/${id}`)}
                       onUnmappableChange={handleUnmappableChange}
+                      onGeocoded={handleGeocoded}
                     />
                   )}
                   {!isLoading && mappableProperties.length === 0 &&

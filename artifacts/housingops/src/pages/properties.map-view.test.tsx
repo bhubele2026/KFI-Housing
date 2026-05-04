@@ -131,25 +131,37 @@ vi.mock("@/components/ui/select", () => {
 const portfolioMapCalls: Array<{
   ids: string[];
   names: string[];
+  coords: Array<{ id: string; lat: number | null; lng: number | null }>;
 }> = [];
 let lastUnmappableHandler:
   | ((ids: string[]) => void)
+  | undefined;
+let lastGeocodedHandler:
+  | ((id: string, coords: { lat: number; lng: number }) => void)
   | undefined;
 
 vi.mock("@/components/portfolio-map", () => ({
   PortfolioMap: ({
     properties,
     onUnmappableChange,
+    onGeocoded,
   }: {
-    properties: Array<{ id: string; name: string }>;
+    properties: Array<{ id: string; name: string; lat?: number | null; lng?: number | null }>;
     onPinClick: (id: string) => void;
     onUnmappableChange?: (ids: string[]) => void;
+    onGeocoded?: (id: string, coords: { lat: number; lng: number }) => void;
   }) => {
     portfolioMapCalls.push({
       ids: properties.map((p) => p.id),
       names: properties.map((p) => p.name),
+      coords: properties.map((p) => ({
+        id: p.id,
+        lat: p.lat ?? null,
+        lng: p.lng ?? null,
+      })),
     });
     lastUnmappableHandler = onUnmappableChange;
+    lastGeocodedHandler = onGeocoded;
     return (
       <div data-testid="portfolio-map-stub" data-pin-count={properties.length} />
     );
@@ -244,6 +256,7 @@ let state: State = makeFreshState();
 const storeMocks = {
   addProperty: vi.fn(),
   addCustomer: vi.fn(),
+  updateProperty: vi.fn(),
 };
 
 vi.mock("@/context/data-store", () => ({
@@ -469,6 +482,50 @@ describe("Properties page — Map view", () => {
     // from its unmappable set.
     expect(get("property-without-address-p1")).not.toBeNull();
     expect(get("properties-without-address-count")?.textContent).toBe("3");
+  });
+
+  it("forwards stored lat/lng to the map and persists fresh geocodes via updateProperty", async () => {
+    // p1 already has a stored lat/lng — those must reach the map verbatim
+    // so the first paint is instant. p2 has no stored coords; when the map
+    // reports a fresh geocode for it, the page should write the coordinates
+    // back via updateProperty so the next visit is also instant.
+    state = {
+      ...makeFreshState(),
+      properties: [
+        baseProperty({
+          id: "p1",
+          customerId: "c1",
+          name: "Maple",
+          lat: 30.2672,
+          lng: -97.7431,
+        }),
+        baseProperty({
+          id: "p2",
+          customerId: "c1",
+          name: "Oak",
+        }),
+      ],
+    };
+    await renderPage();
+    await click(get("button-view-map")!);
+
+    const last = portfolioMapCalls.at(-1)!;
+    const p1Coords = last.coords.find((c) => c.id === "p1");
+    const p2Coords = last.coords.find((c) => c.id === "p2");
+    expect(p1Coords).toEqual({ id: "p1", lat: 30.2672, lng: -97.7431 });
+    expect(p2Coords).toEqual({ id: "p2", lat: null, lng: null });
+
+    // The map calls back with a fresh geocode result for p2.
+    expect(lastGeocodedHandler).toBeDefined();
+    await act(async () => {
+      lastGeocodedHandler!("p2", { lat: 32.7767, lng: -96.797 });
+    });
+
+    // Page persists the result so the next visit can skip the round-trip.
+    expect(storeMocks.updateProperty).toHaveBeenCalledWith("p2", {
+      lat: 32.7767,
+      lng: -96.797,
+    });
   });
 
   it("shows an empty state when no properties match the filters at all", async () => {

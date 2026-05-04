@@ -83,6 +83,15 @@ export interface MappableProperty {
   totalBeds?: number;
   occupied?: number;
   vacant?: number;
+  /**
+   * Persisted coordinates from a previous geocode. When present the
+   * map uses them on the very first paint and skips the live geocode
+   * round-trip entirely. When absent (`null` or `undefined`) the map
+   * falls back to live geocoding and reports the result back via
+   * {@link PortfolioMapProps.onGeocoded} so the parent can persist it.
+   */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 interface PortfolioMapProps {
@@ -106,6 +115,16 @@ interface PortfolioMapProps {
    * disappear from the operator's view.
    */
   onUnmappableChange?: (ids: string[]) => void;
+  /**
+   * Called once per property when the live geocoder resolves a fresh
+   * coordinate (i.e. the property arrived without stored lat/lng). The
+   * parent uses this to persist the coordinate back onto the property
+   * so future loads can render the pin instantly without another
+   * round-trip. Not called for properties whose coordinates were
+   * already supplied via {@link MappableProperty.lat}/{@link
+   * MappableProperty.lng}.
+   */
+  onGeocoded?: (id: string, coords: { lat: number; lng: number }) => void;
   /**
    * Inject the Maps API key for tests. Defaults to the runtime
    * VITE_GOOGLE_MAPS_API_KEY so production code paths use the real key
@@ -274,12 +293,70 @@ function buildInfoBubbleContent(
 // table and map. `null` means "we tried and Google had no result".
 const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 
+// In-flight geocode requests — also module-level. Without this, the
+// effect re-running on every parent rerender (which happens after each
+// `onGeocoded` writes back coordinates and the property list updates)
+// would re-issue Google calls for every still-pending address before
+// their first response lands. Storing the in-flight promise lets every
+// re-render attach to the *same* request rather than spawning a new one,
+// capping total Google calls at exactly one per unique address per
+// session. Entries are deleted as soon as the promise settles so the
+// resolved value lives only in `geocodeCache`.
+const inFlightGeocodes = new Map<
+  string,
+  Promise<{ lat: number; lng: number } | null>
+>();
+
+/**
+ * Resolves an address through Google, deduping concurrent requests for
+ * the same address across renders and component instances. Returns the
+ * cached value synchronously when available so callers don't even pay
+ * the microtask cost on a hit. `null` means "Google has no result".
+ */
+function resolveGeocode(
+  geocoder: MapsGeocoder,
+  addr: string,
+): Promise<{ lat: number; lng: number } | null> {
+  if (geocodeCache.has(addr)) {
+    return Promise.resolve(geocodeCache.get(addr) ?? null);
+  }
+  const existing = inFlightGeocodes.get(addr);
+  if (existing) return existing;
+  const promise = new Promise<{ lat: number; lng: number } | null>(
+    (resolve) => {
+      geocoder.geocode({ address: addr }, (results, geocodeStatus) => {
+        const point =
+          geocodeStatus === "OK" && results && results[0]?.geometry?.location
+            ? {
+                lat: results[0].geometry.location.lat(),
+                lng: results[0].geometry.location.lng(),
+              }
+            : null;
+        geocodeCache.set(addr, point);
+        inFlightGeocodes.delete(addr);
+        resolve(point);
+      });
+    },
+  );
+  inFlightGeocodes.set(addr, promise);
+  return promise;
+}
+
+// Test-only escape hatch — keeps the module-level caches from leaking
+// between Vitest test cases. Not exported through any production import
+// site; lives here so tests don't need to dig at private internals.
+export function __resetPortfolioMapCachesForTest(): void {
+  geocodeCache.clear();
+  inFlightGeocodes.clear();
+}
+
 type LoaderStatus = "idle" | "loading" | "ready" | "error";
 
 export function PortfolioMap({
   properties,
   onPinClick,
   onUnmappableChange,
+  onGeocoded,
   apiKey,
 }: PortfolioMapProps) {
   const resolvedKey =
@@ -300,6 +377,24 @@ export function PortfolioMap({
   useEffect(() => {
     onPinClickRef.current = onPinClick;
   }, [onPinClick]);
+  // Tracks `${id}::${addr}` pairs we've already reported via
+  // `onGeocoded`. Without this, every parent rerender (one per
+  // resolved property — see the dedup commentary on `inFlightGeocodes`)
+  // would attach another `.then` callback to the same in-flight promise
+  // and call `onGeocoded` repeatedly for the same property. Keying by
+  // address (not just id) makes sure that *changing* the address later
+  // re-arms the report so the new geocode is also persisted.
+  const reportedRef = useRef<Set<string>>(new Set());
+  // Tracks whether the component is still mounted so async geocoder
+  // callbacks scheduled before unmount don't try to setState on a
+  // dead tree.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [status, setStatus] = useState<LoaderStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // Resolved coordinates by property.id. `null` means the property has
@@ -351,14 +446,18 @@ export function PortfolioMap({
     };
   }, [resolvedKey]);
 
-  // Geocode any addresses we don't already have cached. Cached hits
-  // become available synchronously so the map renders pins on the first
-  // paint instead of waiting for round-trips. A property's id maps to
-  // `null` when Google has no result — those bubble up to the side
-  // panel so they aren't silently dropped.
+  // Geocode any addresses we don't already have cached. Persisted
+  // lat/lng coming in on the property object are used directly so the
+  // map renders pins on the first paint with zero round-trips. The
+  // module-level cache covers the case where the property has no
+  // stored coords yet but we already resolved them earlier in the
+  // session. A property's id maps to `null` when Google has no
+  // result — those bubble up to the side panel so they aren't
+  // silently dropped. Properties whose coordinates were freshly
+  // resolved by the live geocoder are also reported to
+  // `onGeocoded` so the parent can persist them on the server.
   useEffect(() => {
     if (status !== "ready") return;
-    let cancelled = false;
     const maps = window.google!.maps!;
     const geocoder = new maps.Geocoder();
 
@@ -370,6 +469,17 @@ export function PortfolioMap({
         next.set(p.id, null);
         continue;
       }
+      // Stored coords win — instant paint, no Google call.
+      if (typeof p.lat === "number" && typeof p.lng === "number") {
+        next.set(p.id, { lat: p.lat, lng: p.lng });
+        // Warm the in-session cache too so a sibling property at the
+        // same address (rare, but possible) avoids an extra round-trip.
+        geocodeCache.set(addr, { lat: p.lat, lng: p.lng });
+        // The parent already has these coordinates — make sure we
+        // don't somehow re-report them later.
+        reportedRef.current.add(`${p.id}::${addr}`);
+        continue;
+      }
       if (geocodeCache.has(addr)) {
         next.set(p.id, geocodeCache.get(addr) ?? null);
       } else {
@@ -378,38 +488,46 @@ export function PortfolioMap({
     }
     setCoords(next);
 
+    // Wire each pending property to the (possibly already-in-flight)
+    // geocode for its address. `resolveGeocode` dedupes at the module
+    // level so each unique address is sent to Google at most once per
+    // session, regardless of how many times the effect re-runs while
+    // the request is pending. The reportedRef guard makes `onGeocoded`
+    // one-shot per (id, addr) pair so the parent only persists each
+    // resolution once even though re-renders may attach multiple
+    // `.then` callbacks to the same promise.
     for (const { id, addr } of toResolve) {
-      geocoder.geocode({ address: addr }, (results, geocodeStatus) => {
-        if (cancelled) return;
-        if (
-          geocodeStatus === "OK" &&
-          results &&
-          results[0]?.geometry?.location
-        ) {
-          const loc = results[0].geometry.location;
-          const point = { lat: loc.lat(), lng: loc.lng() };
-          geocodeCache.set(addr, point);
-          setCoords((prev) => {
-            const m = new Map(prev);
-            m.set(id, point);
-            return m;
-          });
-        } else {
-          // Cache the negative result too so we don't keep hammering
-          // Google for an address that will never resolve.
-          geocodeCache.set(addr, null);
-          setCoords((prev) => {
-            const m = new Map(prev);
-            m.set(id, null);
-            return m;
-          });
-        }
+      resolveGeocode(geocoder, addr).then((point) => {
+        if (!mountedRef.current) return;
+        setCoords((prev) => {
+          // Skip the state update if it would be a no-op — the same
+          // resolved value may arrive multiple times via attached
+          // `.then` callbacks across re-renders.
+          const existing = prev.get(id);
+          if (
+            (existing === null && point === null) ||
+            (existing &&
+              point &&
+              existing.lat === point.lat &&
+              existing.lng === point.lng)
+          ) {
+            return prev;
+          }
+          const m = new Map(prev);
+          m.set(id, point);
+          return m;
+        });
+        if (!point) return;
+        const key = `${id}::${addr}`;
+        if (reportedRef.current.has(key)) return;
+        reportedRef.current.add(key);
+        // Tell the parent so it can persist this back onto the
+        // property — next time the map mounts we'll skip the
+        // round-trip and render the pin synchronously.
+        onGeocoded?.(id, point);
       });
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [status, properties]);
+  }, [status, properties, onGeocoded]);
 
   // Sync markers + viewport whenever resolved coords change. We drop
   // every marker and rebuild — properties is small (operators look at

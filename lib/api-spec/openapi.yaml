@@ -677,6 +677,20 @@ components:
         customerId: { type: string }
         ratings:
           $ref: "#/components/schemas/Ratings"
+        lat:
+          type: number
+          nullable: true
+          description: |
+            Cached geographic latitude resolved from the property's
+            address. Persisted on the server so the portfolio map can
+            render pins instantly without re-geocoding on every load.
+            Cleared when the address changes so it gets re-geocoded.
+        lng:
+          type: number
+          nullable: true
+          description: |
+            Cached geographic longitude resolved from the property's
+            address. See `lat` for caching semantics.
     PropertyUpdate:
       type: object
       properties:
@@ -712,6 +726,12 @@ components:
         customerId: { type: string }
         ratings:
           $ref: "#/components/schemas/Ratings"
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
 
     Ratings:
       type: object

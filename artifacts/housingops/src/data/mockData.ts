@@ -77,6 +77,12 @@ export const PropertySchema = z.object({
   notes: z.string(),
   furnishings: z.array(z.string()).default([]),
   ratings: RatingsSchema.optional(),
+  // Cached geocoded coordinates. Persisted on the server so the
+  // portfolio map renders instantly on subsequent loads instead of
+  // re-geocoding on every visit. Cleared whenever the address fields
+  // change so the next view re-resolves.
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 

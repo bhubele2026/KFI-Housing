@@ -34,3 +34,5 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **artifacts/mockup-sandbox** — Design canvas for component previews.
 
 Data persistence: KFI Staffing used to persist via browser localStorage. It now uses the api-server + Postgres so edits are shared across devices/browsers.
+
+Portfolio map geocoding: properties carry optional `lat`/`lng` columns. The portfolio map renders pins from the stored coordinates with no Geocoder round-trip; only properties without cached coords fall back to the live Google Geocoder, and those resolved coordinates are persisted server-side via `updateProperty` so subsequent visits paint instantly. Editing a property's address/city/state/zip without simultaneously writing lat/lng resets the cached coords to `null` so the next map view re-geocodes against the updated address.

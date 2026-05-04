@@ -72,6 +72,8 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
     bankAccount: "4400123456",
     portalUrl: "",
     notes: "Property manager prefers email contact. Parking included.",
+    lat: 30.2672,
+    lng: -97.7431,
     furnishings: [
       "Queen beds", "Mattresses", "Mattress protectors", "Pillows", "Bedding & linens",
       "Nightstands", "Dressers", "Desk", "Desk chair",
@@ -113,6 +115,8 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
     bankAccount: "",
     portalUrl: "https://portal.maplerealty.com",
     notes: "Utilities included in lease except internet.",
+    lat: 30.2649,
+    lng: -97.7185,
     furnishings: [
       "Single beds", "Bunk beds", "Mattresses", "Pillows", "Bedding & linens",
       "Nightstands", "Wardrobes / Closets",
@@ -155,6 +159,8 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
     bankAccount: "",
     portalUrl: "",
     notes: "Requires 30-day notice before move-out of any occupant.",
+    lat: 32.7767,
+    lng: -96.797,
     furnishings: [
       "Single beds", "Mattresses", "Pillows", "Bedding & linens",
       "Nightstands", "Dressers",
@@ -194,6 +200,8 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
     bankAccount: "9900556677",
     portalUrl: "",
     notes: "Best rate in portfolio. Lease up for renewal Dec 2025.",
+    lat: 32.78,
+    lng: -96.8005,
     furnishings: [
       "Queen beds", "King beds", "Mattresses", "Mattress protectors", "Pillows", "Bedding & linens",
       "Nightstands", "Dressers", "Wardrobes / Closets", "Desk", "Desk chair", "Reading lamps",
@@ -236,6 +244,8 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
     bankAccount: "1122334455",
     portalUrl: "",
     notes: "Currently inactive. Renovation underway. Expected reopening Q3 2025.",
+    lat: 29.7604,
+    lng: -95.3698,
     furnishings: [
       "Single beds", "Mattresses", "Pillows", "Bedding & linens",
       "Refrigerator", "Stove / Range",

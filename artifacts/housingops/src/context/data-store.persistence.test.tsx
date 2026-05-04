@@ -83,6 +83,8 @@ function makeBackend(): Backend {
         portalUrl: "",
         notes: "",
         furnishings: [],
+        lat: 30.2672,
+        lng: -97.7431,
       },
     ],
     leases: [
@@ -182,10 +184,12 @@ function TestHarness({
   newEndDate,
   newPropertyName,
   newChargePerBed,
+  newAddress = "1 Main St",
 }: {
   newEndDate: string;
   newPropertyName: string;
   newChargePerBed: number;
+  newAddress?: string;
 }) {
   const { leases, properties, isLoading, updateLease, updateProperty } =
     useData();
@@ -199,6 +203,12 @@ function TestHarness({
       <div data-testid="property-name">{property?.name ?? "missing"}</div>
       <div data-testid="property-charge">
         {property ? String(property.chargePerBed) : "missing"}
+      </div>
+      <div data-testid="property-lat">
+        {property?.lat == null ? "null" : String(property.lat)}
+      </div>
+      <div data-testid="property-lng">
+        {property?.lng == null ? "null" : String(property.lng)}
       </div>
       <button
         data-testid="renew-lease"
@@ -220,6 +230,20 @@ function TestHarness({
       >
         bump
       </button>
+      <button
+        data-testid="edit-address"
+        onClick={() => updateProperty("prop-1", { address: newAddress })}
+      >
+        edit address
+      </button>
+      <button
+        data-testid="write-coords"
+        onClick={() =>
+          updateProperty("prop-1", { lat: 32.7767, lng: -96.797 })
+        }
+      >
+        write coords
+      </button>
     </div>
   );
 }
@@ -232,6 +256,7 @@ function mount(
     newEndDate: string;
     newPropertyName: string;
     newChargePerBed: number;
+    newAddress?: string;
   },
 ) {
   const client = new QueryClient({
@@ -450,6 +475,66 @@ describe("data store: edits persist across browser refresh", () => {
     });
 
     await waitFor(() => getText(container, "property-charge") === "850");
+  });
+
+  it("editing a property's address clears its cached lat/lng so the map re-geocodes", async () => {
+    // The portfolio map paints pins from stored coords without a Geocoder
+    // round-trip. If a user edits the street/city/state/zip without also
+    // writing fresh coords, the existing lat/lng now point at the *old*
+    // address and would render the pin in the wrong spot. The data store
+    // must null those columns so the next map view re-geocodes against
+    // the new address. Conversely, when a write *does* include lat/lng
+    // (e.g. the geocode-write-back path), we must keep them.
+    const props = {
+      newEndDate: "2025-12-31",
+      newPropertyName: "Maple House",
+      newChargePerBed: 500,
+      newAddress: "999 Different Ave",
+    };
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+
+    // Sanity: the seeded coords are visible to the UI on first load.
+    await waitFor(() => getText(container, "property-lat") === "30.2672");
+    expect(getText(container, "property-lng")).toBe("-97.7431");
+    expect(backend.state.properties[0]?.lat).toBe(30.2672);
+    expect(backend.state.properties[0]?.lng).toBe(-97.7431);
+
+    // Edit the address only.
+    await act(async () => {
+      clickButton(container, "edit-address");
+    });
+
+    // Optimistic + server state must both null lat/lng after an
+    // address-only edit.
+    await waitFor(() => getText(container, "property-lat") === "null");
+    await waitFor(() => getText(container, "property-lng") === "null");
+    await waitFor(
+      () =>
+        backend.state.properties[0]?.lat === null &&
+        backend.state.properties[0]?.lng === null,
+    );
+    await waitFor(
+      () =>
+        (backend.state.properties[0]?.address as string) === "999 Different Ave",
+    );
+
+    // Now write fresh coords (simulating the geocode write-back path).
+    // This call deliberately patches lat/lng without touching the address;
+    // the data store must NOT then turn around and null them out.
+    await act(async () => {
+      clickButton(container, "write-coords");
+    });
+
+    await waitFor(() => getText(container, "property-lat") === "32.7767");
+    expect(getText(container, "property-lng")).toBe("-96.797");
+    await waitFor(
+      () =>
+        backend.state.properties[0]?.lat === 32.7767 &&
+        backend.state.properties[0]?.lng === -96.797,
+    );
   });
 
   it("regression: a swallowed PATCH leaves the backend at its seed value", async () => {

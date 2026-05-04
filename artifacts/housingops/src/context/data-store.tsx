@@ -76,6 +76,8 @@ const LegacyPropertySchema = z.object({
   notes: z.string().optional().default(""),
   furnishings: z.array(z.string()).optional().default([]),
   ratings: RatingsSchema.optional(),
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
 });
 
 // v1/v2 beds had a free-text `room` column instead of a `roomId` foreign key.
@@ -639,9 +641,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const updateProperty = (id: string, updates: Partial<Property>) => {
+    // Any edit to the address fields invalidates the cached lat/lng —
+    // the old coordinates would otherwise pin the property at the old
+    // address forever. The portfolio map will re-geocode and persist
+    // the fresh coordinates on the next view. Skip this when the
+    // caller is itself updating lat/lng (i.e. the geocode write-back),
+    // otherwise we'd null out the value we're trying to save.
+    const touchesAddress =
+      "address" in updates ||
+      "city" in updates ||
+      "state" in updates ||
+      "zip" in updates;
+    const writingCoords = "lat" in updates || "lng" in updates;
+    const effectiveUpdates: Partial<Property> =
+      touchesAddress && !writingCoords
+        ? { ...updates, lat: null, lng: null }
+        : updates;
     const handlers = captureRollback<Property[]>(propertiesKey, "save your property changes");
-    patchInList<Property>(propertiesKey, id, updates);
-    updatePropertyMut.mutate({ id, data: updates }, handlers);
+    patchInList<Property>(propertiesKey, id, effectiveUpdates);
+    updatePropertyMut.mutate({ id, data: effectiveUpdates }, handlers);
   };
   const deleteProperty = (id: string) => {
     const handlers = captureRollback<Property[]>(propertiesKey, "delete the property");

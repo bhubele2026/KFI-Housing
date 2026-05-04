@@ -149,6 +149,18 @@ export const ImportDataBody = zod.object({
         .describe(
           'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
         ),
+      lat: zod
+        .number()
+        .nullish()
+        .describe(
+          "Cached geographic latitude resolved from the property's\naddress. Persisted on the server so the portfolio map can\nrender pins instantly without re-geocoding on every load.\nCleared when the address changes so it gets re-geocoded.\n",
+        ),
+      lng: zod
+        .number()
+        .nullish()
+        .describe(
+          "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
+        ),
     }),
   ),
   leases: zod.array(
@@ -378,6 +390,18 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
     ),
+  lat: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic latitude resolved from the property's\naddress. Persisted on the server so the portfolio map can\nrender pins instantly without re-geocoding on every load.\nCleared when the address changes so it gets re-geocoded.\n",
+    ),
+  lng: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
+    ),
 });
 export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
 
@@ -465,6 +489,18 @@ export const CreatePropertyBody = zod.object({
     .describe(
       'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
     ),
+  lat: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic latitude resolved from the property's\naddress. Persisted on the server so the portfolio map can\nrender pins instantly without re-geocoding on every load.\nCleared when the address changes so it gets re-geocoded.\n",
+    ),
+  lng: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
+    ),
 });
 
 /**
@@ -550,6 +586,8 @@ export const UpdatePropertyBody = zod.object({
     .describe(
       'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
     ),
+  lat: zod.number().nullish(),
+  lng: zod.number().nullish(),
 });
 
 export const updatePropertyResponseRatingsLandlordMin = 0;
@@ -632,6 +670,18 @@ export const UpdatePropertyResponse = zod.object({
     .optional()
     .describe(
       'Per-property subjective ratings on a 0–5 whole-star scale.\nA category value of 0 means \"not rated yet\" and is excluded\nfrom the overall average shown in the UI.\n',
+    ),
+  lat: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic latitude resolved from the property's\naddress. Persisted on the server so the portfolio map can\nrender pins instantly without re-geocoding on every load.\nCleared when the address changes so it gets re-geocoded.\n",
+    ),
+  lng: zod
+    .number()
+    .nullish()
+    .describe(
+      "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
     ),
 });
 

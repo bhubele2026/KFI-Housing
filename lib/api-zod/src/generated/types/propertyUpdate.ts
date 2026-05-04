@@ -36,4 +36,6 @@ export interface PropertyUpdate {
   furnishings?: string[];
   customerId?: string;
   ratings?: Ratings;
+  lat?: number | null;
+  lng?: number | null;
 }

@@ -37,4 +37,14 @@ export interface Property {
   furnishings: string[];
   customerId: string;
   ratings?: Ratings;
+  /** Cached geographic latitude resolved from the property's
+address. Persisted on the server so the portfolio map can
+render pins instantly without re-geocoding on every load.
+Cleared when the address changes so it gets re-geocoded.
+ */
+  lat?: number | null;
+  /** Cached geographic longitude resolved from the property's
+address. See `lat` for caching semantics.
+ */
+  lng?: number | null;
 }

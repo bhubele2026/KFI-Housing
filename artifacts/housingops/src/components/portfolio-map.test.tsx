@@ -1,22 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { PortfolioMap, type MappableProperty } from "./portfolio-map";
+import {
+  PortfolioMap,
+  __resetPortfolioMapCachesForTest,
+  type MappableProperty,
+} from "./portfolio-map";
 
-// These tests pin down the pin info-bubble behavior added to the
-// portfolio map:
-//   • hovering or clicking a pin opens the bubble with the property's
-//     name, customer, and bed counts;
-//   • the "View details" link is what now drives navigation — clicking
-//     the pin itself no longer jumps the operator off the page;
-//   • Escape closes an open bubble;
-//   • only one bubble is open at a time even after switching pins.
-//
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// ---------------------------------------------------------------------------
+// Hand-rolled Google Maps SDK shim
+// ---------------------------------------------------------------------------
 // The Google Maps SDK is faked at window.google so jsdom never has to
-// load the real script. The fake records the listeners each marker
-// registered so the tests can drive marker mouseover/click directly,
-// and exposes the InfoWindow's most recent content node + open/close
-// calls so the tests can read its rendered contents.
+// load the real script. We bypass the script-tag loader by also priming
+// `window.__housingopsMapsLoader` to a resolved promise.
+//
+// The fake records the listeners each marker registered so the tests
+// can drive marker mouseover/click directly, and exposes the InfoWindow's
+// most recent content node + open/close calls so the tests can read
+// its rendered contents.
+//
+// Each test gets a fresh shim and we record every call that would have
+// hit Google's geocoder so we can assert dedup.
 
 interface FakeMarker {
   position: { lat: number; lng: number };
@@ -38,16 +44,28 @@ interface FakeMap {
   listeners: Map<string, Array<() => void>>;
 }
 
+interface PendingGeocode {
+  addr: string;
+  cb: (
+    results:
+      | Array<{
+          geometry: { location: { lat: () => number; lng: () => number } };
+        }>
+      | null,
+    status: string,
+  ) => void;
+}
+
 const mapsState: {
   map: FakeMap | null;
   markers: FakeMarker[];
   infoWindow: FakeInfoWindowState | null;
-  lastGeocodeRequest: string | null;
+  pendingGeocodes: PendingGeocode[];
 } = {
   map: null,
   markers: [],
   infoWindow: null,
-  lastGeocodeRequest: null,
+  pendingGeocodes: [],
 };
 
 function fireMarkerEvent(marker: FakeMarker, event: string) {
@@ -61,8 +79,7 @@ function fireMapEvent(event: string) {
 }
 
 function installFakeGoogleMaps() {
-  // Cached "Austin, TX" coordinates so geocoding completes synchronously
-  // — every test below uses this same address pair.
+  // Default POINT for synchronous geocoding in info-bubble tests
   const POINT = { lat: 30.2672, lng: -97.7431 };
 
   class FakeMap {
@@ -91,7 +108,12 @@ function installFakeGoogleMaps() {
       this.title = opts.title;
       mapsState.markers.push(this as unknown as FakeMarker);
     }
-    setMap() {}
+    setMap(m: unknown | null) {
+      if (m === null) {
+        const idx = mapsState.markers.indexOf(this as unknown as FakeMarker);
+        if (idx !== -1) mapsState.markers.splice(idx, 1);
+      }
+    }
     addListener(event: string, cb: () => void) {
       const cur = this.listeners.get(event) ?? [];
       cur.push(cb);
@@ -127,24 +149,12 @@ function installFakeGoogleMaps() {
     addListener() {}
   }
   class FakeGeocoder {
-    geocode(
-      req: { address: string },
-      cb: (
-        results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }>,
-        status: string,
-      ) => void,
-    ) {
-      mapsState.lastGeocodeRequest = req.address;
-      cb(
-        [
-          {
-            geometry: {
-              location: { lat: () => POINT.lat, lng: () => POINT.lng },
-            },
-          },
-        ],
-        "OK",
-      );
+    geocode(req: { address: string }, cb: PendingGeocode["cb"]) {
+      mapsState.pendingGeocodes.push({ addr: req.address, cb });
+      // For tests that expect synchronous resolution, they can just use
+      // mapsState.pendingGeocodes[0].cb(...) themselves, but for the
+      // info-bubble tests we often want it to just work.
+      // However, to keep it clean, we let the tests decide when to fire.
     }
   }
   class FakeBounds {
@@ -153,7 +163,12 @@ function installFakeGoogleMaps() {
       return { lat: () => POINT.lat, lng: () => POINT.lng };
     }
   }
-  (window as unknown as { google: unknown }).google = {
+
+  const w = window as unknown as {
+    google?: { maps?: unknown };
+    __housingopsMapsLoader?: Promise<void>;
+  };
+  w.google = {
     maps: {
       Map: FakeMap,
       Marker: FakeMarker,
@@ -162,6 +177,45 @@ function installFakeGoogleMaps() {
       InfoWindow: FakeInfoWindow,
     },
   };
+  w.__housingopsMapsLoader = Promise.resolve();
+}
+
+function uninstallFakeGoogleMaps() {
+  const w = window as unknown as {
+    google?: unknown;
+    __housingopsMapsLoader?: unknown;
+  };
+  delete w.google;
+  delete w.__housingopsMapsLoader;
+}
+
+function makeProperty(over: Partial<MappableProperty> = {}): MappableProperty {
+  return {
+    id: "p1",
+    name: "Maple",
+    address: "123 Main St",
+    city: "Austin",
+    state: "TX",
+    zip: "78701",
+    ...over,
+  };
+}
+
+async function flush() {
+  // Drain the microtask queue + a macrotask so the loader promise's
+  // `.then`, the resulting `setState("ready")`, and the next effect run
+  // all get a chance to settle.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+async function settle() {
+  // Several flush cycles — enough to walk through loader.then →
+  // setStatus("ready") → render → geocode-effect → geocoder.geocode.
+  for (let i = 0; i < 5; i++) {
+    await flush();
+  }
 }
 
 describe("PortfolioMap — pin info bubble", () => {
@@ -185,8 +239,9 @@ describe("PortfolioMap — pin info bubble", () => {
     mapsState.map = null;
     mapsState.markers = [];
     mapsState.infoWindow = null;
-    mapsState.lastGeocodeRequest = null;
+    mapsState.pendingGeocodes = [];
     installFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -200,7 +255,8 @@ describe("PortfolioMap — pin info bubble", () => {
       root = null;
     }
     container.remove();
-    delete (window as unknown as { google?: unknown }).google;
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
   });
 
   async function renderMap(
@@ -218,20 +274,30 @@ describe("PortfolioMap — pin info bubble", () => {
         />,
       );
     });
-    // Flush the SDK-loaded → geocode → marker render chain. A single
-    // microtask flush isn't enough because loadMapsApi resolves a
-    // pre-resolved promise that re-enters React state on the next tick.
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+
+    // Resolve geocodes for info-bubble tests immediately
+    await settle();
+    while (mapsState.pendingGeocodes.length > 0) {
+      const p = mapsState.pendingGeocodes.shift()!;
+      await act(async () => {
+        p.cb(
+          [
+            {
+              geometry: {
+                location: { lat: () => 30.2672, lng: () => -97.7431 },
+              },
+            },
+          ],
+          "OK",
+        );
+      });
+      await settle();
+    }
+
     return { onPinClick };
   }
 
   it("does not navigate when the pin itself is clicked — opens the bubble instead", async () => {
-    // The whole point of the bubble: scanning the map shouldn't yank
-    // the operator off the page on every click. onPinClick must stay
-    // unfired until they explicitly hit "View details".
     const { onPinClick } = await renderMap();
     expect(mapsState.markers).toHaveLength(1);
     const marker = mapsState.markers[0];
@@ -257,10 +323,6 @@ describe("PortfolioMap — pin info bubble", () => {
     expect(content).not.toBeNull();
     expect(content!.textContent).toContain("Maple Apartments");
     expect(content!.textContent).toContain("Acme Co");
-    // Bed counts: total / occupied / vacant — same numbers the table
-    // cells show. If the table's counting logic ever changes, these
-    // assertions will catch the drift because both views read from the
-    // same upstream `bedStatsByPropertyId` map.
     expect(
       content!.querySelector('[data-testid="portfolio-map-info-total-p1"]')
         ?.textContent,
@@ -295,10 +357,6 @@ describe("PortfolioMap — pin info bubble", () => {
   });
 
   it("closes the bubble when the operator clicks elsewhere on the map background", async () => {
-    // The acceptance criterion calls out "clicking elsewhere closes the
-    // bubble" alongside Escape. We wire an explicit map click listener
-    // (rather than relying on Google's built-in close behavior) so this
-    // path is testable and stable across SDK versions.
     await renderMap();
     const marker = mapsState.markers[0];
     await act(async () => {
@@ -329,9 +387,6 @@ describe("PortfolioMap — pin info bubble", () => {
   });
 
   it("re-uses a single InfoWindow when the operator switches between pins", async () => {
-    // Two pins → one InfoWindow shared between them. Otherwise a stale
-    // bubble would linger over the previous pin while a fresh one
-    // popped over the new one, leaving two open at once.
     const second: MappableProperty = {
       ...baseProperty,
       id: "p2",
@@ -349,8 +404,6 @@ describe("PortfolioMap — pin info bubble", () => {
       fireMarkerEvent(m2, "click");
     });
 
-    // open() called twice (once per pin) but on the same InfoWindow
-    // instance — anchored to the most recently clicked marker.
     expect(mapsState.infoWindow?.openCount).toBe(2);
     expect(mapsState.infoWindow?.lastAnchor).toBe(m2);
     expect(
@@ -359,9 +412,6 @@ describe("PortfolioMap — pin info bubble", () => {
   });
 
   it("uses the latest onPinClick callback after the parent re-renders", async () => {
-    // Defends the ref-trick that decouples the imperative bubble from
-    // React's closure capture. Without it, clicking "View details"
-    // after a re-render would still fire the original callback.
     const first = vi.fn();
     const second = vi.fn();
     await act(async () => {
@@ -374,10 +424,23 @@ describe("PortfolioMap — pin info bubble", () => {
         />,
       );
     });
+    await settle();
+    // Resolve initial geocode
+    const p = mapsState.pendingGeocodes.shift()!;
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      p.cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30.2672, lng: () => -97.7431 },
+            },
+          },
+        ],
+        "OK",
+      );
     });
+    await settle();
+
     // Re-render with a different callback identity.
     await act(async () => {
       root!.render(
@@ -388,6 +451,7 @@ describe("PortfolioMap — pin info bubble", () => {
         />,
       );
     });
+    await settle();
 
     const marker = mapsState.markers[0];
     await act(async () => {
@@ -405,9 +469,6 @@ describe("PortfolioMap — pin info bubble", () => {
   });
 
   it("omits bed-count rows when the caller doesn't pass them", async () => {
-    // Lightweight callers (e.g. preview-only embeds) shouldn't be
-    // forced to thread bed data through. The bubble degrades to just
-    // name + customer + View details rather than rendering "undefined".
     const minimal: MappableProperty = {
       id: "px",
       name: "Tiny",
@@ -415,7 +476,6 @@ describe("PortfolioMap — pin info bubble", () => {
       city: "Austin",
       state: "TX",
       zip: "78701",
-      // intentionally no totalBeds/occupied/vacant
     };
     await renderMap({ properties: [minimal] });
     const marker = mapsState.markers[0];
@@ -430,3 +490,198 @@ describe("PortfolioMap — pin info bubble", () => {
     ).toBeNull();
   });
 });
+
+describe("PortfolioMap geocode deduplication", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    __resetPortfolioMapCachesForTest();
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+  });
+
+  it("only issues one geocoder call per unique address even when the parent re-renders", async () => {
+    const propsV1: MappableProperty[] = [
+      makeProperty({ id: "p1", address: "100 First St" }),
+      makeProperty({ id: "p2", address: "200 Second Ave" }),
+      makeProperty({ id: "p3", address: "100 First St" }),
+    ];
+    const onGeocoded = vi.fn();
+    const onPinClick = vi.fn();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={propsV1}
+          onPinClick={onPinClick}
+          onGeocoded={onGeocoded}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+
+    const pending = mapsState.pendingGeocodes;
+    const uniqueAddrs = new Set(pending.map((p) => p.addr));
+    expect(pending).toHaveLength(2);
+    expect(uniqueAddrs).toEqual(
+      new Set([
+        "100 First St, Austin, TX 78701",
+        "200 Second Ave, Austin, TX 78701",
+      ]),
+    );
+
+    const propsV2 = propsV1.map((p) => ({ ...p }));
+    await act(async () => {
+      root!.render(
+        <PortfolioMap
+          properties={propsV2}
+          onPinClick={onPinClick}
+          onGeocoded={onGeocoded}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+
+    expect(pending).toHaveLength(2);
+  });
+
+  it("calls onGeocoded exactly once per property even when the parent rerenders mid-flight", async () => {
+    const propsInitial: MappableProperty[] = [
+      makeProperty({ id: "p1", address: "100 First St" }),
+      makeProperty({ id: "p2", address: "200 Second Ave" }),
+    ];
+    const onGeocoded = vi.fn();
+    const onPinClick = vi.fn();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={propsInitial}
+          onPinClick={onPinClick}
+          onGeocoded={onGeocoded}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+    const pending = mapsState.pendingGeocodes;
+    expect(pending).toHaveLength(2);
+
+    const p1Pending = pending.find((p) => p.addr.startsWith("100 First St"))!;
+    await act(async () => {
+      p1Pending.cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30.1, lng: () => -97.1 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+
+    const propsAfterP1: MappableProperty[] = [
+      makeProperty({
+        id: "p1",
+        address: "100 First St",
+        lat: 30.1,
+        lng: -97.1,
+      }),
+      makeProperty({ id: "p2", address: "200 Second Ave" }),
+    ];
+    await act(async () => {
+      root!.render(
+        <PortfolioMap
+          properties={propsAfterP1}
+          onPinClick={onPinClick}
+          onGeocoded={onGeocoded}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+
+    expect(pending).toHaveLength(2);
+
+    const p2Pending = pending.find((p) => p.addr.startsWith("200 Second Ave"))!;
+    await act(async () => {
+      p2Pending.cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30.2, lng: () => -97.2 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    await settle();
+
+    expect(onGeocoded).toHaveBeenCalledTimes(2);
+    const calls = onGeocoded.mock.calls.map(([id, point]) => ({ id, point }));
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { id: "p1", point: { lat: 30.1, lng: -97.1 } },
+        { id: "p2", point: { lat: 30.2, lng: -97.2 } },
+      ]),
+    );
+  });
+
+  it("does not call the geocoder for properties that already have stored lat/lng", async () => {
+    const props: MappableProperty[] = [
+      makeProperty({
+        id: "p1",
+        address: "100 First St",
+        lat: 30.1,
+        lng: -97.1,
+      }),
+      makeProperty({
+        id: "p2",
+        address: "200 Second Ave",
+        lat: 30.2,
+        lng: -97.2,
+      }),
+    ];
+    const onGeocoded = vi.fn();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <PortfolioMap
+          properties={props}
+          onPinClick={vi.fn()}
+          onGeocoded={onGeocoded}
+          apiKey="test-key"
+        />,
+      );
+    });
+    await settle();
+
+    expect(mapsState.pendingGeocodes).toHaveLength(0);
+    expect(onGeocoded).not.toHaveBeenCalled();
+  });
+});
+

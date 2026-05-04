@@ -49,6 +49,12 @@ export const propertiesTable = pgTable("properties", {
     .$type<PropertyRatings>()
     .notNull()
     .default(EMPTY_RATINGS),
+  // Cached geocoded coordinates so the portfolio map can render pins
+  // instantly without re-geocoding on every load. Nullable so that
+  // properties without a resolvable address can still be persisted; the
+  // map falls back to live geocoding when these are absent.
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

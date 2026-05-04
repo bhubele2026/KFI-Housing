@@ -97,7 +97,13 @@ describe("start", () => {
     await start(
       makeDeps({
         pushSchemaIfNeeded,
-        env: { NODE_ENV: "production", PORT: "3000" },
+        // Maps key set so we don't hit the Task #191 fast-fail
+        // before pushSchema gets called.
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "live-key",
+        },
       }),
     );
 
@@ -192,7 +198,14 @@ describe("start", () => {
         exit,
         seedIfEmpty,
         listen,
-        env: { NODE_ENV: "production", PORT: "3000" },
+        // GOOGLE_MAPS_API_KEY is set so this test exercises the
+        // schema-out-of-date path rather than the Task #191
+        // missing-key fast-fail (which runs before pushSchema).
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "live-key",
+        },
       }),
     );
 
@@ -226,6 +239,10 @@ describe("start", () => {
           NODE_ENV: "production",
           PORT: "3000",
           SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+          // See sibling test — sets the maps key so this scenario
+          // reaches the schema-drift webhook path instead of the
+          // Task #191 missing-key fast-fail.
+          GOOGLE_MAPS_API_KEY: "live-key",
         },
       }),
     );
@@ -250,7 +267,13 @@ describe("start", () => {
         pushSchemaIfNeeded,
         notifySchemaDrift,
         logger,
-        env: { NODE_ENV: "production", PORT: "3000" },
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          // Set so the test reaches the schema path rather than the
+          // Task #191 missing-key fast-fail.
+          GOOGLE_MAPS_API_KEY: "live-key",
+        },
       }),
     );
 
@@ -298,11 +321,152 @@ describe("start", () => {
           NODE_ENV: "production",
           PORT: "3000",
           SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+          // Same as sibling tests — maps key set so the test exercises
+          // the non-drift schema-failure path, not the Task #191
+          // fast-fail.
+          GOOGLE_MAPS_API_KEY: "live-key",
         },
       }),
     );
 
     expect(notifySchemaDrift).not.toHaveBeenCalled();
+  });
+
+  it("exits 1 in production when neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is set, BEFORE listening or touching the DB", async () => {
+    // Task #191: closing the third loop on the silent-failure mode.
+    // In production we *cannot* afford to start the server with the
+    // key missing — the deploy would land and the only signal would
+    // be the dashed map fallback. By exiting 1 before `listen()`,
+    // the new revision never responds to the autoscale startup
+    // health check, so Replit's deployment system will not promote
+    // the bad build over the previous good one. The check therefore
+    // catches the regression in CI before it reaches production.
+    const pushSchemaIfNeeded = vi.fn();
+    const seedIfEmpty = vi.fn();
+    const listen = vi.fn();
+    const logger = fakeLogger();
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        pushSchemaIfNeeded,
+        seedIfEmpty,
+        listen,
+        logger,
+        exit,
+        env: { NODE_ENV: "production", PORT: "3000" },
+      }),
+    );
+
+    expect(exit).toHaveBeenCalledWith(1);
+    // The whole point of fast-failing here is to short-circuit
+    // before we touch anything — DB, seed, or the network listener.
+    expect(pushSchemaIfNeeded).not.toHaveBeenCalled();
+    expect(seedIfEmpty).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
+
+    const errorMsg = logger.error.mock.calls
+      .map(([msg]) => String(msg))
+      .find((m) => /GOOGLE_MAPS_API_KEY/.test(m));
+    expect(errorMsg).toBeDefined();
+    // The failure message must name BOTH env var names so an
+    // operator looking at the deploy log knows exactly which two
+    // secrets to check.
+    expect(errorMsg).toContain("GOOGLE_MAPS_API_KEY");
+    expect(errorMsg).toContain("VITE_GOOGLE_MAPS_API_KEY");
+  });
+
+  it("exits 1 in production when both env vars are present but whitespace-only", async () => {
+    // Mirrors the route's `trim` semantics so the production
+    // fast-fail agrees with what `/api/config` would have returned.
+    // Without this, an operator who pasted spaces into the secret
+    // would see a "boots fine" deploy but a `googleMapsApiKey: null`
+    // response — exactly the silent-failure mismatch this task is
+    // closing.
+    const listen = vi.fn();
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        listen,
+        exit,
+        logger,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "   ",
+          VITE_GOOGLE_MAPS_API_KEY: "  ",
+        },
+      }),
+    );
+
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(listen).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fast-fail in production when GOOGLE_MAPS_API_KEY is set", async () => {
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        listen,
+        exit,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          GOOGLE_MAPS_API_KEY: "live-key",
+        },
+      }),
+    );
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT fast-fail in production when only the legacy VITE_GOOGLE_MAPS_API_KEY is set", async () => {
+    // The /api/config route falls back to the legacy name (Task
+    // #187), so an operator still pinned to the legacy secret must
+    // not be killed by this fast-fail — otherwise the fast-fail
+    // would itself become a regression.
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        listen,
+        exit,
+        env: {
+          NODE_ENV: "production",
+          PORT: "3000",
+          VITE_GOOGLE_MAPS_API_KEY: "legacy-key",
+        },
+      }),
+    );
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT fast-fail outside of production even when neither env var is set", async () => {
+    // Local dev keeps the existing post-listen WARN (Task #187) so
+    // workflows still start and the operator gets a non-fatal
+    // signal. The task explicitly requires local dev to be
+    // unaffected.
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn() as unknown as (code: number) => never;
+
+    await start(
+      makeDeps({
+        listen,
+        exit,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
   });
 
   it("warns at startup when neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is set", async () => {
@@ -422,6 +586,9 @@ describe("start", () => {
           NODE_ENV: "production",
           PORT: "3000",
           SCHEMA_DRIFT_WEBHOOK_URL: "https://hooks.example.com/T/B/X",
+          // See sibling tests — maps key set so this exercises the
+          // chat-webhook-failure path, not the Task #191 fast-fail.
+          GOOGLE_MAPS_API_KEY: "live-key",
         },
       }),
     );

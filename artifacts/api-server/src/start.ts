@@ -91,6 +91,22 @@ export async function start(deps: StartDeps): Promise<void> {
 
   const port = resolvePort(deps.env);
 
+  // In production, refuse to start if neither GOOGLE_MAPS_API_KEY nor
+  // the legacy VITE_GOOGLE_MAPS_API_KEY is set. With the autoscale
+  // health check at /api/healthz, an exit(1) here means the new
+  // revision never responds, so Replit's deployment system will not
+  // promote the bad build over the previous good one — the missing
+  // secret is caught in CI before it actually reaches production
+  // users (Task #191). In dev, we keep the existing post-listen WARN
+  // (Task #187) so local workflows still start and surface the
+  // problem in a non-fatal way — see `warnIfGoogleMapsKeyMissing`
+  // below.
+  if (isProduction && !hasGoogleMapsKeyConfigured(deps.env)) {
+    deps.logger.error(googleMapsMissingMessage());
+    deps.exit(1);
+    return;
+  }
+
   try {
     await deps.pushSchemaIfNeeded(
       buildPushSchemaOptions(deps.env, deps.logger),
@@ -135,6 +151,34 @@ export async function start(deps: StartDeps): Promise<void> {
   }
 }
 
+// Mirrors `artifacts/api-server/src/routes/config.ts` exactly:
+// trimmed canonical OR trimmed legacy must be a non-empty string. By
+// keeping this in lockstep with the route, a startup that decides
+// "the key is configured" can never disagree with what `/api/config`
+// returns at runtime.
+function hasGoogleMapsKeyConfigured(env: NodeJS.ProcessEnv): boolean {
+  const primary = (env["GOOGLE_MAPS_API_KEY"] ?? "").trim();
+  if (primary !== "") return true;
+  const legacy = (env["VITE_GOOGLE_MAPS_API_KEY"] ?? "").trim();
+  return legacy !== "";
+}
+
+// Single source of truth for the operator-facing message. Both the
+// dev WARN and the production fatal error reuse this so the two
+// paths stay in sync, and the message always names BOTH env var
+// names (Task #191) so whoever sees the log knows exactly which
+// secrets to check.
+function googleMapsMissingMessage(): string {
+  return (
+    "Neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is " +
+    "set — the property-detail Location card and the portfolio " +
+    "map will render their 'API key isn't configured' fallback. " +
+    "Set GOOGLE_MAPS_API_KEY (preferred) on the api-server and " +
+    "restart it to enable the embedded Google Map. The legacy " +
+    "VITE_GOOGLE_MAPS_API_KEY name is also accepted as a fallback."
+  );
+}
+
 // Surfaces a single, clearly-worded warning at startup when neither
 // the canonical `GOOGLE_MAPS_API_KEY` nor the legacy
 // `VITE_GOOGLE_MAPS_API_KEY` is set. Without this, a missing key
@@ -145,21 +189,17 @@ export async function start(deps: StartDeps): Promise<void> {
 // silent failure three times in a row (Task #187), so we make the
 // next regression loud here at boot.
 //
+// In production, the same condition is checked *before* `listen()`
+// and exits 1 (see `start` above) so the new revision fails its
+// startup health check and never gets promoted — this dev-only WARN
+// path is the looser, non-fatal counterpart for local workflows.
+//
 // We deliberately log only the *presence* of either env var, never
 // their values — these end up in plaintext workflow logs.
 function warnIfGoogleMapsKeyMissing(
   deps: Pick<StartDeps, "env" | "logger">,
 ): void {
-  const primary = (deps.env["GOOGLE_MAPS_API_KEY"] ?? "").trim();
-  const legacy = (deps.env["VITE_GOOGLE_MAPS_API_KEY"] ?? "").trim();
-  if (primary === "" && legacy === "") {
-    deps.logger.warn(
-      "Neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is " +
-        "set — the property-detail Location card and the portfolio " +
-        "map will render their 'API key isn't configured' fallback. " +
-        "Set GOOGLE_MAPS_API_KEY (preferred) on the api-server and " +
-        "restart it to enable the embedded Google Map. The legacy " +
-        "VITE_GOOGLE_MAPS_API_KEY name is also accepted as a fallback.",
-    );
+  if (!hasGoogleMapsKeyConfigured(deps.env)) {
+    deps.logger.warn(googleMapsMissingMessage());
   }
 }

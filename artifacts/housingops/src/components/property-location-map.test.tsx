@@ -1559,4 +1559,187 @@ describe("PropertyLocationMap", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  // -------------------------------------------------------------------
+  // SSE disconnects + reconnects (Task #210)
+  //
+  // The browser dispatches an `error` event on the EventSource whenever
+  // the underlying connection drops (an api-server restart, a flaky
+  // network blip, a proxy hiccup) and keeps the same instance alive
+  // while it auto-reconnects with a small back-off. Once the new
+  // connection is up the existing instance fires `open` and then any
+  // queued events on the same listeners. The rotation tests above only
+  // exercise the happy-path `config` event, so a regression that
+  // mishandled the disconnect/reconnect lifecycle — toasting key
+  // rejection on the transient error, re-subscribing on every reconnect
+  // (piling up duplicate listeners → multiple cache writes per push),
+  // or just ignoring the first config event after a reconnect — would
+  // ship silently. These two tests cover the missing cells.
+  // -------------------------------------------------------------------
+
+  it("ignores an SSE `error` event — the last-known key stays in place and no key-rejected toast fires", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "stable-key",
+          googleMapsMapId: "branded-map-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
+      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      await settle();
+
+      // Sanity: the map is mounted against the pre-error key, with the
+      // single SSE channel open and exactly one `config` listener
+      // attached. If the hook had skipped its `addEventListener` call,
+      // the listener count would already be 0 here.
+      expect(mapsState.map?.options.mapId).toBe("branded-map-id");
+      const originalMap = mapsState.map;
+      expect(fakeEventSources).toHaveLength(1);
+      const stream = fakeEventSources[0];
+      expect(stream.listenerCount("config")).toBe(1);
+      expect(stream.closed).toBe(false);
+      expect(toastCalls).toHaveLength(0);
+
+      // The api-server drops the connection — the EventSource fires
+      // `error` while the browser waits to reconnect.
+      await act(async () => {
+        stream.emitError();
+      });
+      await flush();
+
+      // Nothing about the map changed: same FakeMap instance, same
+      // Map ID, no script reload, no key-rejected toast. A regression
+      // that wired an `error` listener which cleared the cache or
+      // surfaced a toast would fail one of these.
+      expect(get("property-location-map-canvas")).not.toBeNull();
+      expect(mapsState.map).toBe(originalMap);
+      expect(mapsState.map?.options.mapId).toBe("branded-map-id");
+      expect(toastCalls).toHaveLength(0);
+      expect(
+        document.querySelector('script[data-housingops-maps]'),
+      ).toBeNull();
+
+      // The hook also left its `config` listener and the EventSource
+      // itself in place — closing on the first error would defeat the
+      // browser's auto-reconnect, and removing the listener would mean
+      // the next `config` push silently no-ops.
+      expect(stream.listenerCount("config")).toBe(1);
+      expect(stream.closed).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("delivers a freshly-rotated key after a transient SSE drop and reconnect, without piling up duplicate listeners on the same channel", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          googleMapsApiKey: "initial-key",
+          googleMapsMapId: "branded-map-id",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await render(
+        <PropertyLocationMap
+          address="100 Oak Way"
+          city="Austin"
+          state="TX"
+          zip="78701"
+        />,
+      );
+      await waitFor(() => get("property-location-map-canvas") !== null);
+      await settle();
+      const originalMap = mapsState.map;
+      expect(originalMap).not.toBeNull();
+      expect(fakeEventSources).toHaveLength(1);
+      const stream = fakeEventSources[0];
+      expect(stream.listenerCount("config")).toBe(1);
+
+      // Mirror the real EventSource reconnect lifecycle on the same
+      // instance: `error` while the browser waits, `open` once the
+      // new connection is up, then the first event over the resumed
+      // stream. The hook trusts the browser's built-in auto-reconnect
+      // — it does NOT tear down + re-open its own EventSource on
+      // error — so this whole sequence runs on the original instance.
+      await act(async () => {
+        stream.emitError();
+        stream.emitOpen();
+      });
+      await flush();
+
+      // The hook did NOT construct a second EventSource during the
+      // reconnect. A regression that opened a fresh stream on every
+      // `error` would bump fakeEventSources.length above 1 here.
+      expect(fakeEventSources).toHaveLength(1);
+      // And the original `config` listener is still the only one.
+      // A regression that re-subscribed without first removing the
+      // old listener would duplicate this — every push would then
+      // fire `setQueryData` twice and race the success toast with
+      // itself.
+      expect(stream.listenerCount("config")).toBe(1);
+
+      // The first config event after the reconnect carries a rotated
+      // key. It must flow through the still-attached listener and
+      // re-enter the SDK rotation path, exactly as if there had been
+      // no drop at all.
+      await act(async () => {
+        stream.emit(
+          "config",
+          JSON.stringify({
+            googleMapsApiKey: "rotated-key",
+            googleMapsMapId: "branded-map-id",
+          }),
+        );
+      });
+      await flush();
+
+      const script = document.querySelector(
+        'script[data-housingops-maps]',
+      ) as HTMLScriptElement | null;
+      expect(script).not.toBeNull();
+      expect(script!.src).toContain("key=rotated-key");
+      expect(script!.src).not.toContain("key=initial-key");
+
+      // Drive the rotated SDK to readiness so the load effect's
+      // success branch can rebuild the Map.
+      installFakeGoogleMaps();
+      await act(async () => {
+        script!.dispatchEvent(new Event("load"));
+      });
+      await settle();
+
+      // The FakeMap was reconstructed against the rotated key — a
+      // brand-new instance, distinct from the pre-reconnect one. If
+      // the post-reconnect `config` event had been silently dropped
+      // (e.g. by a hook that re-subscribed but lost its handler in
+      // the swap), `mapsState.map` would still point at the original.
+      expect(mapsState.map).not.toBeNull();
+      expect(mapsState.map).not.toBe(originalMap);
+      expect(mapsState.map?.options.mapId).toBe("branded-map-id");
+
+      // Still one listener. If a duplicate had snuck in during the
+      // reconnect, the rotated payload would have been written into
+      // the cache twice, and we'd potentially see this count > 1.
+      expect(stream.listenerCount("config")).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

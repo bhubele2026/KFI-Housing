@@ -52,6 +52,57 @@ export class FakeEventSource {
     const evt = new MessageEvent(event, { data });
     (this.listeners.get(event) ?? []).forEach((cb) => cb(evt));
   }
+  /**
+   * Test-only helper: fire an `error` event on this stream. Mirrors the
+   * native EventSource behavior when the underlying connection drops
+   * (e.g. an api-server restart) — the spec keeps the same EventSource
+   * instance alive and dispatches an `error` event while the browser
+   * waits to reconnect, so any `addEventListener("error", …)` callbacks
+   * receive a plain Event (not a MessageEvent). The `error` event also
+   * fires on `onerror` if a hook ever assigns one, which we mirror so a
+   * future regression that wires `onerror` instead of `addEventListener`
+   * still gets driven by this helper.
+   */
+  emitError(): void {
+    const evt = new Event("error");
+    (this.listeners.get("error") ?? []).forEach((cb) =>
+      cb(evt as unknown as MessageEvent),
+    );
+    if (typeof this.onerror === "function") {
+      this.onerror(evt as unknown as MessageEvent);
+    }
+  }
+  /**
+   * Test-only helper: fire an `open` event on this stream. Mirrors the
+   * native EventSource behavior when a connection (re-)opens — fires on
+   * `addEventListener("open", …)` listeners and on the `onopen` slot.
+   * Useful in concert with `emitError` to drive a transient-drop +
+   * reconnect cycle on the same EventSource instance, which is how
+   * browsers actually handle SSE reconnects (a brand-new EventSource
+   * is NOT constructed; the existing one resumes on its own).
+   */
+  emitOpen(): void {
+    const evt = new Event("open");
+    (this.listeners.get("open") ?? []).forEach((cb) =>
+      cb(evt as unknown as MessageEvent),
+    );
+    if (typeof this.onopen === "function") {
+      this.onopen(evt as unknown as MessageEvent);
+    }
+  }
+  /**
+   * Test-only helper: how many listeners are currently registered for
+   * `event` on this stream. The reconnect tests use this to catch a
+   * regression where the SSE-subscription effect re-subscribes without
+   * cleaning up — left unchecked, every reconnect would pile up another
+   * `config` listener and quietly multiply the cache writes per push.
+   */
+  listenerCount(event: string): number {
+    return (this.listeners.get(event) ?? []).length;
+  }
+  /** Mirrors the native EventSource `onerror` / `onopen` slots. */
+  onerror: ((e: MessageEvent) => void) | null = null;
+  onopen: ((e: MessageEvent) => void) | null = null;
 }
 
 let originalEventSource: unknown;

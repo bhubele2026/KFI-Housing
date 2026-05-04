@@ -1759,6 +1759,111 @@ describe("PortfolioMap — runtime config", () => {
     expect(capturedInfoWindowState.closeCount).toBeGreaterThan(0);
   });
 
+  it("removes its global Escape keydown listener when the component is unmounted (no leaked window listener)", async () => {
+    // The Escape useEffect at the bottom of PortfolioMap registers a
+    // window-level keydown handler so the operator can press Escape to
+    // close the info bubble, then tears it down in the same effect's
+    // cleanup. There's no test pinning that down today — a future
+    // refactor that drops the cleanup (or moves the listener into a
+    // different lifecycle) would silently leak a global keydown
+    // listener every time the operator visits the portfolio page,
+    // which is exactly the leak class Tasks #174 / #180 / the
+    // unmount-disposal test above are protecting against.
+    //
+    // Shape mirrors the unmount-disposal test above: pre-supply
+    // lat/lng so a marker is created synchronously and we don't need
+    // to drive the geocoder, then spy on window.addEventListener /
+    // window.removeEventListener for "keydown" around mount and
+    // unmount and assert the add count and remove count match.
+    const propWithCoords = makeProperty({
+      id: "p1",
+      lat: 30.2672,
+      lng: -97.7431,
+    });
+
+    // Spy BEFORE mount so the Escape effect's addEventListener call
+    // is captured. Filter to "keydown" specifically so unrelated
+    // listeners that React or jsdom may attach (e.g. for hydration
+    // bookkeeping) don't pollute the count. Restored in `finally`
+    // below so a mid-test failure can't leak the spies into the next
+    // test in the suite.
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+
+    try {
+      const Wrapper = makeWrapper();
+      await act(async () => {
+        root = createRoot(container);
+        root.render(
+          <Wrapper>
+            <PortfolioMap
+              properties={[propWithCoords]}
+              onPinClick={vi.fn()}
+              apiKey="stable-key"
+              mapId="map-A"
+            />
+          </Wrapper>,
+        );
+      });
+      await settle();
+
+      // Sanity check: the map mounted and the InfoWindow exists, so
+      // the Escape effect has actually run by now.
+      expect(mapsState.map).not.toBeNull();
+      expect(mapsState.infoWindow).not.toBeNull();
+
+      const keydownAddsBeforeUnmount = addSpy.mock.calls.filter(
+        ([event]) => event === "keydown",
+      ).length;
+      const keydownRemovesBeforeUnmount = removeSpy.mock.calls.filter(
+        ([event]) => event === "keydown",
+      ).length;
+      // The Escape effect must have registered at least one keydown
+      // listener — otherwise this test would silently pass even if
+      // the listener registration itself was deleted.
+      expect(keydownAddsBeforeUnmount).toBeGreaterThanOrEqual(1);
+      // And the cleanup must NOT have run yet — only the matching
+      // removeEventListener call we expect to see post-unmount.
+      expect(keydownRemovesBeforeUnmount).toBe(0);
+
+      // Unmount the React tree. The Escape effect's cleanup must
+      // fire, calling removeEventListener("keydown", ...) the same
+      // number of times the effect called addEventListener("keydown",
+      // ...). Null `root` out so the suite's afterEach doesn't try
+      // to unmount again.
+      const r = root!;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+
+      const keydownRemovesAfterUnmount = removeSpy.mock.calls.filter(
+        ([event]) => event === "keydown",
+      ).length;
+      // Add count === remove count: every keydown listener the
+      // component attached has been detached. A future refactor that
+      // drops the cleanup would leave this count at 0 and fail
+      // loudly. This is the primary regression guard for the leak.
+      expect(keydownRemovesAfterUnmount).toBe(keydownAddsBeforeUnmount);
+
+      // Belt-and-braces (supplemental): dispatching an Escape
+      // keydown after unmount must NOT touch the (now-disposed)
+      // shared InfoWindow's closeCount. This is a weaker signal on
+      // its own — a leaked listener could still no-op against a
+      // cleared ref — so it's not the test's main assertion, but it
+      // does catch the worst-case "leak that still calls close()"
+      // shape and complements the count check above.
+      const closeCountBefore = mapsState.infoWindow!.closeCount;
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      });
+      expect(mapsState.infoWindow!.closeCount).toBe(closeCountBefore);
+    } finally {
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    }
+  });
+
   it("prefers an explicit mapId prop over whatever /api/config returned (so tests can override per render)", async () => {
     const fetchMock = vi.fn(
       async () =>

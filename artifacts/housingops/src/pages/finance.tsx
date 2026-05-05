@@ -11,10 +11,12 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { motion } from "framer-motion";
-import { Briefcase, X, DollarSign, Building2 } from "lucide-react";
+import { Briefcase, X, DollarSign, Building2, Download } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Finance() {
   const { properties, beds, leases, utilities, occupants, customers } = useData();
@@ -80,6 +82,30 @@ export default function Finance() {
   const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
   const tableColCount = showCustomerColumn ? 8 : 7;
 
+  const { toast } = useToast();
+
+  const handleDownloadCsv = () => {
+    const columns = [
+      { header: "Property", value: (d: typeof financialData[number]) => d.name },
+      ...(showCustomerColumn
+        ? [{ header: "Customer", value: (d: typeof financialData[number]) => d.customerName ?? "" }]
+        : []),
+      { header: "Occupied Beds", value: (d: typeof financialData[number]) => d.occupiedBeds },
+      { header: "Total Beds", value: (d: typeof financialData[number]) => d.totalBeds },
+      { header: "Revenue", value: (d: typeof financialData[number]) => d.revenue },
+      { header: "Lease Cost", value: (d: typeof financialData[number]) => d.leaseCost },
+      { header: "Utility Cost", value: (d: typeof financialData[number]) => d.utilCost },
+      { header: "Total Cost", value: (d: typeof financialData[number]) => d.totalCost },
+      { header: "Net Profit", value: (d: typeof financialData[number]) => d.profit },
+    ];
+    const csv = toCsv(financialData, columns);
+    downloadCsv(timestampedCsvName("housingops-finance"), csv);
+    toast({
+      title: "Finance summary exported",
+      description: `Downloaded ${financialData.length} ${financialData.length === 1 ? "property" : "properties"} as CSV.`,
+    });
+  };
+
   return (
     <MainLayout>
       <motion.div
@@ -114,6 +140,15 @@ export default function Finance() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={financialData.length === 0}
+              data-testid="button-download-finance-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
             <div className="flex gap-6 text-right">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Revenue</p>

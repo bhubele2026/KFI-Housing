@@ -829,6 +829,12 @@ export const ImportLeasePdfBody = zod.object({
     .describe("A single lease PDF (`application\/pdf`, max 10 MB)."),
 });
 
+export const importLeasePdfResponseExtractedStartDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const importLeasePdfResponseExtractedEndDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
 export const importLeasePdfResponseCandidatesMax = 5;
 
 export const ImportLeasePdfResponse = zod.object({
@@ -840,8 +846,14 @@ export const ImportLeasePdfResponse = zod.object({
       state: zod.string().nullable(),
       zip: zod.string().nullable(),
       landlordName: zod.string().nullable(),
-      startDate: zod.string().nullable().describe("ISO 8601 date"),
-      endDate: zod.string().nullable().describe("ISO 8601 date"),
+      startDate: zod.union([
+        zod.string().regex(importLeasePdfResponseExtractedStartDateOneRegExp),
+        zod.null(),
+      ]),
+      endDate: zod.union([
+        zod.string().regex(importLeasePdfResponseExtractedEndDateOneRegExp),
+        zod.null(),
+      ]),
       monthlyRent: zod.number().nullable(),
       securityDeposit: zod.number().nullable(),
       notes: zod.string(),

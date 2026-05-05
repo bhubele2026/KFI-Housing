@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { LeaseDate } from "./leaseDate";
 import type { LeasePdfExtractedConfidence } from "./leasePdfExtractedConfidence";
 
 /**
@@ -21,10 +22,8 @@ export interface LeasePdfExtracted {
   state: string | null;
   zip: string | null;
   landlordName: string | null;
-  /** ISO 8601 date */
-  startDate: string | null;
-  /** ISO 8601 date */
-  endDate: string | null;
+  startDate: LeaseDate | null;
+  endDate: LeaseDate | null;
   monthlyRent: number | null;
   securityDeposit: number | null;
   notes: string;

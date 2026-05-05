@@ -977,8 +977,14 @@ components:
         state: { type: string, nullable: true }
         zip: { type: string, nullable: true }
         landlordName: { type: string, nullable: true }
-        startDate: { type: string, nullable: true, description: "ISO 8601 date" }
-        endDate: { type: string, nullable: true, description: "ISO 8601 date" }
+        startDate:
+          oneOf:
+            - $ref: "#/components/schemas/LeaseDate"
+            - type: "null"
+        endDate:
+          oneOf:
+            - $ref: "#/components/schemas/LeaseDate"
+            - type: "null"
         monthlyRent: { type: number, nullable: true }
         securityDeposit: { type: number, nullable: true }
         notes: { type: string }

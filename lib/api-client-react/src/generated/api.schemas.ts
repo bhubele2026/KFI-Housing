@@ -474,10 +474,8 @@ export interface LeasePdfExtracted {
   state: string | null;
   zip: string | null;
   landlordName: string | null;
-  /** ISO 8601 date */
-  startDate: string | null;
-  /** ISO 8601 date */
-  endDate: string | null;
+  startDate: LeaseDate | null;
+  endDate: LeaseDate | null;
   monthlyRent: number | null;
   securityDeposit: number | null;
   notes: string;

@@ -83,6 +83,32 @@ export const PropertyRentFrequency = {
 } as const;
 
 /**
+ * Outcome of the server-side geocode the route ran on this
+create/update (Task #228). Transient — set only on the
+POST/PATCH response so the client can surface a save-time
+warning toast when an address couldn't be located. Not
+persisted, never returned by GET /properties.
+  - `ok`: geocoder returned coords (or the request supplied
+    explicit lat/lng that were honored).
+  - `no_result`: a non-blank address was geocoded but
+    Google had no result — the property still saved with
+    `lat: null, lng: null` so it lands in the missing-
+    address side panel.
+  - `skipped`: nothing to geocode — either the address was
+    wholly blank or the PATCH body didn't touch any
+    address field.
+
+ */
+export type PropertyGeocodeStatus =
+  (typeof PropertyGeocodeStatus)[keyof typeof PropertyGeocodeStatus];
+
+export const PropertyGeocodeStatus = {
+  ok: "ok",
+  no_result: "no_result",
+  skipped: "skipped",
+} as const;
+
+/**
  * Per-property subjective ratings on a 0–5 whole-star scale.
 A category value of 0 means "not rated yet" and is excluded
 from the overall average shown in the UI.
@@ -166,6 +192,22 @@ changes — a verified pin only applies to the address it
 was verified against.
  */
   coordsVerified?: boolean;
+  /** Outcome of the server-side geocode the route ran on this
+create/update (Task #228). Transient — set only on the
+POST/PATCH response so the client can surface a save-time
+warning toast when an address couldn't be located. Not
+persisted, never returned by GET /properties.
+  - `ok`: geocoder returned coords (or the request supplied
+    explicit lat/lng that were honored).
+  - `no_result`: a non-blank address was geocoded but
+    Google had no result — the property still saved with
+    `lat: null, lng: null` so it lands in the missing-
+    address side panel.
+  - `skipped`: nothing to geocode — either the address was
+    wholly blank or the PATCH body didn't touch any
+    address field.
+ */
+  geocodeStatus?: PropertyGeocodeStatus;
 }
 
 export type PropertyUpdateStatus =

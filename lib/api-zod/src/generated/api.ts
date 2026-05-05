@@ -179,6 +179,12 @@ export const ImportDataBody = zod.object({
         .describe(
           'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
         ),
+      geocodeStatus: zod
+        .enum(["ok", "no_result", "skipped"])
+        .optional()
+        .describe(
+          "Outcome of the server-side geocode the route ran on this\ncreate\/update (Task #228). Transient — set only on the\nPOST\/PATCH response so the client can surface a save-time\nwarning toast when an address couldn't be located. Not\npersisted, never returned by GET \/properties.\n  - `ok`: geocoder returned coords (or the request supplied\n    explicit lat\/lng that were honored).\n  - `no_result`: a non-blank address was geocoded but\n    Google had no result — the property still saved with\n    `lat: null, lng: null` so it lands in the missing-\n    address side panel.\n  - `skipped`: nothing to geocode — either the address was\n    wholly blank or the PATCH body didn't touch any\n    address field.\n",
+        ),
     }),
   ),
   leases: zod.array(
@@ -431,6 +437,12 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
     ),
+  geocodeStatus: zod
+    .enum(["ok", "no_result", "skipped"])
+    .optional()
+    .describe(
+      "Outcome of the server-side geocode the route ran on this\ncreate\/update (Task #228). Transient — set only on the\nPOST\/PATCH response so the client can surface a save-time\nwarning toast when an address couldn't be located. Not\npersisted, never returned by GET \/properties.\n  - `ok`: geocoder returned coords (or the request supplied\n    explicit lat\/lng that were honored).\n  - `no_result`: a non-blank address was geocoded but\n    Google had no result — the property still saved with\n    `lat: null, lng: null` so it lands in the missing-\n    address side panel.\n  - `skipped`: nothing to geocode — either the address was\n    wholly blank or the PATCH body didn't touch any\n    address field.\n",
+    ),
 });
 export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
 
@@ -535,6 +547,12 @@ export const CreatePropertyBody = zod.object({
     .optional()
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
+  geocodeStatus: zod
+    .enum(["ok", "no_result", "skipped"])
+    .optional()
+    .describe(
+      "Outcome of the server-side geocode the route ran on this\ncreate\/update (Task #228). Transient — set only on the\nPOST\/PATCH response so the client can surface a save-time\nwarning toast when an address couldn't be located. Not\npersisted, never returned by GET \/properties.\n  - `ok`: geocoder returned coords (or the request supplied\n    explicit lat\/lng that were honored).\n  - `no_result`: a non-blank address was geocoded but\n    Google had no result — the property still saved with\n    `lat: null, lng: null` so it lands in the missing-\n    address side panel.\n  - `skipped`: nothing to geocode — either the address was\n    wholly blank or the PATCH body didn't touch any\n    address field.\n",
     ),
 });
 
@@ -759,6 +777,12 @@ export const UpdatePropertyResponse = zod.object({
     .optional()
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
+  geocodeStatus: zod
+    .enum(["ok", "no_result", "skipped"])
+    .optional()
+    .describe(
+      "Outcome of the server-side geocode the route ran on this\ncreate\/update (Task #228). Transient — set only on the\nPOST\/PATCH response so the client can surface a save-time\nwarning toast when an address couldn't be located. Not\npersisted, never returned by GET \/properties.\n  - `ok`: geocoder returned coords (or the request supplied\n    explicit lat\/lng that were honored).\n  - `no_result`: a non-blank address was geocoded but\n    Google had no result — the property still saved with\n    `lat: null, lng: null` so it lands in the missing-\n    address side panel.\n  - `skipped`: nothing to geocode — either the address was\n    wholly blank or the PATCH body didn't touch any\n    address field.\n",
     ),
 });
 

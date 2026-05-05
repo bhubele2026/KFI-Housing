@@ -108,6 +108,20 @@ router.post("/properties/backfill-coords", async (_req, res): Promise<void> => {
  *      missing-address side panel that already handles unmappable
  *      rows. The save itself never fails because of geocoding.
  */
+/**
+ * Outcome of a save-time geocode. Surfaced on the POST/PATCH response
+ * (Task #228) so the front-end can show a non-blocking warning toast
+ * when an address couldn't be located — operators previously only
+ * discovered the failure days later via the missing-address side
+ * panel. Not persisted: this is a per-request signal, not a column.
+ *   - `ok`: coords resolved (geocoder hit OR explicit lat/lng honored)
+ *   - `no_result`: a non-blank address was geocoded but Google had
+ *     nothing; the row still saved with null coords
+ *   - `skipped`: no geocode round-trip happened (blank address, or a
+ *     PATCH body that didn't touch any address field)
+ */
+type GeocodeStatus = "ok" | "no_result" | "skipped";
+
 async function resolveCoordsForSave(
   fields: {
     address?: string | null;
@@ -118,19 +132,23 @@ async function resolveCoordsForSave(
     lng?: number | null;
   },
   explicitOverride: boolean,
-): Promise<{ lat: number | null; lng: number | null }> {
+): Promise<{
+  lat: number | null;
+  lng: number | null;
+  status: GeocodeStatus;
+}> {
   if (
     explicitOverride &&
     typeof fields.lat === "number" &&
     typeof fields.lng === "number"
   ) {
-    return { lat: fields.lat, lng: fields.lng };
+    return { lat: fields.lat, lng: fields.lng, status: "ok" };
   }
   const addr = formatPropertyAddress(fields);
-  if (!addr) return { lat: null, lng: null };
+  if (!addr) return { lat: null, lng: null, status: "skipped" };
   const point: GeoPoint | null = await getGeocoder().geocode(addr);
-  if (!point) return { lat: null, lng: null };
-  return point;
+  if (!point) return { lat: null, lng: null, status: "no_result" };
+  return { ...point, status: "ok" };
 }
 
 router.post("/properties", async (req, res): Promise<void> => {
@@ -161,7 +179,13 @@ router.post("/properties", async (req, res): Promise<void> => {
       coordsVerified,
     })
     .returning();
-  res.status(201).json(UpdatePropertyResponse.parse(row));
+  // Surface the geocode outcome alongside the persisted row (Task #228)
+  // so the front-end can pop a non-blocking warning toast on `no_result`.
+  // Field is documented in openapi as transient (not stored, never
+  // returned by GET /properties).
+  res
+    .status(201)
+    .json({ ...UpdatePropertyResponse.parse(row), geocodeStatus: coords.status });
 });
 
 router.patch("/properties/:id", async (req, res): Promise<void> => {
@@ -193,6 +217,9 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
     lng?: number | null;
     coordsVerified?: boolean;
   } = body.data;
+  // Default outcome (Task #228): no geocode round-trip happened. Gets
+  // overwritten in the address-touched branch below.
+  let geocodeStatus: GeocodeStatus = explicitCoords ? "ok" : "skipped";
 
   if (addressTouched && !explicitCoords) {
     // Need the persisted row so we can compose the *resulting*
@@ -225,6 +252,7 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
       lng: coords.lng,
       coordsVerified: false,
     };
+    geocodeStatus = coords.status;
   }
 
   const [row] = await db
@@ -238,7 +266,7 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdatePropertyResponse.parse(row));
+  res.json({ ...UpdatePropertyResponse.parse(row), geocodeStatus });
 });
 
 router.delete("/properties/:id", async (req, res): Promise<void> => {

@@ -34,6 +34,7 @@ export * from "./occupantUpdate";
 export * from "./occupantUpdateBillingFrequency";
 export * from "./occupantUpdateStatus";
 export * from "./property";
+export * from "./propertyGeocodeStatus";
 export * from "./propertyPaymentMethod";
 export * from "./propertyRentFrequency";
 export * from "./propertyStatus";

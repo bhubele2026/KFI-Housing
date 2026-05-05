@@ -586,9 +586,27 @@ export default function Properties() {
       };
 
       try {
-        await addProperty(newProperty);
+        const saved = await addProperty(newProperty);
         toast({ title: "Property added", description: `${name} created.` });
         setAddOpen(false);
+        // Save-time geocode warning (Task #228). The property already
+        // saved (POST returned 201) — this toast only flags that
+        // Google couldn't pinpoint the address so the operator can fix
+        // the typo immediately instead of finding it days later in the
+        // missing-address side panel. `skipped` (blank address) and
+        // `ok` paths stay silent. We tolerate `geocodeStatus` being
+        // absent because older deployments may not yet ship the field.
+        const geocodeStatus = (saved as Property & {
+          geocodeStatus?: "ok" | "no_result" | "skipped";
+        }).geocodeStatus;
+        if (geocodeStatus === "no_result") {
+          toast({
+            title: "Couldn't locate address",
+            description:
+              `Google had no result for ${name}'s address. The property saved without a map pin — open it to fix the street, city, or ZIP.`,
+            variant: "destructive",
+          });
+        }
       } catch {
         toast({
           title: "Couldn't create property",

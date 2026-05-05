@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { PropertyGeocodeStatus } from "./propertyGeocodeStatus";
 import type { PropertyPaymentMethod } from "./propertyPaymentMethod";
 import type { PropertyRentFrequency } from "./propertyRentFrequency";
 import type { PropertyStatus } from "./propertyStatus";
@@ -55,4 +56,20 @@ changes — a verified pin only applies to the address it
 was verified against.
  */
   coordsVerified?: boolean;
+  /** Outcome of the server-side geocode the route ran on this
+create/update (Task #228). Transient — set only on the
+POST/PATCH response so the client can surface a save-time
+warning toast when an address couldn't be located. Not
+persisted, never returned by GET /properties.
+  - `ok`: geocoder returned coords (or the request supplied
+    explicit lat/lng that were honored).
+  - `no_result`: a non-blank address was geocoded but
+    Google had no result — the property still saved with
+    `lat: null, lng: null` so it lands in the missing-
+    address side panel.
+  - `skipped`: nothing to geocode — either the address was
+    wholly blank or the PATCH body didn't touch any
+    address field.
+ */
+  geocodeStatus?: PropertyGeocodeStatus;
 }

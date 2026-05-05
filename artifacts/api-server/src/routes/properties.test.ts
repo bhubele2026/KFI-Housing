@@ -587,6 +587,128 @@ describe("properties route — server-side geocoding (Task #152)", () => {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // Task #228 — `geocodeStatus` save-time outcome flag
+  // -------------------------------------------------------------------------
+  // The flag rides on the POST/PATCH response (not persisted, not
+  // returned by GET /properties) so the front-end can show a non-
+  // blocking warning toast at save time when an address couldn't be
+  // located. Operators previously only discovered the failure days
+  // later via the missing-address side panel.
+
+  it("POST /properties returns geocodeStatus=ok when the geocoder resolves the address", async () => {
+    geocodeMock.mockResolvedValueOnce({ lat: 30.2672, lng: -97.7431 });
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(makeCreateBody({ id: "p-gs1" })),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("ok");
+  });
+
+  it("POST /properties returns geocodeStatus=no_result on a typo'd address (operator gets a save-time warning)", async () => {
+    geocodeMock.mockResolvedValueOnce(null);
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        makeCreateBody({ id: "p-gs2", address: "asdfgh nonsense" }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("no_result");
+    // Row still saves with null coords — the warning is advisory, not blocking.
+    expect(body.lat).toBeNull();
+    expect(body.lng).toBeNull();
+  });
+
+  it("POST /properties returns geocodeStatus=skipped when the address is wholly blank (no round-trip happened)", async () => {
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        makeCreateBody({
+          id: "p-gs3",
+          address: "",
+          city: "",
+          state: "",
+          zip: "",
+        }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("skipped");
+    expect(geocodeMock).not.toHaveBeenCalled();
+  });
+
+  it("POST /properties returns geocodeStatus=ok when explicit lat/lng are supplied (no warning even though the geocoder didn't run)", async () => {
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        makeCreateBody({ id: "p-gs4", lat: 1.23, lng: 4.56 }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("ok");
+    expect(geocodeMock).not.toHaveBeenCalled();
+  });
+
+  it("PATCH /properties/:id returns geocodeStatus=no_result when an address edit fails to geocode", async () => {
+    store.set("p-gs5", { ...makeCreateBody({ id: "p-gs5" }) });
+    geocodeMock.mockResolvedValueOnce(null);
+    const res = await fetch(`${baseUrl}/api/properties/p-gs5`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: "asdfgh nonsense" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("no_result");
+  });
+
+  it("PATCH /properties/:id returns geocodeStatus=skipped when no address field is in the body", async () => {
+    store.set("p-gs6", { ...makeCreateBody({ id: "p-gs6" }) });
+    const res = await fetch(`${baseUrl}/api/properties/p-gs6`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "Inactive" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("skipped");
+  });
+
+  it("PATCH /properties/:id returns geocodeStatus=ok on a successful re-geocode", async () => {
+    store.set("p-gs7", { ...makeCreateBody({ id: "p-gs7" }) });
+    geocodeMock.mockResolvedValueOnce({ lat: 32.7767, lng: -96.797 });
+    const res = await fetch(`${baseUrl}/api/properties/p-gs7`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ city: "Dallas", zip: "75201" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("ok");
+  });
+
+  it("PATCH /properties/:id returns geocodeStatus=ok when explicit lat/lng are supplied (front-end onGeocoded write-back)", async () => {
+    store.set("p-gs8", { ...makeCreateBody({ id: "p-gs8" }) });
+    const res = await fetch(`${baseUrl}/api/properties/p-gs8`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: 9.99, lng: -8.88 }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PropertyRow & { geocodeStatus: string };
+    expect(body.geocodeStatus).toBe("ok");
+  });
+
   it("PATCH /properties/:id returns 404 when the row doesn't exist (and never calls the geocoder)", async () => {
     const res = await fetch(`${baseUrl}/api/properties/missing`, {
       method: "PATCH",

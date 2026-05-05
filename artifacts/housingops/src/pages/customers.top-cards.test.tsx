@@ -302,11 +302,54 @@ describe("Customers page — top occupancy / top revenue cards", () => {
     expect(container.querySelector('[data-testid="card-top-revenue"]')).toBeNull();
   });
 
-  it("shows the empty-state fallback on the revenue card when no customer has any revenue", async () => {
+  it("hides the occupancy card but shows the revenue card when there is revenue but no beds", async () => {
+    // Mirror of the "beds but no revenue" case below: an active
+    // occupant with a charge but no beds in the system produces real
+    // revenue with no occupancy data. The occupancy card must stay
+    // hidden (no customer has any beds, so the picker returns null and
+    // the surrounding guard would still render the row because of the
+    // revenue winner) while the revenue card surfaces Alpha. A
+    // regression that always rendered both cards — or that showed
+    // "No bed data yet" forever for the occupancy card — would fail
+    // here.
+    state = {
+      customers: [
+        { id: "c1", name: "Alpha", contactName: "", email: "", phone: "", notes: "" },
+      ],
+      properties: [
+        {
+          id: "p1", customerId: "c1", name: "p1", address: "1 Main", city: "Austin",
+          state: "TX", zip: "78701", totalBeds: 0, monthlyRent: 0, chargePerBed: 0,
+          status: "Active", landlordName: "", landlordEmail: "", landlordPhone: "",
+          paymentMethod: "ACH", paymentRecipient: "", paymentDueDay: 1,
+          paymentNotes: "", bankName: "", bankRouting: "", bankAccount: "",
+          portalUrl: "", notes: "", furnishings: [], ratings: undefined,
+        },
+      ],
+      beds: [], // No beds anywhere → occupancy card has no winner.
+      occupants: [
+        {
+          id: "o1", propertyId: "p1", name: "o1", status: "Active",
+          chargePerBed: 1500, billingFrequency: "Monthly",
+        },
+      ],
+    };
+    await renderPage();
+    expect(container.querySelector('[data-testid="card-top-occupancy"]')).toBeNull();
+    const revCard = container.querySelector<HTMLElement>('[data-testid="card-top-revenue"]');
+    expect(revCard).not.toBeNull();
+    const revText = revCard?.textContent ?? "";
+    expect(revText).toContain("Alpha");
+    expect(revText).toContain("$1,500");
+  });
+
+  it("hides the revenue card but shows the occupancy card when there are beds but no revenue", async () => {
     // Beds exist but no active occupants → every customer has $0
     // monthly revenue. The occupancy card should surface Alpha (50%),
-    // and the revenue card must fall back to its "No revenue yet"
-    // empty state rather than picking a $0 customer as a winner.
+    // and the revenue card must hide itself entirely rather than
+    // render an empty placeholder. A regression that always rendered
+    // both cards (or that picked a $0 customer as a winner) would fail
+    // here.
     state = {
       customers: [
         { id: "c1", name: "Alpha", contactName: "", email: "", phone: "", notes: "" },
@@ -331,10 +374,6 @@ describe("Customers page — top occupancy / top revenue cards", () => {
     const occCard = container.querySelector<HTMLElement>('[data-testid="card-top-occupancy"]');
     expect(occCard).not.toBeNull();
     expect(occCard?.textContent ?? "").toContain("Alpha");
-    const revCard = container.querySelector<HTMLElement>('[data-testid="card-top-revenue"]');
-    expect(revCard).not.toBeNull();
-    const revText = revCard?.textContent ?? "";
-    expect(revText).toContain("No revenue yet");
-    expect(revText).not.toContain("Alpha");
+    expect(container.querySelector('[data-testid="card-top-revenue"]')).toBeNull();
   });
 });

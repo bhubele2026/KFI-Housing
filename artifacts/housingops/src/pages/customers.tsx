@@ -336,64 +336,59 @@ export default function Customers() {
           </div>
         </div>
 
-        {/* Top customers summary — only meaningful when there's data to compare. */}
+        {/* Top customers summary — each card hides itself when its
+            metric has no winner so we never render an "empty"
+            placeholder card. The whole row collapses when neither
+            card has data. */}
         {(topCustomers.topOccupancy || topCustomers.topRevenue) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card data-testid="card-top-occupancy">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                      Highest occupancy
-                    </p>
-                    {topCustomers.topOccupancy ? (
-                      <>
-                        <p className="text-lg font-semibold">{topCustomers.topOccupancy.customer.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {topCustomers.topOccupancy.occupied}/{topCustomers.topOccupancy.total} beds occupied
-                          {" · "}
-                          <span className="font-medium text-foreground">
-                            {topCustomers.topOccupancy.pct.toFixed(0)}%
-                          </span>
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No bed data yet.</p>
-                    )}
+            {topCustomers.topOccupancy && (
+              <Card data-testid="card-top-occupancy">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                        Highest occupancy
+                      </p>
+                      <p className="text-lg font-semibold">{topCustomers.topOccupancy.customer.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {topCustomers.topOccupancy.occupied}/{topCustomers.topOccupancy.total} beds occupied
+                        {" · "}
+                        <span className="font-medium text-foreground">
+                          {topCustomers.topOccupancy.pct.toFixed(0)}%
+                        </span>
+                      </p>
+                    </div>
+                    <div className="p-2 rounded-md bg-emerald-100 text-emerald-700">
+                      <Trophy className="h-4 w-4" />
+                    </div>
                   </div>
-                  <div className="p-2 rounded-md bg-emerald-100 text-emerald-700">
-                    <Trophy className="h-4 w-4" />
+                </CardContent>
+              </Card>
+            )}
+            {topCustomers.topRevenue && (
+              <Card data-testid="card-top-revenue">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                        Highest monthly revenue
+                      </p>
+                      <p className="text-lg font-semibold">{topCustomers.topRevenue.customer.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          ${topCustomers.topRevenue.revenue.toLocaleString()}
+                        </span>
+                        /mo across all properties
+                      </p>
+                    </div>
+                    <div className="p-2 rounded-md bg-primary/10 text-primary">
+                      <TrendingUp className="h-4 w-4" />
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card data-testid="card-top-revenue">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                      Highest monthly revenue
-                    </p>
-                    {topCustomers.topRevenue ? (
-                      <>
-                        <p className="text-lg font-semibold">{topCustomers.topRevenue.customer.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">
-                            ${topCustomers.topRevenue.revenue.toLocaleString()}
-                          </span>
-                          /mo across all properties
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No revenue yet.</p>
-                    )}
-                  </div>
-                  <div className="p-2 rounded-md bg-primary/10 text-primary">
-                    <TrendingUp className="h-4 w-4" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 

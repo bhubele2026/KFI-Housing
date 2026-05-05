@@ -248,6 +248,110 @@ describe("RenewLeasePopover renew + Undo", () => {
     expect(undone.title).toBe("Renewal undone");
   });
 
+  it("end-of-month start in a non-leap year: +1 year and +6 months pass through correctly formatted target dates to onRenew", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2025-01-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(1);
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2026-01-31", "Active");
+
+    await renderPopover({
+      currentEndDate: "2025-01-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(2);
+    expect(onRenew).toHaveBeenNthCalledWith(2, "2025-07-31", "Active");
+  });
+
+  it("end-of-month start in a leap year: +1 year and +6 months pass through correctly formatted target dates to onRenew", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2024-01-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(1);
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2025-01-31", "Active");
+
+    await renderPopover({
+      currentEndDate: "2024-01-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(2);
+    expect(onRenew).toHaveBeenNthCalledWith(2, "2024-07-31", "Active");
+  });
+
+  it("end-of-month start that requires clamping: +6 months from Aug 31 clamps to Feb 28 in a non-leap target year", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2025-08-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(1);
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2026-02-28", "Active");
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(2);
+    expect(onRenew).toHaveBeenNthCalledWith(2, "2026-08-31", "Active");
+  });
+
+  it("end-of-month start that requires clamping: +6 months from Aug 31 clamps to Feb 29 in a leap target year", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2023-08-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(1);
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2024-02-29", "Active");
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+
+    expect(onRenew).toHaveBeenCalledTimes(2);
+    expect(onRenew).toHaveBeenNthCalledWith(2, "2024-08-31", "Active");
+  });
+
   it("does not call onRenew and does not show an Undo action when the new end date is not after the current end date", async () => {
     const onRenew = vi.fn();
     await renderPopover({

@@ -161,13 +161,17 @@ export default function Customers() {
 
     if (sortKey && sortDir) {
       // Pull the metric for a customer based on the current sort column.
-      // Customers with no beds have no real occupancy %, so we treat them as
-      // "missing" and always push them to the bottom regardless of direction.
+      // Customers with no beds have no real occupancy %, and customers
+      // with $0 monthly revenue have nothing meaningful to rank on, so we
+      // treat both as "missing" and always push them to the bottom
+      // regardless of direction. Property count keeps its natural 0
+      // ordering — a customer with zero properties is still a real value
+      // worth showing at the top of an ascending list.
       const valueOf = (id: string): number | null => {
         const s = statsByCustomer.get(id);
         if (!s) return null;
         if (sortKey === "properties") return s.propertyCount;
-        if (sortKey === "revenue") return s.monthlyRevenue;
+        if (sortKey === "revenue") return s.monthlyRevenue > 0 ? s.monthlyRevenue : null;
         // occupancy
         return s.totalBeds > 0 ? s.occupancyPct : null;
       };

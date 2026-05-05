@@ -33,8 +33,12 @@ import {
   formatGeocodeAddress,
   loadMapsApi,
   retryGeocode,
+  undismissGeocodeFailure,
 } from "@/lib/google-maps-sdk";
-import { useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
+import {
+  useDismissedGeocodeFailures,
+  useGeocodeFailureTimestamps,
+} from "@/hooks/use-geocode-failures";
 import { CheckedAgoLabel } from "@/components/checked-ago-label";
 import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 
@@ -618,6 +622,20 @@ export default function Properties() {
   // as new failures land or get re-recorded.
   const geocodeFailureTimestamps = useGeocodeFailureTimestamps();
 
+  // Subscribe to the dismissed-failures set so the rollup's footer
+  // can list every address the operator has hidden this session AND
+  // offer an Undo affordance per row. Without this channel, the only
+  // recovery from a misclick on Dismiss was a hard refresh — which
+  // also wiped the rest of the failure cache.
+  const dismissedAddressSet = useDismissedGeocodeFailures();
+
+  // Whether the dismissed footer is expanded into its row list.
+  // Starts collapsed so the panel doesn't grow every time an
+  // operator dismisses something — the small "n dismissed — show"
+  // affordance keeps the visual weight aligned with the active list,
+  // and a click reveals the rows when the operator wants to triage.
+  const [isDismissedExpanded, setIsDismissedExpanded] = useState(false);
+
   // Tracks addresses with an in-flight Retry. Lives in page state
   // (rather than module-level alongside the cache) because the loading
   // UI is per-row + page-scoped — another tab opening this page should
@@ -776,6 +794,44 @@ export default function Properties() {
       return addr.length > 0 && geocodeFailureTimestamps.has(addr);
     });
   }, [properties, geocodeFailureTimestamps]);
+
+  // Properties whose canonical address sits in the dismissed-set —
+  // these are the rows the dismissed footer surfaces with an Undo
+  // affordance. Keyed by the same address string the active list
+  // uses so editing the address (which changes the cache key) drops
+  // the row out of both sides at once. A property whose address is
+  // both dismissed AND missing from the property list (e.g. the
+  // property got deleted while its dismissal lingered) is silently
+  // skipped — there's nothing meaningful to render for it.
+  const dismissedPropertiesForReview = useMemo(() => {
+    if (dismissedAddressSet.size === 0) return [] as Property[];
+    // Dedupe by canonical address — Undo is keyed by address (one
+    // click restores every property sharing it), so showing one row
+    // per address keeps the count and the affordances honest. First
+    // property wins as the row's display, mirroring how the active
+    // list would look once the dismissal is undone.
+    const seen = new Set<string>();
+    const out: Property[] = [];
+    for (const p of properties) {
+      const addr = formatGeocodeAddress(p);
+      if (addr.length === 0) continue;
+      if (!dismissedAddressSet.has(addr)) continue;
+      if (seen.has(addr)) continue;
+      seen.add(addr);
+      out.push(p);
+    }
+    return out;
+  }, [properties, dismissedAddressSet]);
+
+  // Once every dismissal is undone (or the underlying failures get
+  // cleared via reset / address fix), collapse the footer back to
+  // its compact form so the next dismissal opens with a clean slate
+  // rather than starting expanded with no rows to show.
+  useEffect(() => {
+    if (dismissedPropertiesForReview.length === 0 && isDismissedExpanded) {
+      setIsDismissedExpanded(false);
+    }
+  }, [dismissedPropertiesForReview.length, isDismissedExpanded]);
 
   /**
    * Re-run every flagged address in the rollup in one click. Iterates
@@ -1138,12 +1194,15 @@ export default function Properties() {
           empty so a healthy session shows nothing at all — no empty
           state, no nudge to look for problems that aren't there.
         */}
-        {propertiesNeedingAddressFix.length > 0 && (
+        {(propertiesNeedingAddressFix.length > 0 ||
+          dismissedPropertiesForReview.length > 0) && (
           <Card
             className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20"
             data-testid="addresses-needing-review-panel"
           >
             <CardContent className="p-4 space-y-3">
+              {propertiesNeedingAddressFix.length > 0 && (
+              <>
               <div className="flex items-center gap-2">
                 <MapPinOff className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <h2 className="text-sm font-semibold">
@@ -1345,6 +1404,101 @@ export default function Properties() {
                   );
                 })}
               </ul>
+              </>
+              )}
+              {/*
+                Dismissed-this-session footer. Surfaces a compact
+                "n dismissed — show" affordance so an operator who
+                hid an address by mistake can find it again and
+                undo the dismissal — without this the only recovery
+                was a hard refresh, which would also blow away the
+                rest of the in-session failure cache.
+
+                The footer is only rendered when there's actually
+                something to undo, so a clean session shows nothing
+                extra below the active list. When ALL active failures
+                have been dismissed, the parent panel keeps rendering
+                with just this footer so the operator can still
+                review and undo — otherwise the dismiss path would
+                be a one-way trip the moment the active list empties.
+              */}
+              {dismissedPropertiesForReview.length > 0 && (
+                <div
+                  className={
+                    propertiesNeedingAddressFix.length > 0
+                      ? "border-t pt-3 -mx-1 px-1 space-y-2"
+                      : "space-y-2"
+                  }
+                  data-testid="dismissed-addresses-summary"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setIsDismissedExpanded((v) => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                    aria-expanded={isDismissedExpanded}
+                    data-testid="toggle-dismissed-addresses"
+                  >
+                    <span data-testid="dismissed-addresses-count">
+                      {dismissedPropertiesForReview.length}
+                    </span>
+                    {" dismissed this session — "}
+                    {isDismissedExpanded ? "hide" : "show"}
+                  </button>
+                  {isDismissedExpanded && (
+                    <ul
+                      className="divide-y rounded-md border bg-card"
+                      data-testid="dismissed-addresses-list"
+                    >
+                      {dismissedPropertiesForReview.map((p) => {
+                        const customer = customerById.get(p.customerId);
+                        const addrDisplay = formatGeocodeAddress(p);
+                        return (
+                          <li
+                            key={p.id}
+                            className="flex items-stretch hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0 px-3 py-2 flex items-start gap-2">
+                              <Home className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium truncate">
+                                  {p.name}
+                                </span>
+                                <span className="block text-xs text-muted-foreground truncate">
+                                  {addrDisplay}
+                                </span>
+                                {customer && (
+                                  <span className="block text-[11px] text-muted-foreground/80 truncate">
+                                    {customer.name}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            {/*
+                              Restore the row to the active list. The
+                              undismiss path notifies both the failure
+                              and dismissed channels in one shot, so
+                              the active rollup grows back and the
+                              footer count drops on the next render
+                              with no extra plumbing here.
+                            */}
+                            <button
+                              type="button"
+                              onClick={() => undismissGeocodeFailure(addrDisplay)}
+                              className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1"
+                              aria-label={`Undo dismissal of ${p.name}`}
+                              title="Bring this address back to the active list"
+                              data-testid={`undismiss-address-needing-review-${p.id}`}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              Undo
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

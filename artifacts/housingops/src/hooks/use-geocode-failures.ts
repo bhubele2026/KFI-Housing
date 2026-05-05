@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+  getDismissedGeocodeFailures,
   getGeocodeFailures,
   getGeocodeFailureTimestamp,
+  subscribeDismissedGeocodeFailures,
   subscribeGeocodeFailures,
 } from "@/lib/google-maps-sdk";
 
@@ -66,4 +68,31 @@ export function useGeocodeFailureTimestamps(): ReadonlyMap<string, number> {
     if (typeof ts === "number") map.set(addr, ts);
   }
   return map;
+}
+
+/**
+ * Subscribes to the shared dismissed-failures set and returns a
+ * snapshot of every address the operator has dismissed this session.
+ * Drives the rollup's "n dismissed — show" footer so operators can
+ * review and undo dismissals without losing the rest of the session
+ * state — the only prior recovery was a hard refresh, which would
+ * also wipe the active failure cache.
+ *
+ * Kept as a dedicated hook (separate channel from
+ * `useGeocodeFailures`) so consumers that don't render the footer
+ * — the sidebar badge, the active list — don't re-render every
+ * time a dismissal lands or gets undone.
+ */
+export function useDismissedGeocodeFailures(): ReadonlySet<string> {
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() =>
+    getDismissedGeocodeFailures(),
+  );
+  useEffect(() => {
+    // Re-snapshot on mount so a dismissal that landed between the
+    // initial useState() snapshot and this effect attaching is
+    // picked up on first render after subscribe.
+    setDismissed(getDismissedGeocodeFailures());
+    return subscribeDismissedGeocodeFailures((next) => setDismissed(next));
+  }, []);
+  return dismissed;
 }

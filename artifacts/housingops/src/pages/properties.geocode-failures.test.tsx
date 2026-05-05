@@ -304,6 +304,7 @@ import {
   dismissGeocodeFailure,
   formatGeocodeAddress,
   primeGeocodeCache,
+  undismissGeocodeFailure,
 } from "@/lib/google-maps-sdk";
 
 function PropertiesUnderTest() {
@@ -550,9 +551,10 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     // Operator looked at the flagged address, decided it's actually
     // correct (rural lot, brand new build, P.O. box, etc.), and
     // wants the row to stop cluttering the panel. Clicking Dismiss
-    // must drop the row immediately and, when it was the only entry,
-    // tear down the panel entirely so a healthy-looking session
-    // shows nothing at all.
+    // must drop the row from the active list immediately. When the
+    // last active row is dismissed the active-list region disappears
+    // but the panel itself stays so the operator can still see the
+    // dismissed-this-session footer and undo if needed.
     primeGeocodeCache(addrFor(0), null);
     primeGeocodeCache(addrFor(2), null);
 
@@ -575,10 +577,13 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
       );
     });
 
-    // Last failure dismissed → panel disappears entirely. Without
-    // re-checking the snapshot in `notifyGeocodeFailureListeners`
-    // the panel would linger with a stale empty list.
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    // Active-list region is gone (no more rows to fix), but the
+    // parent panel sticks around to host the dismissed footer so
+    // the operator can review and undo without a hard refresh.
+    expect(get("addresses-needing-review-list")).toBeNull();
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+    expect(get("dismissed-addresses-summary")).not.toBeNull();
+    expect(get("dismissed-addresses-count")?.textContent).toBe("2");
   });
 
   it("does not navigate when the Dismiss button is clicked", async () => {
@@ -606,7 +611,9 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     // must outlast view-mode toggles, which would otherwise be a
     // trivial way for the row to bounce back. The map view's local
     // `unmappableIds` resets on toggle, but the cache-driven rollup
-    // must not be subject to that reset.
+    // must not be subject to that reset. Asserting on the active row
+    // (rather than the parent panel) because the panel itself stays
+    // mounted to host the dismissed footer.
     primeGeocodeCache(addrFor(0), null);
 
     await renderPage();
@@ -615,21 +622,21 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
         new MouseEvent("click", { bubbles: true }),
       );
     });
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    expect(get("address-needing-review-p1")).toBeNull();
 
     await act(async () => {
       get("button-view-map")!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    expect(get("address-needing-review-p1")).toBeNull();
 
     await act(async () => {
       get("button-view-table")!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    expect(get("address-needing-review-p1")).toBeNull();
   });
 
   it("brings a dismissed row back when the same address is re-flagged", async () => {
@@ -647,7 +654,7 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
         new MouseEvent("click", { bubbles: true }),
       );
     });
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    expect(get("address-needing-review-p1")).toBeNull();
 
     // Simulate the cache losing its prior failure entry, then
     // re-recording the failure — this is the path that triggers
@@ -690,7 +697,164 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
       dismissGeocodeFailure(addr);
     });
 
-    expect(get("addresses-needing-review-panel")).toBeNull();
+    // Active row stays gone; the panel itself stays mounted to
+    // host the dismissed footer (the only Undo path back).
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("dismissed-addresses-count")?.textContent).toBe("1");
+  });
+
+  // ── Dismissed footer (review + undo) ──────────────────────────────────
+  //
+  // Operators can dismiss a flagged row to silence it for the rest of
+  // the session, but the only recovery from a misclick used to be a
+  // hard refresh — which also wipes the rest of the failure cache. The
+  // panel now surfaces a "n dismissed — show" footer so dismissals can
+  // be reviewed and undone in-place. The cases below pin down the
+  // count, expansion, undo path, and the cross-view-mode lifetime.
+
+  it("surfaces a dismissed-this-session count when an address is dismissed", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    // Nothing dismissed yet — no footer.
+    expect(get("dismissed-addresses-summary")).toBeNull();
+
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // Footer appears with the count of 1 — the operator can see at a
+    // glance how many rows are hidden without having to expand it.
+    expect(get("dismissed-addresses-summary")).not.toBeNull();
+    expect(get("dismissed-addresses-count")?.textContent).toBe("1");
+    // List stays collapsed by default so the panel doesn't grow on
+    // every dismissal.
+    expect(get("dismissed-addresses-list")).toBeNull();
+  });
+
+  it("expands the dismissed list when the summary toggle is clicked", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // Click the toggle — list reveals with the dismissed row's
+    // identifying info so the operator can recognize what's hidden.
+    await act(async () => {
+      get("toggle-dismissed-addresses")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    const list = get("dismissed-addresses-list");
+    expect(list).not.toBeNull();
+    expect(list!.textContent).toContain("Maple");
+    expect(list!.textContent).toContain("999 Nonexistent Way");
+    // Each dismissed row carries an Undo affordance — testid keyed
+    // by property id so the test doesn't depend on label wording.
+    expect(get("undismiss-address-needing-review-p1")).not.toBeNull();
+  });
+
+  it("restores a dismissed row to the active list when Undo is clicked", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("1");
+
+    // Expand and click Undo.
+    await act(async () => {
+      get("toggle-dismissed-addresses")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await act(async () => {
+      get("undismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // The row is back on the active list and the dismissed footer
+    // disappears — that was its only entry.
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("2");
+    expect(get("dismissed-addresses-summary")).toBeNull();
+  });
+
+  it("keeps the undo state across map/table view toggles", async () => {
+    // The undo path must mirror the dismiss path's session lifetime —
+    // restoring a row must not reset on a view-mode toggle, the same
+    // way dismissing it doesn't.
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    await act(async () => {
+      get("dismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await act(async () => {
+      get("toggle-dismissed-addresses")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await act(async () => {
+      get("undismiss-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(get("address-needing-review-p1")).not.toBeNull();
+
+    await act(async () => {
+      get("button-view-map")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    await act(async () => {
+      get("button-view-table")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(get("dismissed-addresses-summary")).toBeNull();
+  });
+
+  it("undismissGeocodeFailure called from the SDK live-updates the page", async () => {
+    // Belt-and-suspenders for the dismissed-channel subscription:
+    // an undismiss originating from anywhere (a sibling tab, a
+    // future programmatic flow) must push through to the page
+    // without a re-mount or any other render trigger.
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    await act(async () => {
+      dismissGeocodeFailure(addrFor(0));
+    });
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("dismissed-addresses-summary")).not.toBeNull();
+
+    await act(async () => {
+      undismissGeocodeFailure(addrFor(0));
+    });
+
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(get("dismissed-addresses-summary")).toBeNull();
   });
 
   // ── Persistence across page reloads ───────────────────────────────────

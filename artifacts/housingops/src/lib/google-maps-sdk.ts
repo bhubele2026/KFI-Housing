@@ -240,6 +240,17 @@ const geocodeCache = new Map<string, { lat: number; lng: number } | null>();
 type GeocodeFailureListener = (failures: ReadonlySet<string>) => void;
 const geocodeFailureListeners = new Set<GeocodeFailureListener>();
 
+// Subscribers notified whenever the dismissed-failures set changes —
+// either because the operator dismissed a fresh row, undismissed a
+// previously-hidden one, or a cache mutation pruned an orphan
+// dismissal (success overriding failure, reset, etc.). Kept as a
+// separate listener channel from `geocodeFailureListeners` so the
+// rollup's "n dismissed — show" footer can subscribe without forcing
+// a re-render in subscribers (the sidebar badge, the active list)
+// that don't care about dismissals at all.
+type DismissedFailureListener = (dismissed: ReadonlySet<string>) => void;
+const dismissedFailureListeners = new Set<DismissedFailureListener>();
+
 // Addresses the operator has explicitly acknowledged via the
 // "Dismiss" affordance on the Properties page rollup. Lives at module
 // scope alongside `geocodeCache` so it shares the same in-session
@@ -405,13 +416,31 @@ function hydrateGeocodeFailuresFromStorage(): void {
 hydrateGeocodeFailuresFromStorage();
 
 function notifyGeocodeFailureListeners(): void {
-  if (geocodeFailureListeners.size === 0) return;
-  // Snapshot once and hand the same Set to every listener — the
-  // returned Set is documented as read-only, and reusing the
-  // reference lets React's `useState` bail out of redundant renders
-  // when the failure set hasn't actually changed identity.
-  const snapshot = computeFailureSnapshot();
-  for (const l of geocodeFailureListeners) l(snapshot);
+  // Every mutation that touches the failure cache (or the dismissals
+  // tracking it) lands here, and either snapshot may have changed.
+  // Recompute and emit both so the active-rollup subscriber and the
+  // dismissed-footer subscriber stay in lock-step without each
+  // mutation site having to call two separate notify helpers.
+  if (geocodeFailureListeners.size > 0) {
+    // Snapshot once and hand the same Set to every listener — the
+    // returned Set is documented as read-only, and reusing the
+    // reference lets React's `useState` bail out of redundant renders
+    // when the failure set hasn't actually changed identity.
+    const snapshot = computeFailureSnapshot();
+    for (const l of geocodeFailureListeners) l(snapshot);
+  }
+  if (dismissedFailureListeners.size > 0) {
+    const snapshot = computeDismissedSnapshot();
+    for (const l of dismissedFailureListeners) l(snapshot);
+  }
+}
+
+function computeDismissedSnapshot(): ReadonlySet<string> {
+  // Fresh Set each call so React's identity check fires a render
+  // even when the size happens to match the prior snapshot — e.g. a
+  // dismiss + simultaneous undismiss of a different address would
+  // otherwise be invisible to subscribers comparing by reference.
+  return new Set(dismissedFailures);
 }
 
 function computeFailureSnapshot(): ReadonlySet<string> {
@@ -442,6 +471,14 @@ function computeFailureSnapshot(): ReadonlySet<string> {
  */
 export function dismissGeocodeFailure(addr: string): void {
   if (dismissedFailures.has(addr)) return;
+  // Don't allow dismissing an address we don't have a failure for —
+  // the dismissed footer relies on a corresponding failure entry to
+  // know how to render the row (name + customer come from the
+  // property whose canonical address matches), and an orphan
+  // dismissal would just leak storage. Defensive: in practice the
+  // Dismiss button is only rendered for active failures, so this
+  // guard mostly catches programmatic misuse / future regressions.
+  if (!geocodeCache.has(addr) || geocodeCache.get(addr) !== null) return;
   dismissedFailures.add(addr);
   // Persist so a reload doesn't bring the dismissed row back — the
   // operator already triaged it once, and re-flagging the panel on
@@ -454,6 +491,52 @@ export function dismissGeocodeFailure(addr: string): void {
   // shape did, and subscribers (the rollup panel) need the updated
   // set to drop the row from their render.
   notifyGeocodeFailureListeners();
+}
+
+/**
+ * Restore a previously-dismissed address to the active rollup. Mirrors
+ * the dismiss path's session lifetime — undismissing in-memory drops
+ * the entry from the dismissals Set + persisted blob, and subscribers
+ * are notified so the active list grows back and the dismissed footer
+ * shrinks in the same render. No-op for addresses that aren't
+ * currently dismissed (e.g. a stuck double-click on Undo) so callers
+ * don't have to defend the call site.
+ */
+export function undismissGeocodeFailure(addr: string): void {
+  if (!dismissedFailures.has(addr)) return;
+  dismissedFailures.delete(addr);
+  writePersistedFailures();
+  // The active failure snapshot grew back AND the dismissed snapshot
+  // shrank — `notifyGeocodeFailureListeners` emits both channels in
+  // one shot so the rollup's active list and dismissed footer stay
+  // in lock-step on the next render.
+  notifyGeocodeFailureListeners();
+}
+
+/**
+ * Returns a snapshot of every address the operator has dismissed this
+ * session. Pairs with `subscribeDismissedGeocodeFailures` so a React
+ * consumer (the rollup's "n dismissed — show" footer) can re-render
+ * as dismissals land or get undone. Each call returns a fresh Set so
+ * subscribers comparing by reference always see a change.
+ */
+export function getDismissedGeocodeFailures(): ReadonlySet<string> {
+  return computeDismissedSnapshot();
+}
+
+/**
+ * Subscribe to dismissed-set changes. Fires whenever a fresh
+ * dismissal lands, an undismiss restores a row, or a cache mutation
+ * prunes an orphan dismissal (success overriding failure, reset).
+ * Returns an unsubscribe function suitable for a `useEffect` cleanup.
+ */
+export function subscribeDismissedGeocodeFailures(
+  listener: DismissedFailureListener,
+): () => void {
+  dismissedFailureListeners.add(listener);
+  return () => {
+    dismissedFailureListeners.delete(listener);
+  };
 }
 
 /**

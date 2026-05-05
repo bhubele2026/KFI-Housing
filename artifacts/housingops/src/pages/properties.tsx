@@ -857,6 +857,19 @@ export default function Properties() {
   const toMappable = useCallback(
     (p: Property): MappableProperty => {
       const stats = bedStatsByPropertyId.get(p.id);
+      // Mirror the table cell exactly: only the *active* lease drives
+      // the renewal badge, and only urgency levels other than "ok"
+      // surface a badge — same `showRenewal` rule the table row uses,
+      // so the bubble can never show a warning the table doesn't (or
+      // vice versa).
+      const activeLease = leases.find(
+        (l) => l.propertyId === p.id && l.status === "Active",
+      );
+      const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
+      const bubbleRenewal =
+        renewal && renewal.level !== "ok"
+          ? { level: renewal.level, label: renewal.label }
+          : null;
       return {
         id: p.id,
         name: p.name,
@@ -873,9 +886,10 @@ export default function Properties() {
         vacant: stats?.vacant ?? 0,
         lat: p.lat ?? null,
         lng: p.lng ?? null,
+        renewal: bubbleRenewal,
       };
     },
-    [bedStatsByPropertyId, customerById],
+    [bedStatsByPropertyId, customerById, leases],
   );
 
   // Split the filtered list for the map view: properties with at least

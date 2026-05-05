@@ -24,6 +24,26 @@ import {
   type MapsInfoWindow,
   type MapsMap,
 } from "@/lib/google-maps-sdk";
+import type { RenewalUrgency } from "@/data/mockData";
+
+/**
+ * Inline color palette for the lease-renewal badge. The bubble lives
+ * inside Google's InfoWindow DOM, which the host Tailwind stylesheet
+ * doesn't reliably reach (the rest of the bubble already inlines its
+ * essentials for the same reason), so we hard-code the same colors
+ * the Properties table's `getRenewalInfo` badge classes resolve to.
+ * Keep these in sync with the `badgeClass` colors in
+ * `src/data/mockData.ts` so the table and the bubble can never drift.
+ */
+const RENEWAL_BUBBLE_STYLES: Record<
+  Exclude<RenewalUrgency, "ok">,
+  { bg: string; fg: string; border: string }
+> = {
+  expired: { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
+  critical: { bg: "#fee2e2", fg: "#991b1b", border: "#fecaca" },
+  warning: { bg: "#fef3c7", fg: "#92400e", border: "#fde68a" },
+  soon: { bg: "#fef9c3", fg: "#854d0e", border: "#fef08a" },
+};
 
 export interface MappableProperty {
   id: string;
@@ -50,6 +70,19 @@ export interface MappableProperty {
    */
   lat?: number | null;
   lng?: number | null;
+  /**
+   * Lease-renewal warning to surface in the bubble. The parent passes
+   * the same `getRenewalInfo` result the Properties table uses, but
+   * only when there is an active lease *and* its urgency level is
+   * worth flagging (anything other than "ok") — properties without an
+   * active lease, or with a lease that's still comfortably far from
+   * renewal, leave this `null`/`undefined` and the bubble shows no
+   * badge, matching the table's empty cell behavior. Storing the
+   * full label + level (rather than recomputing from a date here)
+   * means the table and the bubble can never disagree about what
+   * "Due in 14 days" should read.
+   */
+  renewal?: { level: Exclude<RenewalUrgency, "ok">; label: string } | null;
 }
 
 interface PortfolioMapProps {
@@ -201,6 +234,30 @@ function buildInfoBubbleContent(
       stats.appendChild(vacSpan);
     }
     root.appendChild(stats);
+  }
+
+  if (p.renewal) {
+    // Mirror the Properties table's amber/red "Renewal due" badge so an
+    // operator scanning the map for at-risk leases sees the same signal
+    // here. The parent only sets `renewal` when the table would also
+    // show a badge (active lease + level !== "ok"), so the two views
+    // stay in lockstep.
+    const palette = RENEWAL_BUBBLE_STYLES[p.renewal.level];
+    const badge = document.createElement("div");
+    badge.dataset.testid = `portfolio-map-info-renewal-${p.id}`;
+    badge.dataset.renewalLevel = p.renewal.level;
+    badge.textContent = p.renewal.label;
+    badge.style.display = "inline-block";
+    badge.style.padding = "2px 8px";
+    badge.style.marginBottom = "8px";
+    badge.style.borderRadius = "9999px";
+    badge.style.fontSize = "11px";
+    badge.style.fontWeight = "500";
+    badge.style.lineHeight = "1.4";
+    badge.style.background = palette.bg;
+    badge.style.color = palette.fg;
+    badge.style.border = `1px solid ${palette.border}`;
+    root.appendChild(badge);
   }
 
   const link = document.createElement("button");

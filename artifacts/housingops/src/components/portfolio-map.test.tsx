@@ -594,6 +594,37 @@ describe("PortfolioMap — pin info bubble", () => {
     expect(second).toHaveBeenCalledWith("p1");
   });
 
+  it("renders a renewal badge in the bubble matching the table's signal", async () => {
+    const withRenewal: MappableProperty = {
+      ...baseProperty,
+      renewal: { level: "warning", label: "45 days left" },
+    };
+    await renderMap({ properties: [withRenewal] });
+    const marker = mapsState.markers[0];
+    await act(async () => {
+      fireMarkerEvent(marker, "gmp-click");
+    });
+    const content = mapsState.infoWindow?.content as HTMLElement | null;
+    const badge = content?.querySelector(
+      '[data-testid="portfolio-map-info-renewal-p1"]',
+    ) as HTMLElement | null;
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toBe("45 days left");
+    expect(badge!.dataset.renewalLevel).toBe("warning");
+  });
+
+  it("omits the renewal badge when the property has no active lease (renewal undefined / null)", async () => {
+    await renderMap({ properties: [{ ...baseProperty, renewal: null }] });
+    const marker = mapsState.markers[0];
+    await act(async () => {
+      fireMarkerEvent(marker, "gmp-click");
+    });
+    const content = mapsState.infoWindow?.content as HTMLElement | null;
+    expect(
+      content!.querySelector('[data-testid="portfolio-map-info-renewal-p1"]'),
+    ).toBeNull();
+  });
+
   it("omits bed-count rows when the caller doesn't pass them", async () => {
     const minimal: MappableProperty = {
       id: "px",

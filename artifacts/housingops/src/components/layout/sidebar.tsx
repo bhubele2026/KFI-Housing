@@ -16,6 +16,7 @@ import {
   type ImportPreview,
   type MergeDryRun,
   type MergeImpactCategory,
+  UNDO_IMPORT_WINDOW_MS,
 } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +29,7 @@ import {
   formatGeocodeAddress,
 } from "@/lib/google-maps-sdk";
 import { Button } from "@/components/ui/button";
+import { ToastAction } from "@/components/ui/toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +57,7 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { resetToSampleData, exportData, importData, previewMergeImport, customers, properties } = useData();
+  const { resetToSampleData, exportData, importData, previewMergeImport, undoLastImport, customers, properties } = useData();
   const { customerId, setCustomerId } = useCustomerScope();
   const activeScopedCustomer =
     customerId !== ALL_CUSTOMERS
@@ -295,6 +297,20 @@ export function Sidebar() {
     setPendingImport(null);
     const summary = result.summary;
     const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities`;
+    // Same Undo action attached to both the merge and replace success toasts
+    // — both modes are destructive (rows are overwritten by-id) so an
+    // operator who confirmed by mistake gets the same one-click recovery.
+    // The button stays armed for the data-store's UNDO_IMPORT_WINDOW_MS;
+    // after that the snapshot is dropped and click reports it expired.
+    const undoAction = (
+      <ToastAction
+        altText="Undo this import"
+        onClick={handleUndoImport}
+        data-testid="button-undo-import"
+      >
+        Undo
+      </ToastAction>
+    );
     if (result.mode === "merge" && result.added && result.updated) {
       const addedTotal = totalImportSummary(result.added);
       const updatedTotal = totalImportSummary(result.updated);
@@ -307,6 +323,12 @@ export function Sidebar() {
         description: preview.migratedFromV1
           ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer for the migrated properties. ${addedTotal} added, ${updatedTotal} updated.${unchangedNote}`
           : `From ${fileName}: ${addedTotal} added, ${updatedTotal} updated.${unchangedNote} Existing records not in the file were kept.`,
+        action: undoAction,
+        // Hold the toast open for the full undo window so the Undo
+        // button is reachable for as long as the snapshot is alive.
+        // Without this, Radix's ~5s default would auto-dismiss the
+        // toast (and its action) long before the 30s window expires.
+        duration: UNDO_IMPORT_WINDOW_MS,
       });
     } else {
       toast({
@@ -314,6 +336,27 @@ export function Sidebar() {
         description: preview.migratedFromV1
           ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer and assigned all ${summary.properties} imported properties to it. Loaded ${counts}.`
           : `Loaded ${counts}.`,
+        action: undoAction,
+        duration: UNDO_IMPORT_WINDOW_MS,
+      });
+    }
+  };
+
+  const handleUndoImport = () => {
+    const restored = undoLastImport();
+    if (restored) {
+      toast({
+        title: "Import undone",
+        description: "Your previous data was restored.",
+      });
+    } else {
+      // Either the operator waited past the undo window or already
+      // clicked Undo once — in both cases the snapshot is gone, so
+      // explain that rather than silently no-op.
+      toast({
+        title: "Can't undo this import",
+        description: "The undo window has expired. Re-import your previous backup file to restore that data.",
+        variant: "destructive",
       });
     }
   };

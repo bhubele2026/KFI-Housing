@@ -27,6 +27,7 @@ const resetToSampleDataMock =
 const previewMergeImportMock = vi.fn();
 const inspectImportPayloadMock = vi.fn();
 const importDataMock = vi.fn();
+const undoLastImportMock = vi.fn<() => boolean>();
 const mockData: {
   customers: { id: string; name: string }[];
   properties: Array<{
@@ -41,6 +42,7 @@ const mockData: {
   exportData: () => unknown;
   importData: typeof importDataMock;
   previewMergeImport: typeof previewMergeImportMock;
+  undoLastImport: typeof undoLastImportMock;
 } = {
   customers: [],
   properties: [],
@@ -49,6 +51,7 @@ const mockData: {
   exportData: vi.fn(),
   importData: importDataMock,
   previewMergeImport: previewMergeImportMock,
+  undoLastImport: undoLastImportMock,
 };
 
 vi.mock("@/context/data-store", () => ({
@@ -73,6 +76,9 @@ vi.mock("@/context/data-store", () => ({
     return { added, updated, unchanged };
   },
   UnsupportedImportError: class UnsupportedImportError extends Error {},
+  // Mirror the production constant so the tests can assert the success
+  // toast holds open for the full undo window.
+  UNDO_IMPORT_WINDOW_MS: 30_000,
 }));
 
 import { Sidebar } from "./sidebar";
@@ -913,6 +919,138 @@ describe("Sidebar import dialog — merge preview", () => {
     expect(propsRow!.textContent).toContain("Oak Place");
     const custRow = document.querySelector('[data-testid="merge-preview-overwrites-customers"]');
     expect(custRow!.textContent).toContain("Acme Co");
+  });
+
+  // ── Undo for a just-imported merge/replace ─────────────────────────────
+  //
+  // Once the operator confirms an import the sidebar must surface an
+  // "Undo" action on the success toast. Clicking it has to call the
+  // data-store's undoLastImport(); a successful undo shows a confirming
+  // toast and a stale undo (snapshot already expired or replayed) shows
+  // a destructive "can't undo" toast so the operator isn't left
+  // wondering why nothing happened.
+
+  async function confirmImport() {
+    const confirmBtn = document.querySelector(
+      '[data-testid="button-import-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(confirmBtn).not.toBeNull();
+    await act(async () => { confirmBtn!.click(); });
+  }
+
+  it("attaches an Undo action to the replace-mode success toast", async () => {
+    importDataMock.mockReturnValue({
+      mode: "replace",
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+    });
+    await openImportDialog();
+    await confirmImport();
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const arg = toastMock.mock.calls[0][0];
+    expect(arg.title).toBe("Data imported");
+    // The action is the rendered Undo button. We don't reach into the
+    // ReactElement internals beyond checking it exists — the click
+    // behavior is covered by the next test.
+    expect(arg.action).toBeDefined();
+    // The toast must stay open for the full undo window so the action
+    // is actually reachable. Radix's ~5s default would otherwise close
+    // the toast (and the Undo button with it) long before the 30s
+    // snapshot expires in the data-store.
+    expect(arg.duration).toBe(30_000);
+  });
+
+  it("attaches an Undo action to the merge-mode success toast", async () => {
+    importDataMock.mockReturnValue({
+      mode: "merge",
+      summary: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      added: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      updated: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+    });
+    await openImportDialog();
+    // Switch to merge mode so the merge-summary branch runs.
+    await selectMergeMode();
+    await confirmImport();
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const arg = toastMock.mock.calls[0][0];
+    expect(arg.title).toBe("Data merged");
+    expect(arg.action).toBeDefined();
+    expect(arg.duration).toBe(30_000);
+  });
+
+  it("clicking Undo while the snapshot is still alive restores data and shows a confirming toast", async () => {
+    importDataMock.mockReturnValue({
+      mode: "replace",
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+    });
+    undoLastImportMock.mockReset();
+    undoLastImportMock.mockReturnValue(true);
+    await openImportDialog();
+    await confirmImport();
+
+    // Render the toast's action element so we can click it. The toast
+    // hook is mocked, so the action ReactElement is captured on the
+    // first toast() call rather than mounted by a Toaster.
+    const actionEl = toastMock.mock.calls[0][0].action;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    let undoRoot: Root | null = null;
+    try {
+      await act(async () => {
+        undoRoot = createRoot(host);
+        undoRoot.render(actionEl);
+      });
+      const btn = host.querySelector(
+        '[data-testid="button-undo-import"]',
+      ) as HTMLButtonElement | null;
+      expect(btn).not.toBeNull();
+      await act(async () => { btn!.click(); });
+
+      expect(undoLastImportMock).toHaveBeenCalledTimes(1);
+      // First toast was the success; second is the undo confirmation.
+      expect(toastMock).toHaveBeenCalledTimes(2);
+      expect(toastMock.mock.calls[1][0].title).toBe("Import undone");
+    } finally {
+      if (undoRoot) await act(async () => { (undoRoot as Root).unmount(); });
+      host.remove();
+    }
+  });
+
+  it("clicking Undo after the window expires shows a destructive 'can't undo' toast", async () => {
+    importDataMock.mockReturnValue({
+      mode: "replace",
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+    });
+    undoLastImportMock.mockReset();
+    // Simulate the 30-second window having already lapsed by the time
+    // the operator clicks Undo: undoLastImport returns false.
+    undoLastImportMock.mockReturnValue(false);
+    await openImportDialog();
+    await confirmImport();
+
+    const actionEl = toastMock.mock.calls[0][0].action;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    let undoRoot: Root | null = null;
+    try {
+      await act(async () => {
+        undoRoot = createRoot(host);
+        undoRoot.render(actionEl);
+      });
+      const btn = host.querySelector(
+        '[data-testid="button-undo-import"]',
+      ) as HTMLButtonElement;
+      await act(async () => { btn.click(); });
+
+      expect(undoLastImportMock).toHaveBeenCalledTimes(1);
+      expect(toastMock).toHaveBeenCalledTimes(2);
+      expect(toastMock.mock.calls[1][0].title).toBe("Can't undo this import");
+      expect(toastMock.mock.calls[1][0].variant).toBe("destructive");
+    } finally {
+      if (undoRoot) await act(async () => { (undoRoot as Root).unmount(); });
+      host.remove();
+    }
   });
 
   it("recomputes the preview when toggling back from merge to replace and forward again", async () => {

@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { z } from "zod";
 import {
@@ -565,7 +565,23 @@ interface DataStore {
    * confirms.
    */
   previewMergeImport: (preview: ImportPreview) => MergeDryRun;
+  /**
+   * Restore the bundle that was active just before the most recent
+   * {@link importData} call. Returns true if a snapshot was available and
+   * applied, false if the undo window has already expired (or no import has
+   * happened in this session). The snapshot is cleared whether undo
+   * succeeds or fails so it can only ever be applied once.
+   */
+  undoLastImport: () => boolean;
 }
+
+/**
+ * How long (ms) after a successful import the user has to click Undo before
+ * the snapshot is dropped. Kept short so we don't pin a duplicate copy of
+ * the entire bundle in memory indefinitely, but long enough that an
+ * operator who clicked Confirm by mistake has time to react.
+ */
+export const UNDO_IMPORT_WINDOW_MS = 30_000;
 
 const DataContext = createContext<DataStore | undefined>(undefined);
 
@@ -908,6 +924,50 @@ export function DataProvider({ children }: { children: ReactNode }) {
     data: { customers, properties, leases, rooms, beds, occupants, utilities },
   });
 
+  // Holds the pre-import bundle plus the timer that drops it after the
+  // undo window elapses. A ref (not state) so the timer callback and the
+  // synchronous undo handler always observe the freshest value without
+  // triggering re-renders that could clobber the optimistic cache writes.
+  const undoSnapshotRef = useRef<{
+    data: ExportData;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  const clearUndoSnapshot = () => {
+    if (undoSnapshotRef.current) {
+      clearTimeout(undoSnapshotRef.current.timer);
+      undoSnapshotRef.current = null;
+    }
+  };
+
+  // Belt-and-suspenders cleanup: if the provider unmounts (e.g. user logs
+  // out) while an undo timer is still pending we don't want it firing on
+  // a torn-down React tree.
+  useEffect(() => () => clearUndoSnapshot(), []);
+
+  // Shared writer used by both importData and undoLastImport: pushes the
+  // bundle into every cache and persists atomically through /import. Kept
+  // separate from importData so undo can replay the previous bundle
+  // without itself capturing a fresh snapshot (which would let operators
+  // un-undo and confuse the timer accounting).
+  const writeBundle = (dataToWrite: ExportData) => {
+    queryClient.setQueryData<Customer[]>(customersKey, dataToWrite.customers);
+    queryClient.setQueryData<Property[]>(propertiesKey, dataToWrite.properties);
+    queryClient.setQueryData<Lease[]>(leasesKey, dataToWrite.leases);
+    queryClient.setQueryData<Room[]>(roomsKey, dataToWrite.rooms);
+    queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
+    queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
+    queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
+
+    importMut.mutate(
+      { data: dataToWrite },
+      {
+        onError: () => notifySaveError("save the imported data"),
+        onSettled: invalidateAll,
+      },
+    );
+  };
+
   // Accepts either a raw parsed JSON payload (which we'll inspect ourselves)
   // or a pre-validated ImportPreview (so callers that already inspected the
   // file — e.g. to show a tailored confirmation dialog — don't pay to parse
@@ -921,15 +981,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const preview =
       isImportPreview(input) ? input : inspectImportPayload(input);
 
+    // Snapshot the CURRENT bundle before we overwrite anything so the
+    // user can undo the import. We snapshot from the React-state arrays
+    // (which mirror the cache) rather than reading the cache again
+    // because they're guaranteed to be the values the operator was
+    // looking at when they confirmed.
+    const previousBundle: ExportData = {
+      customers: [...customers],
+      properties: [...properties],
+      leases: [...leases],
+      rooms: [...rooms],
+      beds: [...beds],
+      occupants: [...occupants],
+      utilities: [...utilities],
+    };
+
     let dataToWrite: ExportData;
     let added: ImportSummary | undefined;
     let updated: ImportSummary | undefined;
 
     if (mode === "merge") {
-      const merged = mergeImportBundles(
-        { customers, properties, leases, rooms, beds, occupants, utilities },
-        preview.data,
-      );
+      const merged = mergeImportBundles(previousBundle, preview.data);
       dataToWrite = merged.data;
       added = merged.added;
       updated = merged.updated;
@@ -937,27 +1009,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
       dataToWrite = preview.data;
     }
 
-    // Optimistically populate caches so the UI reflects the import immediately.
-    queryClient.setQueryData<Customer[]>(customersKey, dataToWrite.customers);
-    queryClient.setQueryData<Property[]>(propertiesKey, dataToWrite.properties);
-    queryClient.setQueryData<Lease[]>(leasesKey, dataToWrite.leases);
-    queryClient.setQueryData<Room[]>(roomsKey, dataToWrite.rooms);
-    queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
-    queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
-    queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
+    writeBundle(dataToWrite);
 
-    // Persist atomically on the server. The /import endpoint replaces all
-    // data with the bundle we send, so for merge mode we send the already-
-    // merged bundle (current ∪ imported) and end up at the same state.
-    importMut.mutate(
-      { data: dataToWrite },
-      {
-        onError: () => notifySaveError("save the imported data"),
-        onSettled: invalidateAll,
-      },
-    );
+    // Arm the undo window. Replace any prior snapshot so back-to-back
+    // imports only ever undo the most recent one — the older snapshot
+    // wouldn't fit the now-current state anyway.
+    clearUndoSnapshot();
+    const timer = setTimeout(() => {
+      undoSnapshotRef.current = null;
+    }, UNDO_IMPORT_WINDOW_MS);
+    undoSnapshotRef.current = { data: previousBundle, timer };
 
     return { mode, summary: preview.summary, added, updated };
+  };
+
+  const undoLastImport = (): boolean => {
+    const snap = undoSnapshotRef.current;
+    if (!snap) return false;
+    // Drop the snapshot first so a double-clicked Undo can't replay it
+    // twice and so the next import starts with a clean slate.
+    clearUndoSnapshot();
+    writeBundle(snap.data);
+    return true;
   };
 
   const previewMergeImport = (preview: ImportPreview): MergeDryRun =>
@@ -975,7 +1048,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRoom, updateRoom, deleteRoom,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
-      resetToSampleData, exportData, importData, previewMergeImport,
+      resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
     }}>
       {children}
     </DataContext.Provider>

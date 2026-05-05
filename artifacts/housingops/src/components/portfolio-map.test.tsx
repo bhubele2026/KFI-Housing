@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   PortfolioMap,
   __resetPortfolioMapCachesForTest,
+  spreadOverlappingPins,
   type MappableProperty,
 } from "./portfolio-map";
 import {
@@ -645,6 +646,204 @@ describe("PortfolioMap — pin info bubble", () => {
     expect(
       content!.querySelector('[data-testid="portfolio-map-info-total-px"]'),
     ).toBeNull();
+  });
+});
+
+describe("spreadOverlappingPins", () => {
+  it("returns unique-anchor pins unchanged", () => {
+    const out = spreadOverlappingPins([
+      { id: "a", lat: 30.2672, lng: -97.7431 },
+      { id: "b", lat: 30.5, lng: -97.9 },
+    ]);
+    expect(out.get("a")).toEqual({ lat: 30.2672, lng: -97.7431 });
+    expect(out.get("b")).toEqual({ lat: 30.5, lng: -97.9 });
+  });
+
+  it("spreads pins sharing an anchor onto distinct positions around it", () => {
+    const inputs = [
+      { id: "a", lat: 30.2672, lng: -97.7431 },
+      { id: "b", lat: 30.2672, lng: -97.7431 },
+      { id: "c", lat: 30.2672, lng: -97.7431 },
+    ];
+    const out = spreadOverlappingPins(inputs);
+    const positions = inputs.map((i) => out.get(i.id)!);
+
+    // Each pin moved off the shared anchor.
+    for (const p of positions) {
+      expect(p.lat === 30.2672 && p.lng === -97.7431).toBe(false);
+    }
+
+    // All three positions are distinct from each other.
+    const seen = new Set(positions.map((p) => `${p.lat},${p.lng}`));
+    expect(seen.size).toBe(3);
+
+    // And each remains close to the original anchor (within the
+    // spread radius + a tiny float-math budget) so the cluster still
+    // reads as "roughly here".
+    for (const p of positions) {
+      const d = Math.hypot(p.lat - 30.2672, p.lng - -97.7431);
+      expect(d).toBeLessThan(0.001);
+    }
+  });
+
+  it("collapses near-duplicates (sub-meter geocoder jitter) into the same group", () => {
+    // Both round to (30.2672, -97.7431) at 4 decimals, so they should
+    // be treated as overlapping and spread apart.
+    const out = spreadOverlappingPins([
+      { id: "a", lat: 30.26721, lng: -97.74312 },
+      { id: "b", lat: 30.26719, lng: -97.74308 },
+    ]);
+    const a = out.get("a")!;
+    const b = out.get("b")!;
+    expect(a.lat === b.lat && a.lng === b.lng).toBe(false);
+  });
+
+  it("is stable across re-orderings of the same inputs", () => {
+    const a = spreadOverlappingPins([
+      { id: "x", lat: 30.2672, lng: -97.7431 },
+      { id: "y", lat: 30.2672, lng: -97.7431 },
+      { id: "z", lat: 30.2672, lng: -97.7431 },
+    ]);
+    const b = spreadOverlappingPins([
+      { id: "z", lat: 30.2672, lng: -97.7431 },
+      { id: "x", lat: 30.2672, lng: -97.7431 },
+      { id: "y", lat: 30.2672, lng: -97.7431 },
+    ]);
+    for (const id of ["x", "y", "z"]) {
+      expect(a.get(id)).toEqual(b.get(id));
+    }
+  });
+});
+
+describe("PortfolioMap — overlapping-pin clustering", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    mapsState.map = null;
+    mapsState.markers = [];
+    mapsState.infoWindow = null;
+    mapsState.pendingGeocodes = [];
+    installFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    uninstallFakeGoogleMaps();
+    __resetPortfolioMapCachesForTest();
+  });
+
+  it("renders one independently-clickable marker per property even when several share coordinates", async () => {
+    // Three properties at literally the same lat/lng (e.g. three
+    // units inside a single building). Pre-supply coords so the test
+    // doesn't have to round-trip through the fake geocoder.
+    const sameSpot = { lat: 30.2672, lng: -97.7431 };
+    const properties: MappableProperty[] = [
+      {
+        id: "p1",
+        name: "Unit A",
+        address: "100 Main St",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        ...sameSpot,
+      },
+      {
+        id: "p2",
+        name: "Unit B",
+        address: "100 Main St",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        ...sameSpot,
+      },
+      {
+        id: "p3",
+        name: "Unit C",
+        address: "100 Main St",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        ...sameSpot,
+      },
+    ];
+
+    const Wrapper = makeWrapper();
+    const onPinClick = vi.fn();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={properties}
+            onPinClick={onPinClick}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    // Three distinct markers — none collapsed into the others.
+    expect(mapsState.markers).toHaveLength(3);
+    const positions = mapsState.markers.map(
+      (m) => `${m.position.lat},${m.position.lng}`,
+    );
+    expect(new Set(positions).size).toBe(3);
+
+    // Each marker can be hovered/clicked independently and its own
+    // info bubble opens with the correct property name.
+    for (const expected of ["Unit A", "Unit B", "Unit C"]) {
+      const marker = mapsState.markers.find((m) => m.title === expected);
+      expect(marker, `expected a marker titled "${expected}"`).toBeDefined();
+      await act(async () => {
+        fireMarkerEvent(marker!, "gmp-click");
+      });
+      const content = mapsState.infoWindow?.content as HTMLElement | null;
+      expect(content?.textContent).toContain(expected);
+    }
+  });
+
+  it("leaves uniquely-located pins on their original coordinates", async () => {
+    const properties: MappableProperty[] = [
+      {
+        id: "p1",
+        name: "Solo",
+        address: "1 Lonely Rd",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        lat: 30.5,
+        lng: -97.9,
+      },
+    ];
+    const Wrapper = makeWrapper();
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={properties}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].position).toEqual({ lat: 30.5, lng: -97.9 });
   });
 });
 

@@ -289,6 +289,85 @@ export function __resetPortfolioMapCachesForTest(): void {
   __resetGoogleMapsSdkForTest();
 }
 
+// Two coords are treated as "the same spot" when they round to the
+// same value at this precision. ~4 decimal places of latitude is on
+// the order of 10 m — tight enough that legitimately distinct
+// buildings on different blocks stay separate, but loose enough that
+// properties at the same building / address all collapse into one
+// group regardless of geocoder jitter (Google occasionally returns
+// the same address with sub-meter variation between calls).
+const COORD_GROUP_PRECISION = 4;
+
+// Angular radius (in degrees) used to spread overlapping pins around
+// their shared anchor. ~0.0005 ≈ 55 m at the equator — visibly
+// separates the pin icons at the zoom levels operators actually use
+// for portfolio review without scattering them so far that the group
+// stops reading as "these are at roughly the same place". The exact
+// number is deliberately small: an operator who wants the precise
+// location can still click any pin and read its info bubble.
+const COORD_SPREAD_RADIUS_DEG = 0.0005;
+
+function groupKey(c: { lat: number; lng: number }): string {
+  return `${c.lat.toFixed(COORD_GROUP_PRECISION)},${c.lng.toFixed(COORD_GROUP_PRECISION)}`;
+}
+
+/**
+ * Returns a per-id display coordinate that spreads pins sharing the
+ * same (rounded) anchor onto a small ring around that anchor, so an
+ * operator can hover/click each pin individually instead of every
+ * neighborhood-mate collapsing into one unclickable visual stack.
+ *
+ * Properties whose anchor is unique are returned unchanged. Properties
+ * sharing an anchor with N-1 others are placed evenly around a circle
+ * of radius {@link COORD_SPREAD_RADIUS_DEG}, ordered by id so the
+ * placement is stable across re-renders (otherwise a pin would jump
+ * to a new spot on every prop update, ruining the "I just clicked
+ * that one" muscle memory). Single-pin groups are returned at their
+ * original coordinate so unique addresses don't shift around.
+ */
+export function spreadOverlappingPins(
+  entries: ReadonlyArray<{ id: string; lat: number; lng: number }>,
+): Map<string, { lat: number; lng: number }> {
+  const groups = new Map<
+    string,
+    Array<{ id: string; lat: number; lng: number }>
+  >();
+  for (const e of entries) {
+    const k = groupKey(e);
+    const cur = groups.get(k);
+    if (cur) cur.push(e);
+    else groups.set(k, [e]);
+  }
+  const out = new Map<string, { lat: number; lng: number }>();
+  for (const members of groups.values()) {
+    if (members.length === 1) {
+      const m = members[0];
+      out.set(m.id, { lat: m.lat, lng: m.lng });
+      continue;
+    }
+    // Stable ordering so a re-render with the same inputs keeps each
+    // pin at the same offset slot.
+    const sorted = [...members].sort((a, b) => a.id.localeCompare(b.id));
+    // Anchor on the centroid of the group rather than the first
+    // member's coord — that way a tiny geocoder jitter inside the
+    // group doesn't shift the whole ring, only the affected member's
+    // input to the centroid.
+    const cx =
+      sorted.reduce((s, m) => s + m.lat, 0) / sorted.length;
+    const cy =
+      sorted.reduce((s, m) => s + m.lng, 0) / sorted.length;
+    const step = (2 * Math.PI) / sorted.length;
+    for (let i = 0; i < sorted.length; i++) {
+      const angle = i * step;
+      out.set(sorted[i].id, {
+        lat: cx + COORD_SPREAD_RADIUS_DEG * Math.cos(angle),
+        lng: cy + COORD_SPREAD_RADIUS_DEG * Math.sin(angle),
+      });
+    }
+  }
+  return out;
+}
+
 type LoaderStatus = "idle" | "loading" | "ready" | "error";
 
 export function PortfolioMap({
@@ -677,10 +756,24 @@ export function PortfolioMap({
     }
     const infoWindow = infoWindowRef.current;
 
+    // Spread pins that share (near-)identical coords onto a small ring
+    // around their shared anchor. Without this, properties at the same
+    // building or street would stack into one visually-overlapping
+    // marker that the operator can't hover or click individually —
+    // defeating the new info-bubble flow for any dense neighborhood.
+    // We only feed in resolved coords (`c` truthy) so unresolved
+    // properties never affect the centroid math.
+    const spreadInputs: Array<{ id: string; lat: number; lng: number }> = [];
+    for (const p of properties) {
+      const c = coords.get(p.id);
+      if (c) spreadInputs.push({ id: p.id, lat: c.lat, lng: c.lng });
+    }
+    const displayCoords = spreadOverlappingPins(spreadInputs);
+
     const bounds = new maps.LatLngBounds();
     let added = 0;
     for (const p of properties) {
-      const c = coords.get(p.id);
+      const c = displayCoords.get(p.id);
       if (!c) continue;
       const marker = new maps.marker.AdvancedMarkerElement({
         position: c,

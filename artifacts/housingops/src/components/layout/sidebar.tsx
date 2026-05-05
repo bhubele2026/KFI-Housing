@@ -17,7 +17,10 @@ import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
 import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
 import { useGeocodeFailureToasts } from "@/hooks/use-geocode-failure-toasts";
-import { formatGeocodeAddress } from "@/lib/google-maps-sdk";
+import {
+  clearGeocodeFailures,
+  formatGeocodeAddress,
+} from "@/lib/google-maps-sdk";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -105,6 +108,13 @@ export function Sidebar() {
     // is async — operators could fire two resets back to back.
     resetToSampleData({
       onSuccess: () => {
+        // Wipe persisted geocode failures + dismissals so the sidebar
+        // badge and the Properties rollup drop to empty alongside the
+        // freshly-reseeded demo dataset. Without this, a stale
+        // "addresses Google can't pinpoint" badge from a previous
+        // session would survive the reset since failures live in
+        // localStorage now (see `lib/google-maps-sdk.ts`).
+        clearGeocodeFailures();
         toast({
           title: "Sample data restored",
           description: "All saved changes were cleared and the demo data was reloaded.",
@@ -124,6 +134,10 @@ export function Sidebar() {
     setIsDemoResetting(true);
     resetToSampleData({
       onSuccess: () => {
+        // Same rationale as the production reset above — a clean
+        // demo take shouldn't carry a phantom failures badge into
+        // the next investor walkthrough.
+        clearGeocodeFailures();
         toast({
           title: "Demo data reset",
           description: "Edits cleared and the demo dataset was reseeded. Ready for the next take.",

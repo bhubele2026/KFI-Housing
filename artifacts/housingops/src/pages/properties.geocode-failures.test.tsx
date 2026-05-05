@@ -247,7 +247,10 @@ vi.mock("@/context/data-store", () => ({
 import Properties from "./properties";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import {
+  __FAILURE_STORAGE_KEY_FOR_TEST,
+  __hydrateGeocodeFailuresFromStorageForTest,
   __resetGoogleMapsSdkForTest,
+  clearGeocodeFailures,
   dismissGeocodeFailure,
   formatGeocodeAddress,
   primeGeocodeCache,
@@ -613,6 +616,162 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
       dismissGeocodeFailure(addr);
     });
 
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  // ── Persistence across page reloads ───────────────────────────────────
+  //
+  // Failures used to live in a module-level Map that reset on every
+  // page refresh, so an operator who reloaded the tab lost the rollup
+  // until some Maps surface re-issued the bad geocode (silently
+  // re-hitting Google billing). The cases below pin down the
+  // localStorage-backed persistence that keeps the rollup honest
+  // across reloads.
+
+  it("persists a fresh failure to localStorage so a reload can rehydrate it", async () => {
+    // Recording a failure must immediately land in storage — without
+    // this, a reload that happens before any other write loses the
+    // entry entirely. We assert on storage directly rather than the
+    // DOM here so the test fails loudly if persistence regresses
+    // even when in-memory behavior still looks fine.
+    primeGeocodeCache(addrFor(0), null);
+
+    const raw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!) as { failures: string[]; dismissed: string[] };
+    expect(parsed.failures).toContain(addrFor(0));
+    expect(parsed.dismissed).toEqual([]);
+  });
+
+  it("rehydrates the rollup from localStorage on a simulated page reload", async () => {
+    // Simulate the prior session: prime a failure, confirm it
+    // landed in storage, then wipe in-memory state to mimic a fresh
+    // page load (storage survives, module caches don't).
+    primeGeocodeCache(addrFor(0), null);
+    const persistedRaw = window.localStorage.getItem(
+      __FAILURE_STORAGE_KEY_FOR_TEST,
+    );
+    expect(persistedRaw).not.toBeNull();
+
+    // Tear down in-memory state and restore the persisted blob —
+    // `__resetGoogleMapsSdkForTest` clears storage too, so we put
+    // the snapshot back before re-hydrating.
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, persistedRaw!);
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    // The rollup must show the persisted failure on first render —
+    // no Maps surface needs to re-trigger the bad geocode.
+    await renderPage();
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("1");
+  });
+
+  it("persists a dismissal so a reload doesn't bring the dismissed row back", async () => {
+    // Dismissal is the operator's "I looked at it, it's fine"
+    // signal. If a refresh brought the row back, the operator would
+    // have to re-dismiss every time — defeating the affordance.
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+    dismissGeocodeFailure(addrFor(0));
+
+    const raw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw!) as { failures: string[]; dismissed: string[] };
+    expect(parsed.failures).toEqual(
+      expect.arrayContaining([addrFor(0), addrFor(2)]),
+    );
+    expect(parsed.dismissed).toEqual([addrFor(0)]);
+
+    // Simulate a reload: tear down memory, restore storage, hydrate.
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, raw!);
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await renderPage();
+    // The dismissed row stays hidden after reload; the un-dismissed
+    // one still shows. Without persisting the dismissal both rows
+    // would render on the fresh mount.
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("address-needing-review-p3")).not.toBeNull();
+    expect(get("addresses-needing-review-count")?.textContent).toBe("1");
+  });
+
+  it("removes an address from persisted failures when stored coords overwrite the failure", async () => {
+    // The task spec calls this out specifically: "Successful
+    // geocodes (cached coordinates) clear any prior failure entry
+    // for that address so a fixed address stops alerting after the
+    // next render." Without dropping the address from storage too,
+    // the next reload would resurrect the failure even though it's
+    // been resolved.
+    const addr = addrFor(0);
+    primeGeocodeCache(addr, null);
+    let parsed = JSON.parse(
+      window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST)!,
+    ) as { failures: string[]; dismissed: string[] };
+    expect(parsed.failures).toContain(addr);
+
+    // Successful coords land for the same address — simulates a
+    // per-property Location card priming the cache after the
+    // operator fixed the address (or after a re-attempt resolved).
+    primeGeocodeCache(addr, { lat: 30, lng: -97 });
+
+    const after = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
+    if (after !== null) {
+      parsed = JSON.parse(after) as {
+        failures: string[];
+        dismissed: string[];
+      };
+      expect(parsed.failures).not.toContain(addr);
+    }
+    // And the rollup must drop the row immediately too — the
+    // overwrite path notifies subscribers so the panel reflects the
+    // fix without waiting for an unrelated re-render.
+    await renderPage();
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("clearGeocodeFailures wipes both in-memory and persisted failures + dismissals", async () => {
+    // Backs the "Reset to sample data" / "Reset demo data" flows.
+    // A fresh demo take must NOT carry stale "addresses Google can't
+    // pinpoint" entries from the previous session — operators
+    // expect a pristine slate after reset.
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+    dismissGeocodeFailure(addrFor(0));
+    expect(window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST)).not.toBeNull();
+
+    await renderPage();
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+
+    await act(async () => {
+      clearGeocodeFailures();
+    });
+
+    // Panel disappears immediately (subscribers were notified) and
+    // storage is wiped so a subsequent reload doesn't resurrect the
+    // failures we just cleared.
+    expect(get("addresses-needing-review-panel")).toBeNull();
+    expect(
+      window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST),
+    ).toBeNull();
+  });
+
+  it("ignores a corrupt localStorage payload instead of blocking the SDK", async () => {
+    // Defensive: a malformed blob must not throw on hydration —
+    // otherwise a single bad write (rare, but possible across
+    // version upgrades) would brick the badge until the operator
+    // manually cleared storage.
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(
+      __FAILURE_STORAGE_KEY_FOR_TEST,
+      "{not valid json",
+    );
+    expect(() => __hydrateGeocodeFailuresFromStorageForTest()).not.toThrow();
+
+    await renderPage();
     expect(get("addresses-needing-review-panel")).toBeNull();
   });
 });

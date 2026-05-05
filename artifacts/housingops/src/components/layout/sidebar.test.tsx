@@ -336,7 +336,11 @@ describe("Sidebar customer scope badge", () => {
 // path is exercised end-to-end.
 
 import {
+  __FAILURE_STORAGE_KEY_FOR_TEST,
+  __hydrateGeocodeFailuresFromStorageForTest,
   __resetGoogleMapsSdkForTest,
+  clearGeocodeFailures,
+  dismissGeocodeFailure,
   formatGeocodeAddress,
   primeGeocodeCache,
 } from "@/lib/google-maps-sdk";
@@ -484,5 +488,76 @@ describe("Sidebar Properties nav — addresses-needing-fix badge", () => {
     });
 
     expect(navBadge()).toBeNull();
+  });
+
+  // ── Persistence across page reloads ───────────────────────────────────
+  //
+  // The badge previously reset to empty on every refresh because
+  // failures lived in a module-level Map. The cases below pin down
+  // the localStorage-backed persistence so an operator who reloads
+  // the tab still sees the same count immediately, without any Maps
+  // surface needing to re-trigger the bad geocode.
+
+  it("renders the badge from a localStorage-persisted failure on a simulated reload", async () => {
+    // Seed storage as if a prior session recorded a failure for p1.
+    // Tear down in-memory state, restore the snapshot, then hydrate
+    // — this mimics a fresh module load against a populated
+    // localStorage. Without persistence + hydration, the badge would
+    // stay empty until something re-issued the failing geocode.
+    const persisted = JSON.stringify({
+      failures: [addrFor(0)],
+      dismissed: [],
+    });
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, persisted);
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await render();
+    expect(navBadge()).not.toBeNull();
+    expect(navBadge()!.textContent).toBe("1");
+  });
+
+  it("respects a persisted dismissal so the badge doesn't bring back a triaged row on reload", async () => {
+    // Seed both a failure and its dismissal — the operator already
+    // looked at this address last session and decided it's fine. A
+    // fresh reload must NOT bump the badge again; otherwise the
+    // dismiss button would be a one-shot affordance the operator
+    // has to re-fire after every refresh.
+    const persisted = JSON.stringify({
+      failures: [addrFor(0)],
+      dismissed: [addrFor(0)],
+    });
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, persisted);
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await render();
+    expect(navBadge()).toBeNull();
+  });
+
+  it("clearGeocodeFailures (called from the reset flows) drops the badge and wipes storage", async () => {
+    // The reset handlers in this same file invoke
+    // `clearGeocodeFailures()` from their `onSuccess` callback.
+    // This test pins down the contract those handlers depend on:
+    // calling `clearGeocodeFailures` must drop the badge live AND
+    // wipe storage so a subsequent reload starts clean.
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+    dismissGeocodeFailure(addrFor(0));
+
+    await render();
+    expect(navBadge()?.textContent).toBe("1");
+    expect(
+      window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST),
+    ).not.toBeNull();
+
+    await act(async () => {
+      clearGeocodeFailures();
+    });
+
+    expect(navBadge()).toBeNull();
+    expect(
+      window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST),
+    ).toBeNull();
   });
 });

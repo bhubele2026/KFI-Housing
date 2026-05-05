@@ -99,9 +99,44 @@ function makeBackend(): Backend {
         notes: "",
       },
     ],
-    beds: [],
-    occupants: [],
-    utilities: [],
+    beds: [
+      {
+        id: "bed-1",
+        propertyId: "prop-1",
+        bedNumber: 1,
+        roomId: "room-1",
+        status: "Vacant",
+        occupantId: null,
+      },
+    ],
+    occupants: [
+      {
+        id: "occ-1",
+        name: "Pat Smith",
+        email: "pat@example.com",
+        phone: "555-0100",
+        bedId: null,
+        propertyId: "prop-1",
+        moveInDate: "2025-01-01",
+        moveOutDate: null,
+        status: "Active",
+        chargePerBed: 500,
+        billingFrequency: "Monthly",
+        employeeId: "EMP-1",
+        company: "Acme Co",
+      },
+    ],
+    utilities: [
+      {
+        id: "util-1",
+        propertyId: "prop-1",
+        type: "Electric",
+        company: "City Power",
+        monthlyCost: 120,
+        accountNumber: "ACC-1",
+        notes: "",
+      },
+    ],
   };
 
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -185,19 +220,74 @@ function TestHarness({
   newPropertyName,
   newChargePerBed,
   newAddress = "1 Main St",
+  newCustomerName = "Acme Co (Renamed)",
+  newBedStatus = "Occupied",
+  newOccupantPhone = "555-9999",
+  newUtilityCost = 250,
 }: {
   newEndDate: string;
   newPropertyName: string;
   newChargePerBed: number;
   newAddress?: string;
+  newCustomerName?: string;
+  newBedStatus?: "Occupied" | "Vacant";
+  newOccupantPhone?: string;
+  newUtilityCost?: number;
 }) {
-  const { leases, properties, isLoading, updateLease, updateProperty } =
-    useData();
+  const {
+    leases,
+    properties,
+    customers,
+    beds,
+    occupants,
+    utilities,
+    isLoading,
+    updateLease,
+    updateProperty,
+    updateCustomer,
+    updateBed,
+    updateOccupant,
+    updateUtility,
+  } = useData();
   if (isLoading) return <div data-testid="loading">loading</div>;
   const lease = leases.find((l) => l.id === "lease-1");
   const property = properties.find((p) => p.id === "prop-1");
+  const customer = customers.find((c) => c.id === "cust-1");
+  const bed = beds.find((b) => b.id === "bed-1");
+  const occupant = occupants.find((o) => o.id === "occ-1");
+  const utility = utilities.find((u) => u.id === "util-1");
   return (
     <div>
+      <div data-testid="customer-name">{customer?.name ?? "missing"}</div>
+      <div data-testid="bed-status">{bed?.status ?? "missing"}</div>
+      <div data-testid="occupant-phone">{occupant?.phone ?? "missing"}</div>
+      <div data-testid="utility-cost">
+        {utility ? String(utility.monthlyCost) : "missing"}
+      </div>
+      <button
+        data-testid="rename-customer"
+        onClick={() => updateCustomer("cust-1", { name: newCustomerName })}
+      >
+        rename customer
+      </button>
+      <button
+        data-testid="toggle-bed"
+        onClick={() => updateBed("bed-1", { status: newBedStatus })}
+      >
+        toggle bed
+      </button>
+      <button
+        data-testid="edit-occupant-phone"
+        onClick={() => updateOccupant("occ-1", { phone: newOccupantPhone })}
+      >
+        edit occupant phone
+      </button>
+      <button
+        data-testid="bump-utility-cost"
+        onClick={() => updateUtility("util-1", { monthlyCost: newUtilityCost })}
+      >
+        bump utility cost
+      </button>
       <div data-testid="lease-end">{lease?.endDate ?? "missing"}</div>
       <div data-testid="lease-status">{lease?.status ?? "missing"}</div>
       <div data-testid="property-name">{property?.name ?? "missing"}</div>
@@ -257,6 +347,10 @@ function mount(
     newPropertyName: string;
     newChargePerBed: number;
     newAddress?: string;
+    newCustomerName?: string;
+    newBedStatus?: "Occupied" | "Vacant";
+    newOccupantPhone?: string;
+    newUtilityCost?: number;
   },
 ) {
   const client = new QueryClient({
@@ -601,6 +695,155 @@ describe("data store: edits persist across browser refresh", () => {
       mounted = mount(container, props);
     });
     await waitFor(() => getText(container, "lease-end") === "2025-12-31");
+  });
+
+  it("a customer name edit is still there after a full remount", async () => {
+    const props = {
+      newEndDate: "2025-12-31",
+      newPropertyName: "Maple House",
+      newChargePerBed: 500,
+      newCustomerName: "Acme Co (Renamed)",
+    };
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+    await waitFor(() => getText(container, "customer-name") === "Acme Co");
+
+    await act(async () => {
+      clickButton(container, "rename-customer");
+    });
+
+    await waitFor(
+      () => getText(container, "customer-name") === "Acme Co (Renamed)",
+    );
+    await waitFor(
+      () =>
+        (backend.state.customers[0]?.name as string) === "Acme Co (Renamed)",
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+
+    await waitFor(
+      () => getText(container, "customer-name") === "Acme Co (Renamed)",
+    );
+  });
+
+  it("a bed status edit is still there after a full remount", async () => {
+    const props = {
+      newEndDate: "2025-12-31",
+      newPropertyName: "Maple House",
+      newChargePerBed: 500,
+      newBedStatus: "Occupied" as const,
+    };
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+    await waitFor(() => getText(container, "bed-status") === "Vacant");
+
+    await act(async () => {
+      clickButton(container, "toggle-bed");
+    });
+
+    await waitFor(() => getText(container, "bed-status") === "Occupied");
+    await waitFor(
+      () => (backend.state.beds[0]?.status as string) === "Occupied",
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+
+    await waitFor(() => getText(container, "bed-status") === "Occupied");
+  });
+
+  it("an occupant phone edit is still there after a full remount", async () => {
+    const props = {
+      newEndDate: "2025-12-31",
+      newPropertyName: "Maple House",
+      newChargePerBed: 500,
+      newOccupantPhone: "555-9999",
+    };
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+    await waitFor(() => getText(container, "occupant-phone") === "555-0100");
+
+    await act(async () => {
+      clickButton(container, "edit-occupant-phone");
+    });
+
+    await waitFor(() => getText(container, "occupant-phone") === "555-9999");
+    await waitFor(
+      () => (backend.state.occupants[0]?.phone as string) === "555-9999",
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+
+    await waitFor(() => getText(container, "occupant-phone") === "555-9999");
+  });
+
+  it("a utility monthly-cost edit is still there after a full remount", async () => {
+    const props = {
+      newEndDate: "2025-12-31",
+      newPropertyName: "Maple House",
+      newChargePerBed: 500,
+      newUtilityCost: 250,
+    };
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+    await waitFor(() => getText(container, "utility-cost") === "120");
+
+    await act(async () => {
+      clickButton(container, "bump-utility-cost");
+    });
+
+    await waitFor(() => getText(container, "utility-cost") === "250");
+    await waitFor(
+      () => (backend.state.utilities[0]?.monthlyCost as number) === 250,
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mount(container, props);
+    });
+
+    await waitFor(() => getText(container, "utility-cost") === "250");
   });
 });
 

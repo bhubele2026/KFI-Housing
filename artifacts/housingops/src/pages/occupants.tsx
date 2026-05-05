@@ -74,9 +74,20 @@ export default function Occupants() {
               <Download className="mr-2 h-4 w-4" />
               Download CSV
             </Button>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add Occupant
+            <Button
+              asChild
+              disabled={properties.length === 0}
+              data-testid="button-add-occupant"
+              title={
+                properties.length === 0
+                  ? "Add a property first — occupants are assigned to beds inside a property."
+                  : "Open a property to assign an occupant to one of its beds."
+              }
+            >
+              <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add Occupant
+              </Link>
             </Button>
           </div>
         </div>

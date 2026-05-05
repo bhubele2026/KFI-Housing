@@ -165,14 +165,24 @@ function BedsUnderTest() {
   );
 }
 
+// Reset every place the Beds page (and its CustomerScopeProvider) might
+// have remembered a previously-selected customer. Without this, the
+// customer scope chosen in one test leaks into the next render and
+// silently changes the precondition (e.g. the property sub-filter only
+// listing the leaked customer's properties).
+function resetBedsPersistence() {
+  selectHandlers.clear();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  window.history.replaceState({}, "", "/beds");
+}
+
 describe("Beds customer filter", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
   beforeEach(() => {
-    selectHandlers.clear();
-    window.sessionStorage.clear();
-    window.history.replaceState({}, "", "/beds");
+    resetBedsPersistence();
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -321,9 +331,7 @@ describe("Beds customer filter URL persistence", () => {
   let root: Root | null = null;
 
   beforeEach(() => {
-    selectHandlers.clear();
-    window.sessionStorage.clear();
-    window.history.replaceState({}, "", "/beds");
+    resetBedsPersistence();
     container = document.createElement("div");
     document.body.appendChild(container);
   });

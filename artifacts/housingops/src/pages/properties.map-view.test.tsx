@@ -22,6 +22,28 @@ vi.mock("framer-motion", async () => {
   return createMotionMock();
 });
 
+// The Properties page now reads `/api/config` (Google Maps API key)
+// for its rollup Retry button. The data-store is mocked, so there's no
+// other react-query consumer in this file — mocking the runtime-config
+// hook lets us skip standing up a `QueryClientProvider` while the page
+// still gets a non-empty key shape on first render.
+vi.mock("@workspace/api-client-react", () => ({
+  useGetRuntimeConfig: () => ({
+    data: {
+      googleMapsApiKey: "test-key",
+      googleMapsMapId: "test-map-id",
+    },
+    isPending: false,
+    isLoading: false,
+    isError: false,
+    isSuccess: true,
+    error: null,
+    status: "success",
+    fetchStatus: "idle",
+  }),
+  getGetRuntimeConfigQueryKey: () => ["/api/config"] as const,
+}));
+
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: vi.fn(), dismiss: vi.fn(), toasts: [] }),
 }));

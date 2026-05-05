@@ -34,8 +34,58 @@ vi.mock("framer-motion", async () => {
   return createMotionMock();
 });
 
+// Hoisted toast spy — shared across all `useToast()` consumers in this
+// test file so the Retry tests can assert on the user-facing
+// "still couldn't pinpoint" / "retry failed" / "key isn't loaded yet"
+// toasts that the page surfaces from `handleRetryAddress`. Each
+// `useToast()` call returning a fresh `vi.fn()` (the prior shape) made
+// those assertions impossible.
+const toastMock = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn(), dismiss: vi.fn(), toasts: [] }),
+  useToast: () => ({ toast: toastMock, dismiss: vi.fn(), toasts: [] }),
+}));
+
+// Mirror the property-detail location-map test: mock the runtime-config
+// hook so the page's `useRuntimeConfigQuery` resolves synchronously to
+// a non-empty key without us having to mount a `QueryClientProvider`
+// (the data-store is mocked too, so there's no other react-query
+// consumer to satisfy). The Retry button needs a key to call
+// `loadMapsApi` — the "no key" branch is exercised by its own test
+// below via `runtimeConfigMock.mockReturnValueOnce(...)`.
+// Narrow shape covering only the fields the page reads off
+// `useGetRuntimeConfig()` (just `data`, in `properties.tsx`'s
+// `mapsApiKey` derivation), plus the react-query status fields kept
+// on the object for parity with real behavior. All fields are
+// optional so individual tests can swap in a "still loading" /
+// "errored" shape via `mockImplementation` without each call site
+// having to spell out the entire discriminated-union return type of
+// `UseQueryResult`.
+type RuntimeConfigMockReturn = {
+  data?: { googleMapsApiKey: string; googleMapsMapId: string };
+  isPending?: boolean;
+  isLoading?: boolean;
+  isError?: boolean;
+  isSuccess?: boolean;
+  error?: unknown;
+  status?: string;
+  fetchStatus?: string;
+};
+const runtimeConfigMock = vi.fn<() => RuntimeConfigMockReturn>(() => ({
+  data: {
+    googleMapsApiKey: "test-key",
+    googleMapsMapId: "test-map-id",
+  },
+  isPending: false,
+  isLoading: false,
+  isError: false,
+  isSuccess: true,
+  error: null,
+  status: "success",
+  fetchStatus: "idle",
+}));
+vi.mock("@workspace/api-client-react", () => ({
+  useGetRuntimeConfig: (...args: unknown[]) => runtimeConfigMock(...(args as [])),
+  getGetRuntimeConfigQueryKey: () => ["/api/config"] as const,
 }));
 
 vi.mock("@/components/ui/dialog", () => {
@@ -271,6 +321,21 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
   beforeEach(() => {
     state = makeFreshState();
     Object.values(storeMocks).forEach((m) => m.mockReset());
+    toastMock.mockReset();
+    runtimeConfigMock.mockReset();
+    runtimeConfigMock.mockImplementation(() => ({
+      data: {
+        googleMapsApiKey: "test-key",
+        googleMapsMapId: "test-map-id",
+      },
+      isPending: false,
+      isLoading: false,
+      isError: false,
+      isSuccess: true,
+      error: null,
+      status: "success",
+      fetchStatus: "idle",
+    }));
     window.sessionStorage.clear();
     window.localStorage.clear();
     window.history.replaceState({}, "", "/properties");
@@ -278,6 +343,13 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     // failures don't leak into this one. Listeners are React-driven
     // and torn down at unmount, so we don't touch them.
     __resetGoogleMapsSdkForTest();
+    // Clean any lingering Maps SDK globals planted by a prior Retry
+    // test so `loadMapsApi` re-evaluates against the current test's
+    // setup. Done in `beforeEach` (rather than `afterEach`) so the
+    // Retry tests can plant their own globals locally without us
+    // wiping them out before assertions complete.
+    delete (window as { google?: unknown }).google;
+    delete window.__housingopsMapsLoader;
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -292,6 +364,8 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     }
     container.remove();
     __resetGoogleMapsSdkForTest();
+    delete (window as { google?: unknown }).google;
+    delete window.__housingopsMapsLoader;
   });
 
   async function renderPage() {
@@ -960,5 +1034,302 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // ── Per-row Retry button ──────────────────────────────────────────────
+  //
+  // The rollup ships with a Retry affordance next to Dismiss so a row
+  // stuck in the panel because of a one-time Google outage / network
+  // blip can be re-attempted without making the operator either edit
+  // a perfectly fine address or dismiss it (which would silently hide
+  // a real problem if it recurred). Retry must:
+  //   • bypass the cached `null` so Google actually sees a fresh
+  //     request — the whole point is the previous attempt failed and
+  //     we want a do-over;
+  //   • drop the row on success (delegated to the existing
+  //     success-overriding-failure cache write that notifies
+  //     subscribers — `useGeocodeFailures` re-renders without the row);
+  //   • leave the row in place + toast on a still-failing retry so the
+  //     operator knows the click was honored but didn't help;
+  //   • surface a loading state and disable itself while in flight so a
+  //     stuck double-click never double-spends Google quota.
+
+  type GeocoderCb = (
+    results: Array<{ geometry: { location: { lat: () => number; lng: () => number } } }> | null,
+    status: string,
+  ) => void;
+
+  /**
+   * Plant a fake Google Maps SDK on `window` so `loadMapsApi`
+   * short-circuits to its already-loaded fast path and the page's
+   * `new google.maps.Geocoder()` returns whatever the test provides.
+   * The fake exposes the bare surface the loader's readiness check
+   * reads (`marker.AdvancedMarkerElement`) plus a Geocoder constructor
+   * driven by the per-test handler.
+   */
+  function plantFakeMapsSdk(handler: (addr: string, cb: GeocoderCb) => void) {
+    const Geocoder = function () {
+      return {
+        geocode(req: { address: string }, cb: GeocoderCb) {
+          handler(req.address, cb);
+        },
+      };
+    } as unknown as new () => unknown;
+    (window as unknown as { google: { maps: Record<string, unknown> } }).google = {
+      maps: {
+        Geocoder,
+        marker: { AdvancedMarkerElement: function () {} },
+      },
+    };
+  }
+
+  it("renders a Retry button on every row in the rollup", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+
+    expect(get("retry-address-needing-review-p1")).not.toBeNull();
+    expect(get("retry-address-needing-review-p3")).not.toBeNull();
+    // Healthy property must NOT get a Retry button — there's no row
+    // for it in the rollup in the first place.
+    expect(get("retry-address-needing-review-p2")).toBeNull();
+  });
+
+  it("drops the row when the Retry succeeds (Google now returns coords)", async () => {
+    // The success-overriding-failure cache write inside `runGeocode`
+    // is what makes the row vanish: it removes the cached `null`,
+    // updates persistence, and notifies `useGeocodeFailures`. No code
+    // in `handleRetryAddress` itself touches the rollup state — so
+    // this test pins down the *contract* that retry success ⇒ row gone.
+    plantFakeMapsSdk((_addr, cb) => {
+      cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    expect(get("address-needing-review-p1")).not.toBeNull();
+
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(get("address-needing-review-p1")).toBeNull();
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("keeps the row and toasts when Google still returns no result", async () => {
+    // Operator clicked Retry; Google replied ZERO_RESULTS again. The
+    // row must STAY (the address is still bad — silently dropping it
+    // would lie about the cache state) and we must surface a toast
+    // so the click isn't a silent no-op visually.
+    plantFakeMapsSdk((_addr, cb) => {
+      cb(null, "ZERO_RESULTS");
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(toastMock).toHaveBeenCalled();
+    const titles = toastMock.mock.calls.map(
+      (c) => (c[0] as { title?: string }).title,
+    );
+    expect(titles).toContain("Still couldn't pinpoint");
+  });
+
+  it("toasts and leaves the row in place when the SDK fails to load", async () => {
+    // No Maps globals planted → `loadMapsApi` will try to inject a
+    // <script> tag, but jsdom never fires its `load` event. To force
+    // a deterministic failure we instead plant a SDK shape *missing*
+    // the Geocoder class so `handleRetryAddress` falls into its
+    // "Geocoder unavailable" throw branch — same operator-visible
+    // outcome as a network failure: a destructive toast + the row
+    // stays.
+    (window as unknown as { google: { maps: Record<string, unknown> } }).google = {
+      maps: {
+        // Intentionally no Geocoder.
+        marker: { AdvancedMarkerElement: function () {} },
+      },
+    };
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    const titles = toastMock.mock.calls.map(
+      (c) => (c[0] as { title?: string }).title,
+    );
+    expect(titles).toContain("Retry failed");
+  });
+
+  it("disables the Retry button and shows a loading label while in flight", async () => {
+    // Stash the geocoder callback so we can keep the request "open"
+    // for the duration of the assertions and then complete it
+    // explicitly. Without this, an immediately-resolving Geocoder
+    // would race against the disabled-state assertion and we'd be
+    // testing a render that already passed back through the finally
+    // block — false-greens guaranteed.
+    let pendingCb: GeocoderCb | null = null;
+    plantFakeMapsSdk((_addr, cb) => {
+      pendingCb = cb;
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    const btn = get("retry-address-needing-review-p1") as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toContain("Retry");
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // Mid-flight: the button is disabled (so a double-click can't
+    // double-spend quota) and shows the loading copy so the operator
+    // can tell the click registered.
+    const inFlight = get("retry-address-needing-review-p1") as HTMLButtonElement;
+    expect(inFlight.disabled).toBe(true);
+    expect(inFlight.textContent).toContain("Retrying…");
+    expect(inFlight.getAttribute("aria-busy")).toBe("true");
+
+    // Complete the request with success — the row should drop, which
+    // also removes the button from the DOM, confirming the in-flight
+    // state was real.
+    await act(async () => {
+      pendingCb!(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    expect(get("retry-address-needing-review-p1")).toBeNull();
+  });
+
+  it("ignores a second click on Retry while the first is still in flight", async () => {
+    // Belt-and-suspenders alongside the `disabled` attribute: the
+    // handler itself early-returns when its address is in the
+    // in-flight set so a stuck keyboard "Enter" on a stale render
+    // can't fire a parallel Google request.
+    let geocodeCalls = 0;
+    let pendingCb: GeocoderCb | null = null;
+    plantFakeMapsSdk((_addr, cb) => {
+      geocodeCalls += 1;
+      pendingCb = cb;
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    const btn = get("retry-address-needing-review-p1") as HTMLButtonElement;
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    // Second click while still loading — must NOT issue a second
+    // geocode request. The disabled button doesn't dispatch click in
+    // a real browser, but the handler still has to defend itself
+    // against the stale-render path.
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(geocodeCalls).toBe(1);
+
+    await act(async () => {
+      pendingCb!(null, "ZERO_RESULTS");
+    });
+  });
+
+  it("toasts and skips the call when no Maps API key is loaded yet", async () => {
+    // Edge case: rollup is visible but `/api/config` hasn't resolved
+    // (or returned a null key). Clicking Retry can't do anything
+    // useful, but it must NOT silently no-op — surface a toast so
+    // the operator understands why and can try again in a moment.
+    // Mirror the loading-but-not-yet-resolved shape: `data` is
+    // undefined while react-query is still fetching. The page's
+    // `mapsApiKey` derivation treats absent data the same as a null
+    // key (empty string), which routes the click into the "key isn't
+    // loaded yet" toast branch. Using `undefined` rather than a
+    // null-keyed payload also keeps us off the runtime-config response
+    // schema (which types `googleMapsApiKey` as a non-null string).
+    runtimeConfigMock.mockImplementation(() => ({
+      data: undefined,
+      isPending: true,
+      isLoading: true,
+      isError: false,
+      isSuccess: false,
+      error: null,
+      status: "pending",
+      fetchStatus: "fetching",
+    }));
+    let geocodeCalls = 0;
+    plantFakeMapsSdk((_addr, cb) => {
+      geocodeCalls += 1;
+      cb(null, "ZERO_RESULTS");
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(geocodeCalls).toBe(0);
+    const titles = toastMock.mock.calls.map(
+      (c) => (c[0] as { title?: string }).title,
+    );
+    expect(titles).toContain("Couldn't retry");
+    expect(get("address-needing-review-p1")).not.toBeNull();
+  });
+
+  it("does not navigate when the Retry button is clicked", async () => {
+    // The Retry control sits inside a row that ALSO routes to the
+    // property detail page. The two affordances must not bleed into
+    // each other — clicking Retry should re-attempt the geocode, not
+    // open the property.
+    plantFakeMapsSdk((_addr, cb) => {
+      cb(null, "ZERO_RESULTS");
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+    expect(window.location.pathname).toBe("/properties");
+
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(window.location.pathname).toBe("/properties");
   });
 });

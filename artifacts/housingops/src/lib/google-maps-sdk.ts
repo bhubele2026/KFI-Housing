@@ -670,6 +670,47 @@ export function resolveGeocode(
   if (geocodeCache.has(addr)) {
     return Promise.resolve(geocodeCache.get(addr) ?? null);
   }
+  return runGeocode(geocoder, addr);
+}
+
+/**
+ * Re-attempts a geocode for an address whose previous attempt is
+ * already cached as a failure (`null`). Unlike {@link resolveGeocode},
+ * this does NOT short-circuit on the cached `null` — that's the whole
+ * point: an operator clicking "Retry" on a flagged address in the
+ * Properties page rollup wants a fresh round-trip to Google in case
+ * the original failure was a transient hiccup or a temporary outage.
+ *
+ * The cache write that lands when the new attempt resolves still goes
+ * through the same `previous === null` "success overriding failure"
+ * path inside the geocoder callback (see {@link runGeocode}), so on
+ * success the failure entry is dropped, persistence is updated, and
+ * subscribers (the rollup, the sidebar badge) are notified — no
+ * additional bookkeeping required at the call site.
+ *
+ * In-flight retries for the same address are deduped via
+ * `inFlightGeocodes`, so a stuck double-click never produces two
+ * Google requests.
+ */
+export function retryGeocode(
+  geocoder: MapsGeocoder,
+  addr: string,
+): Promise<{ lat: number; lng: number } | null> {
+  return runGeocode(geocoder, addr);
+}
+
+/**
+ * Shared geocoder-callback path used by both `resolveGeocode` (after
+ * its cache-hit guard) and `retryGeocode` (which bypasses the cache
+ * guard so the operator's explicit retry actually re-hits Google even
+ * when the address is already cached as a failure). Dedupes concurrent
+ * in-flight requests for the same address so two callers — or a stuck
+ * double-click — only ever produce one Google round-trip.
+ */
+function runGeocode(
+  geocoder: MapsGeocoder,
+  addr: string,
+): Promise<{ lat: number; lng: number } | null> {
   const existing = inFlightGeocodes.get(addr);
   if (existing) return existing;
   const promise = new Promise<{ lat: number; lng: number } | null>(

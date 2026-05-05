@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff } from "lucide-react";
+import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw } from "lucide-react";
 import { PortfolioMap, type MappableProperty } from "@/components/portfolio-map";
 import { EmptyStateRow } from "@/components/empty-state";
 import {
@@ -27,9 +27,15 @@ import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
-import { dismissGeocodeFailure, formatGeocodeAddress } from "@/lib/google-maps-sdk";
+import {
+  dismissGeocodeFailure,
+  formatGeocodeAddress,
+  loadMapsApi,
+  retryGeocode,
+} from "@/lib/google-maps-sdk";
 import { useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
 import { CheckedAgoLabel } from "@/components/checked-ago-label";
+import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft";
@@ -514,6 +520,111 @@ export default function Properties() {
   // as new failures land or get re-recorded.
   const geocodeFailureTimestamps = useGeocodeFailureTimestamps();
 
+  // Tracks addresses with an in-flight Retry. Lives in page state
+  // (rather than module-level alongside the cache) because the loading
+  // UI is per-row + page-scoped — another tab opening this page should
+  // start with no spinners. Keyed by canonical address string so a
+  // retry kicked off for a typo'd address that two properties happen
+  // to share would mark both rows simultaneously, matching the way the
+  // rollup itself groups by address.
+  const [retryingAddresses, setRetryingAddresses] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // Fetch the runtime config (Google Maps API key) only when the rollup
+  // could be visible — i.e. there's at least one geocode failure in
+  // the shared cache. Without one the operator can't reach the Retry
+  // button, so there's nothing to spend a /api/config request on.
+  // We key off `geocodeFailureTimestamps.size` rather than the
+  // `propertiesNeedingAddressFix` memo (which lives further down the
+  // file) to keep this hook above all the other useMemos and avoid a
+  // TDZ — the cache-side count is the upper bound anyway: if the cache
+  // is empty, the property-filtered list is too. Sharing the queryKey
+  // with PortfolioMap / Location card means a sibling fetch already in
+  // flight is reused for free, and the SSE stream picks up rotated
+  // keys without us having to wire it again.
+  const hasGeocodeFailures = geocodeFailureTimestamps.size > 0;
+  const runtimeConfig = useRuntimeConfigQuery(hasGeocodeFailures);
+  useRuntimeConfigStream(hasGeocodeFailures);
+  const mapsApiKey =
+    runtimeConfig.data?.googleMapsApiKey == null
+      ? ""
+      : runtimeConfig.data.googleMapsApiKey;
+
+  /**
+   * Re-runs a single geocode for a flagged address. The success path
+   * is delegated to `retryGeocode` → the shared `runGeocode` helper,
+   * which writes the new coords (or fresh `null`) into the module-level
+   * cache: that write triggers `notifyGeocodeFailureListeners`, which
+   * causes `useGeocodeFailures` to re-render the page with the row
+   * gone. So this handler only owns the loading state + the user-
+   * facing toast for the "still no luck" / "key/SDK couldn't load"
+   * branches.
+   */
+  const handleRetryAddress = useCallback(
+    async (addr: string) => {
+      if (!addr) return;
+      // Disable double-submits for the same address. The button is
+      // already `disabled` while in-flight, but a second click can
+      // still race in via keyboard focus + Enter on a stale render.
+      if (retryingAddresses.has(addr)) return;
+      if (!mapsApiKey) {
+        toast({
+          title: "Couldn't retry",
+          description:
+            "Google Maps key isn't loaded yet. Try again in a moment.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setRetryingAddresses((prev) => {
+        const next = new Set(prev);
+        next.add(addr);
+        return next;
+      });
+      try {
+        await loadMapsApi(mapsApiKey);
+        const maps = window.google?.maps;
+        if (!maps?.Geocoder) {
+          throw new Error("Geocoder unavailable");
+        }
+        const geocoder = new maps.Geocoder();
+        const point = await retryGeocode(geocoder, addr);
+        if (point === null) {
+          // Google still has nothing — leave the row in place so the
+          // operator can see the retry was honored but didn't help.
+          // The explicit toast is the only signal that the click did
+          // anything at all (without it the disabled button just snaps
+          // back and looks like a no-op).
+          toast({
+            title: "Still couldn't pinpoint",
+            description:
+              "Google has no result for this address. Edit it to try a different spelling.",
+          });
+        }
+        // Success: the cache write inside `retryGeocode` already
+        // notified subscribers; the row will disappear on the next
+        // render through `useGeocodeFailures`. No toast on success —
+        // the row vanishing IS the confirmation.
+      } catch {
+        toast({
+          title: "Retry failed",
+          description:
+            "Couldn't reach Google Maps. Check your connection and try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setRetryingAddresses((prev) => {
+          if (!prev.has(addr)) return prev;
+          const next = new Set(prev);
+          next.delete(addr);
+          return next;
+        });
+      }
+    },
+    [mapsApiKey, retryingAddresses, toast],
+  );
+
   // Roll up properties whose CURRENT address string matches a cached
   // failure. Keyed by the same canonical address string the maps use
   // when calling the geocoder, so editing the address (which changes
@@ -828,13 +939,14 @@ export default function Properties() {
                   // minute-tick so an idle page keeps the relative
                   // time honest without us having to re-render here.
                   const lastCheckedAt = geocodeFailureTimestamps.get(addrDisplay);
+                  const isRetrying = retryingAddresses.has(addrDisplay);
                   return (
-                    // Row is a flex container with TWO independently
+                    // Row is a flex container with three independently
                     // clickable controls — the main "open property"
-                    // button and the "Dismiss" button — instead of a
+                    // button, "Retry", and "Dismiss" — instead of a
                     // single wrapping <button>. Native <button>s can't
-                    // nest, and a click on Dismiss must NOT also fire
-                    // navigation, so the two affordances live as
+                    // nest, and a click on Retry/Dismiss must NOT also
+                    // fire navigation, so the affordances live as
                     // siblings sharing a hover state on the parent.
                     <li
                       key={p.id}
@@ -881,6 +993,40 @@ export default function Properties() {
                           )}
                         </span>
                         <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      </button>
+                      {/*
+                        Re-run the geocode for this single address. A
+                        one-time Google outage or a flaky network blip
+                        leaves the row stuck in the panel until the
+                        operator either dismisses it or edits the
+                        address — neither of which is right when the
+                        underlying address is fine. Retry calls into
+                        `retryGeocode`, which bypasses the cached
+                        `null` so Google actually sees a fresh request;
+                        on success the shared cache writes the new
+                        coords, the success-overriding-failure path
+                        fires the listener, and `useGeocodeFailures`
+                        drops the row on the next render with no
+                        further bookkeeping needed here. The button is
+                        disabled while in flight so a double-click
+                        can't double-spend Google quota.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => handleRetryAddress(addrDisplay)}
+                        disabled={isRetrying}
+                        className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
+                        aria-label={`Retry geocoding ${p.name}`}
+                        aria-busy={isRetrying}
+                        title="Re-attempt the address lookup"
+                        data-testid={`retry-address-needing-review-${p.id}`}
+                      >
+                        {isRetrying ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        {isRetrying ? "Retrying…" : "Retry"}
                       </button>
                       {/*
                         Dismiss the row for the rest of the session.

@@ -368,7 +368,7 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
-      <div className="flex h-28 flex-col justify-center px-3 py-3 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
+      <div className="flex h-28 flex-col justify-center px-3 py-3">
         {/* The KFI Staffing logo artwork has a dark-navy background
             tuned to match the --sidebar token, so it sits seamlessly
             on the sidebar with no chip or extra wordmark. */}

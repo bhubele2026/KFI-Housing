@@ -186,6 +186,52 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Property" }
+  /properties/backfill-coords:
+    post:
+      operationId: backfillPropertyCoords
+      tags: [properties]
+      summary: Backfill missing map pin coordinates
+      description: |
+        One-shot admin endpoint that walks every property and geocodes
+        any whose `lat`/`lng` is null but whose composed address is
+        non-blank, persisting the result with `coordsVerified=false`.
+
+        Idempotent — rows that already have coordinates, blank-address
+        rows, and rows the geocoder can't resolve are all skipped, so
+        re-running after fixing a typo'd address only touches the rows
+        that just became resolvable.
+      responses:
+        "200":
+          description: Backfill summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - scanned
+                  - updated
+                  - alreadyHadCoords
+                  - noAddress
+                  - stillMissing
+                properties:
+                  scanned:
+                    type: integer
+                    description: Total rows examined.
+                  updated:
+                    type: integer
+                    description: Rows whose null coords got resolved this run.
+                  alreadyHadCoords:
+                    type: integer
+                    description: Rows skipped because lat/lng were already set.
+                  noAddress:
+                    type: integer
+                    description: Rows skipped because every address field was blank.
+                  stillMissing:
+                    type: integer
+                    description: |
+                      Rows with an address that the geocoder couldn't
+                      resolve. They stay null so a future run after the
+                      address is corrected can pick them up.
   /properties/{id}:
     patch:
       operationId: updateProperty

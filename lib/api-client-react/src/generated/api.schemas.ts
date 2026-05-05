@@ -524,6 +524,22 @@ export type DeleteCustomer409 = {
   error: string;
 };
 
+export type BackfillPropertyCoords200 = {
+  /** Total rows examined. */
+  scanned: number;
+  /** Rows whose null coords got resolved this run. */
+  updated: number;
+  /** Rows skipped because lat/lng were already set. */
+  alreadyHadCoords: number;
+  /** Rows skipped because every address field was blank. */
+  noAddress: number;
+  /** Rows with an address that the geocoder couldn't
+resolve. They stay null so a future run after the
+address is corrected can pick them up.
+ */
+  stillMissing: number;
+};
+
 export type ImportLeasePdfBody = {
   /** A single lease PDF (`application/pdf`, max 10 MB). */
   file: Blob;

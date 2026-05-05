@@ -450,6 +450,143 @@ describe("properties route — server-side geocoding (Task #152)", () => {
     expect(persisted.lng).toBe(-97.7431);
   });
 
+  // -------------------------------------------------------------------------
+  // Task #227 — backfill route
+  // -------------------------------------------------------------------------
+  // POST /properties/backfill-coords walks every row, geocodes any
+  // null-coord rows whose composed address is non-blank, and persists
+  // the result. The contract the front-end (and operators running it
+  // again) depend on: idempotent, leaves blank-address and
+  // already-coord rows alone, and surfaces a per-bucket summary so the
+  // caller can tell how many rows are still missing pins.
+  describe("POST /properties/backfill-coords (Task #227)", () => {
+    it("geocodes only rows with null coords and a non-blank address, leaving the rest alone", async () => {
+      // Has coords already — must not be re-geocoded (would burn a
+      // Google call and could clobber a verified pin with an
+      // unverified one).
+      store.set("p-already", {
+        ...makeCreateBody({
+          id: "p-already",
+          lat: 30.2672,
+          lng: -97.7431,
+          coordsVerified: true,
+        }),
+      });
+      // Null coords + non-blank address — the target case.
+      store.set("p-needs", {
+        ...makeCreateBody({ id: "p-needs", lat: null, lng: null }),
+      });
+      // Null coords + entirely blank address — nothing to geocode,
+      // must stay null.
+      store.set("p-blank", {
+        ...makeCreateBody({
+          id: "p-blank",
+          address: "",
+          city: "",
+          state: "",
+          zip: "",
+          lat: null,
+          lng: null,
+        }),
+      });
+      // Null coords + address the geocoder can't resolve — must
+      // stay null so the next run (after the typo is fixed) can pick
+      // it up.
+      store.set("p-typo", {
+        ...makeCreateBody({
+          id: "p-typo",
+          address: "asdfgh",
+          lat: null,
+          lng: null,
+        }),
+      });
+
+      // One resolution for p-needs; p-typo gets ZERO_RESULTS.
+      geocodeMock.mockImplementation(async (addr) => {
+        if (addr === "123 Main St, Austin, TX 78701") {
+          return { lat: 30.2672, lng: -97.7431 };
+        }
+        return null;
+      });
+
+      const res = await fetch(`${baseUrl}/api/properties/backfill-coords`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        scanned: 4,
+        updated: 1,
+        alreadyHadCoords: 1,
+        noAddress: 1,
+        stillMissing: 1,
+      });
+
+      // p-needs got the resolved coords with verified=false.
+      expect(store.get("p-needs")?.lat).toBe(30.2672);
+      expect(store.get("p-needs")?.lng).toBe(-97.7431);
+      expect(store.get("p-needs")?.coordsVerified).toBe(false);
+
+      // p-already untouched — verified flag preserved, no extra
+      // geocoder call.
+      expect(store.get("p-already")?.lat).toBe(30.2672);
+      expect(store.get("p-already")?.coordsVerified).toBe(true);
+
+      // p-blank still null, p-typo still null.
+      expect(store.get("p-blank")?.lat).toBeNull();
+      expect(store.get("p-typo")?.lat).toBeNull();
+
+      // Geocoder only called for the two rows with addresses to try.
+      expect(geocodeMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("is idempotent — a second run only touches rows that became resolvable since the first", async () => {
+      store.set("p-needs", {
+        ...makeCreateBody({ id: "p-needs", lat: null, lng: null }),
+      });
+
+      geocodeMock.mockResolvedValue({ lat: 30.2672, lng: -97.7431 });
+
+      const first = await fetch(`${baseUrl}/api/properties/backfill-coords`, {
+        method: "POST",
+      });
+      expect(first.status).toBe(200);
+      expect(((await first.json()) as { updated: number }).updated).toBe(1);
+      expect(geocodeMock).toHaveBeenCalledTimes(1);
+
+      // Second run with the same store: row already has coords now,
+      // so no geocoder call and updated=0. This is the property the
+      // caller relies on for safe re-runs (admin button or cron).
+      geocodeMock.mockClear();
+      const second = await fetch(`${baseUrl}/api/properties/backfill-coords`, {
+        method: "POST",
+      });
+      expect(second.status).toBe(200);
+      expect(await second.json()).toEqual({
+        scanned: 1,
+        updated: 0,
+        alreadyHadCoords: 1,
+        noAddress: 0,
+        stillMissing: 0,
+      });
+      expect(geocodeMock).not.toHaveBeenCalled();
+    });
+
+    it("returns a zero-everything summary when there are no properties to scan", async () => {
+      const res = await fetch(`${baseUrl}/api/properties/backfill-coords`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        scanned: 0,
+        updated: 0,
+        alreadyHadCoords: 0,
+        noAddress: 0,
+        stillMissing: 0,
+      });
+      expect(geocodeMock).not.toHaveBeenCalled();
+    });
+  });
+
   it("PATCH /properties/:id returns 404 when the row doesn't exist (and never calls the geocoder)", async () => {
     const res = await fetch(`${baseUrl}/api/properties/missing`, {
       method: "PATCH",

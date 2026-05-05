@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  BackfillPropertyCoords200,
   Bed,
   BedUpdate,
   Customer,
@@ -867,6 +868,99 @@ export const useCreateProperty = <
   TContext
 > => {
   return useMutation(getCreatePropertyMutationOptions(options));
+};
+
+/**
+ * One-shot admin endpoint that walks every property and geocodes
+any whose `lat`/`lng` is null but whose composed address is
+non-blank, persisting the result with `coordsVerified=false`.
+
+Idempotent — rows that already have coordinates, blank-address
+rows, and rows the geocoder can't resolve are all skipped, so
+re-running after fixing a typo'd address only touches the rows
+that just became resolvable.
+
+ * @summary Backfill missing map pin coordinates
+ */
+export const getBackfillPropertyCoordsUrl = () => {
+  return `/api/properties/backfill-coords`;
+};
+
+export const backfillPropertyCoords = async (
+  options?: RequestInit,
+): Promise<BackfillPropertyCoords200> => {
+  return customFetch<BackfillPropertyCoords200>(
+    getBackfillPropertyCoordsUrl(),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getBackfillPropertyCoordsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillPropertyCoords>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof backfillPropertyCoords>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["backfillPropertyCoords"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof backfillPropertyCoords>>,
+    void
+  > = () => {
+    return backfillPropertyCoords(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BackfillPropertyCoordsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof backfillPropertyCoords>>
+>;
+
+export type BackfillPropertyCoordsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Backfill missing map pin coordinates
+ */
+export const useBackfillPropertyCoords = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof backfillPropertyCoords>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof backfillPropertyCoords>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getBackfillPropertyCoordsMutationOptions(options));
 };
 
 /**

@@ -23,6 +23,70 @@ router.get("/properties", async (_req, res): Promise<void> => {
 });
 
 /**
+ * One-shot backfill for properties saved before Task #152 added
+ * server-side geocoding. Walks every row, geocodes any whose
+ * `lat`/`lng` is null but whose composed address is non-blank, and
+ * persists the resolved coordinates with `coordsVerified=false` (same
+ * trust treatment as auto-geocoded saves — operators can still verify
+ * a pin from the property detail page).
+ *
+ * Idempotent: rows that already have coords are skipped, and rows the
+ * geocoder can't resolve (typo'd address, ZERO_RESULTS, no API key)
+ * are left as-is so they keep surfacing in the missing-address side
+ * panel and a future re-run can pick them up if the address is fixed.
+ *
+ * Once this has run on a workspace, the front-end live-geocode
+ * fallback in `portfolio-map.tsx` becomes a dev-only safety net — no
+ * production tab needs to call the JS Geocoder anymore because every
+ * mappable row already carries persisted coords.
+ *
+ * Response body:
+ *   - `scanned`: total rows examined
+ *   - `updated`: rows whose null coords got resolved this run
+ *   - `alreadyHadCoords`: skipped because lat/lng were already set
+ *   - `noAddress`: skipped because every address field was blank
+ *   - `stillMissing`: had an address but the geocoder returned no
+ *     result; these stay null so a follow-up run after a typo fix
+ *     can pick them up
+ */
+router.post("/properties/backfill-coords", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(propertiesTable)
+    .orderBy(propertiesTable.id);
+  const geocoder = getGeocoder();
+  let scanned = 0;
+  let updated = 0;
+  let alreadyHadCoords = 0;
+  let noAddress = 0;
+  let stillMissing = 0;
+  for (const row of rows) {
+    scanned++;
+    if (typeof row.lat === "number" && typeof row.lng === "number") {
+      alreadyHadCoords++;
+      continue;
+    }
+    const addr = formatPropertyAddress(row);
+    if (!addr) {
+      noAddress++;
+      continue;
+    }
+    const point = await geocoder.geocode(addr);
+    if (!point) {
+      stillMissing++;
+      continue;
+    }
+    await db
+      .update(propertiesTable)
+      .set({ lat: point.lat, lng: point.lng, coordsVerified: false })
+      .where(eq(propertiesTable.id, row.id))
+      .returning();
+    updated++;
+  }
+  res.json({ scanned, updated, alreadyHadCoords, noAddress, stillMissing });
+});
+
+/**
  * Resolves the lat/lng to persist for a freshly-created or
  * address-edited property. Geocoding happens here, server-side, so
  * the very first viewer of the portfolio map (or anyone reloading the

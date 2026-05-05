@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./backfillPropertyCoords200";
 export * from "./bed";
 export * from "./bedStatus";
 export * from "./bedUpdate";

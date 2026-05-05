@@ -539,6 +539,36 @@ export const CreatePropertyBody = zod.object({
 });
 
 /**
+ * One-shot admin endpoint that walks every property and geocodes
+any whose `lat`/`lng` is null but whose composed address is
+non-blank, persisting the result with `coordsVerified=false`.
+
+Idempotent — rows that already have coordinates, blank-address
+rows, and rows the geocoder can't resolve are all skipped, so
+re-running after fixing a typo'd address only touches the rows
+that just became resolvable.
+
+ * @summary Backfill missing map pin coordinates
+ */
+export const BackfillPropertyCoordsResponse = zod.object({
+  scanned: zod.number().describe("Total rows examined."),
+  updated: zod
+    .number()
+    .describe("Rows whose null coords got resolved this run."),
+  alreadyHadCoords: zod
+    .number()
+    .describe("Rows skipped because lat\/lng were already set."),
+  noAddress: zod
+    .number()
+    .describe("Rows skipped because every address field was blank."),
+  stillMissing: zod
+    .number()
+    .describe(
+      "Rows with an address that the geocoder couldn't\nresolve. They stay null so a future run after the\naddress is corrected can pick them up.\n",
+    ),
+});
+
+/**
  * @summary Update a property
  */
 export const UpdatePropertyParams = zod.object({

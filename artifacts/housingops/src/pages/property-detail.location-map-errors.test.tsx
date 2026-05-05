@@ -5,6 +5,20 @@ import { Switch, Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// React 18+ requires this flag to be truthy before any `act(...)` call
+// will actually flush effects synchronously. Without it, `act` becomes
+// a no-op shim, jsdom emits "The current testing environment is not
+// configured to support act(...)" warnings, and effects from a prior
+// test (the SDK loader's `setStatus("ready")`, the location-map's
+// geocode effect, etc.) can leak into the next test's first render —
+// which is exactly the failure mode the second and third tests in this
+// file hit ("expected null not to be null" on the canvas lookup) when
+// the file is run as part of the full suite. The component-level test
+// at `src/components/property-location-map.test.tsx` already sets this
+// flag at module scope; matching that convention here is the same
+// fix, applied to the page-level file.
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 // Pin down that the property-detail page actually integrates the
 // shared-store-driven, tailored-copy error branch of PropertyLocationMap
 // (Task #163, ported to the JS Maps SDK in Task #195). The

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
+import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -1501,28 +1502,76 @@ export default function Properties() {
                         onClick={() => navigate(`/properties/${property.id}`)}
                         data-testid={`row-property-${property.id}`}
                       >
-                        <td className="p-4"><PropertyNameCell name={property.name} primaryClassName="font-semibold" /></td>
-                        <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`}>
-                          {customer ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateCustomerFilter(customer.id);
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              data-testid={`button-filter-customer-${property.id}`}
-                              aria-label={`Filter by customer ${customer.name}`}
-                            >
-                              <Briefcase className="h-3 w-3 text-muted-foreground" />
-                              {customer.name}
-                            </button>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                          <InlineEdit
+                            value={property.name}
+                            onSave={(v) => updateProperty(property.id, { name: v })}
+                            displayClassName="font-semibold"
+                            inputClassName="w-56"
+                            testId={`inline-edit-property-name-${property.id}`}
+                          />
                         </td>
-                        <td className="p-4 text-sm text-muted-foreground">{property.address}</td>
-                        <td className="p-4 text-sm text-muted-foreground">{property.city}, {property.state}</td>
+                        <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`} onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            <Briefcase className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <Select
+                              value={property.customerId ?? ""}
+                              onValueChange={(v) => updateProperty(property.id, { customerId: v })}
+                            >
+                              <SelectTrigger
+                                className="h-7 text-sm w-44 border-transparent hover:border-border bg-transparent"
+                                data-testid={`select-customer-${property.id}`}
+                              >
+                                <SelectValue placeholder="Unassigned" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {customers.map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {customer && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateCustomerFilter(customer.id);
+                                }}
+                                className="text-xs text-muted-foreground hover:text-foreground hover:underline shrink-0"
+                                data-testid={`button-filter-customer-${property.id}`}
+                                aria-label={`Filter by customer ${customer.name}`}
+                                title={`Filter list by ${customer.name}`}
+                              >
+                                filter
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                          <InlineEdit
+                            value={property.address}
+                            onSave={(v) => updateProperty(property.id, { address: v })}
+                            inputClassName="w-48"
+                            testId={`inline-edit-property-address-${property.id}`}
+                          />
+                        </td>
+                        <td className="p-4 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <InlineEdit
+                              value={property.city}
+                              onSave={(v) => updateProperty(property.id, { city: v })}
+                              inputClassName="w-32"
+                              testId={`inline-edit-property-city-${property.id}`}
+                            />
+                            <span className="text-muted-foreground">,</span>
+                            <InlineEdit
+                              value={property.state}
+                              onSave={(v) => updateProperty(property.id, { state: v })}
+                              inputClassName="w-14"
+                              testId={`inline-edit-property-state-${property.id}`}
+                            />
+                          </div>
+                        </td>
                         <td className="p-4 text-center text-sm">{propBeds.length}</td>
                         <td className="p-4 text-center">
                           <span className="text-sm font-medium text-green-600">{occupied}</span>

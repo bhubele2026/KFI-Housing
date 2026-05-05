@@ -19,7 +19,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown, Download } from "lucide-react";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { EmptyStateRow } from "@/components/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -40,7 +41,7 @@ const EMPTY_DRAFT: Customer = {
 
 export default function Customers() {
   const [location, navigate] = useLocation();
-  const { customers, properties, beds, occupants, addCustomer, updateCustomer, deleteCustomer } = useData();
+  const { customers, properties, beds, occupants, isLoading, addCustomer, updateCustomer, deleteCustomer } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Customer | null>(null);
@@ -252,6 +253,29 @@ export default function Customers() {
     setDialogOpen(false);
   };
 
+  const handleDownloadCsv = () => {
+    const csv = toCsv(filtered, [
+      { header: "Name",            value: (c) => c.name },
+      { header: "Contact Name",    value: (c) => c.contactName },
+      { header: "Email",           value: (c) => c.email },
+      { header: "Phone",           value: (c) => c.phone },
+      { header: "# Properties",    value: (c) => statsByCustomer.get(c.id)?.propertyCount ?? 0 },
+      { header: "Total Beds",      value: (c) => statsByCustomer.get(c.id)?.totalBeds ?? 0 },
+      { header: "Occupied Beds",   value: (c) => statsByCustomer.get(c.id)?.occupiedBeds ?? 0 },
+      { header: "Occupancy %",     value: (c) => {
+          const s = statsByCustomer.get(c.id);
+          return s && s.totalBeds > 0 ? Math.round(s.occupancyPct) : "";
+        } },
+      { header: "Monthly Revenue", value: (c) => statsByCustomer.get(c.id)?.monthlyRevenue ?? 0 },
+      { header: "Notes",           value: (c) => c.notes },
+    ]);
+    downloadCsv(timestampedCsvName("housingops-customers"), csv);
+    toast({
+      title: "Customers exported",
+      description: `Downloaded ${filtered.length} ${filtered.length === 1 ? "customer" : "customers"} as CSV.`,
+    });
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -291,10 +315,21 @@ export default function Customers() {
               Companies that lease beds across your portfolio.
             </p>
           </div>
-          <Button onClick={openAdd} data-testid="button-add-customer">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Customer
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={handleDownloadCsv}
+              disabled={isLoading || filtered.length === 0}
+              data-testid="button-download-customers-csv"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+            <Button onClick={openAdd} data-testid="button-add-customer">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Customer
+            </Button>
+          </div>
         </div>
 
         {/* Top customers summary — only meaningful when there's data to compare. */}

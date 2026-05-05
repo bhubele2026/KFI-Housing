@@ -2,13 +2,12 @@ import { pushSchemaIfNeeded } from "@workspace/db";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
-import { cleanupLeaseDates, seedIfEmpty } from "./lib/seed";
+import { seedIfEmpty } from "./lib/seed";
 import { start } from "./start";
 
 void start({
   pushSchemaIfNeeded,
   seedIfEmpty,
-  cleanupLeaseDates,
   listen: (port) =>
     new Promise<void>((resolve, reject) => {
       app.listen(port, (err) => {

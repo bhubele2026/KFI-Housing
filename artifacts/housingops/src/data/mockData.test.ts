@@ -170,17 +170,22 @@ describe("daysUntil", () => {
     expect(daysUntil("2025-06-15")).toBe(0);
   });
 
-  it("tolerates a stray time component on imported dates", () => {
-    // Some imported / legacy rows arrive as "2026-05-31 00:00:00" or
-    // "2026-05-31T00:00:00.000Z". Without the defensive strip these would
-    // parse as NaN and silently disappear from the renewal alerts panel.
-    expect(daysUntil("2025-06-30 00:00:00")).toBe(15);
-    expect(daysUntil("2025-06-30T00:00:00.000Z")).toBe(15);
-    expect(daysUntil("2025-06-15 23:59:59")).toBe(0);
+  it("throws loudly on a stray time component instead of silently emitting NaN", () => {
+    // Some legacy / imported rows used to arrive as
+    // "2026-05-31 00:00:00" and rendered as "NaN days left", which
+    // silently disabled the Renewal Alerts panel. The API boundary now
+    // rejects those at write time, and the frontend `parseYMD` throws
+    // loudly here so a future regression surfaces immediately rather
+    // than disappearing into a defensive fallback.
+    expect(() => daysUntil("2025-06-30 00:00:00")).toThrow(
+      /2025-06-30 00:00:00/,
+    );
+    expect(() => daysUntil("2025-06-30T00:00:00.000Z")).toThrow();
+    expect(() => daysUntil("")).toThrow();
   });
 });
 
-describe("getRenewalInfo (defensive against malformed dates)", () => {
+describe("getRenewalInfo (loud failure on malformed dates)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2025, 5, 15, 9, 0, 0));
@@ -189,10 +194,17 @@ describe("getRenewalInfo (defensive against malformed dates)", () => {
     vi.useRealTimers();
   });
 
-  it("classifies a legacy 'YYYY-MM-DD HH:MM:SS' end date as a normal critical/warning lease", () => {
-    // 2025-07-15 is 30 days out from the fake 'today' of 2025-06-15 →
-    // critical (≤ 30). The malformed time suffix must not turn this into NaN.
-    const info = getRenewalInfo("2025-07-15 00:00:00");
+  it("propagates the parser's throw so a malformed end date can't silently disable the panel", () => {
+    // Replaces the previous "tolerates the stray suffix" behaviour:
+    // tolerating it is exactly what hid the original NaN bug. Failing
+    // visibly here is the intended replacement.
+    expect(() => getRenewalInfo("2025-07-15 00:00:00")).toThrow(
+      /2025-07-15 00:00:00/,
+    );
+  });
+
+  it("still returns a normal RenewalInfo for a clean YYYY-MM-DD end date", () => {
+    const info = getRenewalInfo("2025-07-15");
     expect(info.level).toBe("critical");
     expect(info.days).toBe(30);
     expect(info.label).toBe("30 days left");

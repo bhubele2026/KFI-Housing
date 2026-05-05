@@ -1,5 +1,75 @@
 import { describe, it, expect } from "vitest";
-import { addMonthsToYMD } from "./lease-dates";
+import { addMonthsToYMD, formatYMDPretty, parseYMD } from "./lease-dates";
+
+describe("parseYMD", () => {
+  describe("happy path", () => {
+    it("parses a clean YYYY-MM-DD into numeric parts", () => {
+      expect(parseYMD("2026-05-31")).toEqual({ year: 2026, month: 5, day: 31 });
+    });
+
+    it("parses a leap-day date", () => {
+      expect(parseYMD("2024-02-29")).toEqual({ year: 2024, month: 2, day: 29 });
+    });
+
+    it("parses zero-padded single-digit month and day", () => {
+      expect(parseYMD("2026-01-05")).toEqual({ year: 2026, month: 1, day: 5 });
+    });
+  });
+
+  describe("throws loudly on the previously-problematic legacy formats", () => {
+    // These shapes used to silently produce `NaN days left` in the
+    // Renewal Alerts panel. The defensive layers (a startup SQL job and
+    // a server-side normalize call) have been removed in favour of
+    // failing visibly here.
+    it("throws on a 'YYYY-MM-DD HH:MM:SS' suffix", () => {
+      expect(() => parseYMD("2026-05-31 00:00:00")).toThrow(
+        /2026-05-31 00:00:00/,
+      );
+    });
+
+    it("throws on an ISO 'T'-separated datetime", () => {
+      expect(() => parseYMD("2026-05-31T00:00:00.000Z")).toThrow(
+        /2026-05-31T00:00:00\.000Z/,
+      );
+    });
+
+    it("throws on a slash-separated date", () => {
+      expect(() => parseYMD("2026/05/31")).toThrow();
+    });
+
+    it("throws on US-style M/D/YYYY", () => {
+      expect(() => parseYMD("5/31/2026")).toThrow();
+    });
+
+    it("throws on an empty string", () => {
+      expect(() => parseYMD("")).toThrow();
+    });
+
+    it("throws on a non-string input", () => {
+      expect(() => parseYMD(undefined as unknown as string)).toThrow();
+      expect(() => parseYMD(null as unknown as string)).toThrow();
+      expect(() => parseYMD(20260531 as unknown as string)).toThrow();
+    });
+  });
+
+  describe("rejects shapes that pass the regex but aren't real calendar dates", () => {
+    it("throws on Feb 30", () => {
+      expect(() => parseYMD("2025-02-30")).toThrow(/not a real calendar date/);
+    });
+
+    it("throws on Feb 29 in a non-leap year", () => {
+      expect(() => parseYMD("2025-02-29")).toThrow(/not a real calendar date/);
+    });
+
+    it("throws on month 13", () => {
+      expect(() => parseYMD("2025-13-01")).toThrow(/not a real calendar date/);
+    });
+
+    it("throws on day 00", () => {
+      expect(() => parseYMD("2025-05-00")).toThrow(/not a real calendar date/);
+    });
+  });
+});
 
 describe("addMonthsToYMD", () => {
   describe("year wrap", () => {
@@ -88,5 +158,34 @@ describe("addMonthsToYMD", () => {
       expect(result).toHaveLength(10);
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
+  });
+
+  describe("propagates parseYMD's loud failure on malformed input", () => {
+    it("throws on a stray time suffix instead of returning a NaN-bearing string", () => {
+      expect(() => addMonthsToYMD("2026-05-31 00:00:00", 12)).toThrow(
+        /2026-05-31 00:00:00/,
+      );
+    });
+
+    it("throws on an empty string", () => {
+      expect(() => addMonthsToYMD("", 12)).toThrow();
+    });
+  });
+});
+
+describe("formatYMDPretty", () => {
+  it("returns a non-empty locale string for a clean date", () => {
+    // Locale formatting varies by environment, so we only assert the
+    // year shows up — the important contract is "doesn't crash and
+    // doesn't render NaN" on a clean input.
+    const out = formatYMDPretty("2026-05-31");
+    expect(out).toContain("2026");
+    expect(out).not.toContain("NaN");
+  });
+
+  it("throws on a stray time suffix instead of silently producing 'Invalid Date'", () => {
+    expect(() => formatYMDPretty("2026-05-31 00:00:00")).toThrow(
+      /2026-05-31 00:00:00/,
+    );
   });
 });

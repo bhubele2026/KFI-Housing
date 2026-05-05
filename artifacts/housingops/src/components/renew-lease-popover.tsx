@@ -7,16 +7,12 @@ import { Separator } from "@/components/ui/separator";
 import { CalendarPlus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { addMonthsToYMD } from "@/lib/lease-dates";
+import { addMonthsToYMD, formatYMDPretty } from "@/lib/lease-dates";
 import type { Lease } from "@/data/mockData";
 
 type LeaseStatus = Lease["status"];
 
-function formatPretty(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+const formatPretty = formatYMDPretty;
 
 interface RenewLeasePopoverProps {
   currentEndDate: string;

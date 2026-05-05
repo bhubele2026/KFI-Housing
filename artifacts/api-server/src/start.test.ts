@@ -23,7 +23,6 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
       hasDataLoss: false,
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
-    cleanupLeaseDates: vi.fn().mockResolvedValue(0),
     listen: vi.fn().mockResolvedValue(undefined),
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),
@@ -131,57 +130,6 @@ describe("start", () => {
     expect(calledWith?.checkOnly).toBe(false);
   });
 
-  it("runs cleanupLeaseDates after seeding and before listening", async () => {
-    const calls: string[] = [];
-    const seedIfEmpty = vi.fn(async () => {
-      calls.push("seed");
-    });
-    const cleanupLeaseDates = vi.fn(async () => {
-      calls.push("cleanup");
-      return 0;
-    });
-    const listen = vi.fn(async () => {
-      calls.push("listen");
-    });
-
-    await start(
-      makeDeps({
-        seedIfEmpty,
-        cleanupLeaseDates,
-        listen,
-        env: { NODE_ENV: "development", PORT: "3000" },
-      }),
-    );
-
-    expect(cleanupLeaseDates).toHaveBeenCalledTimes(1);
-    expect(calls).toEqual(["seed", "cleanup", "listen"]);
-  });
-
-  it("still listens when cleanupLeaseDates throws (logs and continues)", async () => {
-    const cleanupLeaseDates = vi
-      .fn()
-      .mockRejectedValue(new Error("UPDATE failed"));
-    const listen = vi.fn().mockResolvedValue(undefined);
-    const logger = fakeLogger();
-
-    await start(
-      makeDeps({
-        cleanupLeaseDates,
-        listen,
-        logger,
-        env: { NODE_ENV: "development", PORT: "3000" },
-      }),
-    );
-
-    expect(listen).toHaveBeenCalledTimes(1);
-    const errorCalls = logger.error.mock.calls;
-    expect(
-      errorCalls.some(([, message]) =>
-        /normalize lease dates/.test(String(message)),
-      ),
-    ).toBe(true);
-  });
-
   it("warns but continues serving in production when schema drift is detected (so deploys can promote with cosmetic-only diffs)", async () => {
     const pushSchemaIfNeeded = vi
       .fn()
@@ -189,7 +137,6 @@ describe("start", () => {
     const logger = fakeLogger();
     const exit = vi.fn() as unknown as (code: number) => never;
     const seedIfEmpty = vi.fn().mockResolvedValue(undefined);
-    const cleanupLeaseDates = vi.fn().mockResolvedValue(0);
     const listen = vi.fn().mockResolvedValue(undefined);
 
     await start(
@@ -198,7 +145,6 @@ describe("start", () => {
         logger,
         exit,
         seedIfEmpty,
-        cleanupLeaseDates,
         listen,
         // GOOGLE_MAPS_API_KEY is set so this test exercises the
         // schema-out-of-date path rather than the Task #191

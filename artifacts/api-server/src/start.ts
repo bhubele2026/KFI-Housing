@@ -7,7 +7,6 @@ export interface StartDeps {
     options: PushSchemaOptions,
   ) => Promise<PushSchemaResult>;
   seedIfEmpty: () => Promise<void>;
-  cleanupLeaseDates: () => Promise<number>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -169,14 +168,6 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.error({ err }, "Failed to seed database");
     deps.exit(1);
     return;
-  }
-
-  try {
-    await deps.cleanupLeaseDates();
-  } catch (err) {
-    // Cleanup is a defensive convenience — the renewal calculator is also
-    // defensive — so we log and keep serving rather than refusing to start.
-    deps.logger.error({ err }, "Failed to normalize lease dates at startup");
   }
 
   try {

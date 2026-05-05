@@ -15,7 +15,7 @@ import { Briefcase, X, DollarSign, Building2, Download } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
+import { toCsv, toCsvRows, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Finance() {
@@ -98,7 +98,31 @@ export default function Finance() {
       { header: "Total Cost", value: (d: typeof financialData[number]) => d.totalCost },
       { header: "Net Profit", value: (d: typeof financialData[number]) => d.profit },
     ];
-    const csv = toCsv(financialData, columns);
+    const totalsRow: typeof financialData[number] = {
+      id: "__totals__",
+      name: activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total",
+      shortName: activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total",
+      customerId: "",
+      customerName: "",
+      revenue: totals.revenue,
+      leaseCost: totals.leaseCost,
+      utilCost: totals.utilCost,
+      totalCost: totals.totalCost,
+      profit: totals.profit,
+      occupiedBeds: 0,
+      totalBeds: 0,
+    };
+    // Blank out the non-numeric columns (Customer, Occupied/Total Beds) so the
+    // totals row only carries summed values alongside its label.
+    const numericHeaders = new Set(["Revenue", "Lease Cost", "Utility Cost", "Total Cost", "Net Profit"]);
+    const totalsColumns = columns.map((col) =>
+      col.header === "Property" || numericHeaders.has(col.header)
+        ? col
+        : { ...col, value: () => "" },
+    );
+    const bodyCsv = toCsv(financialData, columns);
+    const [totalsCsv = ""] = toCsvRows([totalsRow], totalsColumns);
+    const csv = `${bodyCsv}\r\n${totalsCsv}`;
     downloadCsv(timestampedCsvName("housingops-finance"), csv);
     toast({
       title: "Finance summary exported",

@@ -35,10 +35,18 @@ function escapeCell(value: CsvCellValue): string {
 export function toCsv<Row>(rows: readonly Row[], columns: readonly CsvColumn<Row>[]): string {
   const lines: string[] = [];
   lines.push(columns.map((c) => escapeCell(c.header)).join(","));
-  for (const row of rows) {
-    lines.push(columns.map((c) => escapeCell(c.value(row))).join(","));
-  }
+  lines.push(...toCsvRows(rows, columns));
   return lines.join("\r\n");
+}
+
+/**
+ * Serialize rows into CSV lines without a header. Useful for appending an
+ * extra row (e.g. a totals row) to an existing CSV string without having to
+ * re-parse or split on line delimiters — embedded CR/LF inside quoted cells
+ * would make naive splitting incorrect.
+ */
+export function toCsvRows<Row>(rows: readonly Row[], columns: readonly CsvColumn<Row>[]): string[] {
+  return rows.map((row) => columns.map((c) => escapeCell(c.value(row))).join(","));
 }
 
 /** Append a YYYY-MM-DD-HH-MM-SS timestamp to a base filename. */

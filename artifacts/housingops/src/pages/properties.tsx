@@ -39,7 +39,7 @@ import { CheckedAgoLabel } from "@/components/checked-ago-label";
 import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 
 type SortDir = "asc" | "desc" | null;
-type SortKey = "customer" | "rating" | "sqft";
+type SortKey = "customer" | "rating" | "sqft" | "totalBeds" | "occupied" | "vacant" | "chargePerBed";
 type MinRating = "any" | "3" | "4" | "5";
 type RatingSortKey = "overall" | RatingCategoryKey;
 type ViewMode = "table" | "map";
@@ -71,7 +71,7 @@ function getRatingValueFor(p: Property, key: RatingSortKey): number | null {
 const PROPERTIES_PREFS_STORAGE_KEY = "housingops:properties:prefs";
 const VALID_STATUS_FILTERS = new Set<string>(["All", "Active", "Inactive"]);
 const VALID_MIN_RATINGS = new Set<MinRating>(["any", "3", "4", "5"]);
-const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating", "sqft"]);
+const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating", "sqft", "totalBeds", "occupied", "vacant", "chargePerBed"]);
 const VALID_SORT_DIRS = new Set<Exclude<SortDir, null>>(["asc", "desc"]);
 const VALID_RATING_SORT_KEYS = new Set<RatingSortKey>(
   RATING_SORT_OPTIONS.map((o) => o.key),
@@ -280,6 +280,28 @@ export default function Properties() {
     return map;
   }, [properties, rooms]);
 
+  // Pre-compute total/occupied/vacant bed counts per property so both
+  // the table cells AND the map's info bubble pull from the same source
+  // — the bubble would otherwise have to re-filter `beds` for every
+  // pin, and the two views could drift out of sync if the table's
+  // counting logic ever changed. Declared above `filtered` so the bed-
+  // count column sorts can read from it without a TDZ.
+  const bedStatsByPropertyId = useMemo(() => {
+    const map = new Map<
+      string,
+      { total: number; occupied: number; vacant: number }
+    >();
+    for (const b of beds) {
+      const cur =
+        map.get(b.propertyId) ?? { total: 0, occupied: 0, vacant: 0 };
+      cur.total += 1;
+      if (b.status === "Occupied") cur.occupied += 1;
+      else cur.vacant += 1;
+      map.set(b.propertyId, cur);
+    }
+    return map;
+  }, [beds]);
+
   const filtered = useMemo(() => {
     const minRatingValue = minRating === "any" ? null : Number(minRating);
 
@@ -334,10 +356,33 @@ export default function Properties() {
           const cmp = ap - bp;
           return sortDir === "asc" ? cmp : -cmp;
         });
+      } else if (sortKey === "totalBeds" || sortKey === "occupied" || sortKey === "vacant" || sortKey === "chargePerBed") {
+        // Numeric column sort. Zero / missing values always sort to the
+        // end so an unbedded (or unpriced) property doesn't push real
+        // rows out of view when sorting ascending.
+        const valueOf = (p: Property): number | null => {
+          if (sortKey === "chargePerBed") {
+            return p.chargePerBed > 0 ? p.chargePerBed : null;
+          }
+          const stats = bedStatsByPropertyId.get(p.id);
+          if (!stats || stats.total === 0) return null;
+          if (sortKey === "totalBeds") return stats.total;
+          if (sortKey === "occupied") return stats.occupied;
+          return stats.vacant;
+        };
+        list.sort((a, b) => {
+          const av = valueOf(a);
+          const bv = valueOf(b);
+          if (av === null && bv === null) return 0;
+          if (av === null) return 1;
+          if (bv === null) return -1;
+          const cmp = av - bv;
+          return sortDir === "asc" ? cmp : -cmp;
+        });
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId]);
+  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId, bedStatsByPropertyId]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -358,6 +403,10 @@ export default function Properties() {
 
   const toggleCustomerSort = () => cycleSort("customer");
   const toggleSqftSort = () => cycleSort("sqft");
+  const toggleTotalBedsSort = () => cycleSort("totalBeds");
+  const toggleOccupiedSort = () => cycleSort("occupied");
+  const toggleVacantSort = () => cycleSort("vacant");
+  const toggleChargePerBedSort = () => cycleSort("chargePerBed");
 
   /**
    * Cycle through the rating sort for the chosen category. Picking a different
@@ -384,6 +433,28 @@ export default function Properties() {
   const customerSortDir: SortDir = sortKey === "customer" ? sortDir : null;
   const ratingSortDir: SortDir = sortKey === "rating" ? sortDir : null;
   const sqftSortDir: SortDir = sortKey === "sqft" ? sortDir : null;
+  const totalBedsSortDir: SortDir = sortKey === "totalBeds" ? sortDir : null;
+  const occupiedSortDir: SortDir = sortKey === "occupied" ? sortDir : null;
+  const vacantSortDir: SortDir = sortKey === "vacant" ? sortDir : null;
+  const chargePerBedSortDir: SortDir = sortKey === "chargePerBed" ? sortDir : null;
+
+  // Shared icon for the new numeric column sort headers — keeps every
+  // header rendering identical chevrons without each one repeating the
+  // same ternary.
+  const numericSortIcon = (dir: SortDir) =>
+    dir === "asc" ? (
+      <ArrowUp className="h-3.5 w-3.5" />
+    ) : dir === "desc" ? (
+      <ArrowDown className="h-3.5 w-3.5" />
+    ) : (
+      <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+    );
+  const sortAriaSuffix = (dir: SortDir) =>
+    dir === "asc"
+      ? " (currently ascending)"
+      : dir === "desc"
+        ? " (currently descending)"
+        : "";
   const activeRatingSortLabel =
     sortKey === "rating"
       ? RATING_SORT_OPTIONS.find((o) => o.key === ratingSortCategory)?.label ?? "Rating"
@@ -756,27 +827,6 @@ export default function Properties() {
       return new Set(ids);
     });
   }, []);
-
-  // Pre-compute total/occupied/vacant bed counts per property so both
-  // the table cells AND the map's info bubble pull from the same source
-  // — the bubble would otherwise have to re-filter `beds` for every
-  // pin, and the two views could drift out of sync if the table's
-  // counting logic ever changed.
-  const bedStatsByPropertyId = useMemo(() => {
-    const map = new Map<
-      string,
-      { total: number; occupied: number; vacant: number }
-    >();
-    for (const b of beds) {
-      const cur =
-        map.get(b.propertyId) ?? { total: 0, occupied: 0, vacant: 0 };
-      cur.total += 1;
-      if (b.status === "Occupied") cur.occupied += 1;
-      else cur.vacant += 1;
-      map.set(b.propertyId, cur);
-    }
-    return map;
-  }, [beds]);
 
   const toMappable = useCallback(
     (p: Property): MappableProperty => {
@@ -1369,9 +1419,42 @@ export default function Properties() {
                   </TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead>City</TableHead>
-                  <TableHead className="text-center">Total Beds</TableHead>
-                  <TableHead className="text-center">Occupied</TableHead>
-                  <TableHead className="text-center">Vacant</TableHead>
+                  <TableHead className="text-center">
+                    <button
+                      type="button"
+                      onClick={toggleTotalBedsSort}
+                      className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-total-beds"
+                      aria-label={`Sort by total beds${sortAriaSuffix(totalBedsSortDir)}`}
+                    >
+                      Total Beds
+                      {numericSortIcon(totalBedsSortDir)}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <button
+                      type="button"
+                      onClick={toggleOccupiedSort}
+                      className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-occupied"
+                      aria-label={`Sort by occupied beds${sortAriaSuffix(occupiedSortDir)}`}
+                    >
+                      Occupied
+                      {numericSortIcon(occupiedSortDir)}
+                    </button>
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <button
+                      type="button"
+                      onClick={toggleVacantSort}
+                      className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-vacant"
+                      aria-label={`Sort by vacant beds${sortAriaSuffix(vacantSortDir)}`}
+                    >
+                      Vacant
+                      {numericSortIcon(vacantSortDir)}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">
                     <button
                       type="button"
@@ -1396,7 +1479,18 @@ export default function Properties() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">Charge / Bed</TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      type="button"
+                      onClick={toggleChargePerBedSort}
+                      className="inline-flex items-center gap-1 ml-auto hover:text-foreground transition-colors"
+                      data-testid="button-sort-charge-per-bed"
+                      aria-label={`Sort by charge per bed${sortAriaSuffix(chargePerBedSortDir)}`}
+                    >
+                      Charge / Bed
+                      {numericSortIcon(chargePerBedSortDir)}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead>
                     <DropdownMenu>

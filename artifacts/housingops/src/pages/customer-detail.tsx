@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -56,7 +56,28 @@ export default function CustomerDetail() {
   const [, navigate] = useLocation();
   const { customers, properties, beds, occupants, isLoading, updateCustomer } = useData();
   const { toast } = useToast();
-  const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(12);
+  const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(() => {
+    if (typeof window === "undefined") return 12;
+    try {
+      const stored = window.localStorage.getItem("revenue-trend-range-months");
+      const parsed = stored ? Number(stored) : NaN;
+      if (parsed === 3 || parsed === 6 || parsed === 12 || parsed === 24) {
+        return parsed;
+      }
+    } catch {
+      // ignore storage failures (private mode, quota, etc.)
+    }
+    return 12;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("revenue-trend-range-months", String(trendMonths));
+    } catch {
+      // ignore storage failures
+    }
+  }, [trendMonths]);
 
   // Per-property roll-ups for THIS customer: total beds, occupied beds, and
   // monthly revenue (summed from each active occupant's normalized monthly

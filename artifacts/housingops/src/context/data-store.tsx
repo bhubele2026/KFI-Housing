@@ -763,9 +763,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       "state" in updates ||
       "zip" in updates;
     const writingCoords = "lat" in updates || "lng" in updates;
+    // Address edits also reset the "verified" flag — a manual
+    // verification only applies to the address it was made against.
+    // The server enforces the same rule, but clearing it optimistically
+    // keeps the UI badge from briefly showing the wrong state.
     const effectiveUpdates: Partial<Property> =
       touchesAddress && !writingCoords
-        ? { ...updates, lat: null, lng: null }
+        ? { ...updates, lat: null, lng: null, coordsVerified: false }
         : updates;
     const handlers = captureRollback<Property[]>(propertiesKey, "save your property changes");
     patchInList<Property>(propertiesKey, id, effectiveUpdates);

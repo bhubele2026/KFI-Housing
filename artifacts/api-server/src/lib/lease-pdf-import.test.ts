@@ -48,6 +48,7 @@ function makeProperty(overrides: Partial<PropertyRow> = {}): PropertyRow {
     ratings: EMPTY_RATINGS,
     lat: null,
     lng: null,
+    coordsVerified: false,
     ...overrides,
   };
 }

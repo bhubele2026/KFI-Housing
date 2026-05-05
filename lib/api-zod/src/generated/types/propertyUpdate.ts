@@ -38,4 +38,9 @@ export interface PropertyUpdate {
   ratings?: Ratings;
   lat?: number | null;
   lng?: number | null;
+  /** Whether the operator has confirmed the persisted lat/lng
+pinpoints the property accurately. See `Property.coordsVerified`
+for the full contract.
+ */
+  coordsVerified?: boolean;
 }

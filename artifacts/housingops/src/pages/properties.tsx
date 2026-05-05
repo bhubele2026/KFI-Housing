@@ -887,6 +887,7 @@ export default function Properties() {
         lat: p.lat ?? null,
         lng: p.lng ?? null,
         renewal: bubbleRenewal,
+        coordsVerified: p.coordsVerified ?? false,
       };
     },
     [bedStatsByPropertyId, customerById, leases],

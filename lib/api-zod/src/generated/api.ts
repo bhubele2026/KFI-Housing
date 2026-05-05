@@ -173,6 +173,12 @@ export const ImportDataBody = zod.object({
         .describe(
           "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
         ),
+      coordsVerified: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+        ),
     }),
   ),
   leases: zod.array(
@@ -419,6 +425,12 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
     ),
+  coordsVerified: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
 });
 export const ListPropertiesResponse = zod.array(ListPropertiesResponseItem);
 
@@ -518,6 +530,12 @@ export const CreatePropertyBody = zod.object({
     .describe(
       "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
     ),
+  coordsVerified: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
 });
 
 /**
@@ -605,6 +623,12 @@ export const UpdatePropertyBody = zod.object({
     ),
   lat: zod.number().nullish(),
   lng: zod.number().nullish(),
+  coordsVerified: zod
+    .boolean()
+    .optional()
+    .describe(
+      "Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. See `Property.coordsVerified`\nfor the full contract.\n",
+    ),
 });
 
 export const updatePropertyResponseRatingsLandlordMin = 0;
@@ -699,6 +723,12 @@ export const UpdatePropertyResponse = zod.object({
     .nullish()
     .describe(
       "Cached geographic longitude resolved from the property's\naddress. See `lat` for caching semantics.\n",
+    ),
+  coordsVerified: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
     ),
 });
 

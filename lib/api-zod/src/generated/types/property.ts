@@ -47,4 +47,12 @@ Cleared when the address changes so it gets re-geocoded.
 address. See `lat` for caching semantics.
  */
   lng?: number | null;
+  /** Whether the operator has confirmed the persisted lat/lng
+pinpoints the property accurately. Auto-geocoded pins land
+here as `false` so the UI can label them "approximate".
+Cleared back to `false` automatically when the address
+changes — a verified pin only applies to the address it
+was verified against.
+ */
+  coordsVerified?: boolean;
 }

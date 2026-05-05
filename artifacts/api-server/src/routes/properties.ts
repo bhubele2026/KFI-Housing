@@ -81,9 +81,21 @@ router.post("/properties", async (req, res): Promise<void> => {
   const explicitOverride =
     typeof body.data.lat === "number" && typeof body.data.lng === "number";
   const coords = await resolveCoordsForSave(body.data, explicitOverride);
+  // Trust whatever the client says about verification when it ships
+  // explicit coords (e.g. an import that already vetted them); auto-
+  // geocoded pins always start as unverified so the UI can flag them.
+  const coordsVerified =
+    explicitOverride && typeof body.data.coordsVerified === "boolean"
+      ? body.data.coordsVerified
+      : false;
   const [row] = await db
     .insert(propertiesTable)
-    .values({ ...body.data, lat: coords.lat, lng: coords.lng })
+    .values({
+      ...body.data,
+      lat: coords.lat,
+      lng: coords.lng,
+      coordsVerified,
+    })
     .returning();
   res.status(201).json(UpdatePropertyResponse.parse(row));
 });
@@ -112,8 +124,11 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
   const explicitCoords =
     typeof body.data.lat === "number" && typeof body.data.lng === "number";
 
-  let updateValues: typeof body.data & { lat?: number | null; lng?: number | null } =
-    body.data;
+  let updateValues: typeof body.data & {
+    lat?: number | null;
+    lng?: number | null;
+    coordsVerified?: boolean;
+  } = body.data;
 
   if (addressTouched && !explicitCoords) {
     // Need the persisted row so we can compose the *resulting*
@@ -135,9 +150,17 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
     };
     // Re-geocode and overwrite lat/lng on the update — including
     // clearing them to `null` on failure so a typo'd edit doesn't
-    // leave a stale pin pointing at the previous address.
+    // leave a stale pin pointing at the previous address. Auto-
+    // resolved coords always start unverified — a manual verification
+    // only applies to the address it was made against, so an address
+    // change resets the badge regardless of what the body said.
     const coords = await resolveCoordsForSave(merged, false);
-    updateValues = { ...body.data, lat: coords.lat, lng: coords.lng };
+    updateValues = {
+      ...body.data,
+      lat: coords.lat,
+      lng: coords.lng,
+      coordsVerified: false,
+    };
   }
 
   const [row] = await db

@@ -83,6 +83,14 @@ export interface MappableProperty {
    * "Due in 14 days" should read.
    */
   renewal?: { level: Exclude<RenewalUrgency, "ok">; label: string } | null;
+  /**
+   * Whether the persisted lat/lng has been operator-confirmed. When
+   * `false` (the default for auto-geocoded pins) the info bubble shows
+   * an "Approximate location" badge so operators know the pin may
+   * have drifted as Google's index updated and that they can verify
+   * (or re-geocode) it from the property detail page.
+   */
+  coordsVerified?: boolean;
 }
 
 interface PortfolioMapProps {
@@ -202,6 +210,29 @@ function buildInfoBubbleContent(
     cust.style.marginBottom = "6px";
     cust.dataset.testid = `portfolio-map-info-customer-${p.id}`;
     root.appendChild(cust);
+  }
+
+  // Trust badge — surfaced when the persisted coordinates were
+  // resolved automatically (server-side geocode or front-end
+  // `onGeocoded` writeback) and haven't been verified by an operator.
+  // Plain DOM (not React) for the same reason as the rest of this
+  // bubble — Google Maps owns the InfoWindow lifecycle.
+  if (p.coordsVerified === false) {
+    const badge = document.createElement("div");
+    badge.dataset.testid = `portfolio-map-info-approximate-${p.id}`;
+    badge.textContent = "Approximate location";
+    badge.style.display = "inline-block";
+    badge.style.fontSize = "11px";
+    badge.style.fontWeight = "500";
+    badge.style.padding = "2px 6px";
+    badge.style.marginBottom = "6px";
+    badge.style.borderRadius = "4px";
+    badge.style.color = "#92400e";
+    badge.style.background = "#fef3c7";
+    badge.style.border = "1px solid #fde68a";
+    badge.title =
+      "Pin auto-located from the address. Open the property to verify or re-geocode.";
+    root.appendChild(badge);
   }
 
   if (typeof p.totalBeds === "number") {

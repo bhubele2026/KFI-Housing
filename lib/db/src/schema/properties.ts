@@ -1,4 +1,4 @@
-import { pgTable, text, integer, doublePrecision, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, doublePrecision, jsonb, boolean } from "drizzle-orm/pg-core";
 
 /** Per-property subjective ratings, 0–5 whole-star scale. 0 = not rated. */
 export interface PropertyRatings {
@@ -55,6 +55,14 @@ export const propertiesTable = pgTable("properties", {
   // map falls back to live geocoding when these are absent.
   lat: doublePrecision("lat"),
   lng: doublePrecision("lng"),
+  // Whether the operator has confirmed the persisted lat/lng pinpoints
+  // the property accurately. Coordinates produced by automatic
+  // geocoding (server-side `resolveCoordsForSave`, or the legacy
+  // front-end `onGeocoded` writeback) land here as `false` so the UI
+  // can flag pins as approximate. The badge clears back to `false`
+  // automatically whenever the address changes — a verified pin only
+  // applies to the address it was verified against.
+  coordsVerified: boolean("coords_verified").notNull().default(false),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

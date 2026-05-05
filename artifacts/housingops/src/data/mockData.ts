@@ -84,6 +84,11 @@ export const PropertySchema = z.object({
   // change so the next view re-resolves.
   lat: z.number().nullable().optional(),
   lng: z.number().nullable().optional(),
+  // Whether the operator has confirmed lat/lng pinpoints the property
+  // accurately. Auto-geocoded pins arrive as `false` so the UI can
+  // label the marker "approximate location"; cleared back to `false`
+  // automatically whenever the address changes.
+  coordsVerified: z.boolean().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 

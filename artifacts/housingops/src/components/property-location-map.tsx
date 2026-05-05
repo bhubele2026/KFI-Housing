@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertCircle,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import {
   getMapsKeyConsoleUrl,
@@ -89,6 +90,29 @@ interface PropertyLocationMapProps {
    * Google again. Mirrors `PortfolioMap.onGeocoded`'s contract.
    */
   onGeocoded?: (point: { lat: number; lng: number }) => void;
+  /**
+   * Whether the persisted lat/lng has been operator-confirmed. Drives
+   * the trust badge below the map: `true` shows a "Verified location"
+   * chip; `false` (the default for auto-geocoded pins) shows an
+   * "Approximate location" chip alongside the "Mark as verified" and
+   * "Re-geocode" actions. `undefined` is treated as `false` so legacy
+   * rows (created before this column existed) surface the same
+   * unverified affordances.
+   */
+  coordsVerified?: boolean;
+  /**
+   * Called when the operator clicks "Mark as verified". The parent
+   * persists `coordsVerified: true` onto the property record so the
+   * badge sticks across reloads.
+   */
+  onMarkVerified?: () => void;
+  /**
+   * Called when the operator clicks "Re-geocode". The parent re-runs
+   * the server-side geocode by re-PATCHing the address fields, which
+   * also resets `coordsVerified` to `false` for the freshly-resolved
+   * coords.
+   */
+  onRegeocode?: () => void;
 }
 
 function formatAddressLines(
@@ -123,6 +147,9 @@ export function PropertyLocationMap({
   lat,
   lng,
   onGeocoded,
+  coordsVerified,
+  onMarkVerified,
+  onRegeocode,
 }: PropertyLocationMapProps) {
   const { street, cityStateZip, full } = formatAddressLines(
     address,
@@ -818,6 +845,77 @@ export function PropertyLocationMap({
               <Navigation className="h-4 w-4" />
               Directions
             </a>
+            {/*
+              Trust badge + per-pin actions. Surfaces whether the
+              persisted coordinates are operator-confirmed or were
+              auto-resolved by the server-side geocoder. Auto-resolved
+              pins can drift over time as Google updates its index, so
+              we offer two affordances right next to the badge:
+                * "Mark as verified" — locks in the current lat/lng so
+                  the badge flips to "Verified" and the portfolio map
+                  bubble stops surfacing the "Approximate location"
+                  warning.
+                * "Re-geocode" — re-runs the server-side geocode for
+                  the current address so an operator can refresh a
+                  stale pin without editing the address fields. Resets
+                  the badge back to "Approximate" because the freshly-
+                  resolved coords haven't been verified yet.
+              Hidden when the address is blank — the early-return
+              empty-state branch above owns that case.
+            */}
+            {(onMarkVerified || onRegeocode) && (
+              <div
+                className="flex flex-wrap items-center gap-2 text-xs"
+                data-testid="property-location-trust-row"
+              >
+                {coordsVerified ? (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-500/30"
+                    data-testid="property-location-trust-badge"
+                    data-trust="verified"
+                    title="An operator confirmed this pin pinpoints the property."
+                  >
+                    <ShieldCheck className="h-3 w-3" />
+                    Verified location
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50 px-2 py-0.5 font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-500/30"
+                    data-testid="property-location-trust-badge"
+                    data-trust="approximate"
+                    title="Pin auto-located from the address. Verify it or re-run the geocoder if it looks off."
+                  >
+                    <AlertCircle className="h-3 w-3" />
+                    Approximate location
+                  </span>
+                )}
+                {!coordsVerified && onMarkVerified && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={onMarkVerified}
+                    data-testid="property-location-mark-verified"
+                  >
+                    Mark as verified
+                  </Button>
+                )}
+                {onRegeocode && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs"
+                    onClick={onRegeocode}
+                    data-testid="property-location-regeocode"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Re-geocode
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

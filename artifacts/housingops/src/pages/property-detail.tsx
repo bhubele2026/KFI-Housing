@@ -736,9 +736,30 @@ export default function PropertyDetail() {
               zip={property.zip}
               lat={property.lat ?? null}
               lng={property.lng ?? null}
+              coordsVerified={property.coordsVerified ?? false}
               onGeocoded={(point) =>
                 updateProperty(id, { lat: point.lat, lng: point.lng })
               }
+              onMarkVerified={() =>
+                updateProperty(id, { coordsVerified: true })
+              }
+              onRegeocode={() => {
+                // Resending the address with no body diff is enough to
+                // make the server re-geocode (it re-geocodes whenever
+                // any address field is in the body), and the route also
+                // resets `coordsVerified` to false on the freshly-
+                // resolved coords so the badge reflects the new state.
+                // Optimistically clear the local cached coords so the
+                // map shows the loading state while the round-trip is
+                // in flight, instead of leaving the old pin sitting in
+                // the wrong spot.
+                updateProperty(id, {
+                  address: property.address,
+                  lat: null,
+                  lng: null,
+                  coordsVerified: false,
+                });
+              }}
             />
 
             {/*

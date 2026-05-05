@@ -62,6 +62,7 @@ interface PropertyRow {
   };
   lat: number | null;
   lng: number | null;
+  coordsVerified: boolean;
 }
 
 const store = new Map<string, PropertyRow>();
@@ -204,6 +205,7 @@ describe("properties route — server-side geocoding (Task #152)", () => {
       ratings: EMPTY_RATINGS,
       lat: null,
       lng: null,
+      coordsVerified: false,
       ...overrides,
     };
   }
@@ -358,6 +360,94 @@ describe("properties route — server-side geocoding (Task #152)", () => {
     const persisted = (await res.json()) as PropertyRow;
     expect(persisted.lat).toBe(9.99);
     expect(persisted.lng).toBe(-8.88);
+  });
+
+  // -------------------------------------------------------------------------
+  // Task #153 — `coordsVerified` trust column
+  // -------------------------------------------------------------------------
+  // The column lets the UI render an "Approximate location" badge for
+  // auto-geocoded pins and a "Verified location" badge once an operator
+  // confirms the pin pinpoints the property. The invariants exercised
+  // below are the contract the front-end depends on: any time the
+  // server re-geocodes, trust resets to false; explicit lat/lng
+  // honors any explicit `coordsVerified` value the front-end sent;
+  // and a pure metadata edit can flip the badge without touching the
+  // pin.
+
+  it("POST /properties resets coordsVerified to false on auto-geocoded pins (operator hasn't confirmed yet)", async () => {
+    geocodeMock.mockResolvedValueOnce({ lat: 30.2672, lng: -97.7431 });
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(makeCreateBody({ id: "p-cv1", coordsVerified: true })),
+    });
+    expect(res.status).toBe(201);
+    const persisted = (await res.json()) as PropertyRow;
+    // Even though the body claimed verified=true, the route forces
+    // false because the coords came from the geocoder, not the user.
+    expect(persisted.coordsVerified).toBe(false);
+  });
+
+  it("POST /properties honors coordsVerified=true alongside explicit lat/lng (e.g. trusted import)", async () => {
+    const res = await fetch(`${baseUrl}/api/properties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        makeCreateBody({
+          id: "p-cv2",
+          lat: 1.23,
+          lng: 4.56,
+          coordsVerified: true,
+        }),
+      ),
+    });
+    expect(res.status).toBe(201);
+    const persisted = (await res.json()) as PropertyRow;
+    expect(persisted.coordsVerified).toBe(true);
+  });
+
+  it("PATCH /properties/:id resets coordsVerified to false when an address re-geocode runs (pin moved, trust gone)", async () => {
+    store.set("p-cv3", {
+      ...makeCreateBody({
+        id: "p-cv3",
+        lat: 30.2672,
+        lng: -97.7431,
+        coordsVerified: true,
+      }),
+    });
+    geocodeMock.mockResolvedValueOnce({ lat: 32.7767, lng: -96.797 });
+
+    const res = await fetch(`${baseUrl}/api/properties/p-cv3`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ city: "Dallas", zip: "75201" }),
+    });
+    expect(res.status).toBe(200);
+    const persisted = (await res.json()) as PropertyRow;
+    expect(persisted.coordsVerified).toBe(false);
+  });
+
+  it("PATCH /properties/:id with only coordsVerified=true (operator marks pin verified) skips the geocoder and persists the flag", async () => {
+    store.set("p-cv4", {
+      ...makeCreateBody({
+        id: "p-cv4",
+        lat: 30.2672,
+        lng: -97.7431,
+        coordsVerified: false,
+      }),
+    });
+    const res = await fetch(`${baseUrl}/api/properties/p-cv4`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ coordsVerified: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(geocodeMock).not.toHaveBeenCalled();
+    const persisted = (await res.json()) as PropertyRow;
+    expect(persisted.coordsVerified).toBe(true);
+    // Pin coords untouched.
+    expect(persisted.lat).toBe(30.2672);
+    expect(persisted.lng).toBe(-97.7431);
   });
 
   it("PATCH /properties/:id returns 404 when the row doesn't exist (and never calls the geocoder)", async () => {

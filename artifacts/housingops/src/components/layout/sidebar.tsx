@@ -15,7 +15,8 @@ import {
 } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
-import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
+import { useGeocodeFailures, useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
+import { formatDistanceToNow } from "date-fns";
 import { useGeocodeFailureToasts } from "@/hooks/use-geocode-failure-toasts";
 import {
   clearGeocodeFailures,
@@ -63,16 +64,45 @@ export function Sidebar() {
   // logic exactly (count properties whose CURRENT formatted address
   // matches a cached failure) so the badge and the panel always agree.
   const geocodeFailures = useGeocodeFailures();
-  const addressesNeedingFixCount = useMemo(() => {
-    if (geocodeFailures.size === 0) return 0;
-    if (!properties) return 0;
+  // Pulled alongside the failure set so the badge tooltip can mirror the
+  // Properties rollup's "Checked N ago" label — operators on narrow
+  // displays who never open /properties get the same staleness signal
+  // by hovering the badge. Updating live falls out of the hook's
+  // subscription path: every failure recording or re-recording rebuilds
+  // the Map, which re-renders us and re-runs the memo below.
+  const geocodeFailureTimestamps = useGeocodeFailureTimestamps();
+  const { addressesNeedingFixCount, oldestFailureCheckedAt } = useMemo(() => {
+    if (geocodeFailures.size === 0 || !properties) {
+      return { addressesNeedingFixCount: 0, oldestFailureCheckedAt: null as number | null };
+    }
     let count = 0;
+    let oldest: number | null = null;
     for (const p of properties) {
       const addr = formatGeocodeAddress(p);
-      if (addr.length > 0 && geocodeFailures.has(addr)) count += 1;
+      if (addr.length === 0 || !geocodeFailures.has(addr)) continue;
+      count += 1;
+      // Track the EARLIEST timestamp across matching properties so the
+      // tooltip can call out the most stale flag — that's the one
+      // operators most need a nudge to triage. Falls back silently if
+      // a timestamp is missing (shouldn't happen in steady state since
+      // the cache and timestamp Map are written together).
+      const ts = geocodeFailureTimestamps.get(addr);
+      if (typeof ts === "number" && (oldest === null || ts < oldest)) {
+        oldest = ts;
+      }
     }
-    return count;
-  }, [properties, geocodeFailures]);
+    return { addressesNeedingFixCount: count, oldestFailureCheckedAt: oldest };
+  }, [properties, geocodeFailures, geocodeFailureTimestamps]);
+  const addressesNeedingFixTooltip = useMemo(() => {
+    if (addressesNeedingFixCount === 0) return "";
+    const countLabel = `${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`;
+    if (typeof oldestFailureCheckedAt !== "number") return countLabel;
+    // Match the Properties rollup phrasing exactly ("Checked N ago")
+    // so the two surfaces read the same. Prefixed with "Oldest flag"
+    // so the meaning is clear when we're rolling up multiple rows
+    // into a single line of tooltip text.
+    return `${countLabel} — Oldest flag checked ${formatDistanceToNow(oldestFailureCheckedAt, { addSuffix: true })}`;
+  }, [addressesNeedingFixCount, oldestFailureCheckedAt]);
   // Pop a one-shot toast each time a brand-new failure lands in the
   // shared cache. The badge above only catches the operator's eye if
   // the sidebar is actually visible — on narrow displays where the
@@ -339,8 +369,8 @@ export function Sidebar() {
                         ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
                         : "bg-destructive/15 text-destructive"
                     )}
-                    aria-label={`${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`}
-                    title={`${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`}
+                    aria-label={addressesNeedingFixTooltip}
+                    title={addressesNeedingFixTooltip}
                     data-testid="badge-properties-needing-address-fix"
                   >
                     {addressesNeedingFixCount}

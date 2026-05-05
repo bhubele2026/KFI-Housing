@@ -535,6 +535,97 @@ describe("Sidebar Properties nav — addresses-needing-fix badge", () => {
     expect(navBadge()).toBeNull();
   });
 
+  // ── Badge tooltip "Oldest flag checked …" parity with /properties ────
+  //
+  // The Properties page rollup labels each flagged row with
+  // "Checked N ago". On narrow displays where operators rarely open
+  // /properties, the same staleness signal needs to surface from the
+  // sidebar badge — hovering should reveal the OLDEST flag's
+  // relative-time stamp so an operator can decide whether triage is
+  // urgent without leaving their current page.
+
+  it("tooltip surfaces 'Oldest flag checked N ago' for a single failure (and keeps the count phrasing)", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    await render();
+    const badgeEl = navBadge();
+    expect(badgeEl).not.toBeNull();
+    // Just-recorded failures land at Date.now(), so the relative-time
+    // string can be "less than a minute ago" / "1 minute ago" depending
+    // on the clock — assert on the prefix instead of the exact suffix
+    // so the test is stable across runs.
+    const title = badgeEl!.getAttribute("title") ?? "";
+    expect(title).toMatch(/Oldest flag checked /);
+    expect(title).toMatch(/ago/);
+    // aria-label and title are kept in sync so screen-reader users
+    // get the same context as sighted operators on hover.
+    expect(badgeEl!.getAttribute("aria-label")).toBe(title);
+  });
+
+  it("tooltip reports the OLDEST timestamp when multiple failures are cached", async () => {
+    // Hydrate two failures whose timestamps differ by many days so the
+    // formatter outputs distinct, deterministic strings — "7 days ago"
+    // for the older, "1 day ago" for the newer. The badge tooltip must
+    // surface the older one so operators see the most-stale flag's age.
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const oneDayAgo = now - 1 * 24 * 60 * 60 * 1000;
+    const persisted = JSON.stringify({
+      failures: [
+        { address: addrFor(0), lastCheckedAt: sevenDaysAgo },
+        { address: addrFor(2), lastCheckedAt: oneDayAgo },
+      ],
+      dismissed: [],
+    });
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, persisted);
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await render();
+
+    const badgeEl = navBadge();
+    expect(badgeEl).not.toBeNull();
+    expect(badgeEl!.textContent).toBe("2");
+    const title = badgeEl!.getAttribute("title") ?? "";
+    expect(title).toMatch(/2 addresses need fixing/);
+    // The OLDER stamp wins. We assert on the "7 days" substring rather
+    // than the full string so a future formatter tweak (e.g. dropping
+    // the leading "about ") doesn't break the test, and we verify the
+    // newer "1 day" stamp does NOT leak into the tooltip.
+    expect(title).toMatch(/Oldest flag checked .*7 days ago/);
+    expect(title).not.toMatch(/1 day ago/);
+  });
+
+  it("tooltip updates live when a fresh failure with an older timestamp lands mid-session", async () => {
+    // Start with a recent failure; the tooltip should reflect that.
+    primeGeocodeCache(addrFor(0), null);
+    await render();
+    let title = navBadge()!.getAttribute("title") ?? "";
+    expect(title).toMatch(/Oldest flag checked /);
+    // Now simulate a sibling surface recording a much-older failure
+    // (e.g. hydration from a re-imported backup). The badge tooltip
+    // must re-render to call out the now-oldest stamp without the
+    // operator navigating anywhere.
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const persisted = JSON.stringify({
+      failures: [
+        { address: addrFor(0), lastCheckedAt: Date.now() },
+        { address: addrFor(2), lastCheckedAt: sevenDaysAgo },
+      ],
+      dismissed: [],
+    });
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(__FAILURE_STORAGE_KEY_FOR_TEST, persisted);
+    __hydrateGeocodeFailuresFromStorageForTest();
+    // A subsequent prime triggers the live subscription path so the
+    // sidebar re-renders against the freshly-hydrated cache.
+    await act(async () => {
+      primeGeocodeCache(addrFor(2), null);
+    });
+    title = navBadge()!.getAttribute("title") ?? "";
+    expect(title).toMatch(/2 addresses need fixing/);
+    expect(title).toMatch(/Oldest flag checked /);
+  });
+
   it("clearGeocodeFailures (called from the reset flows) drops the badge and wipes storage", async () => {
     // The reset handlers in this same file invoke
     // `clearGeocodeFailures()` from their `onSuccess` callback.

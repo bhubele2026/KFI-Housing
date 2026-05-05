@@ -72,11 +72,29 @@ async function notifySchemaDriftIfConfigured(
     return;
   }
 
+  // Cap webhook latency so a hung outbound request can never block the
+  // production startup sequence. The schema-drift path now continues to
+  // serve, so we must not let a slow notification webhook hold the
+  // server from calling listen() and answering health checks.
+  const NOTIFY_TIMEOUT_MS = 3_000;
   try {
-    await deps.notifySchemaDrift({
-      webhookUrl,
-      message: err instanceof Error ? err.message : String(err),
-    });
+    await Promise.race([
+      deps.notifySchemaDrift({
+        webhookUrl,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Schema drift webhook timed out after ${NOTIFY_TIMEOUT_MS}ms`,
+              ),
+            ),
+          NOTIFY_TIMEOUT_MS,
+        ).unref(),
+      ),
+    ]);
     deps.logger.info("Sent schema drift notification to chat webhook");
   } catch (notifyErr) {
     deps.logger.error(
@@ -112,17 +130,37 @@ export async function start(deps: StartDeps): Promise<void> {
       buildPushSchemaOptions(deps.env, deps.logger),
     );
   } catch (err) {
-    if (isProduction) {
-      deps.logger.error(
+    // In production, schema drift used to be fatal (`exit(1)`), which
+    // blocks publishes whenever the source-of-truth Drizzle schema and the
+    // production DB disagree on anything — including purely cosmetic diffs
+    // like `SET DEFAULT` changes. Those defaults are also expressed in the
+    // schema via Drizzle's `.default(...)`, so insert behaviour is
+    // identical regardless of what the DB-side default is, and refusing to
+    // start strands the deploy with no in-app way to apply the diff (the
+    // supported path is the publish-time schema flow on Replit).
+    //
+    // We now treat schema drift as a loud warning in production: log,
+    // fire the chat webhook if configured, and continue serving so the
+    // deploy can promote. Non-drift errors (DB connection failures,
+    // unexpected throws) still exit(1) and block the bad revision.
+    if (isProduction && isSchemaDriftError(err)) {
+      deps.logger.warn(
         { err },
-        "Database schema is out of date in production — run `pnpm --filter @workspace/db run push` to apply pending changes",
+        "Database schema drift detected in production — continuing to serve. Apply pending changes via the Publish flow's schema sync, or contact Replit support to apply them to the production database.",
       );
       await notifySchemaDriftIfConfigured(err, deps);
     } else {
-      deps.logger.error({ err }, "Failed to apply database schema changes");
+      if (isProduction) {
+        deps.logger.error(
+          { err },
+          "Failed to validate database schema in production — refusing to start",
+        );
+      } else {
+        deps.logger.error({ err }, "Failed to apply database schema changes");
+      }
+      deps.exit(1);
+      return;
     }
-    deps.exit(1);
-    return;
   }
 
   try {

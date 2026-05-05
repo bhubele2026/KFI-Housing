@@ -182,14 +182,15 @@ describe("start", () => {
     ).toBe(true);
   });
 
-  it("exits with a production-specific error message when schema is out of date", async () => {
+  it("warns but continues serving in production when schema drift is detected (so deploys can promote with cosmetic-only diffs)", async () => {
     const pushSchemaIfNeeded = vi
       .fn()
       .mockRejectedValue(new Error("Schema is out of date: 2 pending"));
     const logger = fakeLogger();
     const exit = vi.fn() as unknown as (code: number) => never;
-    const seedIfEmpty = vi.fn();
-    const listen = vi.fn();
+    const seedIfEmpty = vi.fn().mockResolvedValue(undefined);
+    const cleanupLeaseDates = vi.fn().mockResolvedValue(0);
+    const listen = vi.fn().mockResolvedValue(undefined);
 
     await start(
       makeDeps({
@@ -197,6 +198,7 @@ describe("start", () => {
         logger,
         exit,
         seedIfEmpty,
+        cleanupLeaseDates,
         listen,
         // GOOGLE_MAPS_API_KEY is set so this test exercises the
         // schema-out-of-date path rather than the Task #191
@@ -209,14 +211,14 @@ describe("start", () => {
       }),
     );
 
-    expect(exit).toHaveBeenCalledWith(1);
-    expect(seedIfEmpty).not.toHaveBeenCalled();
-    expect(listen).not.toHaveBeenCalled();
+    expect(exit).not.toHaveBeenCalled();
+    expect(seedIfEmpty).toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledWith(3000);
 
-    const errorCalls = logger.error.mock.calls;
+    const warnCalls = logger.warn.mock.calls;
     expect(
-      errorCalls.some(([, message]) =>
-        /pnpm --filter @workspace\/db run push/.test(String(message)),
+      warnCalls.some(([, message]) =>
+        /schema drift detected in production/i.test(String(message)),
       ),
     ).toBe(true);
   });
@@ -252,7 +254,9 @@ describe("start", () => {
       webhookUrl: "https://hooks.example.com/T/B/X",
       message: "Schema is out of date: 3 pending statement(s) detected.",
     });
-    expect(exit).toHaveBeenCalledWith(1);
+    // Schema drift in production now warns + notifies + continues
+    // serving (the webhook is the visibility surface, not the exit).
+    expect(exit).not.toHaveBeenCalled();
   });
 
   it("does not notify when SCHEMA_DRIFT_WEBHOOK_URL is unset", async () => {
@@ -312,11 +316,17 @@ describe("start", () => {
       .fn()
       .mockRejectedValue(new Error("ECONNREFUSED: cannot reach database"));
     const notifySchemaDrift = vi.fn();
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const seedIfEmpty = vi.fn();
+    const listen = vi.fn();
 
     await start(
       makeDeps({
         pushSchemaIfNeeded,
         notifySchemaDrift,
+        exit,
+        seedIfEmpty,
+        listen,
         env: {
           NODE_ENV: "production",
           PORT: "3000",
@@ -330,6 +340,12 @@ describe("start", () => {
     );
 
     expect(notifySchemaDrift).not.toHaveBeenCalled();
+    // Non-drift production startup failures (e.g., DB unreachable) must
+    // still be fatal so the bad revision never promotes — only benign
+    // schema-drift errors get the new warn-and-continue treatment.
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(seedIfEmpty).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
   });
 
   it("exits 1 in production when neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is set, BEFORE listening or touching the DB", async () => {
@@ -566,7 +582,7 @@ describe("start", () => {
     expect(mapsWarn).toBeDefined();
   });
 
-  it("still exits cleanly if the chat webhook itself fails", async () => {
+  it("still continues serving cleanly if the chat webhook itself fails during schema drift", async () => {
     const pushSchemaIfNeeded = vi
       .fn()
       .mockRejectedValue(new Error("Schema is out of date: 1 pending"));
@@ -575,6 +591,7 @@ describe("start", () => {
       .mockRejectedValue(new Error("webhook 500"));
     const logger = fakeLogger();
     const exit = vi.fn() as unknown as (code: number) => never;
+    const listen = vi.fn().mockResolvedValue(undefined);
 
     await start(
       makeDeps({
@@ -582,6 +599,7 @@ describe("start", () => {
         notifySchemaDrift,
         logger,
         exit,
+        listen,
         env: {
           NODE_ENV: "production",
           PORT: "3000",
@@ -593,7 +611,10 @@ describe("start", () => {
       }),
     );
 
-    expect(exit).toHaveBeenCalledWith(1);
+    // Webhook failure is logged but doesn't change the new
+    // warn-and-continue behavior for production schema drift.
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledWith(3000);
     const errorCalls = logger.error.mock.calls;
     expect(
       errorCalls.some(([, message]) =>

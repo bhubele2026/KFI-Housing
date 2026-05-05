@@ -673,20 +673,26 @@ export default function Properties() {
    * branches.
    */
   const handleRetryAddress = useCallback(
-    async (addr: string) => {
-      if (!addr) return;
+    async (
+      addr: string,
+      options?: { silent?: boolean },
+    ): Promise<"fixed" | "still-failing" | "error" | "skipped"> => {
+      if (!addr) return "skipped";
       // Disable double-submits for the same address. The button is
       // already `disabled` while in-flight, but a second click can
       // still race in via keyboard focus + Enter on a stale render.
-      if (retryingAddresses.has(addr)) return;
+      if (retryingAddresses.has(addr)) return "skipped";
+      const silent = options?.silent === true;
       if (!mapsApiKey) {
-        toast({
-          title: "Couldn't retry",
-          description:
-            "Google Maps key isn't loaded yet. Try again in a moment.",
-          variant: "destructive",
-        });
-        return;
+        if (!silent) {
+          toast({
+            title: "Couldn't retry",
+            description:
+              "Google Maps key isn't loaded yet. Try again in a moment.",
+            variant: "destructive",
+          });
+        }
+        return "error";
       }
       setRetryingAddresses((prev) => {
         const next = new Set(prev);
@@ -706,34 +712,44 @@ export default function Properties() {
           // operator can see the retry was honored but didn't help.
           // The explicit toast is the only signal that the click did
           // anything at all (without it the disabled button just snaps
-          // back and looks like a no-op).
-          toast({
-            title: "Still couldn't pinpoint",
-            description:
-              "Google has no result for this address. Edit it to try a different spelling.",
-          });
-        } else {
-          // Success: the cache write inside `retryGeocode` already
-          // notified subscribers, so the row will disappear on the
-          // next render through `useGeocodeFailures`. We ALSO fire a
-          // brief confirmation toast so an operator who clicked Retry
-          // and then scrolled or tab-switched still sees that the
-          // click landed — without this, the only success signal is
-          // the row vanishing, which is easy to miss when you're not
-          // staring directly at the rollup panel. Mirrors the
-          // ZERO_RESULTS branch's toast for symmetry.
+          // back and looks like a no-op). Suppressed for bulk runs so
+          // the caller can roll N outcomes into one summary toast.
+          if (!silent) {
+            toast({
+              title: "Still couldn't pinpoint",
+              description:
+                "Google has no result for this address. Edit it to try a different spelling.",
+            });
+          }
+          return "still-failing";
+        }
+        // Success: the cache write inside `retryGeocode` already
+        // notified subscribers, so the row will disappear on the
+        // next render through `useGeocodeFailures`. We ALSO fire a
+        // brief confirmation toast so an operator who clicked Retry
+        // and then scrolled or tab-switched still sees that the
+        // click landed — without this, the only success signal is
+        // the row vanishing, which is easy to miss when you're not
+        // staring directly at the rollup panel. Mirrors the
+        // ZERO_RESULTS branch's toast for symmetry. Bulk caller
+        // suppresses to avoid N "Found it" toasts in a row.
+        if (!silent) {
           toast({
             title: "Found it",
             description: "Google pinpointed this address. Removing it from the list.",
           });
         }
+        return "fixed";
       } catch {
-        toast({
-          title: "Retry failed",
-          description:
-            "Couldn't reach Google Maps. Check your connection and try again.",
-          variant: "destructive",
-        });
+        if (!silent) {
+          toast({
+            title: "Retry failed",
+            description:
+              "Couldn't reach Google Maps. Check your connection and try again.",
+            variant: "destructive",
+          });
+        }
+        return "error";
       } finally {
         setRetryingAddresses((prev) => {
           if (!prev.has(addr)) return prev;
@@ -813,9 +829,18 @@ export default function Properties() {
     }
     if (addresses.length < 2) return;
     setBulkRetryProgress({ done: 0, total: addresses.length });
+    let fixed = 0;
+    let stillFailing = 0;
+    let errored = 0;
     try {
       for (const addr of addresses) {
-        await handleRetryAddress(addr);
+        // `silent: true` suppresses the per-row toasts in
+        // `handleRetryAddress` so the bulk run produces a single
+        // summary toast at the end instead of N noisy ones.
+        const outcome = await handleRetryAddress(addr, { silent: true });
+        if (outcome === "fixed") fixed += 1;
+        else if (outcome === "still-failing") stillFailing += 1;
+        else errored += 1; // "error" or "skipped" — both = "couldn't be attempted"
         setBulkRetryProgress((prev) =>
           prev ? { done: prev.done + 1, total: prev.total } : prev,
         );
@@ -823,6 +848,40 @@ export default function Properties() {
     } finally {
       setBulkRetryProgress(null);
     }
+    // One summary toast per bulk run. Wording covers the three shapes
+    // the operator cares about: all-success, all-still-failing, and
+    // the mixed common case. The "couldn't be attempted" tail is only
+    // mentioned when non-zero so the happy path stays terse.
+    const total = addresses.length;
+    const attemptedFailures = stillFailing + errored;
+    let title: string;
+    let description: string;
+    if (fixed === total) {
+      title = "All addresses pinpointed";
+      description =
+        total === 1
+          ? "Fixed the 1 flagged address."
+          : `Fixed all ${total} flagged addresses.`;
+    } else if (fixed === 0) {
+      title = "No addresses could be pinpointed";
+      description =
+        errored > 0 && stillFailing === 0
+          ? `Couldn't reach Google for ${errored} of ${total}. Check your connection and try again.`
+          : errored > 0
+            ? `${stillFailing} of ${total} still need attention; ${errored} couldn't be attempted.`
+            : `${total} still need attention. Try editing the addresses.`;
+    } else {
+      title = `Fixed ${fixed} of ${total}`;
+      description =
+        errored > 0
+          ? `${stillFailing} still need attention; ${errored} couldn't be attempted.`
+          : `${attemptedFailures} still need attention.`;
+    }
+    toast({
+      title,
+      description,
+      variant: fixed === 0 ? "destructive" : undefined,
+    });
   }, [
     isBulkRetrying,
     mapsApiKey,

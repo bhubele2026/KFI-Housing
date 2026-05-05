@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,21 +113,21 @@ export default function Utilities() {
         transition={{ duration: 0.2 }}
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Utilities</h1>
-            <p className="text-muted-foreground mt-1">All utility services across your portfolio</p>
-            {activeCustomerName && (
+        <PageHeader
+          title="Utilities"
+          description="All utility services across your portfolio"
+          meta={
+            activeCustomerName ? (
               <p
-                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                className="text-xs text-muted-foreground flex items-center gap-1"
                 data-testid="text-utilities-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
                 Showing only <span className="font-semibold">{activeCustomerName}</span>
               </p>
-            )}
-          </div>
-          <div className="flex items-center gap-4">
+            ) : null
+          }
+          actions={<>
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-customer-filter">
                 <SelectValue placeholder="Customer" />
@@ -155,8 +156,8 @@ export default function Utilities() {
                 <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
               )}
             </div>
-          </div>
-        </div>
+          </>}
+        />
 
         {activeCustomerName && (
           <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { getRenewalInfo, sortLeases } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -130,55 +131,55 @@ export default function Leases() {
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Leases</h1>
-            <p className="text-muted-foreground mt-1">Manage master lease agreements</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={handleDownloadCsv}
-              disabled={filteredLeases.length === 0}
-              data-testid="button-download-leases-csv"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
-            <UploadLeasePdfDialog onPdfImportFailed={() => setPdfFallbackOpen(true)} />
-            <AddLeaseDialog
-              properties={properties}
-              customers={customers}
-              onAdd={(lease) => {
-                addLease(lease);
-                const property = propertyById.get(lease.propertyId);
-                toast({
-                  title: "Lease added",
-                  description: property
-                    ? `Added a new lease for ${property.name}.`
-                    : "New lease created.",
-                });
-              }}
-            />
-            {/* Controlled-open instance used as a fallback when the PDF import flow fails. */}
-            <AddLeaseDialog
-              properties={properties}
-              customers={customers}
-              open={pdfFallbackOpen}
-              onOpenChange={setPdfFallbackOpen}
-              onAdd={(lease) => {
-                addLease(lease);
-                const property = propertyById.get(lease.propertyId);
-                toast({
-                  title: "Lease added",
-                  description: property
-                    ? `Added a new lease for ${property.name}.`
-                    : "New lease created.",
-                });
-              }}
-            />
-          </div>
-        </div>
+        <PageHeader
+          title="Leases"
+          description="Manage master lease agreements"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                onClick={handleDownloadCsv}
+                disabled={filteredLeases.length === 0}
+                data-testid="button-download-leases-csv"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+              <UploadLeasePdfDialog onPdfImportFailed={() => setPdfFallbackOpen(true)} />
+              <AddLeaseDialog
+                properties={properties}
+                customers={customers}
+                onAdd={(lease) => {
+                  addLease(lease);
+                  const property = propertyById.get(lease.propertyId);
+                  toast({
+                    title: "Lease added",
+                    description: property
+                      ? `Added a new lease for ${property.name}.`
+                      : "New lease created.",
+                  });
+                }}
+              />
+            </>
+          }
+        />
+        {/* Controlled-open instance used as a fallback when the PDF import flow fails. */}
+        <AddLeaseDialog
+          properties={properties}
+          customers={customers}
+          open={pdfFallbackOpen}
+          onOpenChange={setPdfFallbackOpen}
+          onAdd={(lease) => {
+            addLease(lease);
+            const property = propertyById.get(lease.propertyId);
+            toast({
+              title: "Lease added",
+              description: property
+                ? `Added a new lease for ${property.name}.`
+                : "New lease created.",
+            });
+          }}
+        />
 
         {activeCustomerName && (
           <div className="flex items-center gap-2">

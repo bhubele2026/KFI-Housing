@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,32 +128,34 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Dashboard</h1>
-            <p className="text-zinc-500 mt-1">Overview of your housing operations and financials.</p>
-            {activeCustomerName && (
+        <PageHeader
+          title="Dashboard"
+          description="Overview of your housing operations and financials."
+          meta={
+            activeCustomerName ? (
               <p
-                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                className="text-xs text-muted-foreground flex items-center gap-1"
                 data-testid="text-dashboard-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
                 Showing only <span className="font-semibold">{activeCustomerName}</span>
               </p>
-            )}
-          </div>
-          <Select value={customerFilter} onValueChange={updateCustomerFilter}>
-            <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
-              <SelectValue placeholder="Customer" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
-              {customers.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            ) : null
+          }
+          actions={
+            <Select value={customerFilter} onValueChange={updateCustomerFilter}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {cards.map((card, i) => (

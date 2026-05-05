@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
@@ -138,21 +139,21 @@ export default function Finance() {
         transition={{ duration: 0.2 }}
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Financials</h1>
-            <p className="text-muted-foreground mt-1">Profit & loss per property (monthly)</p>
-            {activeCustomerName && (
+        <PageHeader
+          title="Financials"
+          description="Profit & loss per property (monthly)"
+          meta={
+            activeCustomerName ? (
               <p
-                className="text-xs text-muted-foreground mt-2 flex items-center gap-1"
+                className="text-xs text-muted-foreground flex items-center gap-1"
                 data-testid="text-finance-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
                 Showing only <span className="font-semibold">{activeCustomerName}</span>
               </p>
-            )}
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            ) : null
+          }
+          actions={<>
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-finance-customer-filter">
                 <SelectValue placeholder="Customer" />
@@ -189,8 +190,8 @@ export default function Finance() {
                 </p>
               </div>
             </div>
-          </div>
-        </div>
+          </>}
+        />
 
         {activeCustomerName && (
           <div className="flex items-center gap-2">

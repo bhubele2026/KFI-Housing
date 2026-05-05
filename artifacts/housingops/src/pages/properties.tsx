@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { getRenewalInfo, computeOverallRating, computeRoomTotals, computePricePerSqft, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
@@ -1120,12 +1121,10 @@ export default function Properties() {
         transition={{ duration: 0.2 }}
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Properties</h1>
-            <p className="text-muted-foreground mt-1">Select a property to manage it</p>
-          </div>
-          <div className="flex items-center gap-2">
+        <PageHeader
+          title="Properties"
+          description="Select a property to manage it"
+          actions={<>
             {/* Table/Map toggle. Persisted with the rest of the toolbar
                 prefs so the operator's last choice survives refresh and
                 back-navigation. */}
@@ -1173,8 +1172,8 @@ export default function Properties() {
               <Plus className="mr-2 h-4 w-4" />
               Add Property
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
         {activeCustomerName && (
           <div className="flex items-center gap-2">

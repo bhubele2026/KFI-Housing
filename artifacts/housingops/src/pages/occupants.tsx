@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,38 +61,38 @@ export default function Occupants() {
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Occupants</h1>
-            <p className="text-muted-foreground mt-1">Manage employee housing assignments</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleDownloadCsv}
-              disabled={isLoading || filteredOccupants.length === 0}
-              data-testid="button-download-occupants-csv"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
-            <Button
-              asChild
-              disabled={properties.length === 0}
-              data-testid="button-add-occupant"
-              title={
-                properties.length === 0
-                  ? "Add a property first — occupants are assigned to beds inside a property."
-                  : "Open a property to assign an occupant to one of its beds."
-              }
-            >
-              <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Add Occupant
-              </Link>
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title="Occupants"
+          description="Manage employee housing assignments"
+          actions={
+            <>
+              <Button
+                variant="outline"
+                onClick={handleDownloadCsv}
+                disabled={isLoading || filteredOccupants.length === 0}
+                data-testid="button-download-occupants-csv"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+              <Button
+                asChild
+                disabled={properties.length === 0}
+                data-testid="button-add-occupant"
+                title={
+                  properties.length === 0
+                    ? "Add a property first — occupants are assigned to beds inside a property."
+                    : "Open a property to assign an occupant to one of its beds."
+                }
+              >
+                <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Add Occupant
+                </Link>
+              </Button>
+            </>
+          }
+        />
 
         <Card>
           <CardContent className="p-0">

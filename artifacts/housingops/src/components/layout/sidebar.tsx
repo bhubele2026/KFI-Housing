@@ -367,13 +367,21 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-lg">
-      <div className="flex h-16 items-center px-4 border-b border-sidebar-border bg-sidebar">
-        <img
-          src={logoUrl}
-          alt="HousingOps"
-          className="h-9 w-auto max-w-full object-contain"
-        />
+    <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
+      <div className="flex h-20 items-center px-4 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
+        {/* The canonical brand asset has a dark-navy wordmark intended
+            for light surfaces (login card, marketing). To preserve that
+            artwork untouched while still giving the logo prominence in
+            the dark sidebar, we mount the same `<img>` on a soft white
+            chip — non-destructive styling around the asset. */}
+        <div className="flex h-12 w-full items-center rounded-lg bg-white px-3 shadow-sm">
+          <img
+            src={logoUrl}
+            alt="HousingOps"
+            className="h-10 w-auto select-none"
+            draggable={false}
+          />
+        </div>
       </div>
 
       {activeScopedCustomer && (
@@ -406,7 +414,12 @@ export function Sidebar() {
         </div>
       )}
 
-      <nav className="flex-1 space-y-1 px-3 py-6 overflow-y-auto">
+      <div className="px-5 pt-5 pb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
+          Workspace
+        </p>
+      </div>
+      <nav className="flex-1 space-y-0.5 px-3 pb-6 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const isActive = location === item.href;
           const showAddressBadge =
@@ -415,16 +428,22 @@ export function Sidebar() {
             <Link key={item.href} href={item.href}>
               <span
                 className={cn(
-                  "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 cursor-pointer",
+                  "group relative flex items-center rounded-md px-3 py-2 text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
                   isActive
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                 )}
               >
+                {isActive && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-sidebar-primary-foreground/80"
+                  />
+                )}
                 <item.icon
                   className={cn(
-                    "mr-3 h-5 w-5 flex-shrink-0 transition-colors",
-                    isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/50 group-hover:text-sidebar-accent-foreground"
+                    "mr-3 h-[18px] w-[18px] flex-shrink-0 transition-colors",
+                    isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground"
                   )}
                   aria-hidden="true"
                 />
@@ -450,16 +469,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-4 bg-sidebar-accent/10 space-y-2">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center">
-            <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm shadow-sm">
-              AM
-            </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium">Admin Manager</p>
-              <p className="text-xs text-sidebar-foreground/60">admin@housingops.app</p>
-            </div>
+      <div className="border-t border-sidebar-border/70 p-4 bg-sidebar-accent/10 space-y-1.5">
+        <div className="flex items-center mb-3 px-1">
+          <div className="h-9 w-9 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-semibold text-sm shadow-sm ring-2 ring-sidebar-primary-foreground/10">
+            AM
+          </div>
+          <div className="ml-3 min-w-0">
+            <p className="text-sm font-semibold leading-tight truncate">Admin Manager</p>
+            <p className="text-[11px] text-sidebar-foreground/55 truncate">admin@housingops.app</p>
           </div>
         </div>
         <Button

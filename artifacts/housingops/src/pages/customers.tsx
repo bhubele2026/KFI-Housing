@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
+import { PageHeader } from "@/components/layout/page-header";
 import { useData, CustomerInUseError } from "@/context/data-store";
 import { type Customer, toMonthlyCharge } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
@@ -312,29 +313,27 @@ export default function Customers() {
         transition={{ duration: 0.2 }}
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-            <p className="text-muted-foreground mt-1">
-              Companies that lease beds across your portfolio.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              onClick={handleDownloadCsv}
-              disabled={isLoading || filtered.length === 0}
-              data-testid="button-download-customers-csv"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV
-            </Button>
-            <Button onClick={openAdd} data-testid="button-add-customer">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Customer
-            </Button>
-          </div>
-        </div>
+        <PageHeader
+          title="Customers"
+          description="Companies that lease beds across your portfolio."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                onClick={handleDownloadCsv}
+                disabled={isLoading || filtered.length === 0}
+                data-testid="button-download-customers-csv"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+              <Button onClick={openAdd} data-testid="button-add-customer">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Customer
+              </Button>
+            </>
+          }
+        />
 
         {/* Top customers summary — each card hides itself when its
             metric has no winner so we never render an "empty"

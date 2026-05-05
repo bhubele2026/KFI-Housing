@@ -1,6 +1,14 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+// NOTE: this import creates a small module-level cycle with
+// `./use-runtime-config` (which imports `clearGoogleMapsKeyError` from
+// here). It's safe because both bindings are only consumed inside
+// function bodies — `useRecheckGoogleMapsKey` runs when
+// `MapsKeyErrorToastActions` renders, and `clearGoogleMapsKeyError`
+// runs when the recheck callback fires. ESM live bindings are wired
+// up by the time either is invoked.
+import { useRecheckGoogleMapsKey } from "./use-runtime-config";
 
 // ---------------------------------------------------------------------------
 // Tailored, action-oriented copy keyed by the exact error code Google's
@@ -363,6 +371,67 @@ function uninstallGlobalListeners(): void {
 // ---------------------------------------------------------------------------
 
 /**
+ * Action-slot content for the Maps key-rejected toast: a "Re-check"
+ * button next to the existing "Open in Google Cloud Console" deep
+ * link. Lives here (not inline in the listener hook) so the recheck
+ * hook can subscribe to its own re-render lifecycle — that's what
+ * lets the button label flip to "Re-checking…" + disable while a
+ * refetch is in flight without re-emitting the toast.
+ *
+ * Why a Re-check button on the toast at all: the in-card error panels
+ * already carry the same affordance, but an operator who dismisses
+ * the toast and switches to a non-Maps page (Customers, Finance, …)
+ * loses the panel-based recovery path until they navigate back. Hoisting
+ * the action onto the toast itself means recovery is reachable from
+ * anywhere in the app, not just from a card with a visible map.
+ *
+ * On a successful recheck the recheck hook calls
+ * `clearGoogleMapsKeyError`, which dismisses this very toast through
+ * the on-clear callback wired up in `useGoogleMapsKeyErrorToastListener`.
+ * On a failed recheck (api-server down, key still bad) the hook
+ * intentionally leaves the store alone, so the toast stays visible —
+ * lying to the operator with a silent dismissal would send them
+ * chasing the wrong fix.
+ */
+function MapsKeyErrorToastActions({
+  consoleUrl,
+}: {
+  consoleUrl: string;
+}) {
+  const { recheck, isRechecking } = useRecheckGoogleMapsKey();
+  return (
+    <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+      <ToastAction
+        altText="Re-check Google Maps key"
+        onClick={(event) => {
+          // Don't let Radix's default action behavior auto-dismiss the
+          // toast — `clearGoogleMapsKeyError` (called inside `recheck()`
+          // on success) takes care of dismissal via the on-clear
+          // callback. If the recheck fails, the toast must stay up so
+          // the operator still sees they need to act.
+          event.preventDefault();
+          void recheck();
+        }}
+        disabled={isRechecking}
+        data-testid="maps-key-error-toast-recheck"
+      >
+        {isRechecking ? "Re-checking…" : "Re-check"}
+      </ToastAction>
+      <ToastAction altText="Open in Google Cloud Console" asChild>
+        <a
+          href={consoleUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="maps-key-error-toast-console-link"
+        >
+          Open in Google Cloud Console
+        </a>
+      </ToastAction>
+    </div>
+  );
+}
+
+/**
  * Mount once at the app root. Installs the global postMessage and
  * `gm_authFailure` listeners and pumps the resulting key-error events into
  * the app's toast queue (one toast per code per session).
@@ -392,17 +461,7 @@ export function useGoogleMapsKeyErrorToastListener(): void {
         variant: "destructive",
         title: "Google Maps key rejected",
         description: message,
-        action: (
-          <ToastAction altText="Open in Google Cloud Console" asChild>
-            <a
-              href={consoleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open in Google Cloud Console
-            </a>
-          </ToastAction>
-        ),
+        action: <MapsKeyErrorToastActions consoleUrl={consoleUrl} />,
       });
       lastDismiss = handle.dismiss;
     };

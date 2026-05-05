@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import React, { act, isValidElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   useGoogleMapsKeyError,
   useGoogleMapsKeyErrorToastListener,
@@ -15,6 +16,8 @@ import {
   __testing,
 } from "./use-google-maps-key-error";
 import { useToast } from "./use-toast";
+import { Toaster } from "@/components/ui/toaster";
+import { useRuntimeConfigQuery } from "./use-runtime-config";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -81,30 +84,19 @@ describe("useGoogleMapsKeyError", () => {
     return (
       <div data-testid="toast-count" data-count={String(toasts.length)}>
         {toasts.map((t) => {
-          // Pull the action-button href out of the React element tree
-          // without rendering it: ToastAction is a Radix primitive that
-          // expects a Toast.Root context, but the action's href is a
-          // straightforward prop on the <a> child we pass in. Walking
-          // the element tree avoids needing a full Toast provider just
-          // to assert the deep-link target.
-          const actionHref = (() => {
+          // The action slot is a `<MapsKeyErrorToastActions consoleUrl=…/>`
+          // wrapper component. Reading its `consoleUrl` prop directly
+          // (rather than walking into rendered children) avoids needing
+          // to stand up a Toaster + QueryClientProvider just to
+          // confirm which deep-link the toast carries — the wrapper's
+          // shape is the contract we're pinning down here. Toast-level
+          // Re-check click behaviour gets its own test that mounts the
+          // real Toaster.
+          const actionConsoleUrl = (() => {
             if (!t.action || !isValidElement(t.action)) return "";
-            const actionEl = t.action as ReactElement<{
-              children?: unknown;
-              altText?: string;
-            }>;
-            const child = actionEl.props.children;
-            if (!isValidElement(child)) return "";
-            const anchorEl = child as ReactElement<{ href?: string }>;
-            return anchorEl.props.href ?? "";
+            const actionEl = t.action as ReactElement<{ consoleUrl?: string }>;
+            return actionEl.props.consoleUrl ?? "";
           })();
-          const actionAlt =
-            isValidElement(t.action) &&
-            typeof (t.action as ReactElement<{ altText?: string }>).props
-              .altText === "string"
-              ? (t.action as ReactElement<{ altText?: string }>).props
-                  .altText ?? ""
-              : "";
           return (
             <div
               key={t.id}
@@ -112,8 +104,7 @@ describe("useGoogleMapsKeyError", () => {
               data-title={String(t.title ?? "")}
               data-description={String(t.description ?? "")}
               data-variant={String(t.variant ?? "default")}
-              data-action-href={actionHref}
-              data-action-alt={actionAlt}
+              data-action-console-url={actionConsoleUrl}
               data-has-action={t.action ? "true" : "false"}
               // `open` flips to false when the toast is dismissed (the
               // hook keeps dismissed toasts in the queue for ~16
@@ -150,8 +141,7 @@ describe("useGoogleMapsKeyError", () => {
     title: string;
     description: string;
     variant: string;
-    actionHref: string;
-    actionAlt: string;
+    actionConsoleUrl: string;
     hasAction: boolean;
     open: boolean;
   }> {
@@ -160,8 +150,7 @@ describe("useGoogleMapsKeyError", () => {
       title: el.getAttribute("data-title") ?? "",
       description: el.getAttribute("data-description") ?? "",
       variant: el.getAttribute("data-variant") ?? "",
-      actionHref: el.getAttribute("data-action-href") ?? "",
-      actionAlt: el.getAttribute("data-action-alt") ?? "",
+      actionConsoleUrl: el.getAttribute("data-action-console-url") ?? "",
       hasAction: el.getAttribute("data-has-action") === "true",
       open: el.getAttribute("data-open") !== "false",
     }));
@@ -320,8 +309,7 @@ describe("useGoogleMapsKeyError", () => {
       const toasts = readToasts();
       expect(toasts).toHaveLength(1);
       expect(toasts[0].hasAction).toBe(true);
-      expect(toasts[0].actionAlt).toBe("Open in Google Cloud Console");
-      expect(toasts[0].actionHref).toBe(expectedHref);
+      expect(toasts[0].actionConsoleUrl).toBe(expectedHref);
     },
   );
 
@@ -338,7 +326,7 @@ describe("useGoogleMapsKeyError", () => {
     const toasts = readToasts();
     expect(toasts).toHaveLength(1);
     expect(toasts[0].hasAction).toBe(true);
-    expect(toasts[0].actionHref).toBe(
+    expect(toasts[0].actionConsoleUrl).toBe(
       "https://console.cloud.google.com/apis/credentials",
     );
   });
@@ -642,5 +630,253 @@ describe("useGoogleMapsKeyError", () => {
 
     expect(readProbe().code).toBe("");
     expect(readToasts().length).toBe(toastCountBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Toast-level Re-check action (Task #189)
+//
+// The in-card error panels already carry a Re-check affordance, but an
+// operator who dismisses the toast and switches to a non-Maps page
+// (Customers, Finance, …) loses that recovery path until they navigate
+// back to a Maps surface. This describe block pins down that the Re-check
+// button rendered inside the toast itself drives the same recovery
+// pipeline — refetch /api/config, on success clear the shared key-error
+// store, on failure leave both the store and the toast intact so the
+// operator isn't lied to about whether the key was reconfirmed.
+//
+// Mounts the real Toaster (so the action component actually renders and
+// its useRecheckGoogleMapsKey hook runs) inside a QueryClientProvider
+// (required for `useQueryClient` not to throw) plus a fetch mock that
+// stands in for /api/config. The describe block is its own block so we
+// don't pull QueryClientProvider into the lighter-weight tests above.
+// ---------------------------------------------------------------------------
+describe("Maps key-error toast: Re-check action", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+  let originalGmAuthFailure: (() => void) | undefined;
+  let originalFetch: typeof fetch;
+
+  beforeEach(() => {
+    __resetGoogleMapsKeyErrorForTest();
+    expect(__testing.getInstallCount()).toBe(0);
+    originalGmAuthFailure = window.gm_authFailure;
+    originalFetch = globalThis.fetch;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    window.gm_authFailure = originalGmAuthFailure;
+    globalThis.fetch = originalFetch;
+    __resetGoogleMapsKeyErrorForTest();
+  });
+
+  function ListenerProbe() {
+    useGoogleMapsKeyErrorToastListener();
+    return null;
+  }
+
+  // Subscribe to /api/config so the runtime-config query lives in the
+  // react-query cache. Without an active observer the cache is empty
+  // and `queryClient.refetchQueries` (used by `useRecheckGoogleMapsKey`)
+  // has nothing to re-fire — the toast button would silently no-op,
+  // which is not what production sees: in real usage at least one Maps
+  // surface (or the app-level config consumer) has already mounted the
+  // query by the time a key-error toast appears.
+  function ConfigQueryProbe() {
+    useRuntimeConfigQuery(true);
+    return null;
+  }
+
+  async function mountWithToaster(): Promise<{ client: QueryClient }> {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, refetchOnWindowFocus: false, gcTime: 0 },
+      },
+    });
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <QueryClientProvider client={client}>
+          <ConfigQueryProbe />
+          <ListenerProbe />
+          <Toaster />
+        </QueryClientProvider>,
+      );
+    });
+    return { client };
+  }
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 5; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+  }
+
+  async function waitFor(
+    predicate: () => boolean,
+    { timeoutMs = 1000, intervalMs = 5 }: { timeoutMs?: number; intervalMs?: number } = {},
+  ): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, intervalMs));
+      });
+      if (predicate()) return;
+    }
+    throw new Error(
+      `waitFor: predicate did not become true within ${timeoutMs}ms`,
+    );
+  }
+
+  function getRecheck(): HTMLButtonElement | null {
+    return document.querySelector(
+      '[data-testid="maps-key-error-toast-recheck"]',
+    ) as HTMLButtonElement | null;
+  }
+
+  function getConsoleLink(): HTMLAnchorElement | null {
+    return document.querySelector(
+      '[data-testid="maps-key-error-toast-console-link"]',
+    ) as HTMLAnchorElement | null;
+  }
+
+  it("renders a Re-check button next to the existing Open-in-Console link", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ googleMapsApiKey: "fixed-key" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    await mountWithToaster();
+    await act(async () => {
+      reportGoogleMapsKeyError("RefererNotAllowedMapError");
+    });
+
+    const recheck = getRecheck();
+    expect(recheck).not.toBeNull();
+    // The label reads clearly so an operator skimming the toast knows
+    // what the button does — a generic icon next to the existing
+    // "Open in Google Cloud Console" deep link would be ambiguous.
+    expect((recheck!.textContent ?? "").toLowerCase()).toContain("re-check");
+    // It's a real button (not asChild-wrapping an anchor), so clicking
+    // it doesn't navigate the operator away from their current page.
+    expect(recheck!.tagName).toBe("BUTTON");
+    expect(recheck!.disabled).toBe(false);
+
+    // The Console deep link must still be present alongside the new
+    // Re-check button — the new affordance complements, not replaces,
+    // the existing one.
+    const link = getConsoleLink();
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe(
+      "https://console.cloud.google.com/apis/credentials",
+    );
+  });
+
+  it("clicking Re-check refetches /api/config and clears the shared store on success", async () => {
+    let calls = 0;
+    const fetchMock = vi.fn(async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ googleMapsApiKey: "freshly-fixed-key" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await mountWithToaster();
+    // Wait for the ConfigQueryProbe's initial /api/config fetch to
+    // settle before flipping into the rejected branch — otherwise the
+    // recheck assertion below races the initial mount and `callsBefore`
+    // would be a moving target.
+    await waitFor(() => calls >= 1);
+    await settle();
+
+    await act(async () => {
+      reportGoogleMapsKeyError("InvalidKeyMapError");
+    });
+    expect(__testing.getNotifiedCodes().has("InvalidKeyMapError")).toBe(true);
+
+    const callsBefore = calls;
+    const recheck = getRecheck();
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+
+    // The recheck must hit /api/config — guards against a regression
+    // where the toast button merely cleared the local store without
+    // actually re-confirming the runtime config.
+    await waitFor(() => calls > callsBefore);
+    expect(calls).toBeGreaterThan(callsBefore);
+    const lastCall = fetchMock.mock.calls.at(-1) as unknown as [
+      RequestInfo | URL,
+      ...unknown[],
+    ];
+    expect(String(lastCall[0])).toContain("/api/config");
+
+    // And on success the shared dedupe set must be empty — the store
+    // is cleared so every Maps surface drops out of its rejected
+    // branch and the *next* failure for the same code can fire a
+    // fresh toast (instead of being silently swallowed because we'd
+    // already toasted that code earlier in the session).
+    await waitFor(() => __testing.getNotifiedCodes().size === 0);
+    expect(__testing.getNotifiedCodes().has("InvalidKeyMapError")).toBe(false);
+  });
+
+  it("leaves the store intact when /api/config still errors on recheck (no false recovery)", async () => {
+    // When the operator clicks Re-check but /api/config itself errors
+    // — the api-server is down, the network blipped, the key is still
+    // bad — we must NOT silently drop the key-error state and pretend
+    // the key is fixed. Doing so would lie to the operator and send
+    // them chasing the wrong fix. The shared store stays populated;
+    // clicking again retries.
+    let calls = 0;
+    globalThis.fetch = vi.fn(async () => {
+      calls += 1;
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+
+    await mountWithToaster();
+    // Let the ConfigQueryProbe's initial /api/config fetch fire (and
+    // fail) so `callsBefore` is a stable baseline — otherwise asserting
+    // `calls > callsBefore` below would race the initial mount.
+    await waitFor(() => calls >= 1);
+    await settle();
+
+    await act(async () => {
+      reportGoogleMapsKeyError("OverQuotaMapError");
+    });
+    expect(__testing.getNotifiedCodes().has("OverQuotaMapError")).toBe(true);
+
+    const callsBefore = calls;
+    const recheck = getRecheck();
+    expect(recheck).not.toBeNull();
+    await act(async () => {
+      recheck!.click();
+    });
+    // Wait for the recheck's failed refetch to actually fire (one more
+    // call than the baseline). Asserting against `callsBefore` rather
+    // than `calls >= 1` rules out the initial mount fetch satisfying
+    // the predicate without the click ever triggering anything.
+    await waitFor(() => calls > callsBefore);
+    await settle();
+
+    // Surface stays rejected — the dedupe set still holds the code,
+    // and a future success-path recheck can still reset it.
+    expect(__testing.getNotifiedCodes().has("OverQuotaMapError")).toBe(true);
   });
 });

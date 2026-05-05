@@ -42,6 +42,10 @@ type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft" | "totalBeds" | "occupied" | "vacant" | "chargePerBed";
 type MinRating = "any" | "3" | "4" | "5";
 type RatingSortKey = "overall" | RatingCategoryKey;
+// The category the Min-rating filter applies to. Mirrors the rating
+// sort dimensions so the filter can target Overall or any one of the
+// six rating categories independently of how the list is sorted.
+type RatingFilterCategory = RatingSortKey;
 type ViewMode = "table" | "map";
 
 const RATING_SORT_OPTIONS: { key: RatingSortKey; label: string }[] = [
@@ -81,6 +85,7 @@ const VALID_VIEW_MODES = new Set<ViewMode>(["table", "map"]);
 interface PersistedPrefs {
   statusFilter?: string;
   minRating?: MinRating;
+  ratingFilterCategory?: RatingFilterCategory;
   sortKey?: SortKey;
   sortDir?: Exclude<SortDir, null>;
   ratingSortCategory?: RatingSortKey;
@@ -99,6 +104,12 @@ function readPersistedPrefs(): PersistedPrefs {
     }
     if (typeof parsed.minRating === "string" && VALID_MIN_RATINGS.has(parsed.minRating as MinRating)) {
       out.minRating = parsed.minRating as MinRating;
+    }
+    if (
+      typeof parsed.ratingFilterCategory === "string" &&
+      VALID_RATING_SORT_KEYS.has(parsed.ratingFilterCategory as RatingFilterCategory)
+    ) {
+      out.ratingFilterCategory = parsed.ratingFilterCategory as RatingFilterCategory;
     }
     // Sort key + direction must agree: persisting one without the other
     // would render meaningless state.
@@ -132,6 +143,7 @@ function readPersistedPrefs(): PersistedPrefs {
 function writePersistedPrefs(prefs: {
   statusFilter: string;
   minRating: MinRating;
+  ratingFilterCategory: RatingFilterCategory;
   sortKey: SortKey | null;
   sortDir: SortDir;
   ratingSortCategory: RatingSortKey;
@@ -144,6 +156,12 @@ function writePersistedPrefs(prefs: {
     const cleaned: PersistedPrefs = {};
     if (prefs.statusFilter !== "All") cleaned.statusFilter = prefs.statusFilter;
     if (prefs.minRating !== "any") cleaned.minRating = prefs.minRating;
+    // The rating filter category is only meaningful when an actual minimum
+    // is set — otherwise the dimension doesn't affect the list. Skipping it
+    // when minRating is "any" keeps storage clean of inert state.
+    if (prefs.minRating !== "any" && prefs.ratingFilterCategory !== "overall") {
+      cleaned.ratingFilterCategory = prefs.ratingFilterCategory;
+    }
     if (prefs.sortKey && prefs.sortDir) {
       cleaned.sortKey = prefs.sortKey;
       cleaned.sortDir = prefs.sortDir;
@@ -222,6 +240,10 @@ export default function Properties() {
   const [minRating, setMinRating] = useState<MinRating>(
     () => initialPrefs.minRating ?? "any",
   );
+  const [ratingFilterCategory, setRatingFilterCategory] =
+    useState<RatingFilterCategory>(
+      () => initialPrefs.ratingFilterCategory ?? "overall",
+    );
   const [sortKey, setSortKey] = useState<SortKey | null>(
     () => initialPrefs.sortKey ?? null,
   );
@@ -243,12 +265,13 @@ export default function Properties() {
     writePersistedPrefs({
       statusFilter,
       minRating,
+      ratingFilterCategory,
       sortKey,
       sortDir,
       ratingSortCategory,
       viewMode,
     });
-  }, [statusFilter, minRating, sortKey, sortDir, ratingSortCategory, viewMode]);
+  }, [statusFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, viewMode]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(EMPTY_PROPERTY_DRAFT);
@@ -318,9 +341,12 @@ export default function Properties() {
         customerFilter === ALL_CUSTOMERS || p.customerId === customerFilter;
       let matchesRating = true;
       if (minRatingValue !== null) {
-        const overall = computeOverallRating(p.ratings);
-        // Unrated properties are excluded when a minimum is set.
-        matchesRating = overall !== null && overall >= minRatingValue;
+        // Compare against whichever rating dimension the user picked —
+        // Overall by default, or any one of the six per-category ratings.
+        // Unrated properties (null) for that dimension are excluded so the
+        // behavior matches the previous overall-only filter.
+        const value = getRatingValueFor(p, ratingFilterCategory);
+        matchesRating = value !== null && value >= minRatingValue;
       }
       return matchesSearch && matchesStatus && matchesCustomer && matchesRating;
     });
@@ -382,7 +408,7 @@ export default function Properties() {
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId, bedStatsByPropertyId]);
+  }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId, bedStatsByPropertyId]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -1284,6 +1310,25 @@ export default function Properties() {
                     <SelectItem value="Inactive">Inactive</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select
+                  value={ratingFilterCategory}
+                  onValueChange={(v) => setRatingFilterCategory(v as RatingFilterCategory)}
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-44"
+                    data-testid="select-rating-filter-category"
+                    aria-label="Rating category to filter by"
+                  >
+                    <SelectValue placeholder="Rating category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RATING_SORT_OPTIONS.map((o) => (
+                      <SelectItem key={o.key} value={o.key}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={minRating} onValueChange={(v) => setMinRating(v as MinRating)}>
                   <SelectTrigger className="w-full sm:w-36" data-testid="select-min-rating">
                     <SelectValue placeholder="Min rating" />
@@ -1295,6 +1340,29 @@ export default function Properties() {
                     <SelectItem value="5">5 stars</SelectItem>
                   </SelectContent>
                 </Select>
+                {minRating !== "any" && (
+                  <Badge
+                    variant="secondary"
+                    className="self-center gap-1"
+                    data-testid="badge-rating-filter-active"
+                  >
+                    {RATING_SORT_OPTIONS.find((o) => o.key === ratingFilterCategory)?.label ?? "Overall"}
+                    {" "}
+                    ≥ {minRating}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMinRating("any");
+                        setRatingFilterCategory("overall");
+                      }}
+                      className="ml-1 hover:text-foreground"
+                      aria-label="Clear rating filter"
+                      data-testid="button-clear-rating-filter"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
               </div>
             </div>
 

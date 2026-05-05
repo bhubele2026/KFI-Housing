@@ -1,7 +1,0 @@
-<svg width="220" height="56" viewBox="0 0 220 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g transform="translate(8, 8)">
-    <rect x="0" y="0" width="40" height="40" rx="8" fill="#0F2E5E"/>
-    <path d="M8 22 L20 11 L32 22 L32 32 L24 32 L24 24 L16 24 L16 32 L8 32 Z" fill="#ffffff"/>
-  </g>
-  <text x="60" y="36" font-family="Inter, system-ui, -apple-system, sans-serif" font-weight="700" font-size="22" fill="#0F2E5E" letter-spacing="-0.5">HousingOps</text>
-</svg>

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import logoUrl from "@/assets/housingops-logo.svg";
+import logoUrl from "@/assets/kfi-staffing-logo.png";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -28,12 +28,19 @@ export default function Login() {
       >
         <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
           <CardHeader className="space-y-3 text-center pb-6">
-            <div className="flex justify-center mb-2">
+            <div className="flex flex-col items-center gap-2 mb-2">
               <img
                 src={logoUrl}
-                alt="HousingOps"
-                className="h-12 w-auto object-contain"
+                alt="KFI Staffing"
+                className="h-24 w-full max-w-[320px] rounded-md object-contain"
+                data-testid="img-login-logo"
               />
+              <div
+                className="text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-500 dark:text-zinc-400"
+                data-testid="text-login-product-name"
+              >
+                HousingOps
+              </div>
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
             <CardDescription className="text-zinc-500 dark:text-zinc-400">

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import logoUrl from "@/assets/housingops-logo.svg";
+import logoUrl from "@/assets/kfi-staffing-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -368,19 +368,24 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
-      <div className="flex h-20 items-center px-4 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
-        {/* The canonical brand asset has a dark-navy wordmark intended
-            for light surfaces (login card, marketing). To preserve that
-            artwork untouched while still giving the logo prominence in
-            the dark sidebar, we mount the same `<img>` on a soft white
-            chip — non-destructive styling around the asset. */}
-        <div className="flex h-12 w-full items-center rounded-lg bg-white px-3 shadow-sm">
-          <img
-            src={logoUrl}
-            alt="HousingOps"
-            className="h-10 w-auto select-none"
-            draggable={false}
-          />
+      <div className="flex h-20 flex-col justify-center gap-1 px-3 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
+        {/* The KFI Staffing logo artwork already has a dark-navy
+            background built in, so we let it sit directly on the dark
+            sidebar — no white chip needed. The "HousingOps" product
+            label sits beneath it as a smaller wordmark so users still
+            know which app they're in. */}
+        <img
+          src={logoUrl}
+          alt="KFI Staffing"
+          className="h-12 w-full rounded-md object-contain select-none"
+          draggable={false}
+          data-testid="img-sidebar-logo"
+        />
+        <div
+          className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/70"
+          data-testid="text-sidebar-product-name"
+        >
+          HousingOps
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -56,6 +56,7 @@ export default function CustomerDetail() {
   const [, navigate] = useLocation();
   const { customers, properties, beds, occupants, isLoading, updateCustomer } = useData();
   const { toast } = useToast();
+  const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(12);
 
   // Per-property roll-ups for THIS customer: total beds, occupied beds, and
   // monthly revenue (summed from each active occupant's normalized monthly
@@ -104,7 +105,7 @@ export default function CustomerDetail() {
   const revenueTrend = useMemo(() => {
     const now = new Date();
     const months: { key: string; label: string; tooltipLabel: string }[] = [];
-    for (let i = 11; i >= 0; i--) {
+    for (let i = trendMonths - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const year = d.getFullYear();
       const month = d.getMonth() + 1;
@@ -135,7 +136,7 @@ export default function CustomerDetail() {
       }
       return { key, label, tooltipLabel, revenue: Math.round(revenue) };
     });
-  }, [properties, occupants, id]);
+  }, [properties, occupants, id, trendMonths]);
 
   const totals = useMemo(() => {
     let totalBeds = 0;
@@ -313,9 +314,32 @@ export default function CustomerDetail() {
                 <TrendingUp className="h-4 w-4" />
                 Revenue Trend
               </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                Last 12 months
-              </span>
+              <div
+                className="flex items-center gap-1"
+                role="group"
+                aria-label="Select revenue trend range"
+                data-testid="revenue-trend-range"
+              >
+                {([3, 6, 12, 24] as const).map((m) => {
+                  const active = trendMonths === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setTrendMonths(m)}
+                      aria-pressed={active}
+                      className={`px-2 py-0.5 text-xs font-medium rounded-md border transition-colors ${
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+                      }`}
+                      data-testid={`revenue-trend-range-${m}m`}
+                    >
+                      {m}M
+                    </button>
+                  );
+                })}
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>

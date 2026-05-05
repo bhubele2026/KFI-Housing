@@ -55,6 +55,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
+    "eventsource": "^4.1.0",
     "framer-motion": "catalog:",
     "input-otp": "^1.4.2",
     "jsdom": "^25.0.1",

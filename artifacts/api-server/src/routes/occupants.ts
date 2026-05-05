@@ -1,12 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, occupantsTable } from "@workspace/db";
+import { db, occupantsTable, bedsTable } from "@workspace/db";
 import {
   ListOccupantsResponse,
   CreateOccupantBody,
   UpdateOccupantParams,
   UpdateOccupantBody,
   UpdateOccupantResponse,
+  DeleteOccupantParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -47,6 +48,23 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     return;
   }
   res.json(UpdateOccupantResponse.parse(row));
+});
+
+router.delete("/occupants/:id", async (req, res): Promise<void> => {
+  const params = DeleteOccupantParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  // Mirror the inverse cleanup the bed delete pathway implies: any bed
+  // pointing at this occupant gets its occupantId cleared so we don't
+  // leave dangling references behind.
+  await db
+    .update(bedsTable)
+    .set({ occupantId: null })
+    .where(eq(bedsTable.occupantId, params.data.id));
+  await db.delete(occupantsTable).where(eq(occupantsTable.id, params.data.id));
+  res.sendStatus(204);
 });
 
 export default router;

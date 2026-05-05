@@ -7,7 +7,7 @@ import {
   useListLeases, getListLeasesQueryKey, useCreateLease, useUpdateLease, useDeleteLease,
   useListRooms, getListRoomsQueryKey, useCreateRoom, useUpdateRoom, useDeleteRoom,
   useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
-  useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant,
+  useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant, useDeleteOccupant,
   useListUtilities, getListUtilitiesQueryKey, useCreateUtility, useUpdateUtility, useDeleteUtility,
   useResetToSampleData,
   useImportData,
@@ -553,6 +553,7 @@ interface DataStore {
   updateBed: (id: string, updates: Partial<Bed>) => void;
   updateOccupant: (id: string, updates: Partial<Occupant>) => void;
   addOccupant: (occupant: Occupant) => void;
+  deleteOccupant: (id: string) => void;
   updateUtility: (id: string, updates: Partial<Utility>) => void;
   addUtility: (utility: Utility) => void;
   deleteUtility: (id: string) => void;
@@ -632,6 +633,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const deleteBedMut = useDeleteBed();
   const createOccupantMut = useCreateOccupant();
   const updateOccupantMut = useUpdateOccupant();
+  const deleteOccupantMut = useDeleteOccupant();
   const createUtilityMut = useCreateUtility();
   const updateUtilityMut = useUpdateUtility();
   const deleteUtilityMut = useDeleteUtility();
@@ -884,6 +886,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     pushToList<Occupant>(occupantsKey, occupant);
     createOccupantMut.mutate({ data: occupant }, handlers);
   };
+  const deleteOccupant = (id: string) => {
+    // Mirror the api-server cleanup: any bed pointing at this occupant
+    // gets cleared optimistically so the UI doesn't show a stale link
+    // before the next /beds GET runs. We snapshot both caches here so a
+    // failed mutation rolls back together — but we only surface ONE
+    // user-facing error toast on failure (captureRollback emits one per
+    // call, which would double up if used naively here).
+    const occupantsSnapshot = queryClient.getQueryData<Occupant[]>(occupantsKey);
+    const bedsSnapshot = queryClient.getQueryData<Bed[]>(bedsKey);
+    removeFromList<Occupant>(occupantsKey, id);
+    queryClient.setQueryData<Bed[]>(bedsKey, (prev) =>
+      (prev ?? []).map((b) => (b.occupantId === id ? { ...b, occupantId: null } : b)),
+    );
+    deleteOccupantMut.mutate(
+      { id },
+      {
+        onError: () => {
+          if (occupantsSnapshot !== undefined) {
+            queryClient.setQueryData<Occupant[]>(occupantsKey, occupantsSnapshot);
+          }
+          if (bedsSnapshot !== undefined) {
+            queryClient.setQueryData<Bed[]>(bedsKey, bedsSnapshot);
+          }
+          notifySaveError("delete the occupant");
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: occupantsKey });
+          queryClient.invalidateQueries({ queryKey: bedsKey });
+        },
+      },
+    );
+  };
 
   const updateUtility = (id: string, updates: Partial<Utility>) => {
     const handlers = captureRollback<Utility[]>(utilitiesKey, "save your utility changes");
@@ -1046,7 +1080,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addProperty, updateProperty, deleteProperty,
       updateLease, addLease, deleteLease,
       addRoom, updateRoom, deleteRoom,
-      addBed, deleteBed, updateBed, updateOccupant, addOccupant,
+      addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant,
       updateUtility, addUtility, deleteUtility,
       resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
     }}>

@@ -268,6 +268,7 @@ const mocks = {
   deleteLease: vi.fn(),
   updateOccupant: vi.fn(),
   addOccupant: vi.fn(),
+  deleteOccupant: vi.fn(),
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),
@@ -1011,5 +1012,108 @@ describe("Property detail — Beds tab room sort", () => {
       '[data-testid="select-beds-sort"]',
     ) as HTMLElement | null;
     expect(wrapper?.getAttribute("data-current")).toBe("default");
+  });
+});
+
+// ── Tests: occupant delete affordance inside a bed row ──────────────────
+describe("Property detail — Beds tab occupant delete", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    state = makeFreshState();
+    // Seed a single occupied bed so the inline occupant cells render
+    // (and therefore the delete-occupant trash button does too).
+    state.beds = [
+      {
+        id: "b1",
+        propertyId: "p1",
+        bedNumber: 1,
+        roomId: "r1",
+        status: "Occupied",
+        occupantId: "occ-1",
+      },
+    ];
+    state.occupants = [
+      {
+        id: "occ-1",
+        name: "Pat Smith",
+        email: "pat@example.com",
+        phone: "555-0100",
+        bedId: "b1",
+        propertyId: "p1",
+        moveInDate: "2025-01-01",
+        moveOutDate: null,
+        status: "Active",
+        chargePerBed: 500,
+        billingFrequency: "Monthly",
+        employeeId: "EMP-1",
+        company: "Acme Co",
+      },
+    ];
+    Object.values(mocks).forEach((m) => m.mockReset());
+    toastMock.mockReset();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+  });
+
+  async function renderBedsTab() {
+    const { Harness } = makeHarness("/properties/p1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+    const trigger = container.querySelector(
+      '[data-testid="tab-trigger-beds"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) throw new Error("Could not find Beds tab trigger");
+    await act(async () => {
+      trigger.click();
+    });
+  }
+
+  it("renders a delete-occupant trash button beside the occupant name", async () => {
+    await renderBedsTab();
+    const btn = container.querySelector(
+      '[data-testid="button-delete-occupant-occ-1"]',
+    );
+    expect(btn).not.toBeNull();
+  });
+
+  it("clicking the trash opens a confirm dialog and Confirm fires deleteOccupant", async () => {
+    await renderBedsTab();
+
+    const trash = container.querySelector(
+      '[data-testid="button-delete-occupant-occ-1"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      trash.click();
+    });
+
+    // The confirm dialog renders into a portal off `document`, not the
+    // test container, so query off `document`.
+    const confirm = document.querySelector(
+      '[data-testid="button-confirm-delete-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(confirm, "confirm dialog should be open after clicking the trash").not.toBeNull();
+    expect(mocks.deleteOccupant).not.toHaveBeenCalled();
+
+    await act(async () => {
+      confirm!.click();
+    });
+
+    expect(mocks.deleteOccupant).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteOccupant).toHaveBeenCalledWith("occ-1");
   });
 });

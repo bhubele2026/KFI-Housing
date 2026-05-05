@@ -452,7 +452,7 @@ export function InlineEdit({
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility } = useData();
   const { toast } = useToast();
 
   // Beds-tab sort selection. Hydrated once from localStorage so the
@@ -1562,7 +1562,28 @@ export default function PropertyDetail() {
                                         </TableCell>
                                         {occ ? (
                                           <>
-                                            <TableCell className="font-medium"><InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} /></TableCell>
+                                            <TableCell className="font-medium">
+                                              <div className="flex items-center gap-1">
+                                                <InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} />
+                                                <ConfirmDeleteButton
+                                                  title={`Delete ${occ.name}?`}
+                                                  description="This permanently removes the occupant record and frees up the bed. You can't undo this."
+                                                  onConfirm={() => deleteOccupant(occ.id)}
+                                                  testId={`dialog-confirm-delete-occupant-${occ.id}`}
+                                                  trigger={
+                                                    <Button
+                                                      size="icon"
+                                                      variant="ghost"
+                                                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                      data-testid={`button-delete-occupant-${occ.id}`}
+                                                      title="Delete occupant"
+                                                    >
+                                                      <Trash2 className="h-3 w-3" />
+                                                    </Button>
+                                                  }
+                                                />
+                                              </div>
+                                            </TableCell>
                                             <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>

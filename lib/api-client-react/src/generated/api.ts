@@ -2460,6 +2460,90 @@ export const useUpdateOccupant = <
 };
 
 /**
+ * @summary Delete an occupant
+ */
+export const getDeleteOccupantUrl = (id: string) => {
+  return `/api/occupants/${id}`;
+};
+
+export const deleteOccupant = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteOccupantUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteOccupantMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOccupant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteOccupant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteOccupant"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteOccupant>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteOccupant(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteOccupantMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteOccupant>>
+>;
+
+export type DeleteOccupantMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an occupant
+ */
+export const useDeleteOccupant = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOccupant>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteOccupant>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteOccupantMutationOptions(options));
+};
+
+/**
  * @summary List all utilities
  */
 export const getListUtilitiesUrl = () => {

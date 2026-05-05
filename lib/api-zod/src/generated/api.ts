@@ -1259,6 +1259,13 @@ export const UpdateOccupantResponse = zod.object({
 });
 
 /**
+ * @summary Delete an occupant
+ */
+export const DeleteOccupantParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List all utilities
  */
 export const ListUtilitiesResponseItem = zod.object({

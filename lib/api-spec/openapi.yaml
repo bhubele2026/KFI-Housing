@@ -557,6 +557,18 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Occupant" }
+    delete:
+      operationId: deleteOccupant
+      tags: [occupants]
+      summary: Delete an occupant
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
 
   /utilities:
     get:

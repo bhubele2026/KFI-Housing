@@ -10,14 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, UserPlus, Download, Users } from "lucide-react";
+import { Search, UserPlus, Download, Users, Trash2 } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Occupants() {
-  const { occupants, properties, beds, isLoading } = useData();
+  const { occupants, properties, beds, isLoading, deleteOccupant } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
@@ -136,14 +137,15 @@ export default function Occupants() {
                   <TableHead>Move In</TableHead>
                   <TableHead className="text-right">Charge/Bed</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={6} />
+                  <SkeletonRows rows={6} columns={7} />
                 ) : filteredOccupants.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={6}
+                    colSpan={7}
                     icon={Users}
                     title="No occupants found"
                     description={
@@ -178,6 +180,25 @@ export default function Occupants() {
                           <Badge variant={occupant.status === "Active" ? "default" : "secondary"}>
                             {occupant.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <ConfirmDeleteButton
+                            title={`Delete ${occupant.name}?`}
+                            description="This permanently removes the occupant record. Any bed currently assigned to them will be cleared. You can't undo this."
+                            onConfirm={() => deleteOccupant(occupant.id)}
+                            testId={`dialog-confirm-delete-occupant-${occupant.id}`}
+                            trigger={
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                data-testid={`button-delete-occupant-${occupant.id}`}
+                                title="Delete occupant"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     );

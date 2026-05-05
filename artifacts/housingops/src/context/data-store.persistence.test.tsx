@@ -234,6 +234,14 @@ function makeBackend(): Backend {
     if (method === "DELETE" && id) {
       const idx = list.findIndex((r) => r.id === id);
       if (idx !== -1) list.splice(idx, 1);
+      // Mirror the api-server's inverse cleanup when deleting an
+      // occupant: any bed pointing at the removed occupant has its
+      // occupantId cleared so we don't leave dangling references.
+      if (endpoint === "occupants") {
+        for (const bed of state.beds) {
+          if (bed.occupantId === id) bed.occupantId = null;
+        }
+      }
       return new Response(null, { status: 204 });
     }
 
@@ -1087,6 +1095,12 @@ function CrudHarness() {
       >
         add occupant
       </button>
+      <button
+        data-testid="delete-occupant"
+        onClick={() => data.deleteOccupant("occ-1")}
+      >
+        delete occupant
+      </button>
 
       <button
         data-testid="add-utility"
@@ -1342,8 +1356,40 @@ describe("data store: creates and deletes persist across browser refresh", () =>
       idsTestId: "occupant-ids",
     });
   });
-  // Note: the data store does not expose deleteOccupant, so there is no
-  // matching delete test for occupants.
+
+  it("deleteOccupant persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-occupant",
+      listKey: "occupants",
+      deletedId: "occ-1",
+      idsTestId: "occupant-ids",
+    });
+  });
+
+  it("deleteOccupant clears bed.occupantId for any bed that referenced them", async () => {
+    // Pre-link bed-1 to occ-1 so we can verify the inverse cleanup the
+    // api-server performs when deleting an occupant.
+    backend.state.beds[0].occupantId = "occ-1";
+    backend.state.beds[0].status = "Occupied";
+
+    await act(async () => {
+      mounted = mountCrud(container);
+    });
+    await waitFor(() => ids(container, "occupant-ids").includes("occ-1"), {
+      describe: () => "occupant-ids to initially include occ-1",
+    });
+    await act(async () => {
+      clickButton(container, "delete-occupant");
+    });
+    await waitFor(
+      () => !backend.state.occupants.some((r) => r.id === "occ-1"),
+      { describe: () => "backend.occupants to no longer contain occ-1" },
+    );
+    await waitFor(
+      () => backend.state.beds.find((b) => b.id === "bed-1")?.occupantId === null,
+      { describe: () => "bed-1.occupantId to be cleared on the backend" },
+    );
+  });
 
   it("addUtility persists across a full remount", async () => {
     await runAddTest({

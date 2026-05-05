@@ -28,6 +28,7 @@ interface Backend {
     customers: Row[];
     properties: Row[];
     leases: Row[];
+    rooms: Row[];
     beds: Row[];
     occupants: Row[];
     utilities: Row[];
@@ -39,6 +40,7 @@ const ENDPOINTS = [
   "customers",
   "properties",
   "leases",
+  "rooms",
   "beds",
   "occupants",
   "utilities",
@@ -51,6 +53,18 @@ function makeBackend(): Backend {
       {
         id: "cust-1",
         name: "Acme Co",
+        contactName: "",
+        email: "",
+        phone: "",
+        notes: "",
+      },
+      // A second customer with no properties referencing it, so the
+      // deleteCustomer test can remove a row that satisfies the
+      // "in-use" guard. Keep cust-1 at index [0] so the existing
+      // edit tests that read backend.state.customers[0] still work.
+      {
+        id: "cust-2",
+        name: "Beta Inc",
         contactName: "",
         email: "",
         phone: "",
@@ -97,6 +111,28 @@ function makeBackend(): Backend {
         securityDeposit: 1000,
         status: "Active",
         notes: "",
+      },
+    ],
+    rooms: [
+      // room-1 is referenced by bed-1 below, so the data-store's
+      // "can't delete a room that still has beds" guard would block
+      // its deletion.
+      {
+        id: "room-1",
+        propertyId: "prop-1",
+        name: "Room 1",
+        sqft: 0,
+        bathrooms: 0,
+        monthlyRent: 0,
+      },
+      // room-2 has no beds — the deleteRoom test removes this one.
+      {
+        id: "room-2",
+        propertyId: "prop-1",
+        name: "Room 2",
+        sqft: 0,
+        bathrooms: 0,
+        monthlyRent: 0,
       },
     ],
     beds: [
@@ -847,3 +883,483 @@ describe("data store: edits persist across browser refresh", () => {
   });
 });
 
+// ─── Create + delete persistence tests ──────────────────────────────────
+// Mirrors the edit tests above for every entity that exposes add* and/or
+// delete* mutations. Each test:
+//   1. mounts a fresh tree against the seeded backend,
+//   2. invokes the data-store mutation through a click handler,
+//   3. waits for the in-memory backend state to reflect the change
+//      (proving the mutation actually hit the server, not just the cache),
+//   4. unmounts and remounts with a fresh QueryClient (simulating a
+//      browser refresh), and
+//   5. asserts the rendered list matches the persisted backend.
+//
+// Without these tests, a regression that made any add*/delete* call
+// in-memory-only would silently lose user data on the next refresh.
+
+function CrudHarness() {
+  const data = useData();
+  if (data.isLoading) return <div data-testid="loading">loading</div>;
+  return (
+    <div>
+      <div data-testid="customer-ids">
+        {data.customers.map((c) => c.id).join(",")}
+      </div>
+      <div data-testid="property-ids">
+        {data.properties.map((p) => p.id).join(",")}
+      </div>
+      <div data-testid="lease-ids">
+        {data.leases.map((l) => l.id).join(",")}
+      </div>
+      <div data-testid="room-ids">
+        {data.rooms.map((r) => r.id).join(",")}
+      </div>
+      <div data-testid="bed-ids">{data.beds.map((b) => b.id).join(",")}</div>
+      <div data-testid="occupant-ids">
+        {data.occupants.map((o) => o.id).join(",")}
+      </div>
+      <div data-testid="utility-ids">
+        {data.utilities.map((u) => u.id).join(",")}
+      </div>
+
+      <button
+        data-testid="add-customer"
+        onClick={() => {
+          data
+            .addCustomer({
+              id: "cust-new",
+              name: "New Co",
+              contactName: "",
+              email: "",
+              phone: "",
+              notes: "",
+            })
+            .catch(() => {});
+        }}
+      >
+        add customer
+      </button>
+      <button
+        data-testid="delete-customer"
+        onClick={() => {
+          data.deleteCustomer("cust-2").catch(() => {});
+        }}
+      >
+        delete customer
+      </button>
+
+      <button
+        data-testid="add-property"
+        onClick={() => {
+          data
+            .addProperty({
+              id: "prop-new",
+              customerId: "cust-1",
+              name: "New Place",
+              address: "200 New St",
+              city: "Springfield",
+              state: "IL",
+              zip: "62702",
+              totalBeds: 2,
+              monthlyRent: 800,
+              chargePerBed: 400,
+              status: "Active",
+              landlordName: "",
+              landlordEmail: "",
+              landlordPhone: "",
+              paymentMethod: "ACH",
+              paymentRecipient: "",
+              paymentDueDay: 1,
+              paymentNotes: "",
+              bankName: "",
+              bankRouting: "",
+              bankAccount: "",
+              portalUrl: "",
+              notes: "",
+              furnishings: [],
+            })
+            .catch(() => {});
+        }}
+      >
+        add property
+      </button>
+      <button
+        data-testid="delete-property"
+        onClick={() => data.deleteProperty("prop-1")}
+      >
+        delete property
+      </button>
+
+      <button
+        data-testid="add-lease"
+        onClick={() =>
+          data.addLease({
+            id: "lease-new",
+            propertyId: "prop-1",
+            startDate: "2026-01-01",
+            endDate: "2026-12-31",
+            monthlyRent: 1100,
+            securityDeposit: 1100,
+            status: "Active",
+            notes: "",
+            clauses: "",
+            buyoutAvailable: false,
+            buyoutCost: null,
+          })
+        }
+      >
+        add lease
+      </button>
+      <button
+        data-testid="delete-lease"
+        onClick={() => data.deleteLease("lease-1")}
+      >
+        delete lease
+      </button>
+
+      <button
+        data-testid="add-room"
+        onClick={() => {
+          data
+            .addRoom({
+              id: "room-new",
+              propertyId: "prop-1",
+              name: "Bedroom A",
+              sqft: 100,
+              bathrooms: 1,
+              monthlyRent: 600,
+            })
+            .catch(() => {});
+        }}
+      >
+        add room
+      </button>
+      <button
+        data-testid="delete-room"
+        onClick={() => {
+          data.deleteRoom("room-2").catch(() => {});
+        }}
+      >
+        delete room
+      </button>
+
+      <button
+        data-testid="add-bed"
+        onClick={() =>
+          data.addBed({
+            id: "bed-new",
+            propertyId: "prop-1",
+            bedNumber: 2,
+            roomId: "room-1",
+            status: "Vacant",
+            occupantId: null,
+          })
+        }
+      >
+        add bed
+      </button>
+      <button
+        data-testid="delete-bed"
+        onClick={() => data.deleteBed("bed-1")}
+      >
+        delete bed
+      </button>
+
+      <button
+        data-testid="add-occupant"
+        onClick={() =>
+          data.addOccupant({
+            id: "occ-new",
+            name: "New Person",
+            email: "",
+            phone: "555-0200",
+            bedId: null,
+            propertyId: "prop-1",
+            moveInDate: "2026-01-01",
+            moveOutDate: null,
+            status: "Active",
+            chargePerBed: 500,
+            billingFrequency: "Monthly",
+            employeeId: "EMP-2",
+            company: "Acme Co",
+          })
+        }
+      >
+        add occupant
+      </button>
+
+      <button
+        data-testid="add-utility"
+        onClick={() =>
+          data.addUtility({
+            id: "util-new",
+            propertyId: "prop-1",
+            type: "Gas",
+            company: "City Gas",
+            monthlyCost: 80,
+            accountNumber: "ACC-2",
+            notes: "",
+          })
+        }
+      >
+        add utility
+      </button>
+      <button
+        data-testid="delete-utility"
+        onClick={() => data.deleteUtility("util-1")}
+      >
+        delete utility
+      </button>
+    </div>
+  );
+}
+
+function mountCrud(container: HTMLDivElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const root = createRoot(container);
+  root.render(
+    <QueryClientProvider client={client}>
+      <DataProvider>
+        <CrudHarness />
+      </DataProvider>
+    </QueryClientProvider>,
+  );
+  return { root, client };
+}
+
+function ids(container: HTMLElement, testid: string): string[] {
+  const text = getText(container, testid);
+  if (!text) return [];
+  return text.split(",");
+}
+
+describe("data store: creates and deletes persist across browser refresh", () => {
+  let container: HTMLDivElement;
+  let mounted: { root: Root; client: QueryClient } | null = null;
+  let backend: Backend;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    backend = makeBackend();
+    vi.stubGlobal("fetch", backend.fetch);
+  });
+
+  afterEach(async () => {
+    if (mounted) {
+      const m = mounted;
+      await act(async () => {
+        m.root.unmount();
+        m.client.clear();
+      });
+      mounted = null;
+    }
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  // Drives one create test: clicks the add button, waits for the backend
+  // to gain the new id, then remounts with a fresh QueryClient and asserts
+  // the new row is still rendered (i.e. the GET after refresh returned it).
+  async function runAddTest(opts: {
+    button: string;
+    listKey: keyof Backend["state"];
+    newId: string;
+    idsTestId: string;
+  }) {
+    await act(async () => {
+      mounted = mountCrud(container);
+    });
+    // Wait for the initial GET to populate the ids list (the harness only
+    // renders the *-ids divs once useData().isLoading is false).
+    await waitFor(() => readText(container, opts.idsTestId) !== null, {
+      describe: () => `${opts.idsTestId} to render after initial mount`,
+    });
+    await act(async () => {
+      clickButton(container, opts.button);
+    });
+    await waitFor(
+      () => backend.state[opts.listKey].some((r) => r.id === opts.newId),
+      { describe: () => `backend.${opts.listKey} to contain ${opts.newId}` },
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mountCrud(container);
+    });
+    await waitFor(() => ids(container, opts.idsTestId).includes(opts.newId), {
+      describe: () => `${opts.idsTestId} to include ${opts.newId} after refresh`,
+    });
+  }
+
+  // Drives one delete test: clicks the delete button, waits for the backend
+  // to drop the id, then remounts and asserts the row is gone from the
+  // refreshed list.
+  async function runDeleteTest(opts: {
+    button: string;
+    listKey: keyof Backend["state"];
+    deletedId: string;
+    idsTestId: string;
+  }) {
+    await act(async () => {
+      mounted = mountCrud(container);
+    });
+    await waitFor(() => ids(container, opts.idsTestId).includes(opts.deletedId), {
+      describe: () => `${opts.idsTestId} to initially include ${opts.deletedId}`,
+    });
+    await act(async () => {
+      clickButton(container, opts.button);
+    });
+    await waitFor(
+      () => !backend.state[opts.listKey].some((r) => r.id === opts.deletedId),
+      {
+        describe: () => `backend.${opts.listKey} to no longer contain ${opts.deletedId}`,
+      },
+    );
+
+    const m = mounted!;
+    await act(async () => {
+      m.root.unmount();
+      m.client.clear();
+    });
+    mounted = null;
+
+    await act(async () => {
+      mounted = mountCrud(container);
+    });
+    await waitFor(
+      () => !ids(container, opts.idsTestId).includes(opts.deletedId),
+      {
+        describe: () =>
+          `${opts.idsTestId} to no longer include ${opts.deletedId} after refresh`,
+      },
+    );
+  }
+
+  it("addCustomer persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-customer",
+      listKey: "customers",
+      newId: "cust-new",
+      idsTestId: "customer-ids",
+    });
+  });
+
+  it("deleteCustomer persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-customer",
+      listKey: "customers",
+      deletedId: "cust-2",
+      idsTestId: "customer-ids",
+    });
+  });
+
+  it("addProperty persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-property",
+      listKey: "properties",
+      newId: "prop-new",
+      idsTestId: "property-ids",
+    });
+  });
+
+  it("deleteProperty persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-property",
+      listKey: "properties",
+      deletedId: "prop-1",
+      idsTestId: "property-ids",
+    });
+  });
+
+  it("addLease persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-lease",
+      listKey: "leases",
+      newId: "lease-new",
+      idsTestId: "lease-ids",
+    });
+  });
+
+  it("deleteLease persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-lease",
+      listKey: "leases",
+      deletedId: "lease-1",
+      idsTestId: "lease-ids",
+    });
+  });
+
+  it("addRoom persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-room",
+      listKey: "rooms",
+      newId: "room-new",
+      idsTestId: "room-ids",
+    });
+  });
+
+  it("deleteRoom persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-room",
+      listKey: "rooms",
+      deletedId: "room-2",
+      idsTestId: "room-ids",
+    });
+  });
+
+  it("addBed persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-bed",
+      listKey: "beds",
+      newId: "bed-new",
+      idsTestId: "bed-ids",
+    });
+  });
+
+  it("deleteBed persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-bed",
+      listKey: "beds",
+      deletedId: "bed-1",
+      idsTestId: "bed-ids",
+    });
+  });
+
+  it("addOccupant persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-occupant",
+      listKey: "occupants",
+      newId: "occ-new",
+      idsTestId: "occupant-ids",
+    });
+  });
+  // Note: the data store does not expose deleteOccupant, so there is no
+  // matching delete test for occupants.
+
+  it("addUtility persists across a full remount", async () => {
+    await runAddTest({
+      button: "add-utility",
+      listKey: "utilities",
+      newId: "util-new",
+      idsTestId: "utility-ids",
+    });
+  });
+
+  it("deleteUtility persists across a full remount", async () => {
+    await runDeleteTest({
+      button: "delete-utility",
+      listKey: "utilities",
+      deletedId: "util-1",
+      idsTestId: "utility-ids",
+    });
+  });
+});

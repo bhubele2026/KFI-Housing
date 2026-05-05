@@ -601,11 +601,21 @@ export default function Properties() {
             description:
               "Google has no result for this address. Edit it to try a different spelling.",
           });
+        } else {
+          // Success: the cache write inside `retryGeocode` already
+          // notified subscribers, so the row will disappear on the
+          // next render through `useGeocodeFailures`. We ALSO fire a
+          // brief confirmation toast so an operator who clicked Retry
+          // and then scrolled or tab-switched still sees that the
+          // click landed — without this, the only success signal is
+          // the row vanishing, which is easy to miss when you're not
+          // staring directly at the rollup panel. Mirrors the
+          // ZERO_RESULTS branch's toast for symmetry.
+          toast({
+            title: "Found it",
+            description: "Google pinpointed this address. Removing it from the list.",
+          });
         }
-        // Success: the cache write inside `retryGeocode` already
-        // notified subscribers; the row will disappear on the next
-        // render through `useGeocodeFailures`. No toast on success —
-        // the row vanishing IS the confirmation.
       } catch {
         toast({
           title: "Retry failed",

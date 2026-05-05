@@ -1129,6 +1129,51 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     expect(get("addresses-needing-review-panel")).toBeNull();
   });
 
+  it("toasts a one-shot success confirmation when the Retry lands coords", async () => {
+    // The row vanishing IS the structural confirmation, but it's
+    // easy to miss for an operator who clicked Retry and then
+    // scrolled or tab-switched while waiting. A success toast keeps
+    // the success path as legible as the ZERO_RESULTS path (which
+    // already toasts) so the click never feels like a silent no-op.
+    plantFakeMapsSdk((_addr, cb) => {
+      cb(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+
+    await act(async () => {
+      get("retry-address-needing-review-p1")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    const titles = toastMock.mock.calls.map(
+      (c) => (c[0] as { title?: string }).title,
+    );
+    expect(titles).toContain("Found it");
+    // The success toast must NOT also fire the failure-branch toast —
+    // that would be a contradictory pair of signals for one click.
+    expect(titles).not.toContain("Still couldn't pinpoint");
+    expect(titles).not.toContain("Retry failed");
+    // And the success toast is informational, not destructive — it's
+    // a positive confirmation, so it should never carry the
+    // destructive variant the error-branch toasts use.
+    const variants = toastMock.mock.calls.map(
+      (c) => (c[0] as { variant?: string }).variant,
+    );
+    expect(variants).not.toContain("destructive");
+  });
+
   it("keeps the row and toasts when Google still returns no result", async () => {
     // Operator clicked Retry; Google replied ZERO_RESULTS again. The
     // row must STAY (the address is still bad — silently dropping it
@@ -1153,6 +1198,11 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
       (c) => (c[0] as { title?: string }).title,
     );
     expect(titles).toContain("Still couldn't pinpoint");
+    // Belt-and-suspenders for the success-toast addition: the
+    // ZERO_RESULTS branch must NOT also fire the success
+    // confirmation, or the operator would see contradictory toasts
+    // for a single click.
+    expect(titles).not.toContain("Found it");
   });
 
   it("toasts and leaves the row in place when the SDK fails to load", async () => {

@@ -252,6 +252,21 @@ const geocodeFailureListeners = new Set<GeocodeFailureListener>();
 // state. See `notifyGeocodeFailureListeners` for the undismiss path.
 const dismissedFailures = new Set<string>();
 
+// Tracks WHEN each persisted failure was last recorded — separate Map
+// (rather than stamping the timestamp into `geocodeCache` itself) so
+// the cache's value type stays a pure coords-or-null and only the
+// failure side carries the extra metadata. Surfaced through
+// `getGeocodeFailureTimestamp` so the Properties rollup can render
+// "Checked N minutes ago" on each row, helping operators tell a
+// stale flag from a fresh one.
+//
+// Updated on EVERY recorded failure (not just transitions) so a
+// re-attempt that lands `null` again advances the clock — the row's
+// relative-time label should reflect the most recent check, not the
+// first one. Hydrated from localStorage at module load so the label
+// stays meaningful across page reloads.
+const failureTimestamps = new Map<string, number>();
+
 // localStorage key used to persist failures + dismissals across page
 // reloads. Lives at module scope (not inside the helpers) so tests can
 // import the constant if they need to seed storage directly. Scoped
@@ -259,8 +274,18 @@ const dismissedFailures = new Set<string>();
 // users since the entire app data store is local-only too.
 const FAILURE_STORAGE_KEY = "housingops:geocode-failures";
 
+interface PersistedFailureEntry {
+  address: string;
+  // Unix-epoch milliseconds (Date.now()) of the most recent recorded
+  // failure for this address. Hydrated as-is so a reload preserves the
+  // "Checked N ago" label exactly — without persisting the timestamp,
+  // every reload would reset the clock and silently mask weeks-old
+  // flags as fresh.
+  lastCheckedAt: number;
+}
+
 interface PersistedFailures {
-  failures: string[];
+  failures: PersistedFailureEntry[];
   // Only addresses that ALSO appear in `failures` — we never persist
   // dismissals for addresses we haven't recorded a failure for, since
   // an orphan dismissal can't be observed (the rollup only renders
@@ -274,10 +299,31 @@ function readPersistedFailures(): PersistedFailures {
     const raw = window.localStorage.getItem(FAILURE_STORAGE_KEY);
     if (!raw) return { failures: [], dismissed: [] };
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const failures = Array.isArray(parsed.failures)
-      ? parsed.failures.filter(
-          (s): s is string => typeof s === "string" && s.length > 0,
-        )
+    // Backward-compat with the pre-timestamp shape (`failures: string[]`):
+    // each plain string becomes an entry stamped with `Date.now()` so
+    // the row still renders a sensible "Checked just now" label on
+    // first load after upgrade. Treating legacy entries as fresh is a
+    // one-shot migration cost — better than crashing on hydrate or
+    // showing "Checked 56 years ago" (epoch 0) for every legacy entry.
+    const now = Date.now();
+    const failures: PersistedFailureEntry[] = Array.isArray(parsed.failures)
+      ? parsed.failures.flatMap((entry): PersistedFailureEntry[] => {
+          if (typeof entry === "string" && entry.length > 0) {
+            return [{ address: entry, lastCheckedAt: now }];
+          }
+          if (
+            entry &&
+            typeof entry === "object" &&
+            typeof (entry as { address?: unknown }).address === "string" &&
+            (entry as { address: string }).address.length > 0
+          ) {
+            const addr = (entry as { address: string }).address;
+            const ts = (entry as { lastCheckedAt?: unknown }).lastCheckedAt;
+            const stamp = typeof ts === "number" && Number.isFinite(ts) ? ts : now;
+            return [{ address: addr, lastCheckedAt: stamp }];
+          }
+          return [];
+        })
       : [];
     const dismissed = Array.isArray(parsed.dismissed)
       ? parsed.dismissed.filter(
@@ -295,9 +341,16 @@ function readPersistedFailures(): PersistedFailures {
 function writePersistedFailures(): void {
   if (typeof window === "undefined") return;
   try {
-    const failures: string[] = [];
+    const failures: PersistedFailureEntry[] = [];
     for (const [addr, point] of geocodeCache) {
-      if (point === null) failures.push(addr);
+      if (point === null) {
+        // A failure should always have a timestamp by the time we
+        // write — every recording path stamps `failureTimestamps`
+        // before calling here. Falling back to `Date.now()` keeps
+        // storage coherent even if some path forgets.
+        const stamp = failureTimestamps.get(addr) ?? Date.now();
+        failures.push({ address: addr, lastCheckedAt: stamp });
+      }
     }
     if (failures.length === 0 && dismissedFailures.size === 0) {
       // Empty state — drop the key entirely so storage doesn't carry
@@ -305,13 +358,14 @@ function writePersistedFailures(): void {
       window.localStorage.removeItem(FAILURE_STORAGE_KEY);
       return;
     }
+    const failureAddrs = new Set(failures.map((f) => f.address));
     const payload: PersistedFailures = {
       failures,
       // Filter dismissals down to addresses that are still failing.
       // A dismissal whose underlying failure has been cleared (the
       // address now resolves successfully, or was wiped via reset)
       // can never resurface — persisting it would just leak storage.
-      dismissed: failures.filter((a) => dismissedFailures.has(a)),
+      dismissed: [...dismissedFailures].filter((a) => failureAddrs.has(a)),
     };
     window.localStorage.setItem(FAILURE_STORAGE_KEY, JSON.stringify(payload));
   } catch {
@@ -332,11 +386,17 @@ function writePersistedFailures(): void {
 function hydrateGeocodeFailuresFromStorage(): void {
   if (typeof window === "undefined") return;
   const { failures, dismissed } = readPersistedFailures();
-  for (const addr of failures) {
+  for (const entry of failures) {
     // Don't clobber a fresher entry that may have been primed before
     // hydration ran (e.g. a test priming the cache before this fires)
-    // — only fill in addresses we don't already know about.
-    if (!geocodeCache.has(addr)) geocodeCache.set(addr, null);
+    // — only fill in addresses we don't already know about. The
+    // matching timestamp lands alongside the cache entry so the row
+    // can render "Checked N ago" on the very first render after
+    // reload, without waiting for any Maps surface to re-attempt.
+    if (!geocodeCache.has(entry.address)) {
+      geocodeCache.set(entry.address, null);
+      failureTimestamps.set(entry.address, entry.lastCheckedAt);
+    }
   }
   for (const addr of dismissed) {
     dismissedFailures.add(addr);
@@ -418,6 +478,10 @@ export function clearGeocodeFailures(): void {
   for (const [addr, point] of [...geocodeCache]) {
     if (point === null) {
       geocodeCache.delete(addr);
+      // Drop the matching timestamp too — leaving it would let a
+      // future failure for the same address inherit a stale "Checked
+      // N ago" label from a previous, supposedly-cleared incident.
+      failureTimestamps.delete(addr);
       changed = true;
     }
   }
@@ -431,6 +495,25 @@ export function clearGeocodeFailures(): void {
   // succeeded but the in-memory state was reset by a test helper).
   writePersistedFailures();
   if (changed) notifyGeocodeFailureListeners();
+}
+
+/**
+ * Returns the most recent recorded-failure timestamp (epoch ms) for an
+ * address, or `undefined` if the address isn't currently failing.
+ *
+ * The Properties rollup uses this to render a "Checked N minutes ago"
+ * label per row so operators can tell stale flags from fresh ones.
+ * Updated on every recorded failure (not just transitions to failure)
+ * so a re-attempt that lands `null` again advances the clock.
+ */
+export function getGeocodeFailureTimestamp(addr: string): number | undefined {
+  // Only return a timestamp for addresses currently in the failure
+  // snapshot — a stale entry left over from a flicker would mislead
+  // the row label. The cache's value is the source of truth for
+  // "is this still failing"; the timestamp Map shadows it.
+  const point = geocodeCache.get(addr);
+  if (point !== null) return undefined;
+  return failureTimestamps.get(addr);
 }
 
 /**
@@ -513,10 +596,6 @@ export function primeGeocodeCache(
   addr: string,
   point: { lat: number; lng: number } | null,
 ): void {
-  // A pre-existing `null` doesn't constitute a *new* failure — only
-  // notify when this write actually adds (or upgrades) a failure
-  // entry, so subscribers don't see redundant updates when stored
-  // coords prime the cache for an already-failed lookup.
   const previous = geocodeCache.get(addr);
   const isNewFailure = point === null && previous !== null;
   // Stored-coords / successful resolution overwriting a previously
@@ -527,7 +606,27 @@ export function primeGeocodeCache(
   // persisted set must drop the address so a reload doesn't
   // resurrect the bad entry.
   const successOverridingFailure = point !== null && previous === null;
+  // A re-record of an already-failing address — the failure set
+  // didn't change, but the timestamp must advance so the row's
+  // "Checked N ago" label reflects the most recent attempt rather
+  // than the first one. Without this branch, an operator watching
+  // an address re-fail every hour would still see a label growing
+  // older as if the original check were the only one.
+  const isRefailure = point === null && previous === null;
   geocodeCache.set(addr, point);
+  if (point === null) {
+    // Stamp the timestamp on every recording — fresh failure OR
+    // re-record. The Properties rollup re-renders on the
+    // notification below and reads `getGeocodeFailureTimestamp` to
+    // surface the updated label.
+    failureTimestamps.set(addr, Date.now());
+  } else {
+    // Successful coords land — drop any timestamp tracking the
+    // now-resolved failure so a future failure for the same
+    // address starts a fresh clock instead of inheriting a stale
+    // one.
+    failureTimestamps.delete(addr);
+  }
   if (isNewFailure) {
     // Re-flagging an address that the operator previously dismissed
     // brings the row back: a fresh failure is genuinely new
@@ -546,6 +645,13 @@ export function primeGeocodeCache(
     // the same address surfaces as a fresh row rather than a
     // pre-suppressed one.
     dismissedFailures.delete(addr);
+    writePersistedFailures();
+    notifyGeocodeFailureListeners();
+  } else if (isRefailure) {
+    // The failure SET is unchanged, but the per-row timestamp moved.
+    // Persist + notify so the rollup re-renders the updated label
+    // (and so storage stays in lock-step with memory across a
+    // potential reload mid-session).
     writePersistedFailures();
     notifyGeocodeFailureListeners();
   }
@@ -594,10 +700,17 @@ export function resolveGeocode(
         // comment in `primeGeocodeCache` above. Persisting on failure
         // keeps the badge honest across page reloads.
         if (point === null) {
+          // Stamp the per-row timestamp so the rollup's "Checked N
+          // ago" label reflects this attempt — the most recent one
+          // for the address — rather than the original flag.
+          failureTimestamps.set(addr, Date.now());
           dismissedFailures.delete(addr);
           writePersistedFailures();
           notifyGeocodeFailureListeners();
         } else if (previous === null) {
+          // Successful coords on top of a prior failure — drop the
+          // timestamp so a future failure starts a fresh clock.
+          failureTimestamps.delete(addr);
           // Success on top of an existing failure — drop the address
           // from the persisted failure set (so reload doesn't
           // resurrect it) and notify the rollup that the entry is
@@ -632,6 +745,11 @@ export function __resetGoogleMapsSdkForTest(): void {
   // reset them between tests for the same reason we reset the cache,
   // so a dismissal in one test doesn't suppress a failure in the next.
   dismissedFailures.clear();
+  // Per-failure timestamps shadow the failure cache, so they share
+  // the same reset path — leaving them around would let a fresh
+  // failure in the next test inherit a stale "Checked N ago" stamp
+  // from the previous one.
+  failureTimestamps.clear();
   loadedApiKey = null;
   // Wipe persisted failures too. Without this, a test that primed a
   // failure (which now writes to localStorage) would leak storage

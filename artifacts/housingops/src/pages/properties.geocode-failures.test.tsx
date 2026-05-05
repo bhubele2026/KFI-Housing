@@ -638,8 +638,17 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
 
     const raw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!) as { failures: string[]; dismissed: string[] };
-    expect(parsed.failures).toContain(addrFor(0));
+    const parsed = JSON.parse(raw!) as {
+      failures: Array<{ address: string; lastCheckedAt: number }>;
+      dismissed: string[];
+    };
+    expect(parsed.failures.map((f) => f.address)).toContain(addrFor(0));
+    // The timestamp must land alongside the address so a reload can
+    // render "Checked N ago" without resetting the clock to "now".
+    const entry = parsed.failures.find((f) => f.address === addrFor(0));
+    expect(entry).toBeDefined();
+    expect(typeof entry!.lastCheckedAt).toBe("number");
+    expect(entry!.lastCheckedAt).toBeGreaterThan(0);
     expect(parsed.dismissed).toEqual([]);
   });
 
@@ -678,8 +687,11 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
 
     const raw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
     expect(raw).not.toBeNull();
-    const parsed = JSON.parse(raw!) as { failures: string[]; dismissed: string[] };
-    expect(parsed.failures).toEqual(
+    const parsed = JSON.parse(raw!) as {
+      failures: Array<{ address: string; lastCheckedAt: number }>;
+      dismissed: string[];
+    };
+    expect(parsed.failures.map((f) => f.address)).toEqual(
       expect.arrayContaining([addrFor(0), addrFor(2)]),
     );
     expect(parsed.dismissed).toEqual([addrFor(0)]);
@@ -709,8 +721,8 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     primeGeocodeCache(addr, null);
     let parsed = JSON.parse(
       window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST)!,
-    ) as { failures: string[]; dismissed: string[] };
-    expect(parsed.failures).toContain(addr);
+    ) as { failures: Array<{ address: string; lastCheckedAt: number }>; dismissed: string[] };
+    expect(parsed.failures.map((f) => f.address)).toContain(addr);
 
     // Successful coords land for the same address — simulates a
     // per-property Location card priming the cache after the
@@ -720,10 +732,10 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     const after = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
     if (after !== null) {
       parsed = JSON.parse(after) as {
-        failures: string[];
+        failures: Array<{ address: string; lastCheckedAt: number }>;
         dismissed: string[];
       };
-      expect(parsed.failures).not.toContain(addr);
+      expect(parsed.failures.map((f) => f.address)).not.toContain(addr);
     }
     // And the rollup must drop the row immediately too — the
     // overwrite path notifies subscribers so the panel reflects the
@@ -773,5 +785,133 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
 
     await renderPage();
     expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  // ── "Checked N ago" relative-time label ──────────────────────────────
+  //
+  // Each persisted failure carries a `lastCheckedAt` timestamp so the
+  // rollup row can show how stale the flag is — operators need to
+  // tell a five-minute-old flag from a three-week-old one to triage
+  // honestly. The cases below pin down the rendering path, the
+  // re-record refresh, and the persistence behavior.
+
+  it("renders a 'Checked … ago' label for each flagged row", async () => {
+    // The label must appear on every row the panel surfaces so
+    // operators can prioritize fresh failures over stale ones at a
+    // glance — without it, a row that's been failing for weeks looks
+    // identical to one that just landed this minute.
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+
+    const stamp = get("address-needing-review-checked-p1");
+    expect(stamp).not.toBeNull();
+    // We don't pin down the exact relative-time string (it'd churn
+    // every minute), but it must contain the "Checked" prefix and
+    // an "ago" suffix so the row's intent is unambiguous.
+    expect(stamp!.textContent).toMatch(/^Checked /);
+    expect(stamp!.textContent).toMatch(/ ago$/);
+  });
+
+  it("shows 'Checked … ago' that reflects an older timestamp from storage", async () => {
+    // A reload should NOT reset the clock to "now" — the persisted
+    // timestamp must drive the label so an operator who's been away
+    // for a week sees "Checked 7 days ago", not "Checked just now".
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(
+      __FAILURE_STORAGE_KEY_FOR_TEST,
+      JSON.stringify({
+        failures: [{ address: addrFor(0), lastCheckedAt: sevenDaysAgo }],
+        dismissed: [],
+      }),
+    );
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await renderPage();
+
+    const stamp = get("address-needing-review-checked-p1");
+    expect(stamp).not.toBeNull();
+    // date-fns' formatDistanceToNow outputs "7 days ago" for ~1
+    // week back. Asserting on the "days" unit (not the exact
+    // number) keeps this stable against tiny clock drift between
+    // computing the stamp and rendering.
+    expect(stamp!.textContent).toMatch(/days? ago$/);
+  });
+
+  it("advances the timestamp when the same address is re-recorded as failing", async () => {
+    // The contract: re-recording an already-failing address advances
+    // the timestamp so the row reflects the most recent attempt, not
+    // the first one. Without this, an address re-checked every hour
+    // would show a label growing stale even though we keep
+    // confirming the failure.
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(
+      __FAILURE_STORAGE_KEY_FOR_TEST,
+      JSON.stringify({
+        failures: [{ address: addrFor(0), lastCheckedAt: fiveMinutesAgo }],
+        dismissed: [],
+      }),
+    );
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await renderPage();
+    // Snapshot the persisted timestamp before re-recording.
+    const beforeRaw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
+    const beforeParsed = JSON.parse(beforeRaw!) as {
+      failures: Array<{ address: string; lastCheckedAt: number }>;
+    };
+    const beforeTs = beforeParsed.failures.find(
+      (f) => f.address === addrFor(0),
+    )!.lastCheckedAt;
+    expect(beforeTs).toBe(fiveMinutesAgo);
+
+    // Re-record the same failure — simulates a sibling Maps surface
+    // re-attempting the address and getting the same `null` back.
+    await act(async () => {
+      primeGeocodeCache(addrFor(0), null);
+    });
+
+    const afterRaw = window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST);
+    const afterParsed = JSON.parse(afterRaw!) as {
+      failures: Array<{ address: string; lastCheckedAt: number }>;
+    };
+    const afterTs = afterParsed.failures.find(
+      (f) => f.address === addrFor(0),
+    )!.lastCheckedAt;
+    // The new stamp must be strictly newer than the old one — the
+    // exact value depends on `Date.now()`, but it MUST move forward.
+    expect(afterTs).toBeGreaterThan(beforeTs);
+
+    // The row stays present (the failure hasn't been resolved) and
+    // still carries the label — the re-record refreshes it rather
+    // than clearing it.
+    expect(get("address-needing-review-checked-p1")).not.toBeNull();
+  });
+
+  it("hydrates legacy string-only persisted failures into stamped entries", async () => {
+    // Older builds persisted `failures: string[]` without timestamps.
+    // A user upgrading mid-session must NOT crash on hydration and
+    // must still see the row — we stamp legacy entries with `now` so
+    // the label renders sensibly ("Checked just now") instead of
+    // "Checked 56 years ago" or throwing.
+    __resetGoogleMapsSdkForTest();
+    window.localStorage.setItem(
+      __FAILURE_STORAGE_KEY_FOR_TEST,
+      JSON.stringify({
+        failures: [addrFor(0)],
+        dismissed: [],
+      }),
+    );
+    __hydrateGeocodeFailuresFromStorageForTest();
+
+    await renderPage();
+
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    const stamp = get("address-needing-review-checked-p1");
+    expect(stamp).not.toBeNull();
+    expect(stamp!.textContent).toMatch(/^Checked /);
   });
 });

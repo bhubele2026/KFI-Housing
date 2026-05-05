@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getGeocodeFailures,
+  getGeocodeFailureTimestamp,
   subscribeGeocodeFailures,
 } from "@/lib/google-maps-sdk";
 
@@ -32,4 +33,37 @@ export function useGeocodeFailures(): ReadonlySet<string> {
     return subscribeGeocodeFailures((next) => setFailures(next));
   }, []);
   return failures;
+}
+
+/**
+ * Subscribes to the shared geocode-failure cache and returns a Map of
+ * `address → lastCheckedAt` (epoch ms) for every currently-failing
+ * address. Mirrors `useGeocodeFailures` but carries the per-row
+ * timestamp the Properties rollup needs to render "Checked N minutes
+ * ago" labels.
+ *
+ * Kept as a separate hook (rather than augmenting `useGeocodeFailures`)
+ * so existing callers — the sidebar badge, the toast hook — don't
+ * carry the timestamp Map they have no use for, and so a re-record of
+ * the same failure (which advances the timestamp but not the set) only
+ * forces a re-render in subscribers that actually display the label.
+ *
+ * The Map is rebuilt on every notification, so `getTimestamp(addr)`
+ * inside a render always reflects the most recent recording. Rows
+ * whose timestamp predates the live `Date.now()` clock by minutes /
+ * hours / days will format accordingly without any extra plumbing.
+ */
+export function useGeocodeFailureTimestamps(): ReadonlyMap<string, number> {
+  // Computed from the current set so a re-render driven by
+  // `useGeocodeFailures` already pulls a fresh map on the next render
+  // — there's no separate subscription path needed. Walking the set
+  // is cheap (one entry per unique failed address) and avoids
+  // exposing the module-level Map directly.
+  const failures = useGeocodeFailures();
+  const map = new Map<string, number>();
+  for (const addr of failures) {
+    const ts = getGeocodeFailureTimestamp(addr);
+    if (typeof ts === "number") map.set(addr, ts);
+  }
+  return map;
 }

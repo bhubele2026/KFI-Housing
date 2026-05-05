@@ -28,7 +28,8 @@ import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { dismissGeocodeFailure, formatGeocodeAddress } from "@/lib/google-maps-sdk";
-import { useGeocodeFailures } from "@/hooks/use-geocode-failures";
+import { useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
+import { formatDistanceToNow } from "date-fns";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft";
@@ -503,8 +504,15 @@ export default function Properties() {
   // a per-property Location card the operator visited earlier, etc. —
   // surfaces here so the rollup panel can list every property whose
   // address Google can't pinpoint without each surface having to push
-  // into a parallel store. The set updates live as new failures land.
-  const geocodeFailures = useGeocodeFailures();
+  // into a parallel store.
+  //
+  // We subscribe via the timestamps hook (Map of address →
+  // lastCheckedAt) and use it for BOTH the failure-set lookup
+  // (`.has(addr)`, `.size`) AND the per-row "Checked N ago" label.
+  // Calling only one hook keeps us from running two parallel
+  // subscriptions over the same shared cache. The Map updates live
+  // as new failures land or get re-recorded.
+  const geocodeFailureTimestamps = useGeocodeFailureTimestamps();
 
   // Roll up properties whose CURRENT address string matches a cached
   // failure. Keyed by the same canonical address string the maps use
@@ -514,12 +522,12 @@ export default function Properties() {
   // the lookup entirely — they don't have anything for Google to
   // reject in the first place.
   const propertiesNeedingAddressFix = useMemo(() => {
-    if (geocodeFailures.size === 0) return [] as Property[];
+    if (geocodeFailureTimestamps.size === 0) return [] as Property[];
     return properties.filter((p) => {
       const addr = formatGeocodeAddress(p);
-      return addr.length > 0 && geocodeFailures.has(addr);
+      return addr.length > 0 && geocodeFailureTimestamps.has(addr);
     });
-  }, [properties, geocodeFailures]);
+  }, [properties, geocodeFailureTimestamps]);
 
   // Ids reported back from the map for properties whose address looked
   // valid but Google couldn't actually geocode (typo'd street, removed
@@ -811,6 +819,20 @@ export default function Properties() {
                   // same comma-joined form keeps the two views from
                   // drifting visually.
                   const addrDisplay = formatGeocodeAddress(p);
+                  // Format "Checked N minutes/hours/days ago" from the
+                  // last-recorded-failure timestamp. `addSuffix: true`
+                  // gives us the trailing "ago" so we don't have to
+                  // hand-format the suffix per unit. We guard against
+                  // a missing timestamp (shouldn't happen in steady
+                  // state since the cache and the timestamp Map are
+                  // updated together) by simply hiding the label —
+                  // an empty stamp is better than rendering "Checked
+                  // Invalid Date ago".
+                  const lastCheckedAt = geocodeFailureTimestamps.get(addrDisplay);
+                  const checkedLabel =
+                    typeof lastCheckedAt === "number"
+                      ? `Checked ${formatDistanceToNow(lastCheckedAt, { addSuffix: true })}`
+                      : null;
                   return (
                     // Row is a flex container with TWO independently
                     // clickable controls — the main "open property"
@@ -840,6 +862,22 @@ export default function Properties() {
                           {customer && (
                             <span className="block text-[11px] text-muted-foreground/80 truncate">
                               {customer.name}
+                            </span>
+                          )}
+                          {checkedLabel && (
+                            // Surfaces how stale the failure is so an
+                            // operator can prioritize fresh flags over
+                            // weeks-old ones. Stamped via a stable
+                            // testid (NOT the relative-time text,
+                            // which would churn every minute) so tests
+                            // can assert on presence + content
+                            // without race conditions.
+                            <span
+                              className="block text-[11px] text-muted-foreground/70 truncate"
+                              data-testid={`address-needing-review-checked-${p.id}`}
+                              title={new Date(lastCheckedAt!).toLocaleString()}
+                            >
+                              {checkedLabel}
                             </span>
                           )}
                         </span>

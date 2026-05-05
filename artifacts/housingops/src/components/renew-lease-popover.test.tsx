@@ -46,6 +46,7 @@ vi.mock("@/components/ui/toast", () => ({
 }));
 
 import { RenewLeasePopover } from "./renew-lease-popover";
+import { formatYMDPretty } from "@/lib/lease-dates";
 import type { Lease } from "@/data/mockData";
 
 type LeaseStatus = Lease["status"];
@@ -101,6 +102,16 @@ describe("RenewLeasePopover renew + Undo", () => {
     const input = container.querySelector('input[type="date"]') as HTMLInputElement | null;
     if (!input) throw new Error("Could not find custom date input");
     return input;
+  }
+
+  function getPreviewTextForButton(label: string): string {
+    const btn = findButtonByText(label);
+    const spans = Array.from(btn.querySelectorAll("span"));
+    const previewSpan = spans.find((s) => s.textContent && s.textContent !== label);
+    if (!previewSpan) {
+      throw new Error(`Could not find preview span next to "${label}" button`);
+    }
+    return previewSpan.textContent ?? "";
   }
 
   function getApplyCustomButton(): HTMLButtonElement {
@@ -350,6 +361,91 @@ describe("RenewLeasePopover renew + Undo", () => {
 
     expect(onRenew).toHaveBeenCalledTimes(2);
     expect(onRenew).toHaveBeenNthCalledWith(2, "2024-08-31", "Active");
+  });
+
+  it("preview text next to +6 months and +1 year matches the same target date that gets passed to onRenew (mid-month, no clamping)", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2026-01-15",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    expect(getPreviewTextForButton("+6 months")).toBe(formatYMDPretty("2026-07-15"));
+    expect(getPreviewTextForButton("+1 year")).toBe(formatYMDPretty("2027-01-15"));
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2026-07-15", "Active");
+  });
+
+  it("preview text next to +6 months and +1 year reflects end-of-month pass-through (Jan 31 in a non-leap year)", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2025-01-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    expect(getPreviewTextForButton("+6 months")).toBe(formatYMDPretty("2025-07-31"));
+    expect(getPreviewTextForButton("+1 year")).toBe(formatYMDPretty("2026-01-31"));
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2026-01-31", "Active");
+  });
+
+  it("preview text next to +6 months matches the clamped target when Aug 31 + 6 months clamps to Feb 28 in a non-leap target year", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2025-08-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    expect(getPreviewTextForButton("+6 months")).toBe(formatYMDPretty("2026-02-28"));
+    expect(getPreviewTextForButton("+1 year")).toBe(formatYMDPretty("2026-08-31"));
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2026-02-28", "Active");
+  });
+
+  it("preview text next to +6 months matches the clamped target when Aug 31 + 6 months clamps to Feb 29 in a leap target year", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2023-08-31",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    expect(getPreviewTextForButton("+6 months")).toBe(formatYMDPretty("2024-02-29"));
+    expect(getPreviewTextForButton("+1 year")).toBe(formatYMDPretty("2024-08-31"));
+
+    await act(async () => {
+      findButtonByText("+6 months").click();
+    });
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2024-02-29", "Active");
+  });
+
+  it("preview text next to +1 year matches the clamped target when Feb 29 (leap) + 1 year clamps to Feb 28 (non-leap)", async () => {
+    const onRenew = vi.fn();
+    await renderPopover({
+      currentEndDate: "2024-02-29",
+      currentStatus: "Active",
+      onRenew,
+    });
+
+    expect(getPreviewTextForButton("+6 months")).toBe(formatYMDPretty("2024-08-29"));
+    expect(getPreviewTextForButton("+1 year")).toBe(formatYMDPretty("2025-02-28"));
+
+    await act(async () => {
+      findButtonByText("+1 year").click();
+    });
+    expect(onRenew).toHaveBeenNthCalledWith(1, "2025-02-28", "Active");
   });
 
   it("does not call onRenew and does not show an Undo action when the new end date is not after the current end date", async () => {

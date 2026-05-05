@@ -5,7 +5,9 @@ import {
   EXPORT_FORMAT_VERSION,
   LEGACY_CUSTOMER_ID,
   mergeImportBundles,
+  dryRunMergeImport,
   totalImportSummary,
+  totalMergeDryRun,
   type ExportData,
 } from "./data-store";
 
@@ -437,5 +439,59 @@ describe("mergeImportBundles", () => {
     });
     expect(totalImportSummary(merged.added)).toBe(2);
     expect(totalImportSummary(merged.updated)).toBe(1);
+  });
+});
+
+describe("dryRunMergeImport", () => {
+  it("classifies records as added, updated, or unchanged with their labels", () => {
+    const current: ExportData = {
+      ...emptyBundle(),
+      customers: [baseCustomer("c1", { name: "Acme Co" })],
+      properties: [
+        baseProperty("p1", { name: "Maple House" }),
+        baseProperty("p2", { name: "Oak Place" }),
+      ],
+    };
+    const incoming: ExportData = {
+      ...emptyBundle(),
+      // c1 unchanged (same content), c2 added.
+      customers: [baseCustomer("c1", { name: "Acme Co" }), baseCustomer("c2", { name: "Beta Inc" })],
+      // p1 updated (renamed), p3 added, p2 not in file (preserved, not in counts).
+      properties: [
+        baseProperty("p1", { name: "Maple House Renamed" }),
+        baseProperty("p3", { name: "Pine Lodge" }),
+      ],
+    };
+
+    const dry = dryRunMergeImport(current, incoming);
+
+    expect(dry.customers.added).toBe(1);
+    expect(dry.customers.updated).toBe(0);
+    expect(dry.customers.unchanged).toBe(1);
+    expect(dry.customers.addedItems).toEqual([{ id: "c2", label: "Beta Inc" }]);
+
+    expect(dry.properties.added).toBe(1);
+    expect(dry.properties.updated).toBe(1);
+    expect(dry.properties.unchanged).toBe(0);
+    expect(dry.properties.addedItems).toEqual([{ id: "p3", label: "Pine Lodge" }]);
+    // The label for an updated row uses the EXISTING name so operators
+    // recognize what's about to be overwritten.
+    expect(dry.properties.updatedItems).toEqual([{ id: "p1", label: "Maple House" }]);
+
+    const totals = totalMergeDryRun(dry);
+    expect(totals).toEqual({ added: 2, updated: 1, unchanged: 1 });
+  });
+
+  it("does not mutate the inputs", () => {
+    const property = baseProperty("p1", { name: "Same" });
+    const current: ExportData = { ...emptyBundle(), properties: [property] };
+    const incoming: ExportData = { ...emptyBundle(), properties: [{ ...property, name: "Changed" }] };
+    const snapshotCurrent = JSON.stringify(current);
+    const snapshotIncoming = JSON.stringify(incoming);
+
+    dryRunMergeImport(current, incoming);
+
+    expect(JSON.stringify(current)).toBe(snapshotCurrent);
+    expect(JSON.stringify(incoming)).toBe(snapshotIncoming);
   });
 });

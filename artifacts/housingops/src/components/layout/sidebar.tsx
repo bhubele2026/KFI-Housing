@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import kfiLogoUrl from "@assets/kfi-staffing-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -9,9 +10,12 @@ import {
   inspectImportPayload,
   UnsupportedImportError,
   totalImportSummary,
+  totalMergeDryRun,
   type ImportMode,
   type ImportResult,
   type ImportPreview,
+  type MergeDryRun,
+  type MergeImpactCategory,
 } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
@@ -50,7 +54,7 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { resetToSampleData, exportData, importData, customers, properties } = useData();
+  const { resetToSampleData, exportData, importData, previewMergeImport, customers, properties } = useData();
   const { customerId, setCustomerId } = useCustomerScope();
   const activeScopedCustomer =
     customerId !== ALL_CUSTOMERS
@@ -245,6 +249,14 @@ export function Sidebar() {
       });
     }
   };
+
+  // Recompute the per-type "what will change" preview whenever the operator
+  // toggles to merge mode (or the underlying data changes mid-dialog).
+  // Skipped in replace mode since replace is total — there's nothing to diff.
+  const mergeDryRun = useMemo<MergeDryRun | null>(() => {
+    if (!pendingImport || importMode !== "merge") return null;
+    return previewMergeImport(pendingImport.preview);
+  }, [pendingImport, importMode, previewMergeImport]);
 
   const handleConfirmImport = () => {
     if (!pendingImport) return;
@@ -567,6 +579,9 @@ export function Sidebar() {
                     Your current data will be lost. Consider exporting first if you want a backup.
                   </p>
                 ) : null}
+                {importMode === "merge" && mergeDryRun ? (
+                  <MergePreview dryRun={mergeDryRun} />
+                ) : null}
                 {pendingImport?.preview.migratedFromV1 ? (
                   <p
                     className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
@@ -605,5 +620,111 @@ export function Sidebar() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; label: string }> = [
+  { key: "customers", label: "Customers" },
+  { key: "properties", label: "Properties" },
+  { key: "leases", label: "Leases" },
+  { key: "rooms", label: "Rooms" },
+  { key: "beds", label: "Beds" },
+  { key: "occupants", label: "Occupants" },
+  { key: "utilities", label: "Utilities" },
+];
+
+/**
+ * Renders the per-type breakdown of a merge dry-run (added / updated /
+ * unchanged) plus a collapsible list of the rows that would be overwritten.
+ * Lets operators spot accidental overwrites BEFORE confirming the merge.
+ */
+function MergePreview({ dryRun }: { dryRun: MergeDryRun }) {
+  const totals = totalMergeDryRun(dryRun);
+  const hasAnyUpdate = MERGE_PREVIEW_TYPES.some(
+    (t) => dryRun[t.key].updatedItems.length > 0,
+  );
+  return (
+    <div
+      className="rounded-md border border-border bg-muted/40 p-3 space-y-2"
+      data-testid="merge-import-preview"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">What this merge will do</p>
+        <p className="text-xs text-muted-foreground tabular-nums" data-testid="merge-import-preview-totals">
+          {totals.added} added · {totals.updated} updated · {totals.unchanged} unchanged
+        </p>
+      </div>
+      <ul className="text-sm text-muted-foreground space-y-0.5">
+        {MERGE_PREVIEW_TYPES.map(({ key, label }) => {
+          const cat = dryRun[key];
+          if (cat.added === 0 && cat.updated === 0 && cat.unchanged === 0) {
+            return null;
+          }
+          return (
+            <li key={key} className="flex justify-between gap-2 tabular-nums" data-testid={`merge-preview-row-${key}`}>
+              <span>{label}</span>
+              <span>
+                <span className="text-emerald-700 dark:text-emerald-400">{cat.added} added</span>
+                {", "}
+                <span className={cn(cat.updated > 0 && "text-amber-700 dark:text-amber-400 font-medium")}>
+                  {cat.updated} updated
+                </span>
+                {", "}
+                <span>{cat.unchanged} unchanged</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {hasAnyUpdate ? (
+        <Collapsible>
+          <CollapsibleTrigger
+            className="group flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
+            data-testid="merge-preview-overwrites-toggle"
+          >
+            <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
+            Show records that would be overwritten ({totals.updated})
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="mb-1">
+                These existing records share an id with the file and will be replaced. Any local
+                edits to them will be lost.
+              </p>
+              <ul className="space-y-1">
+                {MERGE_PREVIEW_TYPES.map(({ key, label }) => (
+                  <MergeOverwriteList key={key} label={label} category={dryRun[key]} typeKey={key} />
+                ))}
+              </ul>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+    </div>
+  );
+}
+
+function MergeOverwriteList({
+  label,
+  category,
+  typeKey,
+}: {
+  label: string;
+  category: MergeImpactCategory;
+  typeKey: keyof MergeDryRun;
+}) {
+  if (category.updatedItems.length === 0) return null;
+  return (
+    <li data-testid={`merge-preview-overwrites-${typeKey}`}>
+      <span className="font-semibold">{label}:</span>{" "}
+      <span>
+        {category.updatedItems.map((item, idx) => (
+          <span key={item.id}>
+            {idx > 0 ? ", " : ""}
+            <span title={item.id}>{item.label}</span>
+          </span>
+        ))}
+      </span>
+    </li>
   );
 }

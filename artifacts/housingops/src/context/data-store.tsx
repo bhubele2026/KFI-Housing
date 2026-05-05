@@ -177,6 +177,44 @@ export function totalImportSummary(s: ImportSummary): number {
   return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities;
 }
 
+/** A single record affected by a merge dry-run, with a human-readable label. */
+export interface MergeImpactItem {
+  id: string;
+  label: string;
+}
+
+/** Per-type breakdown of what a merge would change. */
+export interface MergeImpactCategory {
+  added: number;
+  updated: number;
+  unchanged: number;
+  /** Records whose existing content would be overwritten by the import. */
+  updatedItems: MergeImpactItem[];
+  /** Records that would be appended as new entries. */
+  addedItems: MergeImpactItem[];
+}
+
+export interface MergeDryRun {
+  customers: MergeImpactCategory;
+  properties: MergeImpactCategory;
+  leases: MergeImpactCategory;
+  rooms: MergeImpactCategory;
+  beds: MergeImpactCategory;
+  occupants: MergeImpactCategory;
+  utilities: MergeImpactCategory;
+}
+
+/** Total counts across every record type in a dry run. */
+export function totalMergeDryRun(dry: MergeDryRun): { added: number; updated: number; unchanged: number } {
+  let added = 0, updated = 0, unchanged = 0;
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"] as const) {
+    added += dry[k].added;
+    updated += dry[k].updated;
+    unchanged += dry[k].unchanged;
+  }
+  return { added, updated, unchanged };
+}
+
 const EMPTY_SUMMARY: ImportSummary = {
   customers: 0,
   properties: 0,
@@ -234,6 +272,72 @@ export function mergeImportBundles(
   };
 
   return { data, added, updated };
+}
+
+// Per-type label generators used by the merge dry-run preview. Each returns
+// a short human-readable string so operators can spot accidental overwrites
+// (e.g. "Sunset House" instead of "p-7"). Pure: depends only on the record
+// itself, no cross-table joins required.
+const MERGE_LABELS = {
+  customers: (c: Customer) => c.name || c.id,
+  properties: (p: Property) => p.name || p.id,
+  leases: (l: Lease) => `Lease ${l.startDate || l.id}`,
+  rooms: (r: Room) => r.name || r.id,
+  beds: (b: Bed) => `Bed #${b.bedNumber}`,
+  occupants: (o: Occupant) => o.name || o.id,
+  utilities: (u: Utility) => `${u.type}${u.company ? ` — ${u.company}` : ""}`,
+};
+
+const EMPTY_CATEGORY = (): MergeImpactCategory => ({
+  added: 0,
+  updated: 0,
+  unchanged: 0,
+  updatedItems: [],
+  addedItems: [],
+});
+
+/**
+ * Compute what `mergeImportBundles(current, incoming)` would do — without
+ * mutating any caches. Returns per-type counts of added/updated/unchanged
+ * plus the ids and human-readable labels of affected rows so the import
+ * dialog can preview the impact and surface accidental overwrites.
+ */
+export function dryRunMergeImport(current: ExportData, incoming: ExportData): MergeDryRun {
+  function diffList<T extends { id: string }>(
+    currentList: readonly T[],
+    incomingList: readonly T[],
+    label: (item: T) => string,
+  ): MergeImpactCategory {
+    const out = EMPTY_CATEGORY();
+    const byId = new Map<string, T>();
+    for (const item of currentList) byId.set(item.id, item);
+    for (const item of incomingList) {
+      const existing = byId.get(item.id);
+      if (!existing) {
+        out.added += 1;
+        out.addedItems.push({ id: item.id, label: label(item) });
+      } else if (JSON.stringify(existing) !== JSON.stringify(item)) {
+        out.updated += 1;
+        // Use the EXISTING label so the operator recognizes the row that's
+        // about to be overwritten by name they already know, not the
+        // (possibly renamed) incoming version.
+        out.updatedItems.push({ id: existing.id, label: label(existing) });
+      } else {
+        out.unchanged += 1;
+      }
+    }
+    return out;
+  }
+
+  return {
+    customers: diffList(current.customers, incoming.customers, MERGE_LABELS.customers),
+    properties: diffList(current.properties, incoming.properties, MERGE_LABELS.properties),
+    leases: diffList(current.leases, incoming.leases, MERGE_LABELS.leases),
+    rooms: diffList(current.rooms, incoming.rooms, MERGE_LABELS.rooms),
+    beds: diffList(current.beds, incoming.beds, MERGE_LABELS.beds),
+    occupants: diffList(current.occupants, incoming.occupants, MERGE_LABELS.occupants),
+    utilities: diffList(current.utilities, incoming.utilities, MERGE_LABELS.utilities),
+  };
 }
 
 // Strict shape check: only treat a value as a pre-validated ImportPreview when
@@ -455,6 +559,12 @@ interface DataStore {
   resetToSampleData: (callbacks?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void }) => void;
   exportData: () => ExportPayload;
   importData: (input: unknown | ImportPreview, mode?: ImportMode) => ImportResult;
+  /**
+   * Compute a per-type "what will change" preview for a merge import without
+   * touching any caches. Use to surface accidental overwrites before the user
+   * confirms.
+   */
+  previewMergeImport: (preview: ImportPreview) => MergeDryRun;
 }
 
 const DataContext = createContext<DataStore | undefined>(undefined);
@@ -846,6 +956,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { mode, summary: preview.summary, added, updated };
   };
 
+  const previewMergeImport = (preview: ImportPreview): MergeDryRun =>
+    dryRunMergeImport(
+      { customers, properties, leases, rooms, beds, occupants, utilities },
+      preview.data,
+    );
+
   return (
     <DataContext.Provider value={{
       customers, properties, leases, rooms, beds, occupants, utilities, isLoading,
@@ -855,7 +971,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRoom, updateRoom, deleteRoom,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant,
       updateUtility, addUtility, deleteUtility,
-      resetToSampleData, exportData, importData,
+      resetToSampleData, exportData, importData, previewMergeImport,
     }}>
       {children}
     </DataContext.Provider>

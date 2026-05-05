@@ -24,6 +24,9 @@ const resetToSampleDataMock =
   vi.fn<
     (opts?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void }) => void
   >();
+const previewMergeImportMock = vi.fn();
+const inspectImportPayloadMock = vi.fn();
+const importDataMock = vi.fn();
 const mockData: {
   customers: { id: string; name: string }[];
   properties: Array<{
@@ -36,22 +39,39 @@ const mockData: {
   isLoading: boolean;
   resetToSampleData: typeof resetToSampleDataMock;
   exportData: () => unknown;
-  importData: () => unknown;
+  importData: typeof importDataMock;
+  previewMergeImport: typeof previewMergeImportMock;
 } = {
   customers: [],
   properties: [],
   isLoading: false,
   resetToSampleData: resetToSampleDataMock,
   exportData: vi.fn(),
-  importData: vi.fn(),
+  importData: importDataMock,
+  previewMergeImport: previewMergeImportMock,
 };
 
 vi.mock("@/context/data-store", () => ({
   useData: () => mockData,
-  // The sidebar imports these for its import-data flow. The badge tests
-  // never trigger that flow, so trivial stand-ins are enough.
-  inspectImportPayload: vi.fn(),
+  // The sidebar imports these for its import-data flow. Most tests don't
+  // trigger that flow; the merge-preview tests below override the mocks.
+  inspectImportPayload: (...args: unknown[]) => inspectImportPayloadMock(...args),
   totalImportSummary: vi.fn(() => 0),
+  totalMergeDryRun: (dry: {
+    customers: { added: number; updated: number; unchanged: number };
+    properties: { added: number; updated: number; unchanged: number };
+    leases: { added: number; updated: number; unchanged: number };
+    rooms: { added: number; updated: number; unchanged: number };
+    beds: { added: number; updated: number; unchanged: number };
+    occupants: { added: number; updated: number; unchanged: number };
+    utilities: { added: number; updated: number; unchanged: number };
+  }) => {
+    let added = 0, updated = 0, unchanged = 0;
+    for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"] as const) {
+      added += dry[k].added; updated += dry[k].updated; unchanged += dry[k].unchanged;
+    }
+    return { added, updated, unchanged };
+  },
   UnsupportedImportError: class UnsupportedImportError extends Error {},
 }));
 
@@ -650,5 +670,228 @@ describe("Sidebar Properties nav — addresses-needing-fix badge", () => {
     expect(
       window.localStorage.getItem(__FAILURE_STORAGE_KEY_FOR_TEST),
     ).toBeNull();
+  });
+});
+
+// ── Import dialog merge-preview ─────────────────────────────────────────
+//
+// When the operator picks "Merge into current data" the dialog must show
+// a per-type breakdown (added / updated / unchanged) plus a collapsible
+// list of records that will be overwritten so accidental overwrites are
+// caught BEFORE confirming. These tests exercise that surface end-to-end
+// via the file-input + radio toggle.
+
+describe("Sidebar import dialog — merge preview", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  // Empty bundle the inspectImportPayload mock returns; the dry-run
+  // result is what actually drives the rendered preview, so the
+  // bundle's contents don't matter for these tests.
+  const emptyData = {
+    customers: [], properties: [], leases: [], rooms: [],
+    beds: [], occupants: [], utilities: [],
+  };
+
+  function dryRun(over: Partial<Record<keyof typeof emptyData, {
+    added?: number; updated?: number; unchanged?: number;
+    addedItems?: { id: string; label: string }[];
+    updatedItems?: { id: string; label: string }[];
+  }>>) {
+    const empty = () => ({
+      added: 0,
+      updated: 0,
+      unchanged: 0,
+      addedItems: [] as { id: string; label: string }[],
+      updatedItems: [] as { id: string; label: string }[],
+    });
+    const out: Record<string, ReturnType<typeof empty>> = {
+      customers: empty(), properties: empty(), leases: empty(), rooms: empty(),
+      beds: empty(), occupants: empty(), utilities: empty(),
+    };
+    for (const [k, v] of Object.entries(over)) {
+      out[k] = { ...out[k], ...v };
+    }
+    return out;
+  }
+
+  beforeEach(() => {
+    mockData.customers = [];
+    mockData.properties = [];
+    mockData.isLoading = false;
+    inspectImportPayloadMock.mockReset();
+    previewMergeImportMock.mockReset();
+    importDataMock.mockReset();
+    toastMock.mockReset();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => { r.unmount(); });
+      root = null;
+    }
+    container.remove();
+    // The dialog portals into document.body — clean any leftover nodes
+    // so a previous test's dialog doesn't satisfy the next test's query.
+    document.querySelectorAll('[role="alertdialog"]').forEach((el) => el.remove());
+  });
+
+  async function openImportDialog() {
+    inspectImportPayloadMock.mockReturnValue({
+      data: emptyData,
+      summary: {
+        customers: 0, properties: 0, leases: 0, rooms: 0,
+        beds: 0, occupants: 0, utilities: 0,
+      },
+      migratedFromV1: false,
+      migratedRooms: false,
+    });
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<SidebarUnderTest />);
+    });
+    const fileInput = container.querySelector(
+      '[data-testid="input-import-file"]',
+    ) as HTMLInputElement;
+    // Synthesize a JSON file pick — the handler reads it via .text().
+    // jsdom's File prototype lacks a reliable `.text()`, so stub it on
+    // the instance so the handler's `await file.text()` resolves
+    // immediately to valid JSON.
+    const file = {
+      name: "backup.json",
+      type: "application/json",
+      text: () => Promise.resolve("{}"),
+    } as unknown as File;
+    Object.defineProperty(fileInput, "files", { value: [file], configurable: true });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    // The handler awaits file.text() + JSON.parse before calling
+    // inspectImportPayload + setting state. Spin until the dialog
+    // mounts (or give up after a generous tick budget) so the rest
+    // of the test can interact with the rendered radio group.
+    for (let i = 0; i < 20; i++) {
+      if (document.querySelector('[data-testid="radio-import-mode-merge"]')) break;
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    }
+  }
+
+  async function selectMergeMode() {
+    const mergeRadio = document.querySelector(
+      '[data-testid="radio-import-mode-merge"]',
+    ) as HTMLElement | null;
+    expect(mergeRadio).not.toBeNull();
+    await act(async () => { mergeRadio!.click(); });
+  }
+
+  it("hides the merge preview while replace mode is selected (the default)", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      properties: { added: 1, updated: 1, unchanged: 0, updatedItems: [{ id: "p1", label: "Maple House" }] },
+    }));
+    await openImportDialog();
+
+    // Replace is the default. The preview block must not render and
+    // previewMergeImport must NOT be called (replace is total — there's
+    // nothing to diff and we shouldn't pay for the work).
+    expect(document.querySelector('[data-testid="merge-import-preview"]')).toBeNull();
+    expect(previewMergeImportMock).not.toHaveBeenCalled();
+  });
+
+  it("renders per-type counts when merge mode is selected", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      customers: { added: 0, updated: 0, unchanged: 1 },
+      properties: { added: 1, updated: 2, unchanged: 3,
+        updatedItems: [
+          { id: "p1", label: "Maple House" },
+          { id: "p2", label: "Oak Place" },
+        ] },
+    }));
+    await openImportDialog();
+    await selectMergeMode();
+
+    expect(previewMergeImportMock).toHaveBeenCalledTimes(1);
+
+    const preview = document.querySelector('[data-testid="merge-import-preview"]');
+    expect(preview).not.toBeNull();
+    // Totals header rolls up every type.
+    const totals = document.querySelector('[data-testid="merge-import-preview-totals"]');
+    expect(totals?.textContent).toBe("1 added · 2 updated · 4 unchanged");
+    // Per-type rows render only for types with any activity.
+    const propRow = document.querySelector('[data-testid="merge-preview-row-properties"]');
+    expect(propRow?.textContent).toContain("1 added");
+    expect(propRow?.textContent).toContain("2 updated");
+    expect(propRow?.textContent).toContain("3 unchanged");
+    // Types with all zeros are omitted to keep the list scannable.
+    expect(document.querySelector('[data-testid="merge-preview-row-leases"]')).toBeNull();
+  });
+
+  it("hides the overwrite-list toggle when nothing would be overwritten", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      properties: { added: 3, updated: 0, unchanged: 0,
+        addedItems: [
+          { id: "p1", label: "A" }, { id: "p2", label: "B" }, { id: "p3", label: "C" },
+        ] },
+    }));
+    await openImportDialog();
+    await selectMergeMode();
+
+    expect(
+      document.querySelector('[data-testid="merge-preview-overwrites-toggle"]'),
+    ).toBeNull();
+  });
+
+  it("expands the overwrite list and shows updated record labels per type", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      properties: { added: 0, updated: 2, unchanged: 0,
+        updatedItems: [
+          { id: "p1", label: "Maple House" },
+          { id: "p2", label: "Oak Place" },
+        ] },
+      customers: { added: 0, updated: 1, unchanged: 0,
+        updatedItems: [{ id: "c1", label: "Acme Co" }] },
+    }));
+    await openImportDialog();
+    await selectMergeMode();
+
+    const toggle = document.querySelector(
+      '[data-testid="merge-preview-overwrites-toggle"]',
+    ) as HTMLElement | null;
+    expect(toggle).not.toBeNull();
+    expect(toggle!.textContent).toContain("3");
+
+    await act(async () => { toggle!.click(); });
+
+    // Both per-type rows render with the existing labels (the names the
+    // operator already knows) — that's how they spot overwrites.
+    const propsRow = document.querySelector('[data-testid="merge-preview-overwrites-properties"]');
+    expect(propsRow).not.toBeNull();
+    expect(propsRow!.textContent).toContain("Maple House");
+    expect(propsRow!.textContent).toContain("Oak Place");
+    const custRow = document.querySelector('[data-testid="merge-preview-overwrites-customers"]');
+    expect(custRow!.textContent).toContain("Acme Co");
+  });
+
+  it("recomputes the preview when toggling back from merge to replace and forward again", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      properties: { added: 1, updated: 0, unchanged: 0, addedItems: [{ id: "p9", label: "New" }] },
+    }));
+    await openImportDialog();
+    await selectMergeMode();
+    expect(previewMergeImportMock).toHaveBeenCalledTimes(1);
+
+    // Toggle back to replace — the preview must disappear.
+    const replaceRadio = document.querySelector(
+      '[data-testid="radio-import-mode-replace"]',
+    ) as HTMLElement;
+    await act(async () => { replaceRadio.click(); });
+    expect(document.querySelector('[data-testid="merge-import-preview"]')).toBeNull();
+
+    // Back to merge — the dialog must recompute and show the preview again.
+    await selectMergeMode();
+    expect(previewMergeImportMock).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[data-testid="merge-import-preview"]')).not.toBeNull();
   });
 });

@@ -29,7 +29,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { dismissGeocodeFailure, formatGeocodeAddress } from "@/lib/google-maps-sdk";
 import { useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
-import { formatDistanceToNow } from "date-fns";
+import { CheckedAgoLabel } from "@/components/checked-ago-label";
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "customer" | "rating" | "sqft";
@@ -819,20 +819,15 @@ export default function Properties() {
                   // same comma-joined form keeps the two views from
                   // drifting visually.
                   const addrDisplay = formatGeocodeAddress(p);
-                  // Format "Checked N minutes/hours/days ago" from the
-                  // last-recorded-failure timestamp. `addSuffix: true`
-                  // gives us the trailing "ago" so we don't have to
-                  // hand-format the suffix per unit. We guard against
-                  // a missing timestamp (shouldn't happen in steady
-                  // state since the cache and the timestamp Map are
-                  // updated together) by simply hiding the label —
-                  // an empty stamp is better than rendering "Checked
-                  // Invalid Date ago".
+                  // Look up the last-recorded-failure timestamp.
+                  // Missing entries (shouldn't happen in steady state
+                  // since the cache and the timestamp Map are updated
+                  // together) simply hide the label — an empty stamp
+                  // is better than rendering "Checked Invalid Date
+                  // ago". The label itself self-refreshes on a
+                  // minute-tick so an idle page keeps the relative
+                  // time honest without us having to re-render here.
                   const lastCheckedAt = geocodeFailureTimestamps.get(addrDisplay);
-                  const checkedLabel =
-                    typeof lastCheckedAt === "number"
-                      ? `Checked ${formatDistanceToNow(lastCheckedAt, { addSuffix: true })}`
-                      : null;
                   return (
                     // Row is a flex container with TWO independently
                     // clickable controls — the main "open property"
@@ -864,21 +859,25 @@ export default function Properties() {
                               {customer.name}
                             </span>
                           )}
-                          {checkedLabel && (
+                          {typeof lastCheckedAt === "number" && (
                             // Surfaces how stale the failure is so an
                             // operator can prioritize fresh flags over
-                            // weeks-old ones. Stamped via a stable
-                            // testid (NOT the relative-time text,
-                            // which would churn every minute) so tests
-                            // can assert on presence + content
-                            // without race conditions.
-                            <span
+                            // weeks-old ones. The label component
+                            // owns its own minute-tick subscription
+                            // so this row keeps reading "5 minutes
+                            // ago" → "6 minutes ago" while the page
+                            // sits idle, without forcing the rest of
+                            // the Properties screen to re-render.
+                            // Stamped via a stable testid (NOT the
+                            // relative-time text, which would churn
+                            // every minute) so tests can assert on
+                            // presence + content without race
+                            // conditions.
+                            <CheckedAgoLabel
                               className="block text-[11px] text-muted-foreground/70 truncate"
-                              data-testid={`address-needing-review-checked-${p.id}`}
-                              title={new Date(lastCheckedAt!).toLocaleString()}
-                            >
-                              {checkedLabel}
-                            </span>
+                              testId={`address-needing-review-checked-${p.id}`}
+                              timestamp={lastCheckedAt}
+                            />
                           )}
                         </span>
                         <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />

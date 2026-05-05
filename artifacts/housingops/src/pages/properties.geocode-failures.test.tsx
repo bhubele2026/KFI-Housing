@@ -914,4 +914,51 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
     expect(stamp).not.toBeNull();
     expect(stamp!.textContent).toMatch(/^Checked /);
   });
+
+  it("auto-refreshes the 'Checked … ago' label as time passes without any user interaction", async () => {
+    // The whole point of the rollup label is to honestly show how
+    // stale a flag is. Before this behavior was added, the label was
+    // computed once on render — an operator who left Properties open
+    // for an hour without touching it could be staring at "Checked 5
+    // minutes ago" the whole time. The label MUST tick over on its
+    // own so the displayed elapsed time tracks real time.
+    vi.useFakeTimers();
+    try {
+      // Pin wall time so we can reason about exact label wording.
+      // `primeGeocodeCache` stamps with `Date.now()`, so the cache
+      // entry will record `start` as its `lastCheckedAt`.
+      const start = new Date(2026, 0, 1, 12, 0, 0).getTime();
+      vi.setSystemTime(start);
+      primeGeocodeCache(addrFor(0), null);
+
+      await renderPage();
+
+      const stampAtStart = get("address-needing-review-checked-p1");
+      expect(stampAtStart).not.toBeNull();
+      // date-fns renders a fresh-ish stamp as "less than a minute
+      // ago". Asserting on the unit (not the exact wording) keeps
+      // this stable if date-fns ever phrases the sub-minute case
+      // slightly differently across versions.
+      expect(stampAtStart!.textContent).not.toMatch(/minutes ago$/);
+
+      // Advance the clock by 5 minutes WITHOUT touching the page —
+      // no new failure landing, no filter change, nothing else that
+      // would force a re-render. `advanceTimersByTimeAsync` both
+      // moves fake `Date.now()` forward AND fires the minute-tick
+      // intervals along the way; React then flushes the resulting
+      // state updates inside `act`.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      });
+
+      const stampAfter = get("address-needing-review-checked-p1");
+      expect(stampAfter).not.toBeNull();
+      // The label must now reflect the elapsed 5 minutes — without
+      // the auto-refresh it would still say "less than a minute
+      // ago" because nothing else triggered a re-render.
+      expect(stampAfter!.textContent).toMatch(/5 minutes ago$/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

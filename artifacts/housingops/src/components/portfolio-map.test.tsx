@@ -655,12 +655,30 @@ describe("PortfolioMap — pin info bubble", () => {
     // The fake markers preserve the construction order of the property
     // array, so we can index by it.
     const [exp, crit, warn, soon, ok] = mapsState.markers;
-    expect(exp.content).toBeDefined();
-    expect(exp.content!.dataset.renewalLevel).toBe("expired");
-    expect(crit.content!.dataset.renewalLevel).toBe("critical");
-    expect(warn.content!.dataset.renewalLevel).toBe("warning");
-    expect(soon.content!.dataset.renewalLevel).toBe("soon");
-    // The "ok" property leaves the default red Google pin alone.
+    // Lock both the per-level data attribute *and* the per-level
+    // testid emitted by buildRenewalPinContent — either dropping out
+    // of the DOM (e.g. a refactor that forgets to forward the dataset
+    // assignments) would silently regress the at-a-glance signal, so
+    // both are pinned here.
+    for (const [marker, level] of [
+      [exp, "expired"],
+      [crit, "critical"],
+      [warn, "warning"],
+      [soon, "soon"],
+    ] as const) {
+      expect(marker.content).toBeDefined();
+      expect(marker.content!.dataset.renewalLevel).toBe(level);
+      expect(marker.content!.dataset.testid).toBe(
+        `portfolio-map-pin-renewal-${level}`,
+      );
+      expect(marker.content!.getAttribute("data-renewal-level")).toBe(level);
+      expect(marker.content!.getAttribute("data-testid")).toBe(
+        `portfolio-map-pin-renewal-${level}`,
+      );
+    }
+    // The "ok" property leaves the default red Google pin alone — no
+    // custom content node, so neither the per-level data attribute nor
+    // the testid show up.
     expect(ok.content).toBeUndefined();
   });
 
@@ -698,6 +716,9 @@ describe("PortfolioMap — pin info bubble", () => {
     }
     expect(mapsState.markers).toHaveLength(1);
     expect(mapsState.markers[0].content?.dataset.renewalLevel).toBe("warning");
+    expect(mapsState.markers[0].content?.dataset.testid).toBe(
+      "portfolio-map-pin-renewal-warning",
+    );
 
     // Lease renewed → parent now passes renewal: null. Marker effect
     // tears down + rebuilds; new marker has no custom content.

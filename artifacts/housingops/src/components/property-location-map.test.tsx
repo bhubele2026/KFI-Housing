@@ -55,7 +55,9 @@ interface FakeMarker {
   position: { lat: number; lng: number };
   title?: string;
   gmpClickable?: boolean;
+  gmpDraggable?: boolean;
   map: unknown | null;
+  listeners: Map<string, Array<() => void>>;
 }
 
 interface FakeMapState {
@@ -114,16 +116,20 @@ function installFakeGoogleMaps() {
     position: { lat: number; lng: number };
     title?: string;
     gmpClickable?: boolean;
+    gmpDraggable?: boolean;
+    listeners = new Map<string, Array<() => void>>();
     private _map: unknown | null = null;
     constructor(opts: {
       position: { lat: number; lng: number };
       map: unknown;
       title?: string;
       gmpClickable?: boolean;
+      gmpDraggable?: boolean;
     }) {
       this.position = opts.position;
       this.title = opts.title;
       this.gmpClickable = opts.gmpClickable;
+      this.gmpDraggable = opts.gmpDraggable;
       this._map = opts.map ?? null;
       mapsState.markers.push(this as unknown as FakeMarker);
     }
@@ -138,6 +144,11 @@ function installFakeGoogleMaps() {
       }
     }
     addEventListener() {}
+    addListener(event: string, cb: () => void) {
+      const cur = this.listeners.get(event) ?? [];
+      cur.push(cb);
+      this.listeners.set(event, cur);
+    }
   }
   class FakeInfoWindow {
     setContent() {}
@@ -533,6 +544,132 @@ describe("PropertyLocationMap", () => {
       lat: 30.5,
       lng: -97.5,
     });
+  });
+
+  it("makes the marker draggable when `onCoordsAdjusted` is supplied and reports the dropped position", async () => {
+    const onCoordsAdjusted = vi.fn();
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
+        onCoordsAdjusted={onCoordsAdjusted}
+      />,
+    );
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    const marker = mapsState.markers[0];
+    // Drag affordance is on.
+    expect(marker.gmpDraggable).toBe(true);
+    // Simulate the operator dragging the pin to a new spot — the SDK
+    // updates `marker.position` as part of the drag, then fires the
+    // `dragend` event the component subscribed to.
+    marker.position = { lat: 31.1, lng: -98.2 };
+    const handlers = marker.listeners.get("dragend") ?? [];
+    expect(handlers).toHaveLength(1);
+    await act(async () => {
+      handlers[0]();
+    });
+    expect(onCoordsAdjusted).toHaveBeenCalledTimes(1);
+    expect(onCoordsAdjusted).toHaveBeenCalledWith({ lat: 31.1, lng: -98.2 });
+  });
+
+  it("does NOT make the marker draggable when `onCoordsAdjusted` is omitted", async () => {
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
+      />,
+    );
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].gmpDraggable).toBe(false);
+    // No `dragend` listener was wired up either, so a stray drag
+    // event would be a no-op.
+    expect(mapsState.markers[0].listeners.get("dragend") ?? []).toHaveLength(0);
+  });
+
+  it("shows the 'Reset to geocoded' affordance after a drag and restores the snapshot when clicked", async () => {
+    const onCoordsAdjusted = vi.fn();
+    const onResetCoords = vi.fn();
+    // Unverified stored coords seed the snapshot — this is the
+    // address-resolved point that "Reset to geocoded" should restore.
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
+        coordsVerified={false}
+        onCoordsAdjusted={onCoordsAdjusted}
+        onResetCoords={onResetCoords}
+      />,
+    );
+    await settle();
+    // Steady state: pin sits exactly at the geocoded snapshot, so the
+    // Reset button is hidden.
+    expect(get("property-location-reset-to-geocoded")).toBeNull();
+    // Operator drags to a new spot.
+    const marker = mapsState.markers[0];
+    marker.position = { lat: 31.1, lng: -98.2 };
+    const handlers = marker.listeners.get("dragend") ?? [];
+    await act(async () => {
+      handlers[0]();
+    });
+    // Now the Reset affordance is visible.
+    const resetBtn = get("property-location-reset-to-geocoded");
+    expect(resetBtn).not.toBeNull();
+    // Click it — the parent should be told to persist the original
+    // (snapshot) coords so the saved pin returns to the geocoded spot.
+    await act(async () => {
+      resetBtn!.click();
+    });
+    expect(onResetCoords).toHaveBeenCalledTimes(1);
+    expect(onResetCoords).toHaveBeenCalledWith({ lat: 30.5, lng: -97.5 });
+  });
+
+  it("does not show the 'Reset to geocoded' affordance for verified stored coords (no snapshot to fall back to)", async () => {
+    // Verified coords on first mount may already be a hand-placed pin
+    // from a previous session — we have no original-geocode snapshot
+    // to restore, so the Reset action stays hidden.
+    await render(
+      <PropertyLocationMap
+        address="100 Oak Way"
+        city="Austin"
+        state="TX"
+        zip="78701"
+        apiKey="test-key"
+        mapId="m"
+        lat={30.5}
+        lng={-97.5}
+        coordsVerified={true}
+        onCoordsAdjusted={vi.fn()}
+        onResetCoords={vi.fn()}
+      />,
+    );
+    await settle();
+    const marker = mapsState.markers[0];
+    marker.position = { lat: 31.1, lng: -98.2 };
+    const handlers = marker.listeners.get("dragend") ?? [];
+    await act(async () => {
+      handlers[0]();
+    });
+    expect(get("property-location-reset-to-geocoded")).toBeNull();
   });
 
   it("invokes `onGeocoded` exactly once when the live geocoder resolves a fresh point", async () => {

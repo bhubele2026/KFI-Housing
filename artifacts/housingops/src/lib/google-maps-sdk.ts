@@ -33,7 +33,21 @@ export interface MapsAdvancedMarkerElement {
   // `map = null` removes the marker from the map. Property assignment
   // replaces the old `setMap(null)` API on google.maps.Marker.
   map: MapsMap | null;
+  // Live position. The SDK updates this automatically as the operator
+  // drags a `gmpDraggable` marker, so the `dragend` listener can read
+  // the new lat/lng directly off the marker. Google sometimes returns
+  // a LatLng instance (with `.lat()` / `.lng()` methods) and sometimes
+  // a plain object — callers handle both shapes.
+  position?:
+    | { lat: number; lng: number }
+    | { lat: () => number; lng: () => number }
+    | null;
   addEventListener: (event: string, cb: () => void) => void;
+  // Legacy MVCObject `addListener` API. The marker's `dragend` event
+  // is delivered through this channel (and not via DOM events) — kept
+  // optional because some hosting environments / older SDK builds may
+  // not expose it.
+  addListener?: (event: string, cb: () => void) => void;
 }
 export interface MapsInfoWindow {
   setContent: (content: string | HTMLElement) => void;
@@ -66,6 +80,11 @@ export interface MapsMarkerLibrary {
     map: MapsMap;
     title?: string;
     gmpClickable?: boolean;
+    // When true, the operator can drag the pin around. The marker's
+    // `position` updates as part of the drag and a `dragend` event
+    // fires on release — see PropertyLocationMap's marker-sync effect
+    // for the consumer.
+    gmpDraggable?: boolean;
   }) => MapsAdvancedMarkerElement;
 }
 export interface MapsApi {

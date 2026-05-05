@@ -8,6 +8,7 @@ import {
   AlertCircle,
   RefreshCw,
   ShieldCheck,
+  Undo2,
 } from "lucide-react";
 import {
   getMapsKeyConsoleUrl,
@@ -113,6 +114,24 @@ interface PropertyLocationMapProps {
    * coords.
    */
   onRegeocode?: () => void;
+  /**
+   * Called when the operator drags the marker to a new spot. The
+   * parent persists the supplied lat/lng onto the property record AND
+   * flips `coordsVerified` to `true` (a hand-placed pin is considered
+   * operator-confirmed). Supplying this prop is what enables the
+   * draggable affordance on the marker — when omitted, the pin
+   * remains a static read-only marker.
+   */
+  onCoordsAdjusted?: (point: { lat: number; lng: number }) => void;
+  /**
+   * Called when the operator clicks "Reset to geocoded" after having
+   * dragged the pin. The supplied point is the address-resolved
+   * location captured before the drag (the same coords the geocoder
+   * would re-produce for the current address). The parent persists
+   * those coords back onto the property record and clears
+   * `coordsVerified` so the badge flips back to "Approximate".
+   */
+  onResetCoords?: (point: { lat: number; lng: number }) => void;
 }
 
 function formatAddressLines(
@@ -150,6 +169,8 @@ export function PropertyLocationMap({
   coordsVerified,
   onMarkVerified,
   onRegeocode,
+  onCoordsAdjusted,
+  onResetCoords,
 }: PropertyLocationMapProps) {
   const { street, cityStateZip, full } = formatAddressLines(
     address,
@@ -320,6 +341,41 @@ export function PropertyLocationMap({
   useEffect(() => {
     onGeocodedRef.current = onGeocoded;
   }, [onGeocoded]);
+  const onCoordsAdjustedRef = useRef(onCoordsAdjusted);
+  useEffect(() => {
+    onCoordsAdjustedRef.current = onCoordsAdjusted;
+  }, [onCoordsAdjusted]);
+
+  // Snapshot of the address-resolved ("geocoded") coords, captured the
+  // first time we see a value for this address that wasn't placed by an
+  // operator. Powers the "Reset to geocoded" affordance after a drag —
+  // we keep the snapshot in component state so the operator can undo a
+  // pin nudge without burning a fresh geocode round-trip. The snapshot
+  // is keyed to the current address: when the address changes we drop
+  // it and let the next geocode (or unverified stored coords) repopulate
+  // it. Verified stored coords on initial mount are NOT a valid
+  // snapshot — they may already be a hand-placed pin from a previous
+  // session — so we only seed from `lat`/`lng` when `coordsVerified`
+  // is falsy.
+  const [geocodedSnapshot, setGeocodedSnapshot] = useState<
+    { lat: number; lng: number } | null
+  >(() => {
+    if (
+      typeof lat === "number" &&
+      typeof lng === "number" &&
+      !coordsVerified
+    ) {
+      return { lat, lng };
+    }
+    return null;
+  });
+  const snapshotAddressRef = useRef<string>(full);
+  useEffect(() => {
+    if (snapshotAddressRef.current !== full) {
+      snapshotAddressRef.current = full;
+      setGeocodedSnapshot(null);
+    }
+  }, [full]);
 
   const [status, setStatus] = useState<LoaderStatus>("idle");
   // Resolved coordinate for *this* property's address. `undefined`
@@ -435,7 +491,14 @@ export function PropertyLocationMap({
     // We also warm the shared cache so the portfolio map or another
     // Location card at the same address skips the round-trip.
     if (typeof lat === "number" && typeof lng === "number") {
-      primeGeocodeCache(full, { lat, lng });
+      // Don't pollute the shared geocode cache with a hand-placed pin —
+      // verified coords may have been dragged off the geocoder's actual
+      // result and we don't want the portfolio map (or another Location
+      // card at the same address) to inherit the nudged value as if it
+      // were the geocoder's answer.
+      if (!coordsVerified) {
+        primeGeocodeCache(full, { lat, lng });
+      }
       setPoint((prev) => {
         if (prev && prev.lat === lat && prev.lng === lng) return prev;
         return { lat, lng };
@@ -465,6 +528,14 @@ export function PropertyLocationMap({
       // this effect (parent state updates, prop identity churn, …).
       // Address changes naturally re-arm the report by failing the
       // equality check below.
+      // Capture the address-resolved snapshot so a subsequent drag
+      // can be undone via the "Reset to geocoded" button without
+      // burning another round-trip. Only set when there isn't already
+      // a snapshot for this address — re-runs of this effect (e.g.
+      // because lat/lng prop changed after a save) shouldn't overwrite
+      // the original geocoder answer with the saved (possibly dragged)
+      // value.
+      setGeocodedSnapshot((prev) => prev ?? resolved);
       if (reportedRef.current === full) return;
       reportedRef.current = full;
       onGeocodedRef.current?.(resolved);
@@ -500,7 +571,8 @@ export function PropertyLocationMap({
     }
     if (!point) return;
     const maps = window.google.maps;
-    markerRef.current = new maps.marker.AdvancedMarkerElement({
+    const draggable = Boolean(onCoordsAdjusted);
+    const marker = new maps.marker.AdvancedMarkerElement({
       position: { lat: point.lat, lng: point.lng },
       map: mapRef.current,
       title: full,
@@ -508,10 +580,50 @@ export function PropertyLocationMap({
       // overlay anchor below handles "open in Google Maps". Setting
       // `gmpClickable: false` (the default) keeps the pin from
       // intercepting pointer events that the overlay should handle.
+      // `gmpDraggable` enables the drag-to-adjust affordance — only
+      // turned on when the parent supplied an `onCoordsAdjusted`
+      // callback to receive the dropped position.
+      gmpDraggable: draggable,
     });
+    markerRef.current = marker;
+    if (draggable) {
+      // The AdvancedMarkerElement fires `dragend` after the operator
+      // releases the pin in its new spot. We read the live position
+      // off the marker (`marker.position` is updated by the SDK as
+      // part of the drag) — handling both LatLng-instance shape
+      // (`.lat()` / `.lng()`) and the plain-object shape Google
+      // sometimes emits — then echo the new point back into local
+      // state so the marker stays put even before the parent's save
+      // round-trips, and call the parent so the new lat/lng can be
+      // persisted.
+      marker.addListener?.("dragend", () => {
+        const pos = marker.position as
+          | { lat: number | (() => number); lng: number | (() => number) }
+          | null
+          | undefined;
+        if (!pos) return;
+        const latVal =
+          typeof pos.lat === "function" ? pos.lat() : pos.lat;
+        const lngVal =
+          typeof pos.lng === "function" ? pos.lng() : pos.lng;
+        if (typeof latVal !== "number" || typeof lngVal !== "number") {
+          return;
+        }
+        const next = { lat: latVal, lng: lngVal };
+        setPoint(next);
+        onCoordsAdjustedRef.current?.(next);
+      });
+    }
     mapRef.current.setCenter({ lat: point.lat, lng: point.lng });
     mapRef.current.setZoom(15);
-  }, [status, point, full]);
+    // Depend on a stable boolean (not the function identity itself) so
+    // a parent re-render that hands us a fresh inline `onCoordsAdjusted`
+    // lambda doesn't tear down + recreate the marker (which would also
+    // re-center and re-zoom the map). The latest callback is read off
+    // `onCoordsAdjustedRef` from inside the dragend handler, so the
+    // wiring stays current without rebinding the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, point, full, Boolean(onCoordsAdjusted)]);
 
   // ---------------------------------------------------------------
   // Branch order matters: the key-rejected branch is checked BEFORE
@@ -863,7 +975,7 @@ export function PropertyLocationMap({
               Hidden when the address is blank — the early-return
               empty-state branch above owns that case.
             */}
-            {(onMarkVerified || onRegeocode) && (
+            {(onMarkVerified || onRegeocode || onCoordsAdjusted) && (
               <div
                 className="flex flex-wrap items-center gap-2 text-xs"
                 data-testid="property-location-trust-row"
@@ -914,6 +1026,38 @@ export function PropertyLocationMap({
                     Re-geocode
                   </Button>
                 )}
+                {/*
+                  "Reset to geocoded" — only useful after the operator
+                  has nudged the pin off the address-resolved point.
+                  Hidden until we have a snapshot AND the current
+                  position differs from it, so the row stays clean in
+                  the steady state. Clicking it restores the saved
+                  lat/lng to the geocoder's original answer and clears
+                  `coordsVerified`, undoing the drag without burning a
+                  fresh geocode round-trip.
+                */}
+                {onResetCoords &&
+                  geocodedSnapshot &&
+                  point &&
+                  (point.lat !== geocodedSnapshot.lat ||
+                    point.lng !== geocodedSnapshot.lng) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => {
+                        const snap = geocodedSnapshot;
+                        setPoint(snap);
+                        onResetCoords(snap);
+                      }}
+                      data-testid="property-location-reset-to-geocoded"
+                      title="Move the pin back to the address-resolved location."
+                    >
+                      <Undo2 className="h-3 w-3" />
+                      Reset to geocoded
+                    </Button>
+                  )}
               </div>
             )}
           </div>

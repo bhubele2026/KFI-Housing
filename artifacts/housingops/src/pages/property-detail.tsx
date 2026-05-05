@@ -743,6 +743,29 @@ export default function PropertyDetail() {
               onMarkVerified={() =>
                 updateProperty(id, { coordsVerified: true })
               }
+              onCoordsAdjusted={(point) =>
+                // Operator dragged the pin to a new spot. Persist the
+                // hand-placed coords AND flip `coordsVerified` to true
+                // — a manually-positioned pin is by definition operator
+                // confirmed, so the badge should reflect that without a
+                // separate "Mark as verified" click.
+                updateProperty(id, {
+                  lat: point.lat,
+                  lng: point.lng,
+                  coordsVerified: true,
+                })
+              }
+              onResetCoords={(point) =>
+                // Restore the address-resolved coords captured before
+                // the drag. Clearing `coordsVerified` returns the badge
+                // to "Approximate" so the row matches a freshly auto-
+                // geocoded pin.
+                updateProperty(id, {
+                  lat: point.lat,
+                  lng: point.lng,
+                  coordsVerified: false,
+                })
+              }
               onRegeocode={() => {
                 // Resending the address with no body diff is enough to
                 // make the server re-geocode (it re-geocodes whenever

@@ -311,6 +311,45 @@ function buildInfoBubbleContent(
   return root;
 }
 
+/**
+ * Builds the custom DOM AdvancedMarkerElement renders in place of the
+ * default red Google pin for a property whose lease is due for renewal.
+ * The pin reads as the same colored badge the table cell shows so an
+ * operator scanning the whole map can spot at-risk properties without
+ * opening every info bubble (the bubble still surfaces the full label
+ * on hover/click — this is the at-a-glance signal).
+ *
+ * Plain DOM (not React) because AdvancedMarkerElement owns the pin's
+ * lifecycle just like the InfoWindow above — re-mounting a React tree
+ * per marker would be wasteful.
+ */
+function buildRenewalPinContent(
+  level: Exclude<RenewalUrgency, "ok">,
+): HTMLElement {
+  const palette = RENEWAL_BUBBLE_STYLES[level];
+  const wrap = document.createElement("div");
+  wrap.dataset.testid = `portfolio-map-pin-renewal-${level}`;
+  wrap.dataset.renewalLevel = level;
+  // Sized to roughly match Google's default red pin footprint so the
+  // map's overall density reads the same — operators using both
+  // ok-pins (default) and at-risk-pins (this) shouldn't perceive a
+  // jarring size jump.
+  wrap.style.width = "26px";
+  wrap.style.height = "26px";
+  wrap.style.borderRadius = "50%";
+  // The badge background is light (e.g. amber-100); use the darker fg
+  // (e.g. amber-800) as the pin fill so the colored treatment reads
+  // strongly at small sizes against street tiles, and use the bg as
+  // the ring so the pin still ties back to the badge palette.
+  wrap.style.background = palette.fg;
+  wrap.style.border = `3px solid ${palette.bg}`;
+  // A drop shadow gives the pin some depth and keeps it readable on
+  // light + dark map tiles.
+  wrap.style.boxShadow = "0 1px 4px rgba(0,0,0,0.45)";
+  wrap.style.boxSizing = "border-box";
+  return wrap;
+}
+
 // Test-only escape hatch — keeps the module-level caches in the shared
 // `lib/google-maps-sdk` module from leaking between Vitest test cases.
 // Existing portfolio-map tests already import this name, so it's kept
@@ -814,6 +853,14 @@ export function PortfolioMap({
         // a purely decorative overlay and the operator can't open the
         // info bubble at all.
         gmpClickable: true,
+        // At-risk renewal pins get a colored treatment matching the
+        // table's badge so an operator can scan the whole map for
+        // properties due for renewal without opening every bubble.
+        // Properties without a renewal warning fall through to the
+        // default red Google pin so the at-risk pins stand out.
+        ...(p.renewal
+          ? { content: buildRenewalPinContent(p.renewal.level) }
+          : {}),
       });
       // Hover and click both open the bubble. Operators scanning for
       // clusters use mouseover; click is the keyboard/touch fallback

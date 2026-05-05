@@ -85,6 +85,11 @@ export interface MapsMarkerLibrary {
     // fires on release — see PropertyLocationMap's marker-sync effect
     // for the consumer.
     gmpDraggable?: boolean;
+    // Custom DOM the marker renders in place of the default red pin.
+    // We use this to overlay an at-risk colored treatment for
+    // properties whose lease renewal is due so the operator can scan
+    // the map without opening every bubble.
+    content?: HTMLElement;
   }) => MapsAdvancedMarkerElement;
 }
 export interface MapsApi {

@@ -75,6 +75,10 @@ interface FakeMarker {
   position: { lat: number; lng: number };
   title?: string;
   gmpClickable?: boolean;
+  // Optional custom DOM injected via the `content` opt — only set for
+  // properties whose lease is due for renewal so the at-risk pin
+  // treatment is visible at a glance (Task #236).
+  content?: HTMLElement;
   map: unknown | null;
   listeners: Map<string, Array<() => void>>;
   addEventListener: (event: string, cb: () => void) => void;
@@ -151,6 +155,11 @@ function installFakeGoogleMaps() {
     position: { lat: number; lng: number };
     title?: string;
     gmpClickable?: boolean;
+    // Captures the optional custom DOM the component injects in place
+    // of the default red Google pin (used for the at-risk renewal pin
+    // treatment so operators can scan the map without opening every
+    // bubble — Task #236). Tests assert against this directly.
+    content?: HTMLElement;
     listeners = new Map<string, Array<() => void>>();
     // Backing field for the `map` property setter below. Mirrors
     // AdvancedMarkerElement, which removes itself from the parent map
@@ -161,10 +170,12 @@ function installFakeGoogleMaps() {
       map: unknown;
       title?: string;
       gmpClickable?: boolean;
+      content?: HTMLElement;
     }) {
       this.position = opts.position;
       this.title = opts.title;
       this.gmpClickable = opts.gmpClickable;
+      this.content = opts.content;
       this._map = opts.map ?? null;
       mapsState.markers.push(this as unknown as FakeMarker);
     }
@@ -624,6 +635,86 @@ describe("PortfolioMap — pin info bubble", () => {
     expect(
       content!.querySelector('[data-testid="portfolio-map-info-renewal-p1"]'),
     ).toBeNull();
+  });
+
+  it("renders an at-risk colored pin treatment matching the renewal level (Task #236)", async () => {
+    // One property per non-ok renewal level + one ok property; the
+    // ok property must keep the default Google pin (no `content`),
+    // while the at-risk ones must carry per-level marker content so
+    // operators can scan the whole map for renewals without opening
+    // every bubble.
+    const props: MappableProperty[] = [
+      { ...baseProperty, id: "p-exp", address: "1 A St", renewal: { level: "expired", label: "Lease expired" } },
+      { ...baseProperty, id: "p-crit", address: "2 B St", renewal: { level: "critical", label: "7 days left" } },
+      { ...baseProperty, id: "p-warn", address: "3 C St", renewal: { level: "warning", label: "45 days left" } },
+      { ...baseProperty, id: "p-soon", address: "4 D St", renewal: { level: "soon", label: "75 days left" } },
+      { ...baseProperty, id: "p-ok", address: "5 E St", renewal: null },
+    ];
+    await renderMap({ properties: props });
+    expect(mapsState.markers).toHaveLength(5);
+    // The fake markers preserve the construction order of the property
+    // array, so we can index by it.
+    const [exp, crit, warn, soon, ok] = mapsState.markers;
+    expect(exp.content).toBeDefined();
+    expect(exp.content!.dataset.renewalLevel).toBe("expired");
+    expect(crit.content!.dataset.renewalLevel).toBe("critical");
+    expect(warn.content!.dataset.renewalLevel).toBe("warning");
+    expect(soon.content!.dataset.renewalLevel).toBe("soon");
+    // The "ok" property leaves the default red Google pin alone.
+    expect(ok.content).toBeUndefined();
+  });
+
+  it("drops the at-risk pin treatment once the lease is no longer due (renewal cleared)", async () => {
+    // First render: property is at-risk → marker carries the colored
+    // content. Re-render with renewal cleared → the marker is rebuilt
+    // without the content so the default Google pin returns.
+    const Wrapper = makeWrapper();
+    const atRisk: MappableProperty = {
+      ...baseProperty,
+      renewal: { level: "warning", label: "45 days left" },
+    };
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[atRisk]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+    while (mapsState.pendingGeocodes.length > 0) {
+      const p = mapsState.pendingGeocodes.shift()!;
+      await act(async () => {
+        p.cb(
+          [{ geometry: { location: { lat: () => 30.27, lng: () => -97.74 } } }],
+          "OK",
+        );
+      });
+      await settle();
+    }
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].content?.dataset.renewalLevel).toBe("warning");
+
+    // Lease renewed → parent now passes renewal: null. Marker effect
+    // tears down + rebuilds; new marker has no custom content.
+    await act(async () => {
+      root!.render(
+        <Wrapper>
+          <PortfolioMap
+            properties={[{ ...baseProperty, renewal: null }]}
+            onPinClick={vi.fn()}
+            apiKey="fake-key"
+          />
+        </Wrapper>,
+      );
+    });
+    await settle();
+    expect(mapsState.markers).toHaveLength(1);
+    expect(mapsState.markers[0].content).toBeUndefined();
   });
 
   it("omits bed-count rows when the caller doesn't pass them", async () => {

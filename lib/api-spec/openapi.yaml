@@ -861,6 +861,13 @@ components:
       type: string
       pattern: '^\d{4}-\d{2}-\d{2}$'
       example: "2026-05-31"
+    # Like LeaseDate, but also permits an empty string. Used for
+    # occupant move-in/out dates because the DB column defaults to ""
+    # for occupants who were imported without a known move-in date.
+    OptionalLeaseDate:
+      type: string
+      pattern: '^(\d{4}-\d{2}-\d{2})?$'
+      example: "2026-05-31"
     Lease:
       type: object
       # The extended fields (clauses, buyoutAvailable, buyoutCost) are
@@ -967,10 +974,10 @@ components:
           type: ["string", "null"]
         propertyId:
           type: ["string", "null"]
-        moveInDate: { $ref: "#/components/schemas/LeaseDate" }
+        moveInDate: { $ref: "#/components/schemas/OptionalLeaseDate" }
         moveOutDate:
           oneOf:
-            - $ref: "#/components/schemas/LeaseDate"
+            - $ref: "#/components/schemas/OptionalLeaseDate"
             - type: "null"
         status: { type: string, enum: [Active, Former] }
         chargePerBed: { type: number }
@@ -987,10 +994,10 @@ components:
           type: ["string", "null"]
         propertyId:
           type: ["string", "null"]
-        moveInDate: { $ref: "#/components/schemas/LeaseDate" }
+        moveInDate: { $ref: "#/components/schemas/OptionalLeaseDate" }
         moveOutDate:
           oneOf:
-            - $ref: "#/components/schemas/LeaseDate"
+            - $ref: "#/components/schemas/OptionalLeaseDate"
             - type: "null"
         status: { type: string, enum: [Active, Former] }
         chargePerBed: { type: number }
@@ -1055,11 +1062,11 @@ components:
         landlordName: { type: string, nullable: true }
         startDate:
           oneOf:
-            - $ref: "#/components/schemas/LeaseDate"
+            - $ref: "#/components/schemas/OptionalLeaseDate"
             - type: "null"
         endDate:
           oneOf:
-            - $ref: "#/components/schemas/LeaseDate"
+            - $ref: "#/components/schemas/OptionalLeaseDate"
             - type: "null"
         monthlyRent: { type: number, nullable: true }
         securityDeposit: { type: number, nullable: true }

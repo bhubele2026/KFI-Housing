@@ -5,9 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { LeaseDate } from "./leaseDate";
 import type { OccupantUpdateBillingFrequency } from "./occupantUpdateBillingFrequency";
 import type { OccupantUpdateStatus } from "./occupantUpdateStatus";
+import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 export interface OccupantUpdate {
   name?: string;
@@ -17,8 +17,8 @@ export interface OccupantUpdate {
   bedId?: string | null;
   /** @nullable */
   propertyId?: string | null;
-  moveInDate?: LeaseDate;
-  moveOutDate?: LeaseDate | null;
+  moveInDate?: OptionalLeaseDate;
+  moveOutDate?: OptionalLeaseDate | null;
   status?: OccupantUpdateStatus;
   chargePerBed?: number;
   billingFrequency?: OccupantUpdateBillingFrequency;

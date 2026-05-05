@@ -278,6 +278,11 @@ for the full contract.
  */
 export type LeaseDate = string;
 
+/**
+ * @pattern ^(\d{4}-\d{2}-\d{2})?$
+ */
+export type OptionalLeaseDate = string;
+
 export type LeaseStatus = (typeof LeaseStatus)[keyof typeof LeaseStatus];
 
 export const LeaseStatus = {
@@ -406,8 +411,8 @@ export interface Occupant {
   bedId: string | null;
   /** @nullable */
   propertyId: string | null;
-  moveInDate: LeaseDate;
-  moveOutDate: LeaseDate | null;
+  moveInDate: OptionalLeaseDate;
+  moveOutDate: OptionalLeaseDate | null;
   status: OccupantStatus;
   chargePerBed: number;
   billingFrequency: OccupantBillingFrequency;
@@ -440,8 +445,8 @@ export interface OccupantUpdate {
   bedId?: string | null;
   /** @nullable */
   propertyId?: string | null;
-  moveInDate?: LeaseDate;
-  moveOutDate?: LeaseDate | null;
+  moveInDate?: OptionalLeaseDate;
+  moveOutDate?: OptionalLeaseDate | null;
   status?: OccupantUpdateStatus;
   chargePerBed?: number;
   billingFrequency?: OccupantUpdateBillingFrequency;
@@ -516,8 +521,8 @@ export interface LeasePdfExtracted {
   state: string | null;
   zip: string | null;
   landlordName: string | null;
-  startDate: LeaseDate | null;
-  endDate: LeaseDate | null;
+  startDate: OptionalLeaseDate | null;
+  endDate: OptionalLeaseDate | null;
   monthlyRent: number | null;
   securityDeposit: number | null;
   notes: string;

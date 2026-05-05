@@ -73,7 +73,7 @@ export default function Utilities() {
       { header: "Monthly Cost", value: (u) => u.monthlyCost },
       { header: "Notes",        value: (u) => u.notes },
     ]);
-    downloadCsv(timestampedCsvName("kfi-staffing-utilities"), csv);
+    downloadCsv(timestampedCsvName("housingops-utilities"), csv);
     toast({
       title: "Utilities exported",
       description: `Downloaded ${filtered.length} utility ${filtered.length === 1 ? "service" : "services"} as CSV.`,

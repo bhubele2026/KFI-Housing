@@ -5,8 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { LeaseDate } from "./leaseDate";
 import type { LeasePdfExtractedConfidence } from "./leasePdfExtractedConfidence";
+import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 /**
  * Lease fields parsed from the uploaded PDF. Any field the LLM could not
@@ -22,8 +22,8 @@ export interface LeasePdfExtracted {
   state: string | null;
   zip: string | null;
   landlordName: string | null;
-  startDate: LeaseDate | null;
-  endDate: LeaseDate | null;
+  startDate: OptionalLeaseDate | null;
+  endDate: OptionalLeaseDate | null;
   monthlyRent: number | null;
   securityDeposit: number | null;
   notes: string;

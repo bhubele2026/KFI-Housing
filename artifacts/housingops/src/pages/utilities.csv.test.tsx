@@ -224,7 +224,7 @@ describe("Utilities CSV download", () => {
     await clickDownload();
 
     expect(anchorClicks).toHaveLength(1);
-    expect(anchorClicks[0].download).toMatch(/^kfi-staffing-utilities-.*\.csv$/);
+    expect(anchorClicks[0].download).toMatch(/^housingops-utilities-.*\.csv$/);
     expect(anchorClicks[0].href).toBe("blob:mock-url");
 
     const lines = readCsvLines();

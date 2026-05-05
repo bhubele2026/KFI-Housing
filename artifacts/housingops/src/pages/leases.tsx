@@ -120,7 +120,7 @@ export default function Leases() {
       { header: "Status",           value: (l) => l.status },
       { header: "Notes",            value: (l) => l.notes },
     ]);
-    downloadCsv(timestampedCsvName("kfi-staffing-leases"), csv);
+    downloadCsv(timestampedCsvName("housingops-leases"), csv);
     toast({
       title: "Leases exported",
       description: `Downloaded ${filteredLeases.length} ${filteredLeases.length === 1 ? "lease" : "leases"} as CSV.`,

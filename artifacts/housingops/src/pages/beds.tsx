@@ -105,7 +105,7 @@ export default function Beds() {
       { header: "Occupant",   value: (b) => (b.occupantId ? occupants.find((o) => o.id === b.occupantId)?.name ?? "" : "") },
       { header: "Status",     value: (b) => b.status },
     ]);
-    downloadCsv(timestampedCsvName("kfi-staffing-beds"), csv);
+    downloadCsv(timestampedCsvName("housingops-beds"), csv);
     toast({
       title: "Beds exported",
       description: `Downloaded ${filteredBeds.length} ${filteredBeds.length === 1 ? "bed" : "beds"} as CSV.`,

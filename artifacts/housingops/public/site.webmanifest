@@ -1,7 +1,7 @@
 {
-  "name": "KFI Staffing",
-  "short_name": "KFI Staffing",
-  "description": "Drastically Different Staffing.",
+  "name": "HousingOps",
+  "short_name": "HousingOps",
+  "description": "Housing operations for properties, leases, beds, and occupants.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

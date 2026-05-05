@@ -33,6 +33,7 @@ export * from "./occupantStatus";
 export * from "./occupantUpdate";
 export * from "./occupantUpdateBillingFrequency";
 export * from "./occupantUpdateStatus";
+export * from "./optionalLeaseDate";
 export * from "./property";
 export * from "./propertyGeocodeStatus";
 export * from "./propertyPaymentMethod";

@@ -80,10 +80,10 @@ export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
   "^\\d{4}-\\d{2}-\\d{2}$",
 );
 export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const importDataBodyOccupantsItemMoveOutDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const ImportDataBody = zod.object({
@@ -884,10 +884,10 @@ export const ImportLeasePdfBody = zod.object({
 });
 
 export const importLeasePdfResponseExtractedStartDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const importLeasePdfResponseExtractedEndDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const importLeasePdfResponseCandidatesMax = 5;
 
@@ -1143,10 +1143,10 @@ export const DeleteBedParams = zod.object({
  * @summary List all occupants
  */
 export const listOccupantsResponseMoveInDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const listOccupantsResponseMoveOutDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const ListOccupantsResponseItem = zod.object({
@@ -1173,10 +1173,10 @@ export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
  * @summary Create an occupant
  */
 export const createOccupantBodyMoveInDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const createOccupantBodyMoveOutDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const CreateOccupantBody = zod.object({
@@ -1206,10 +1206,10 @@ export const UpdateOccupantParams = zod.object({
 });
 
 export const updateOccupantBodyMoveInDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const updateOccupantBodyMoveOutDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const UpdateOccupantBody = zod.object({
@@ -1233,10 +1233,10 @@ export const UpdateOccupantBody = zod.object({
 });
 
 export const updateOccupantResponseMoveInDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const updateOccupantResponseMoveOutDateOneRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const UpdateOccupantResponse = zod.object({

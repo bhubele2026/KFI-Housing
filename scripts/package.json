@@ -7,7 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "check:deploy-env": "tsx ./src/check-deploy-env.ts",
     "check:deployed-config": "tsx ./src/check-deployed-config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b tsconfig.json",
     "test": "vitest run"
   },
   "devDependencies": {

@@ -23,8 +23,19 @@ import {
 
 // Capture toast calls without running the full Toast portal — we don't
 // need to render the toast, only assert the contract our hook hands to
-// `toast()` (title, description, action element shape).
-const toastMock = vi.fn();
+// `toast()` (title, description, action element shape). The mock
+// returns a stub `{ update }` handle so the hook can refresh an
+// already-open toast in place when a re-recorded failure advances the
+// "Checked … ago" timestamp; the captured update calls let us assert
+// the hook actually pushes the refreshed description.
+const updateMock = vi.fn();
+const toastMock = vi.fn(
+  (_props: CapturedToast) => ({
+    id: "stub",
+    dismiss: vi.fn(),
+    update: updateMock,
+  }),
+);
 vi.mock("./use-toast", () => ({
   useToast: () => ({ toast: toastMock, dismiss: vi.fn(), toasts: [] }),
 }));
@@ -88,12 +99,35 @@ function actionAltOf(t: CapturedToast | undefined): string {
   return actionEl.props.altText ?? "";
 }
 
+// Walk a React node tree concatenating its text content. The toast
+// description is JSX (a sentence plus an embedded <CheckedAgoLabel/>)
+// rather than a raw string, so we can't just call String() on it —
+// that would yield "[object Object]" and hide every textual assertion.
+function descriptionTextOf(node: React.ReactNode): string {
+  if (node == null || node === false || node === true) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(descriptionTextOf).join("");
+  if (isValidElement(node)) {
+    const el = node as ReactElement<{ children?: React.ReactNode; timestamp?: number }>;
+    // <CheckedAgoLabel timestamp={ts} /> renders "Checked … ago" but
+    // doesn't put its own children in props.children — synthesize the
+    // label text here so assertions can pin down the "Checked" prefix
+    // without spinning up a renderer for the label component.
+    if (typeof el.props.timestamp === "number" && el.props.children == null) {
+      return `Checked …`;
+    }
+    return descriptionTextOf(el.props.children);
+  }
+  return "";
+}
+
 describe("useGeocodeFailureToasts", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
   beforeEach(() => {
-    toastMock.mockReset();
+    toastMock.mockClear();
+    updateMock.mockReset();
     __resetGoogleMapsSdkForTest();
     __resetGeocodeFailureToastsForTest();
     container = document.createElement("div");
@@ -147,8 +181,13 @@ describe("useGeocodeFailureToasts", () => {
     // The description must include the actual rejected address so
     // operators glancing at the toast immediately know which property
     // is broken — not a generic "an address" message.
-    expect(String(t?.description)).toContain(addr);
-    expect(String(t?.description)).toContain("fix it on the property page");
+    expect(descriptionTextOf(t?.description)).toContain(addr);
+    expect(descriptionTextOf(t?.description)).toContain("fix it on the property page");
+    // Surfaces the same "Checked … ago" line operators see in the
+    // Properties rollup and sidebar tooltip — without it, a fresh
+    // toast for a known-stale address looks identical to a brand-new
+    // failure landing for the first time.
+    expect(descriptionTextOf(t?.description)).toContain("Checked");
   });
 
   it("links the toast action straight to the matching property's detail page", async () => {
@@ -231,7 +270,7 @@ describe("useGeocodeFailureToasts", () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
     const t = lastToast();
     expect(t?.action).toBeUndefined();
-    expect(String(t?.description)).toContain("999 Stale Address");
+    expect(descriptionTextOf(t?.description)).toContain("999 Stale Address");
   });
 
   it("toasts pre-existing failures observed before mount", async () => {
@@ -247,6 +286,47 @@ describe("useGeocodeFailureToasts", () => {
 
     expect(toastMock).toHaveBeenCalledTimes(1);
     expect(actionHrefOf(lastToast())).toBe("/properties/p1");
+  });
+
+  it("updates the open toast's 'Checked … ago' line when a re-recorded failure advances the timestamp", async () => {
+    // A re-record of an already-failing address keeps the failure in
+    // the set but advances its `lastCheckedAt`. The open toast must
+    // pick that up — without an in-place update, it would keep
+    // showing the original "Checked just now" text long after the
+    // underlying entry was re-stamped, defeating the whole purpose
+    // of carrying the label.
+    const p1 = baseProp({ id: "p1" });
+    await mount([p1]);
+    const addr = formatGeocodeAddress(p1);
+
+    // Seed the original failure with a deterministic past timestamp
+    // so the assertion can pin down the change. Using Date.now()
+    // before the act lets the cache stamp it on its own clock — we
+    // just need to know the toast captured *some* timestamp first.
+    await act(async () => {
+      primeGeocodeCache(addr, null);
+    });
+    expect(toastMock).toHaveBeenCalledTimes(1);
+
+    // Re-fail the same address — the failure set is unchanged, but
+    // the underlying timestamp Map records a fresh `Date.now()`.
+    // Wait a tick first so the Date.now() values differ.
+    await new Promise((r) => setTimeout(r, 5));
+    await act(async () => {
+      primeGeocodeCache(addr, null);
+    });
+
+    // Still exactly one toast (the dedupe rule above) — but the
+    // hook must have called the toast handle's `update` to push the
+    // refreshed description, so the open toast reflects the new
+    // timestamp instead of being frozen on the original wording.
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).toHaveBeenCalled();
+    const lastUpdate = updateMock.mock.calls[updateMock.mock.calls.length - 1][0] as {
+      description?: React.ReactNode;
+    };
+    expect(descriptionTextOf(lastUpdate.description)).toContain(addr);
+    expect(descriptionTextOf(lastUpdate.description)).toContain("Checked");
   });
 
   it("survives a remount without re-toasting addresses already announced", async () => {

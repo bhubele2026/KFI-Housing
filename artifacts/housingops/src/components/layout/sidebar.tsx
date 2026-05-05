@@ -368,25 +368,17 @@ export function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
-      <div className="flex h-20 flex-col justify-center gap-1 px-3 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
-        {/* The KFI Staffing logo artwork already has a dark-navy
-            background built in, so we let it sit directly on the dark
-            sidebar — no white chip needed. The "HousingOps" product
-            label sits beneath it as a smaller wordmark so users still
-            know which app they're in. */}
+      <div className="flex h-28 flex-col justify-center px-3 py-3 border-b border-sidebar-border/70 bg-gradient-to-b from-sidebar to-sidebar/95">
+        {/* The KFI Staffing logo artwork has a dark-navy background
+            tuned to match the --sidebar token, so it sits seamlessly
+            on the sidebar with no chip or extra wordmark. */}
         <img
           src={logoUrl}
           alt="KFI Staffing"
-          className="h-12 w-full rounded-md object-contain select-none"
+          className="h-20 w-full rounded-md object-contain select-none"
           draggable={false}
           data-testid="img-sidebar-logo"
         />
-        <div
-          className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/70"
-          data-testid="text-sidebar-product-name"
-        >
-          HousingOps
-        </div>
       </div>
 
       {activeScopedCustomer && (

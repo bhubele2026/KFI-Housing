@@ -5,7 +5,23 @@ import {
   ImportDataBody,
 } from "@workspace/api-zod";
 
-const VALID_OCCUPANT = {
+type ValidOccupant = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  bedId: string;
+  propertyId: string;
+  moveInDate: string;
+  moveOutDate: string | null;
+  status: "Active";
+  chargePerBed: number;
+  billingFrequency: "Monthly";
+  employeeId: string;
+  company: string;
+};
+
+const VALID_OCCUPANT: ValidOccupant = {
   id: "o1",
   name: "Jane Doe",
   email: "jane@example.com",
@@ -14,9 +30,9 @@ const VALID_OCCUPANT = {
   propertyId: "p1",
   moveInDate: "2024-01-15",
   moveOutDate: null,
-  status: "Active" as const,
+  status: "Active",
   chargePerBed: 800,
-  billingFrequency: "Monthly" as const,
+  billingFrequency: "Monthly",
   employeeId: "e1",
   company: "Acme",
 };

@@ -876,9 +876,11 @@ components:
           type: ["string", "null"]
         propertyId:
           type: ["string", "null"]
-        moveInDate: { type: string }
+        moveInDate: { $ref: "#/components/schemas/LeaseDate" }
         moveOutDate:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/LeaseDate"
+            - type: "null"
         status: { type: string, enum: [Active, Former] }
         chargePerBed: { type: number }
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
@@ -894,9 +896,11 @@ components:
           type: ["string", "null"]
         propertyId:
           type: ["string", "null"]
-        moveInDate: { type: string }
+        moveInDate: { $ref: "#/components/schemas/LeaseDate" }
         moveOutDate:
-          type: ["string", "null"]
+          oneOf:
+            - $ref: "#/components/schemas/LeaseDate"
+            - type: "null"
         status: { type: string, enum: [Active, Former] }
         chargePerBed: { type: number }
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }

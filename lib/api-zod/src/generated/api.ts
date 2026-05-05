@@ -79,6 +79,12 @@ export const importDataBodyLeasesItemStartDateRegExp = new RegExp(
 export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
   "^\\d{4}-\\d{2}-\\d{2}$",
 );
+export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const importDataBodyOccupantsItemMoveOutDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
 
 export const ImportDataBody = zod.object({
   customers: zod.array(
@@ -221,8 +227,13 @@ export const ImportDataBody = zod.object({
       phone: zod.string(),
       bedId: zod.string().nullable(),
       propertyId: zod.string().nullable(),
-      moveInDate: zod.string(),
-      moveOutDate: zod.string().nullable(),
+      moveInDate: zod
+        .string()
+        .regex(importDataBodyOccupantsItemMoveInDateRegExp),
+      moveOutDate: zod.union([
+        zod.string().regex(importDataBodyOccupantsItemMoveOutDateOneRegExp),
+        zod.null(),
+      ]),
       status: zod.enum(["Active", "Former"]),
       chargePerBed: zod.number(),
       billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
@@ -1035,6 +1046,13 @@ export const DeleteBedParams = zod.object({
 /**
  * @summary List all occupants
  */
+export const listOccupantsResponseMoveInDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const listOccupantsResponseMoveOutDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const ListOccupantsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -1042,8 +1060,11 @@ export const ListOccupantsResponseItem = zod.object({
   phone: zod.string(),
   bedId: zod.string().nullable(),
   propertyId: zod.string().nullable(),
-  moveInDate: zod.string(),
-  moveOutDate: zod.string().nullable(),
+  moveInDate: zod.string().regex(listOccupantsResponseMoveInDateRegExp),
+  moveOutDate: zod.union([
+    zod.string().regex(listOccupantsResponseMoveOutDateOneRegExp),
+    zod.null(),
+  ]),
   status: zod.enum(["Active", "Former"]),
   chargePerBed: zod.number(),
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
@@ -1055,6 +1076,13 @@ export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
 /**
  * @summary Create an occupant
  */
+export const createOccupantBodyMoveInDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const createOccupantBodyMoveOutDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const CreateOccupantBody = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -1062,8 +1090,11 @@ export const CreateOccupantBody = zod.object({
   phone: zod.string(),
   bedId: zod.string().nullable(),
   propertyId: zod.string().nullable(),
-  moveInDate: zod.string(),
-  moveOutDate: zod.string().nullable(),
+  moveInDate: zod.string().regex(createOccupantBodyMoveInDateRegExp),
+  moveOutDate: zod.union([
+    zod.string().regex(createOccupantBodyMoveOutDateOneRegExp),
+    zod.null(),
+  ]),
   status: zod.enum(["Active", "Former"]),
   chargePerBed: zod.number(),
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
@@ -1078,20 +1109,39 @@ export const UpdateOccupantParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateOccupantBodyMoveInDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const updateOccupantBodyMoveOutDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const UpdateOccupantBody = zod.object({
   name: zod.string().optional(),
   email: zod.string().optional(),
   phone: zod.string().optional(),
   bedId: zod.string().nullish(),
   propertyId: zod.string().nullish(),
-  moveInDate: zod.string().optional(),
-  moveOutDate: zod.string().nullish(),
+  moveInDate: zod.string().regex(updateOccupantBodyMoveInDateRegExp).optional(),
+  moveOutDate: zod
+    .union([
+      zod.string().regex(updateOccupantBodyMoveOutDateOneRegExp),
+      zod.null(),
+    ])
+    .optional(),
   status: zod.enum(["Active", "Former"]).optional(),
   chargePerBed: zod.number().optional(),
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]).optional(),
   employeeId: zod.string().optional(),
   company: zod.string().optional(),
 });
+
+export const updateOccupantResponseMoveInDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const updateOccupantResponseMoveOutDateOneRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
 
 export const UpdateOccupantResponse = zod.object({
   id: zod.string(),
@@ -1100,8 +1150,11 @@ export const UpdateOccupantResponse = zod.object({
   phone: zod.string(),
   bedId: zod.string().nullable(),
   propertyId: zod.string().nullable(),
-  moveInDate: zod.string(),
-  moveOutDate: zod.string().nullable(),
+  moveInDate: zod.string().regex(updateOccupantResponseMoveInDateRegExp),
+  moveOutDate: zod.union([
+    zod.string().regex(updateOccupantResponseMoveOutDateOneRegExp),
+    zod.null(),
+  ]),
   status: zod.enum(["Active", "Former"]),
   chargePerBed: zod.number(),
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),

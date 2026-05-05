@@ -351,9 +351,8 @@ export interface Occupant {
   bedId: string | null;
   /** @nullable */
   propertyId: string | null;
-  moveInDate: string;
-  /** @nullable */
-  moveOutDate: string | null;
+  moveInDate: LeaseDate;
+  moveOutDate: LeaseDate | null;
   status: OccupantStatus;
   chargePerBed: number;
   billingFrequency: OccupantBillingFrequency;
@@ -386,9 +385,8 @@ export interface OccupantUpdate {
   bedId?: string | null;
   /** @nullable */
   propertyId?: string | null;
-  moveInDate?: string;
-  /** @nullable */
-  moveOutDate?: string | null;
+  moveInDate?: LeaseDate;
+  moveOutDate?: LeaseDate | null;
   status?: OccupantUpdateStatus;
   chargePerBed?: number;
   billingFrequency?: OccupantUpdateBillingFrequency;

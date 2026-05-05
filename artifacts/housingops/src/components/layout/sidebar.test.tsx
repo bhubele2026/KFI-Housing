@@ -646,6 +646,47 @@ describe("Sidebar Properties nav — addresses-needing-fix badge", () => {
     expect(title).toMatch(/Oldest flag checked /);
   });
 
+  it("tooltip auto-refreshes 'Oldest flag checked …' as time passes without any user interaction", async () => {
+    // The tooltip exists to give operators a staleness signal at a
+    // glance. Before this behavior was added, the relative-time
+    // suffix only recomputed when the geocode-failure cache itself
+    // changed — so a session that recorded a failure and then sat
+    // idle for an hour would still read "checked 1 minute ago".
+    // The minute-tick subscription on this surface must keep the
+    // tooltip honest without any other event firing.
+    vi.useFakeTimers();
+    try {
+      const start = new Date(2026, 0, 1, 12, 0, 0).getTime();
+      vi.setSystemTime(start);
+      // `primeGeocodeCache` stamps the failure with `Date.now()`, so
+      // the cache entry's `lastCheckedAt` is exactly `start`.
+      primeGeocodeCache(addrFor(0), null);
+
+      await render();
+
+      const titleAtStart = navBadge()!.getAttribute("title") ?? "";
+      // Just-recorded failure renders as "less than a minute ago".
+      expect(titleAtStart).toMatch(/Oldest flag checked /);
+      expect(titleAtStart).not.toMatch(/minutes ago/);
+
+      // Advance the wall clock by 5 minutes — no cache writes, no
+      // route changes, nothing else that would force a re-render.
+      // The shared minute-tick from `useNow` must drive the
+      // re-render so the tooltip suffix tracks elapsed time.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      });
+
+      const titleAfter = navBadge()!.getAttribute("title") ?? "";
+      expect(titleAfter).toMatch(/Oldest flag checked .*5 minutes ago/);
+      // aria-label stays in sync with title so screen-reader users
+      // get the freshly-ticked suffix too.
+      expect(navBadge()!.getAttribute("aria-label")).toBe(titleAfter);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clearGeocodeFailures (called from the reset flows) drops the badge and wipes storage", async () => {
     // The reset handlers in this same file invoke
     // `clearGeocodeFailures()` from their `onSuccess` callback.

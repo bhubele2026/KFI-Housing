@@ -20,6 +20,7 @@ import {
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useToast } from "@/hooks/use-toast";
 import { useGeocodeFailures, useGeocodeFailureTimestamps } from "@/hooks/use-geocode-failures";
+import { useNow } from "@/hooks/use-now";
 import { formatDistanceToNow } from "date-fns";
 import { useGeocodeFailureToasts } from "@/hooks/use-geocode-failure-toasts";
 import {
@@ -75,6 +76,14 @@ export function Sidebar() {
   // subscription path: every failure recording or re-recording rebuilds
   // the Map, which re-renders us and re-runs the memo below.
   const geocodeFailureTimestamps = useGeocodeFailureTimestamps();
+  // Subscribe to the shared minute-tick clock so the tooltip below
+  // ("Oldest flag checked N ago") advances over real time even when
+  // no fresh failure lands in the cache to force a re-render. Without
+  // this, an operator who left the tab open for an hour would still
+  // see "checked 1 minute ago" until something else nudged the
+  // sidebar to render. The hook piggy-backs on a single shared
+  // setInterval, so we don't add per-component timer load.
+  const now = useNow(60_000);
   const { addressesNeedingFixCount, oldestFailureCheckedAt } = useMemo(() => {
     if (geocodeFailures.size === 0 || !properties) {
       return { addressesNeedingFixCount: 0, oldestFailureCheckedAt: null as number | null };
@@ -106,7 +115,11 @@ export function Sidebar() {
     // so the meaning is clear when we're rolling up multiple rows
     // into a single line of tooltip text.
     return `${countLabel} — Oldest flag checked ${formatDistanceToNow(oldestFailureCheckedAt, { addSuffix: true })}`;
-  }, [addressesNeedingFixCount, oldestFailureCheckedAt]);
+    // `now` is in the dep list so each minute-tick recomputes the
+    // relative-time suffix off a fresh clock — `formatDistanceToNow`
+    // reads `Date.now()` internally, but the memo would otherwise
+    // hold the previous string and never invalidate.
+  }, [addressesNeedingFixCount, oldestFailureCheckedAt, now]);
   // Pop a one-shot toast each time a brand-new failure lands in the
   // shared cache. The badge above only catches the operator's eye if
   // the sidebar is actually visible — on narrow displays where the

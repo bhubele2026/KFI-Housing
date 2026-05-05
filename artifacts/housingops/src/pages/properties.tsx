@@ -531,6 +531,19 @@ export default function Properties() {
     () => new Set(),
   );
 
+  // Bulk-retry progress for the "Retry all" button. Non-null only while
+  // a bulk run is in flight; the per-row state (`retryingAddresses`)
+  // stays the source of truth for which individual rows are disabled,
+  // so the bulk run can hand off to `handleRetryAddress` without
+  // duplicating its bookkeeping. We capture `total` from the snapshot
+  // taken when the click landed so the indicator reads "Retrying X of
+  // Y…" against a stable denominator even as successful rows drop out
+  // of `propertiesNeedingAddressFix` mid-iteration.
+  const [bulkRetryProgress, setBulkRetryProgress] = useState<
+    { done: number; total: number } | null
+  >(null);
+  const isBulkRetrying = bulkRetryProgress !== null;
+
   // Fetch the runtime config (Google Maps API key) only when the rollup
   // could be visible — i.e. there's at least one geocode failure in
   // the shared cache. Without one the operator can't reach the Retry
@@ -649,6 +662,76 @@ export default function Properties() {
       return addr.length > 0 && geocodeFailureTimestamps.has(addr);
     });
   }, [properties, geocodeFailureTimestamps]);
+
+  /**
+   * Re-run every flagged address in the rollup in one click. Iterates
+   * sequentially through `handleRetryAddress` so we never have two
+   * Google requests in flight at the same time — the SDK's
+   * `inFlightGeocodes` map already dedupes per-address, but going
+   * sequentially also avoids blasting Google with N parallel requests
+   * after a partial outage and keeps the per-row spinner pattern
+   * predictable (only the address currently being retried is marked
+   * busy at any moment).
+   *
+   * The address snapshot is taken at click time so the loop has a
+   * stable list to iterate even as successful rows drop out of
+   * `propertiesNeedingAddressFix` mid-run. `handleRetryAddress` is
+   * idempotent — early-returning on addresses already in
+   * `retryingAddresses`, and routing toasts for the still-failing /
+   * SDK-unavailable / no-key branches — so the loop just hands each
+   * address off and advances the progress counter when the per-row
+   * call settles.
+   */
+  const handleRetryAll = useCallback(async () => {
+    if (isBulkRetrying) return;
+    if (!mapsApiKey) {
+      // Mirror the per-row "no key" branch so a click on Retry all
+      // before /api/config resolves doesn't silently no-op. We bail
+      // BEFORE flipping into the bulk-progress state so the button
+      // doesn't briefly disable itself for a run we never started.
+      toast({
+        title: "Couldn't retry",
+        description:
+          "Google Maps key isn't loaded yet. Try again in a moment.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Snapshot the address list NOW. Successful retries shrink the
+    // upstream array via the cache → subscribers path while the loop
+    // runs; we want the denominator and the iteration order to stay
+    // pinned to what the operator clicked on. Dedupe so two properties
+    // sharing the exact same flagged address (e.g. a duplicate-import
+    // edge case) don't burn two Google calls on the same string —
+    // `inFlightGeocodes` would already collapse parallel requests, but
+    // sequential iteration here would otherwise re-hit Google twice.
+    const seen = new Set<string>();
+    const addresses: string[] = [];
+    for (const p of propertiesNeedingAddressFix) {
+      const a = formatGeocodeAddress(p);
+      if (a.length === 0 || seen.has(a)) continue;
+      seen.add(a);
+      addresses.push(a);
+    }
+    if (addresses.length < 2) return;
+    setBulkRetryProgress({ done: 0, total: addresses.length });
+    try {
+      for (const addr of addresses) {
+        await handleRetryAddress(addr);
+        setBulkRetryProgress((prev) =>
+          prev ? { done: prev.done + 1, total: prev.total } : prev,
+        );
+      }
+    } finally {
+      setBulkRetryProgress(null);
+    }
+  }, [
+    isBulkRetrying,
+    mapsApiKey,
+    propertiesNeedingAddressFix,
+    handleRetryAddress,
+    toast,
+  ]);
 
   // Ids reported back from the map for properties whose address looked
   // valid but Google couldn't actually geocode (typo'd street, removed
@@ -922,6 +1005,53 @@ export default function Properties() {
                 >
                   {propertiesNeedingAddressFix.length}
                 </Badge>
+                {/*
+                  "Retry all" — only meaningful when there are 2+
+                  flagged addresses (a single row is already a one-
+                  click operation via its own per-row Retry, and
+                  showing both controls for a count of 1 would be
+                  busywork). Hands every snapshotted address off to
+                  `handleRetryAddress` sequentially so we never have
+                  two parallel Google requests for the same address
+                  (the SDK's `inFlightGeocodes` already dedupes, but
+                  going one at a time also keeps the per-row spinner
+                  pattern predictable and avoids a thundering-herd
+                  retry burst right after a partial outage). The
+                  button doubles as a combined progress indicator —
+                  "Retrying X of Y…" reads off the snapshot taken at
+                  click time so the denominator stays stable even as
+                  successful rows drop out mid-iteration.
+                */}
+                {(propertiesNeedingAddressFix.length >= 2 ||
+                  isBulkRetrying) && (
+                  // Keep the button visible mid-bulk-run even after
+                  // successful retries shrink the count below 2 — the
+                  // run owns the indicator's denominator and would
+                  // otherwise vanish on the very render that's supposed
+                  // to show "Retrying N of N…".
+                  <button
+                    type="button"
+                    onClick={handleRetryAll}
+                    disabled={isBulkRetrying}
+                    className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
+                    aria-label="Retry every flagged address"
+                    aria-busy={isBulkRetrying}
+                    title="Re-attempt every address Google couldn't pinpoint"
+                    data-testid="retry-all-addresses-needing-review"
+                  >
+                    {isBulkRetrying ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    {isBulkRetrying && bulkRetryProgress
+                      ? `Retrying ${Math.min(
+                          bulkRetryProgress.done + 1,
+                          bulkRetryProgress.total,
+                        )} of ${bulkRetryProgress.total}…`
+                      : "Retry all"}
+                  </button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Google had no result for these addresses this session.

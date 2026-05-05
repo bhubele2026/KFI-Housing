@@ -1382,4 +1382,305 @@ describe("Properties page — addresses Google can't pinpoint rollup", () => {
 
     expect(window.location.pathname).toBe("/properties");
   });
+
+  // ── "Retry all" button ────────────────────────────────────────────────
+  //
+  // After a Google Maps outage or a bulk-import that ran while the
+  // api-server was misconfigured, the rollup can fill with dozens of
+  // flagged addresses. Clicking Retry on each row one-by-one is tedious;
+  // a single "Retry all" button drains the rollup in one action while
+  // still respecting per-row dedupe / quota safety. The button must:
+  //   • only appear when there are 2+ flagged addresses (a single row is
+  //     already a one-click operation via its own per-row Retry);
+  //   • iterate the snapshotted addresses sequentially through the same
+  //     `handleRetryAddress` path so we never produce parallel Google
+  //     requests for the same address;
+  //   • disable itself + show a combined progress indicator while the
+  //     run is in flight;
+  //   • toast and skip the run when no Maps API key is loaded yet.
+
+  it("hides the Retry all button when only one address is flagged", async () => {
+    // Single-row case: the per-row Retry already covers it. Showing
+    // both buttons for a count of 1 would be busywork and would also
+    // make the panel header noisy in the common partial-recovery
+    // case where only one row is left.
+    primeGeocodeCache(addrFor(0), null);
+
+    await renderPage();
+
+    expect(get("addresses-needing-review-panel")).not.toBeNull();
+    expect(get("retry-all-addresses-needing-review")).toBeNull();
+  });
+
+  it("shows the Retry all button when there are 2+ flagged addresses", async () => {
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+
+    const btn = get("retry-all-addresses-needing-review");
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toContain("Retry all");
+  });
+
+  it("retries every flagged address sequentially when clicked", async () => {
+    // Pin down the contract that one click drains the panel: each
+    // address gets exactly one Google call AND the calls happen one
+    // at a time (not in parallel) so a partial-outage burst doesn't
+    // hammer Google.
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const calledFor: string[] = [];
+    plantFakeMapsSdk((addr, cb) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      calledFor.push(addr);
+      // Resolve on a microtask so the loop's `await` actually has to
+      // suspend — a synchronous resolve would let the for-loop body
+      // run to completion before the next iteration "starts", masking
+      // a parallel implementation.
+      queueMicrotask(() => {
+        inFlight -= 1;
+        cb(
+          [
+            {
+              geometry: {
+                location: { lat: () => 30, lng: () => -97 },
+              },
+            },
+          ],
+          "OK",
+        );
+      });
+    });
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+
+    await act(async () => {
+      get("retry-all-addresses-needing-review")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // Both addresses got exactly one Google call each, and at no
+    // point were two requests in flight simultaneously.
+    expect(calledFor).toEqual(
+      expect.arrayContaining([addrFor(0), addrFor(2)]),
+    );
+    expect(calledFor.length).toBe(2);
+    expect(maxInFlight).toBe(1);
+    // Both successes drop their rows — the panel is gone.
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("shows a combined progress indicator while the bulk run is in flight", async () => {
+    // The button doubles as the progress indicator — "Retrying X of
+    // Y…" reads off a snapshot taken at click time so the denominator
+    // stays stable even as successful rows drop out of the rollup
+    // mid-iteration. We hold each geocode open with a stashed callback
+    // so the assertion lands while the run is genuinely in flight,
+    // not after a fast resolver has already closed it out.
+    const pending: GeocoderCb[] = [];
+    plantFakeMapsSdk((_addr, cb) => {
+      pending.push(cb);
+    });
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    const btn = get("retry-all-addresses-needing-review") as HTMLButtonElement;
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // First request in flight: indicator reads "Retrying 1 of 2…",
+    // button is disabled, aria-busy is set so screen readers know
+    // the click registered.
+    const midFirst = get("retry-all-addresses-needing-review") as HTMLButtonElement;
+    expect(midFirst.disabled).toBe(true);
+    expect(midFirst.getAttribute("aria-busy")).toBe("true");
+    expect(midFirst.textContent).toContain("Retrying 1 of 2");
+
+    // Resolve the first request as a success — the loop should
+    // advance to "Retrying 2 of 2…" with the second request now in
+    // flight.
+    await act(async () => {
+      pending[0]!(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    const midSecond = get("retry-all-addresses-needing-review") as HTMLButtonElement;
+    expect(midSecond).not.toBeNull();
+    expect(midSecond.textContent).toContain("Retrying 2 of 2");
+
+    // Resolve the second request — bulk run finishes, panel empties.
+    await act(async () => {
+      pending[1]!(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    expect(get("addresses-needing-review-panel")).toBeNull();
+  });
+
+  it("disables per-row Retry for the address currently being retried in bulk", async () => {
+    // The per-row Retry buttons must remain visible during the bulk
+    // run (so the operator can still kick off an individual retry on
+    // a row the loop hasn't reached yet) but must disable while their
+    // own row is the one currently in flight — otherwise a click
+    // would fall through to `handleRetryAddress`'s in-flight guard
+    // and silently no-op, looking broken.
+    const pending: GeocoderCb[] = [];
+    plantFakeMapsSdk((_addr, cb) => {
+      pending.push(cb);
+    });
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+
+    await act(async () => {
+      get("retry-all-addresses-needing-review")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    // The first address is in flight; its row's per-row Retry is
+    // disabled, while the second row's is still clickable so the
+    // operator isn't locked out of acting on rows the loop hasn't
+    // reached yet.
+    const rowOne = get("retry-address-needing-review-p1") as HTMLButtonElement;
+    const rowTwo = get("retry-address-needing-review-p3") as HTMLButtonElement;
+    expect(rowOne.disabled).toBe(true);
+    expect(rowTwo.disabled).toBe(false);
+
+    // Resolve first address. Loop advances to the second; now THAT
+    // per-row button disables and the first one is gone (success
+    // dropped the row).
+    await act(async () => {
+      pending[0]!(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+    expect(get("retry-address-needing-review-p1")).toBeNull();
+    const rowTwoNow = get("retry-address-needing-review-p3") as HTMLButtonElement;
+    expect(rowTwoNow.disabled).toBe(true);
+
+    // Drain the second so we don't leak a pending promise into the
+    // afterEach unmount.
+    await act(async () => {
+      pending[1]!(
+        [
+          {
+            geometry: {
+              location: { lat: () => 30, lng: () => -97 },
+            },
+          },
+        ],
+        "OK",
+      );
+    });
+  });
+
+  it("ignores a second click on Retry all while the first run is still in flight", async () => {
+    // Belt-and-suspenders alongside the `disabled` attribute: the
+    // handler itself early-returns when a bulk run is already in
+    // flight so a stuck keyboard "Enter" on a stale render can't
+    // double the Google round-trips.
+    let geocodeCalls = 0;
+    const pending: GeocoderCb[] = [];
+    plantFakeMapsSdk((_addr, cb) => {
+      geocodeCalls += 1;
+      pending.push(cb);
+    });
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    const btn = get("retry-all-addresses-needing-review")!;
+
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    // Second click while the first run is still working through its
+    // first address — must NOT spawn a parallel run.
+    await act(async () => {
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(geocodeCalls).toBe(1);
+
+    // Drain.
+    await act(async () => {
+      pending[0]!(null, "ZERO_RESULTS");
+    });
+    await act(async () => {
+      pending[1]!(null, "ZERO_RESULTS");
+    });
+  });
+
+  it("toasts and skips the bulk run when no Maps API key is loaded yet", async () => {
+    // Same edge case as the per-row branch: rollup is visible but
+    // /api/config hasn't resolved. Clicking Retry all can't do
+    // anything useful, but it must NOT silently no-op — surface a
+    // toast so the operator understands why and can try again in a
+    // moment. We also assert NO geocode calls land, so a regression
+    // that flipped the order (set bulk-progress THEN check key)
+    // would still get caught.
+    runtimeConfigMock.mockImplementation(() => ({
+      data: undefined,
+      isPending: true,
+      isLoading: true,
+      isError: false,
+      isSuccess: false,
+      error: null,
+      status: "pending",
+      fetchStatus: "fetching",
+    }));
+    let geocodeCalls = 0;
+    plantFakeMapsSdk((_addr, cb) => {
+      geocodeCalls += 1;
+      cb(null, "ZERO_RESULTS");
+    });
+    primeGeocodeCache(addrFor(0), null);
+    primeGeocodeCache(addrFor(2), null);
+
+    await renderPage();
+    await act(async () => {
+      get("retry-all-addresses-needing-review")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(geocodeCalls).toBe(0);
+    const titles = toastMock.mock.calls.map(
+      (c) => (c[0] as { title?: string }).title,
+    );
+    expect(titles).toContain("Couldn't retry");
+    // Both rows still present — nothing was attempted.
+    expect(get("address-needing-review-p1")).not.toBeNull();
+    expect(get("address-needing-review-p3")).not.toBeNull();
+  });
 });

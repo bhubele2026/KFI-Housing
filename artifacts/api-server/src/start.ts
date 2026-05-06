@@ -12,6 +12,7 @@ export interface StartDeps {
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
   seedAdientIfMissing: () => Promise<void>;
   seedPatriotBarabooIfMissing: () => Promise<void>;
+  backfillOccupantPayrollIds: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -211,6 +212,20 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Patriot Baraboo seed — continuing to serve",
+    );
+  }
+
+  // Backfill `employeeId` and `company` on occupants from the payroll
+  // export *before* the deduction seeder runs (Task #285), so the
+  // strict `employeeId == personId` matcher resolves the bulk of rows
+  // and the fragile name-only fallback is only a last-resort safety
+  // net. Idempotent and non-fatal.
+  try {
+    await deps.backfillOccupantPayrollIds();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to backfill occupant payroll IDs — continuing to serve",
     );
   }
 

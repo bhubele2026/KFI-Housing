@@ -16,6 +16,12 @@ export interface SeedHousingDeductionsResult {
   updated: number;
   alreadyCorrect: number;
   unmatched: Array<Pick<HousingDeductionRow, "customer" | "name" | "personId">>;
+  // Per-path match counters so we can verify in the workflow log that
+  // employeeId is the dominant matcher and the fragile name-only
+  // fallback resolves at most a handful of rows. Sum equals `matched`.
+  matchedByEmployeeId: number;
+  matchedByNameCompany: number;
+  matchedByNameOnly: number;
 }
 
 export interface SeedHousingDeductionsDeps {
@@ -261,14 +267,32 @@ export async function seedHousingDeductions(
   let matched = 0;
   let updated = 0;
   let alreadyCorrect = 0;
+  let matchedByEmployeeId = 0;
+  let matchedByNameCompany = 0;
+  let matchedByNameOnly = 0;
   const unmatched: SeedHousingDeductionsResult["unmatched"] = [];
 
   for (const row of rows) {
-    const target =
-      byEmployeeId.get(row.personId.trim()) ??
-      byNameCompany.get(nameCompanyKey(row.name, row.customer)) ??
-      byNameOnly.get(nameKey(row.name)) ??
-      null;
+    let target: (typeof allOccupants)[number] | null = null;
+    let matchPath: "employeeId" | "nameCompany" | "nameOnly" | null = null;
+
+    const byId = byEmployeeId.get(row.personId.trim());
+    if (byId) {
+      target = byId;
+      matchPath = "employeeId";
+    } else {
+      const byNc = byNameCompany.get(nameCompanyKey(row.name, row.customer));
+      if (byNc) {
+        target = byNc;
+        matchPath = "nameCompany";
+      } else {
+        const byN = byNameOnly.get(nameKey(row.name));
+        if (byN) {
+          target = byN;
+          matchPath = "nameOnly";
+        }
+      }
+    }
 
     if (!target) {
       unmatched.push({
@@ -280,6 +304,9 @@ export async function seedHousingDeductions(
     }
 
     matched++;
+    if (matchPath === "employeeId") matchedByEmployeeId++;
+    else if (matchPath === "nameCompany") matchedByNameCompany++;
+    else if (matchPath === "nameOnly") matchedByNameOnly++;
     const isCorrect =
       target.billingFrequency === "Weekly" &&
       Math.abs((target.chargePerBed ?? 0) - row.weekly) < 1e-6;
@@ -302,6 +329,9 @@ export async function seedHousingDeductions(
     updated,
     alreadyCorrect,
     unmatched,
+    matchedByEmployeeId,
+    matchedByNameCompany,
+    matchedByNameOnly,
   };
 
   log.info(
@@ -311,6 +341,9 @@ export async function seedHousingDeductions(
       updated: result.updated,
       alreadyCorrect: result.alreadyCorrect,
       unmatched: result.unmatched.length,
+      matchedByEmployeeId: result.matchedByEmployeeId,
+      matchedByNameCompany: result.matchedByNameCompany,
+      matchedByNameOnly: result.matchedByNameOnly,
     },
     "Seeded weekly housing deductions from payroll file",
   );

@@ -26,6 +26,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
     seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
     seedPatriotBarabooIfMissing: vi.fn().mockResolvedValue(undefined),
+    backfillOccupantPayrollIds: vi.fn().mockResolvedValue(undefined),
     seedHousingDeductions: vi.fn().mockResolvedValue(undefined),
     seedAttachedLeasesIfMissing: vi.fn().mockResolvedValue(undefined),
     listen: vi.fn().mockResolvedValue(undefined),

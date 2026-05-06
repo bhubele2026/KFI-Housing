@@ -7,6 +7,7 @@ import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
+import { backfillOccupantPayrollIds } from "./lib/backfill-occupant-payroll-ids";
 import { seedHousingDeductions } from "./lib/seed-housing-deductions";
 import { start } from "./start";
 
@@ -21,6 +22,9 @@ void start({
   },
   seedPatriotBarabooIfMissing: async () => {
     await seedPatriotBarabooIfMissing();
+  },
+  backfillOccupantPayrollIds: async () => {
+    await backfillOccupantPayrollIds();
   },
   seedHousingDeductions: async () => {
     await seedHousingDeductions();

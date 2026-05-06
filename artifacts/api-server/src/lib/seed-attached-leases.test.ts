@@ -124,6 +124,7 @@ vi.mock("@workspace/db", () => ({
     __table: "properties",
     id: { __col: "id" },
     customerId: { __col: "customerId" },
+    name: { __col: "name" },
     address: { __col: "address" },
     zip: { __col: "zip" },
   },
@@ -152,27 +153,30 @@ beforeEach(() => {
 });
 
 describe("seedAttachedLeasesIfMissing", () => {
-  it("inserts the 2 customers, 3 properties, and 3 active leases on a fresh DB", async () => {
+  it("inserts the 3 customers, 4 properties, and 4 active leases on a fresh DB", async () => {
     const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
 
     expect(result).toEqual({
-      customersInserted: 2,
-      propertiesInserted: 3,
-      leasesInserted: 3,
+      customersInserted: 3,
+      propertiesInserted: 4,
+      leasesInserted: 4,
     });
-    expect(stores.customers.size).toBe(2);
-    expect(stores.properties.size).toBe(3);
-    expect(stores.leases.size).toBe(3);
+    expect(stores.customers.size).toBe(3);
+    expect(stores.properties.size).toBe(4);
+    expect(stores.leases.size).toBe(4);
 
     const ids = SEED_ATTACHED_LEASES_IDS;
     expect(stores.customers.has(ids.customers.kfiWebster)).toBe(true);
     expect(stores.customers.has(ids.customers.autozoneJeannette)).toBe(true);
+    expect(stores.customers.has(ids.customers.kfiStaffingLlc)).toBe(true);
     expect(stores.properties.has(ids.properties.zielsdorf)).toBe(true);
     expect(stores.properties.has(ids.properties.autozoneHouse)).toBe(true);
     expect(stores.properties.has(ids.properties.yellowHouse)).toBe(true);
+    expect(stores.properties.has(ids.properties.ridgeMotorInn)).toBe(true);
     expect(stores.leases.has(ids.leases.zielsdorf)).toBe(true);
     expect(stores.leases.has(ids.leases.autozoneHouse)).toBe(true);
     expect(stores.leases.has(ids.leases.yellowHouse)).toBe(true);
+    expect(stores.leases.has(ids.leases.ridgeMotorInn)).toBe(true);
   });
 
   it("seeds each lease with the correct rent, dates, status, and source PDF marker", async () => {
@@ -211,6 +215,26 @@ describe("seedAttachedLeasesIfMissing", () => {
     expect(String(y["notes"])).toContain(
       "Yellow_House-_6454_Us-30,_Jeannette,_PA_15644_-_2026_KFI_STAFF_1778107208478.pdf",
     );
+
+    const r = stores.leases.get(ids.leases.ridgeMotorInn)!;
+    expect(r["startDate"]).toBe("2026-04-06");
+    expect(r["endDate"]).toBe("2027-04-05");
+    expect(r["monthlyRent"]).toBe(0);
+    expect(r["status"]).toBe("Active");
+    expect(String(r["clauses"])).toContain("$53.00/night");
+    expect(String(r["clauses"])).toContain("Double Queen");
+    expect(String(r["clauses"])).toContain("10");
+    expect(String(r["notes"])).toContain(
+      "The_Ridge_Motor_Inn_1778107885976.pdf",
+    );
+
+    const ridgeProp = stores.properties.get(ids.properties.ridgeMotorInn)!;
+    expect(ridgeProp["name"]).toBe("The Ridge Motor Inn");
+    expect(ridgeProp["address"]).toBe("");
+    expect(ridgeProp["customerId"]).toBe(ids.customers.kfiStaffingLlc);
+
+    const ridgeCust = stores.customers.get(ids.customers.kfiStaffingLlc)!;
+    expect(ridgeCust["name"]).toBe("KFI Staffing LLC");
   });
 
   it("links properties to the correct customers", async () => {
@@ -249,7 +273,7 @@ describe("seedAttachedLeasesIfMissing", () => {
     const after = stores.properties.get(ids.properties.zielsdorf)!;
     expect(after["notes"]).toBe("operator edit");
     expect(after["landlordEmail"]).toBe("ops@eureka.example");
-    expect(stores.leases.size).toBe(3);
+    expect(stores.leases.size).toBe(4);
   });
 
   it("reuses pre-existing customers/properties created under different IDs (natural-key match)", async () => {
@@ -275,9 +299,9 @@ describe("seedAttachedLeasesIfMissing", () => {
     const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
     const ids = SEED_ATTACHED_LEASES_IDS;
 
-    expect(result.customersInserted).toBe(1);
-    expect(result.propertiesInserted).toBe(2);
-    expect(result.leasesInserted).toBe(3);
+    expect(result.customersInserted).toBe(2);
+    expect(result.propertiesInserted).toBe(3);
+    expect(result.leasesInserted).toBe(4);
 
     expect(stores.customers.has(ids.customers.autozoneJeannette)).toBe(false);
     expect(stores.properties.has(ids.properties.autozoneHouse)).toBe(false);
@@ -289,5 +313,64 @@ describe("seedAttachedLeasesIfMissing", () => {
     expect(stores.properties.get(yellowLease["propertyId"] as string)!["customerId"]).toBe(
       "operator-cust-autozone",
     );
+  });
+
+  it("does not duplicate The Ridge Motor Inn when a prior import (e.g. #288 master file) already created an equivalent customer/property/lease under different IDs and metadata", async () => {
+    // Pre-existing rows the master-file importer might have created:
+    // - same customer name "KFI Staffing LLC" but different id
+    // - same property name "The Ridge Motor Inn" but with a populated
+    //   address (since master file may know the address) and a different id
+    // - same active agreement (matching start date) but with no source-PDF
+    //   marker in notes and a different id
+    stores.customers.set("master-cust-kfi", {
+      id: "master-cust-kfi",
+      name: "KFI Staffing LLC",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "from master-file import",
+    });
+    stores.properties.set("master-prop-ridge", {
+      id: "master-prop-ridge",
+      customerId: "master-cust-kfi",
+      name: "The Ridge Motor Inn",
+      address: "123 Some St (filled in by master file)",
+      city: "Portage",
+      state: "WI",
+      zip: "53901",
+      notes: "operator notes",
+    });
+    stores.leases.set("master-lease-ridge", {
+      id: "master-lease-ridge",
+      propertyId: "master-prop-ridge",
+      startDate: "2026-04-06",
+      endDate: "2027-04-05",
+      monthlyRent: 0,
+      status: "Active",
+      notes: "Pre-existing Ridge agreement from master file (no source marker).",
+    });
+
+    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    const ids = SEED_ATTACHED_LEASES_IDS;
+
+    // The Ridge customer/property/lease must NOT be re-inserted.
+    expect(stores.customers.has(ids.customers.kfiStaffingLlc)).toBe(false);
+    expect(stores.properties.has(ids.properties.ridgeMotorInn)).toBe(false);
+    expect(stores.leases.has(ids.leases.ridgeMotorInn)).toBe(false);
+
+    // Pre-existing rows untouched.
+    expect(stores.properties.get("master-prop-ridge")!["address"]).toBe(
+      "123 Some St (filled in by master file)",
+    );
+    expect(stores.leases.get("master-lease-ridge")!["notes"]).toBe(
+      "Pre-existing Ridge agreement from master file (no source marker).",
+    );
+
+    // Only the non-Ridge KFI/AutoZone seed rows get inserted.
+    expect(result).toEqual({
+      customersInserted: 2, // kfiWebster + autozoneJeannette (Ridge skipped)
+      propertiesInserted: 3, // zielsdorf + autozoneHouse + yellowHouse (Ridge skipped)
+      leasesInserted: 3, // zielsdorf + autozoneHouse + yellowHouse (Ridge skipped)
+    });
   });
 });

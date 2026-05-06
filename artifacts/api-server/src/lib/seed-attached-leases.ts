@@ -21,14 +21,17 @@ import type { Logger } from "pino";
 
 const KFI_WEBSTER_CUSTOMER_ID = "cust-kfi-webster";
 const AUTOZONE_JEANNETTE_CUSTOMER_ID = "cust-autozone-jeannette";
+const KFI_STAFFING_LLC_CUSTOMER_ID = "cust-kfi-staffing-llc";
 
 const ZIELSDORF_PROPERTY_ID = "prop-zielsdorf-webster";
 const AUTOZONE_HOUSE_PROPERTY_ID = "prop-autozone-6481-us30";
 const YELLOW_HOUSE_PROPERTY_ID = "prop-yellow-house-6454-us30";
+const RIDGE_MOTOR_INN_PROPERTY_ID = "prop-ridge-motor-inn";
 
 const ZIELSDORF_LEASE_ID = "lease-zielsdorf-2025-08-29";
 const AUTOZONE_HOUSE_LEASE_ID = "lease-6481-us30-2026-05-01";
 const YELLOW_HOUSE_LEASE_ID = "lease-6454-us30-2026-03-05";
+const RIDGE_MOTOR_INN_LEASE_ID = "lease-ridge-motor-inn-2026-04-06";
 
 interface CustomerSpec {
   id: string;
@@ -50,6 +53,15 @@ const CUSTOMERS: readonly CustomerSpec[] = [
     notes:
       "KFI Staffing crew housing for AutoZone employees in Jeannette, PA. " +
       "Two George DeLallo Company houses on US-30 ('AutoZone house' at 6481 and 'Yellow House' at 6454).",
+  },
+  {
+    id: KFI_STAFFING_LLC_CUSTOMER_ID,
+    name: "KFI Staffing LLC",
+    notes:
+      "KFI Staffing LLC umbrella account for hotel/corporate-rate agreements " +
+      "(e.g., The Ridge Motor Inn). Distinct from the per-property KFI crew " +
+      "housing customers (Webster, Versailles, etc.). Account contact for " +
+      "the Ridge Motor Inn agreement: Valerie Alderman, Logistics Mgr.",
   },
 ];
 
@@ -137,6 +149,31 @@ const PROPERTIES: readonly PropertySpec[] = [
     notes:
       "AutoZone employee housing ('Yellow House'). Tenant pays all utilities. " +
       "Same insurance + house-rule clauses as 6481 US-30 (sister property under same landlord).",
+  },
+  {
+    id: RIDGE_MOTOR_INN_PROPERTY_ID,
+    customerId: KFI_STAFFING_LLC_CUSTOMER_ID,
+    name: "The Ridge Motor Inn",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    monthlyRent: 0,
+    landlordName: "The Ridge Motor Inn (Dilip Patel, owner)",
+    landlordEmail: "",
+    landlordPhone: "",
+    paymentMethod: "Invoice",
+    paymentRecipient: "The Ridge Motor Inn",
+    paymentDueDay: 1,
+    paymentNotes:
+      "Hotel corporate-rate agreement (not a fixed monthly rent). Billed per " +
+      "room-night at $53.00/night for Double Queen rooms. Stays of 30+ days " +
+      "are Long Stays and tax exempt.",
+    notes:
+      "Hotel corporate-rate agreement with KFI Staffing LLC — not a per-unit " +
+      "apartment lease. Street address is not stated in the source PDF and " +
+      "is intentionally left blank (address TBD; do not guess). " +
+      "Source: The_Ridge_Motor_Inn_1778107885976.pdf",
   },
 ];
 
@@ -226,6 +263,37 @@ const LEASES: readonly LeaseSpec[] = [
       "Default / termination: standard PA residential default and notice provisions apply.",
       "Landlord: George DeLallo Company, Inc.",
       "Source document: Yellow_House-_6454_Us-30,_Jeannette,_PA_15644_-_2026_KFI_STAFF_1778107208478.pdf.",
+    ].join(" "),
+  },
+  {
+    id: RIDGE_MOTOR_INN_LEASE_ID,
+    propertyId: RIDGE_MOTOR_INN_PROPERTY_ID,
+    startDate: "2026-04-06",
+    endDate: "2027-04-05",
+    monthlyRent: 0,
+    securityDeposit: 0,
+    source: "The_Ridge_Motor_Inn_1778107885976.pdf",
+    notes:
+      "The Ridge Motor Inn — KFI Staffing LLC negotiated hotel rate agreement " +
+      "(not a per-unit apartment lease). Initial Term 04/06/2026 – 04/05/2027, " +
+      "renewable. $53.00/night Double Queen (single or double occupancy); " +
+      "10 guaranteed available rooms; 10 revenue-producing room nights/month " +
+      "minimum (account may lose volume discount if it falls below). " +
+      "Stays of 30+ days are Long Stays and tax exempt. " +
+      "Source: The_Ridge_Motor_Inn_1778107885976.pdf",
+    clauses: [
+      "Tenant / account: KFI Staffing LLC (signed by Valerie Alderman, Logistics Mgr, 03/19/2026).",
+      "Hotel / landlord: The Ridge Motor Inn (signed by owner Dilip Patel, 03/15/2026).",
+      "Agreement dated: March 12, 2026.",
+      "Initial Term: 2026-04-06 → 2027-04-05, renewable.",
+      "Negotiated rate: $53.00/night, Double Queen, single or double occupancy.",
+      "Guaranteed available rooms: 10 minimum.",
+      "Room-night minimum: 10 revenue-producing room nights/month (account may lose volume discount if it falls below).",
+      "Stays of 30+ days are Long Stays and tax exempt.",
+      "Amenities: free WiFi, weekly room cleaning, community room with kitchen appliances.",
+      "Termination: either party may terminate with 30 days' written notice.",
+      "Property street address is not stated in the PDF; left blank (TBD), do not guess.",
+      "Source document: The_Ridge_Motor_Inn_1778107885976.pdf.",
     ].join(" "),
   },
 ];
@@ -349,6 +417,7 @@ export async function seedAttachedLeasesIfMissing(
     for (const spec of PROPERTIES) {
       const customerId = customerIdByKey.get(spec.customerId);
       if (!customerId) continue;
+      // Primary natural key: (customerId, address, zip).
       const existing = await tx
         .select({ id: propertiesTable.id })
         .from(propertiesTable)
@@ -363,6 +432,26 @@ export async function seedAttachedLeasesIfMissing(
       if (existing.length > 0) {
         propertyIdByKey.set(spec.id, existing[0]!.id);
         continue;
+      }
+      // Fallback for hotel-rate / address-TBD properties (e.g. The Ridge
+      // Motor Inn): match by (customerId, name) so an operator/import that
+      // already created the same property under a different ID — possibly
+      // with a populated address — is still recognized and not duplicated.
+      if (spec.address === "" && spec.zip === "") {
+        const byName = await tx
+          .select({ id: propertiesTable.id })
+          .from(propertiesTable)
+          .where(
+            and(
+              eq(propertiesTable.customerId, customerId),
+              eq(propertiesTable.name, spec.name),
+            ),
+          )
+          .limit(1);
+        if (byName.length > 0) {
+          propertyIdByKey.set(spec.id, byName[0]!.id);
+          continue;
+        }
       }
       const inserted = await tx
         .insert(propertiesTable)
@@ -392,6 +481,8 @@ export async function seedAttachedLeasesIfMissing(
     for (const spec of LEASES) {
       const propertyId = propertyIdByKey.get(spec.propertyId);
       if (!propertyId) continue;
+      // Primary natural key: (propertyId, startDate, endDate, source-PDF
+      // marker in notes) — pinpoints leases seeded by this importer.
       const existing = await tx
         .select({ id: leasesTable.id })
         .from(leasesTable)
@@ -405,6 +496,21 @@ export async function seedAttachedLeasesIfMissing(
         )
         .limit(1);
       if (existing.length > 0) continue;
+      // Fallback: same property + same start date (tenant is implied by
+      // the property's customerId). Catches the case where a prior import
+      // (e.g. master-file #288) already created the same agreement under
+      // a different ID and without our source-PDF marker in its notes.
+      const byPropertyAndStart = await tx
+        .select({ id: leasesTable.id })
+        .from(leasesTable)
+        .where(
+          and(
+            eq(leasesTable.propertyId, propertyId),
+            eq(leasesTable.startDate, spec.startDate),
+          ),
+        )
+        .limit(1);
+      if (byPropertyAndStart.length > 0) continue;
 
       const inserted = await tx
         .insert(leasesTable)
@@ -431,15 +537,18 @@ export const SEED_ATTACHED_LEASES_IDS = {
   customers: {
     kfiWebster: KFI_WEBSTER_CUSTOMER_ID,
     autozoneJeannette: AUTOZONE_JEANNETTE_CUSTOMER_ID,
+    kfiStaffingLlc: KFI_STAFFING_LLC_CUSTOMER_ID,
   },
   properties: {
     zielsdorf: ZIELSDORF_PROPERTY_ID,
     autozoneHouse: AUTOZONE_HOUSE_PROPERTY_ID,
     yellowHouse: YELLOW_HOUSE_PROPERTY_ID,
+    ridgeMotorInn: RIDGE_MOTOR_INN_PROPERTY_ID,
   },
   leases: {
     zielsdorf: ZIELSDORF_LEASE_ID,
     autozoneHouse: AUTOZONE_HOUSE_LEASE_ID,
     yellowHouse: YELLOW_HOUSE_LEASE_ID,
+    ridgeMotorInn: RIDGE_MOTOR_INN_LEASE_ID,
   },
 } as const;

@@ -82,8 +82,8 @@ function makeSelect(projection: Record<string, { __col: string }>) {
 function makeUpdate(table: unknown) {
   return {
     set: (patch: Record<string, unknown>) => ({
-      where: (pred: Predicate) => ({
-        returning: async (_cols?: unknown) => {
+      where: (pred: Predicate) => {
+        const exec = async (): Promise<Row[]> => {
           const store = stores[tableNameOf(table)];
           const updated: Row[] = [];
           for (const row of store.values()) {
@@ -93,8 +93,33 @@ function makeUpdate(table: unknown) {
             }
           }
           return updated;
-        },
-      }),
+        };
+        return {
+          returning: (_cols?: unknown) => exec(),
+          then: (
+            onF: (v: Row[]) => unknown,
+            onR?: (e: unknown) => unknown,
+          ) => exec().then(onF, onR),
+        };
+      },
+    }),
+  };
+}
+
+function makeDelete(table: unknown) {
+  return {
+    where: (pred: Predicate) => ({
+      returning: async (_cols?: unknown) => {
+        const store = stores[tableNameOf(table)];
+        const removed: Row[] = [];
+        for (const [id, row] of Array.from(store.entries())) {
+          if (matches(row, pred)) {
+            store.delete(id);
+            removed.push({ id });
+          }
+        }
+        return removed;
+      },
     }),
   };
 }
@@ -122,12 +147,18 @@ function makeInsert(table: unknown) {
   };
 }
 
-const tx = { select: makeSelect, insert: makeInsert, update: makeUpdate };
+const tx = {
+  select: makeSelect,
+  insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
+};
 type Tx = typeof tx;
 const fakeDb = {
   select: makeSelect,
   insert: makeInsert,
   update: makeUpdate,
+  delete: makeDelete,
   transaction: <T,>(cb: (tx: Tx) => Promise<T>): Promise<T> => cb(tx),
 };
 
@@ -355,6 +386,137 @@ describe("seedChateauKnollIfMissing", () => {
     const result = await seedChateauKnollIfMissing({ logger: silentLogger });
     expect(result.totalBedsBumped).toBe(false);
     expect(stores.properties.get("operator-prop")!["totalBeds"]).toBe(12);
+  });
+
+  it("attaches the property to the Greystone Manufacturing end-client when one exists, and skips the corporate fallback", async () => {
+    stores.customers.set("cust-greystone", {
+      id: "cust-greystone",
+      name: "Greystone Manufacturing - Bettendorf, IA",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+
+    expect(result.customerId).toBe("cust-greystone");
+    expect(result.customerInserted).toBe(false);
+    expect(result.fallbackCustomerDeleted).toBe(false);
+    expect(stores.customers.has(SEED_CHATEAU_KNOLL_IDS.customer)).toBe(false);
+
+    const property = stores.properties.get(SEED_CHATEAU_KNOLL_IDS.property)!;
+    expect(property["customerId"]).toBe("cust-greystone");
+
+    expect(result.leasesInserted).toBe(6);
+    for (const unit of ["1407", "1506", "2108", "3512", "3524", "3604"]) {
+      const lease = stores.leases.get(SEED_CHATEAU_KNOLL_IDS.leases[unit]!)!;
+      expect(lease["propertyId"]).toBe(SEED_CHATEAU_KNOLL_IDS.property);
+    }
+  });
+
+  it("matches the Greystone end-client by 'Greystone Manufacturing' (no city suffix) too", async () => {
+    stores.customers.set("cust-greystone-short", {
+      id: "cust-greystone-short",
+      name: "Greystone Manufacturing",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+
+    expect(result.customerId).toBe("cust-greystone-short");
+    expect(stores.customers.has(SEED_CHATEAU_KNOLL_IDS.customer)).toBe(false);
+    const property = stores.properties.get(SEED_CHATEAU_KNOLL_IDS.property)!;
+    expect(property["customerId"]).toBe("cust-greystone-short");
+  });
+
+  it("repoints a property previously attached to the corporate fallback once Greystone shows up, and deletes the unused fallback", async () => {
+    // First boot: no Greystone yet — falls back to "KFI Staffing — Corporate".
+    const first = await seedChateauKnollIfMissing({ logger: silentLogger });
+    expect(first.customerInserted).toBe(true);
+    expect(first.repointedToEndClient).toBe(false);
+    expect(first.fallbackCustomerDeleted).toBe(false);
+    expect(
+      stores.properties.get(SEED_CHATEAU_KNOLL_IDS.property)!["customerId"],
+    ).toBe(SEED_CHATEAU_KNOLL_IDS.customer);
+
+    // Master file lands and creates the Greystone customer.
+    stores.customers.set("cust-greystone", {
+      id: "cust-greystone",
+      name: "Greystone Manufacturing - Bettendorf, IA",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    // Second boot: should repoint the property and remove the orphaned
+    // corporate fallback.
+    const second = await seedChateauKnollIfMissing({ logger: silentLogger });
+    expect(second.repointedToEndClient).toBe(true);
+    expect(second.fallbackCustomerDeleted).toBe(true);
+    expect(second.customerId).toBe("cust-greystone");
+    expect(stores.customers.has(SEED_CHATEAU_KNOLL_IDS.customer)).toBe(false);
+    expect(stores.customers.has("cust-greystone")).toBe(true);
+
+    const property = stores.properties.get(SEED_CHATEAU_KNOLL_IDS.property)!;
+    expect(property["customerId"]).toBe("cust-greystone");
+
+    // All 6 leases still roll up under the property (and so under
+    // Greystone) — no leases were lost in the repoint.
+    expect(stores.leases.size).toBe(6);
+    for (const unit of ["1407", "1506", "2108", "3512", "3524", "3604"]) {
+      const lease = stores.leases.get(SEED_CHATEAU_KNOLL_IDS.leases[unit]!)!;
+      expect(lease["propertyId"]).toBe(SEED_CHATEAU_KNOLL_IDS.property);
+    }
+  });
+
+  it("does not repoint or delete anything when the property is attached to an operator-chosen non-fallback customer", async () => {
+    // Operator manually attached Chateau Knoll to a different
+    // downstream client; Greystone also exists.
+    stores.customers.set("operator-cust", {
+      id: "operator-cust",
+      name: "Operator Custom Client",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.customers.set("cust-greystone", {
+      id: "cust-greystone",
+      name: "Greystone Manufacturing",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.properties.set("operator-prop", {
+      id: "operator-prop",
+      customerId: "operator-cust",
+      name: "Chateau Knoll (operator)",
+      address: "2900 Middle Rd",
+      city: "Bettendorf",
+      state: "IA",
+      zip: "52722",
+      totalBeds: 6,
+      notes: "operator notes",
+    });
+
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+
+    // Operator's choice is preserved — we only repoint AWAY from the
+    // legacy "KFI Staffing — Corporate" fallback id.
+    expect(result.repointedToEndClient).toBe(false);
+    expect(result.customerId).toBe("operator-cust");
+    expect(stores.properties.get("operator-prop")!["customerId"]).toBe(
+      "operator-cust",
+    );
+    // Both real customers preserved.
+    expect(stores.customers.has("operator-cust")).toBe(true);
+    expect(stores.customers.has("cust-greystone")).toBe(true);
   });
 
   it("does not duplicate leases that another import already wrote without our '— Unit N —' marker", async () => {

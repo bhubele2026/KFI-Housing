@@ -17,6 +17,15 @@ export const chateauKnollLeaseId = (unit: string): string =>
   `lease-chateau-knoll-u${unit}`;
 
 const CHATEAU_CUSTOMER_NAME = "KFI Staffing — Corporate";
+/**
+ * The downstream end-client for Chateau Knoll, per master file row 33
+ * (`Greystone Manufacturing - Bettendorf, IA`). Matched LIKE so we
+ * accept either the master-file form (`"Greystone Manufacturing -
+ * Bettendorf, IA"`) or the canonical payroll form
+ * (`"Greystone Manufacturing"`) — whichever the master-file import
+ * (#288) or operator created first.
+ */
+const CHATEAU_END_CLIENT_NAME_PATTERN = "Greystone Manufacturing%";
 const CHATEAU_ADDRESS = "2900 Middle Rd";
 const CHATEAU_CITY = "Bettendorf";
 const CHATEAU_STATE = "IA";
@@ -235,6 +244,17 @@ export interface SeedChateauKnollResult {
   leasesInserted: number;
   propertyId: string | null;
   unitsPresent: string[];
+  /** Customer the property is attached to after this run. Either the
+   *  Greystone Manufacturing end-client (when found) or the corporate
+   *  KFI fallback when it isn't yet. */
+  customerId: string | null;
+  /** True when the property was repointed from the legacy fallback
+   *  ("KFI Staffing — Corporate") to the real Greystone Manufacturing
+   *  end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned "KFI Staffing — Corporate" fallback
+   *  customer was deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedChateauKnollDeps {
@@ -264,6 +284,19 @@ export async function seedChateauKnollIfMissing(
   const log = deps.logger ?? defaultLogger;
 
   const result = await database.transaction(async (tx) => {
+    // 0. Look up the downstream end-client (Greystone Manufacturing) up
+    //    front. The master-file import (#288) runs before this seed and,
+    //    when present, gives us the real customer to attach the
+    //    property to instead of the legacy "KFI Staffing — Corporate"
+    //    fallback (Task #312).
+    const endClientRows = await tx
+      .select({ id: customersTable.id })
+      .from(customersTable)
+      .where(like(customersTable.name, CHATEAU_END_CLIENT_NAME_PATTERN))
+      .limit(1);
+    const endClientId =
+      endClientRows.length > 0 ? (endClientRows[0]!.id as string) : null;
+
     // 1. Property reconciliation by (address, zip) first — this protects
     //    against #287/#288 having already created a Chateau Knoll record
     //    under a different customer.
@@ -287,6 +320,7 @@ export async function seedChateauKnollIfMissing(
     let propertyInserted = false;
     let customerInserted = false;
     let totalBedsBumped = false;
+    let repointedToEndClient = false;
 
     if (existingByAddress.length > 0) {
       propertyId = existingByAddress[0]!.id;
@@ -307,9 +341,56 @@ export async function seedChateauKnollIfMissing(
         )
         .returning({ id: propertiesTable.id });
       totalBedsBumped = updated.length > 0;
+
+      // Task #312: if the property is currently attached to the legacy
+      // "KFI Staffing — Corporate" fallback (because this seed ran on a
+      // previous boot before the master-file import created the
+      // Greystone customer), repoint it now that the end-client is
+      // known. We deliberately only repoint AWAY from the corporate
+      // fallback id — operator-set customers (e.g. another downstream
+      // client) are preserved.
+      if (
+        endClientId !== null &&
+        customerId !== endClientId &&
+        customerId === CHATEAU_KNOLL_CUSTOMER_ID
+      ) {
+        await tx
+          .update(propertiesTable)
+          .set({ customerId: endClientId })
+          .where(eq(propertiesTable.id, propertyId));
+        customerId = endClientId;
+        repointedToEndClient = true;
+      }
+    } else if (endClientId !== null) {
+      // 2a. Fresh insert under the known end-client — no fallback
+      //     customer is created.
+      customerId = endClientId;
+      propertyId = CHATEAU_KNOLL_PROPERTY_ID;
+      const insertedProp = await tx
+        .insert(propertiesTable)
+        .values(buildPropertyRow(propertyId, customerId))
+        .onConflictDoNothing()
+        .returning({ id: propertiesTable.id });
+      propertyInserted = insertedProp.length > 0;
+      if (!propertyInserted) {
+        const reread = await tx
+          .select({ id: propertiesTable.id })
+          .from(propertiesTable)
+          .where(
+            and(
+              eq(propertiesTable.address, CHATEAU_ADDRESS),
+              eq(propertiesTable.zip, CHATEAU_ZIP),
+            ),
+          )
+          .limit(1);
+        if (reread.length > 0) propertyId = reread[0]!.id;
+      }
     } else {
-      // 2. No existing property — find or create the corporate fallback
-      //    customer, then insert the property under it.
+      // 2b. No existing property AND no end-client yet — fall back to
+      //     creating "KFI Staffing — Corporate" so the leases still
+      //     have a customer to roll up under. The next boot (after the
+      //     master file lands Greystone) will repoint via the branch
+      //     above and clean up the fallback.
       const existingCustomer = await tx
         .select({ id: customersTable.id })
         .from(customersTable)
@@ -420,6 +501,28 @@ export async function seedChateauKnollIfMissing(
       }
     }
 
+    // 4. Cleanup: drop the legacy "KFI Staffing — Corporate" fallback
+    //    customer when nothing else still references it. Other KFI
+    //    seeds (Park Place, Kolbe Wausau) own their own
+    //    "KFI Staffing – <city>" customers and never read this exact
+    //    "— Corporate" name, so removing it once it has no properties
+    //    is safe and keeps the customer list clean (Task #312).
+    let fallbackCustomerDeleted = false;
+    if (endClientId !== null) {
+      const stillUsed = await tx
+        .select({ id: propertiesTable.id })
+        .from(propertiesTable)
+        .where(eq(propertiesTable.customerId, CHATEAU_KNOLL_CUSTOMER_ID))
+        .limit(1);
+      if (stillUsed.length === 0) {
+        const deleted = await tx
+          .delete(customersTable)
+          .where(eq(customersTable.id, CHATEAU_KNOLL_CUSTOMER_ID))
+          .returning({ id: customersTable.id });
+        fallbackCustomerDeleted = deleted.length > 0;
+      }
+    }
+
     return {
       customerInserted,
       propertyInserted,
@@ -427,6 +530,9 @@ export async function seedChateauKnollIfMissing(
       leasesInserted,
       propertyId,
       unitsPresent,
+      customerId,
+      repointedToEndClient,
+      fallbackCustomerDeleted,
     };
   });
 
@@ -434,7 +540,9 @@ export async function seedChateauKnollIfMissing(
     result.customerInserted ||
     result.propertyInserted ||
     result.totalBedsBumped ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Chateau Knoll seed applied.");
   }

@@ -1,11 +1,13 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { Briefcase, Menu, X } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
 import { Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
+import { useData } from "@/context/data-store";
 
 const COLLAPSED_STORAGE_KEY = "housingops:sidebar-collapsed";
 
@@ -29,6 +31,12 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState<boolean>(readPersistedCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { customerId, setCustomerId } = useCustomerScope();
+  const { customers } = useData();
+  const activeScopedCustomer =
+    customerId !== ALL_CUSTOMERS
+      ? customers.find((c) => c.id === customerId)
+      : undefined;
 
   // Remember the last authenticated page so reopening the tab lands the
   // operator back where they left off instead of always on /dashboard.
@@ -92,6 +100,40 @@ export function MainLayout({ children }: { children: ReactNode }) {
             <Menu className="h-5 w-5" />
           </Button>
           <span className="text-sm font-semibold">HousingOps</span>
+          {activeScopedCustomer ? (
+            <div
+              className="ml-auto flex min-w-0 items-center gap-1 rounded-md border border-border bg-accent/40 py-1 pl-2 pr-1"
+              data-testid="mobile-header-customer-scope"
+            >
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                className="flex min-w-0 items-center gap-1.5 text-left"
+                aria-label={`Filtered by customer: ${activeScopedCustomer.name}. Open navigation.`}
+              >
+                <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                <span
+                  className="truncate max-w-[40vw] text-xs font-medium"
+                  title={activeScopedCustomer.name}
+                  data-testid="text-mobile-header-customer-name"
+                >
+                  {activeScopedCustomer.name}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCustomerId(ALL_CUSTOMERS);
+                }}
+                className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                aria-label="Clear customer filter"
+                data-testid="button-mobile-header-clear-customer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : null}
         </div>
         <main className="flex-1 overflow-y-auto">
           {/* Inner boundary so a crash inside the page body keeps the

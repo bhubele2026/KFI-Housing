@@ -13,6 +13,27 @@ vi.mock("wouter", () => ({
   ),
 }));
 
+// MainLayout reads the active customer scope to render a chip in the
+// mobile header. The route-guard tests don't care about that wiring, so
+// we replace both contexts with the minimal surface MainLayout uses.
+vi.mock("@/context/customer-scope", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/context/customer-scope")>(
+      "@/context/customer-scope",
+    );
+  return {
+    ...actual,
+    useCustomerScope: () => ({
+      customerId: actual.ALL_CUSTOMERS,
+      setCustomerId: vi.fn(),
+    }),
+  };
+});
+
+vi.mock("@/context/data-store", () => ({
+  useData: () => ({ customers: [] }),
+}));
+
 import { MainLayout } from "./main-layout";
 import { AuthProvider } from "@/hooks/use-auth";
 

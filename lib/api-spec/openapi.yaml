@@ -1114,6 +1114,14 @@ components:
             Leases "By customer" view can show one lease under each
             customer. Empty string means "fall back to property's
             customerId".
+        customerResponsibleForRent:
+          type: boolean
+          description: |
+            True when the customer (not the occupant) is on the hook
+            for rent, utilities, and damages on this lease — e.g.
+            corporate-responsibility units like the KFI-responsible
+            Chateau Knoll units called out in the 01/22/2026 LOI.
+            Defaults to false. Added by task #313.
     LeaseUpdate:
       type: object
       properties:
@@ -1137,6 +1145,7 @@ components:
         monthlyRoomNightMin: { type: integer }
         longStayTaxExempt: { type: boolean }
         customerId: { type: string }
+        customerResponsibleForRent: { type: boolean }
 
     RoomNightLog:
       type: object

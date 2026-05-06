@@ -135,6 +135,7 @@ function makeCreateDraft(propertyId: string): Lease {
     guaranteedRooms: 0,
     monthlyRoomNightMin: 0,
     longStayTaxExempt: false,
+    customerResponsibleForRent: false,
   };
 }
 
@@ -699,6 +700,20 @@ export default function LeaseDetail() {
                   >
                     <AlertTriangle className="h-3 w-3" />
                     Needs review
+                  </Badge>
+                )}
+                {(lease.customerResponsibleForRent ?? false) && (
+                  // Corporate-responsibility badge (task #313). Mirrors the
+                  // pill on the leases table so operators recognize the
+                  // same signal regardless of where they opened the lease.
+                  <Badge
+                    variant="outline"
+                    className="text-xs gap-1 border-indigo-300 bg-indigo-50 text-indigo-800"
+                    title="The customer (not the occupant) is on the hook for rent, utilities, and damages on this lease."
+                    data-testid="badge-lease-customer-responsible"
+                  >
+                    <Briefcase className="h-3 w-3" />
+                    {customer ? `${customer.name} pays` : "Customer pays"}
                   </Badge>
                 )}
               </div>

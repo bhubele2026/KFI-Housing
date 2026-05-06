@@ -254,6 +254,12 @@ export const LeaseSchema = z.object({
   // literals parse cleanly; the API populates it on the wire. Callers
   // fall back to the parent property's customerId when absent.
   customerId: z.string().optional(),
+  // Corporate-responsibility flag (task #313). True when the customer
+  // (e.g. KFI Staffing per the 01/22/2026 Chateau Knoll LOI) is on the
+  // hook for rent, utilities, and damages on this unit. Optional with a
+  // safe default so legacy backups and ordinary occupant-paid leases
+  // parse unchanged.
+  customerResponsibleForRent: z.boolean().optional().default(false),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 
@@ -891,6 +897,7 @@ const LEASE_EXTENDED_DEFAULTS = {
   guaranteedRooms: 0,
   monthlyRoomNightMin: 0,
   longStayTaxExempt: false,
+  customerResponsibleForRent: false,
 };
 
 export const MOCK_LEASES: Lease[] = [

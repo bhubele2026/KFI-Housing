@@ -4,7 +4,7 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
@@ -511,8 +511,13 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
   // the most useful number is visible without opening the lease detail.
   const isRateBased = lease.rateType === "room-night";
   const nightlyRate = lease.nightlyRate ?? 0;
+  // Corporate-responsibility flag (task #313) — when true the customer
+  // (not the occupant) is on the hook for rent, utilities, and damages.
+  // Surfaced as a pill so operators can scan the table for which rows
+  // their customer must invoice or chase up directly.
+  const isCustomerResponsible = lease.customerResponsibleForRent ?? false;
 
-  if (!hasBuyout && !hasClauses && !isRateBased) {
+  if (!hasBuyout && !hasClauses && !isRateBased && !isCustomerResponsible) {
     return (
       <span
         className="text-sm text-muted-foreground"
@@ -547,6 +552,17 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
           {lease.buyoutCost == null
             ? "Buyout"
             : `Buyout: $${lease.buyoutCost.toLocaleString()}`}
+        </Badge>
+      )}
+      {isCustomerResponsible && (
+        <Badge
+          variant="outline"
+          className="gap-1 text-[11px] font-medium border-indigo-300 bg-indigo-50 text-indigo-800"
+          title="The customer (not the occupant) is on the hook for rent, utilities, and damages on this lease."
+          data-testid={`badge-lease-customer-responsible-${lease.id}`}
+        >
+          <Briefcase className="h-3 w-3" />
+          Customer pays
         </Badge>
       )}
       {hasClauses && (

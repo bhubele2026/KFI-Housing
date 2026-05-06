@@ -278,6 +278,12 @@ export const ImportDataBody = zod.object({
         .describe(
           'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
         ),
+      customerResponsibleForRent: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
+        ),
     }),
   ),
   rooms: zod.array(
@@ -1015,6 +1021,12 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
     ),
+  customerResponsibleForRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1102,6 +1114,12 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+    ),
+  customerResponsibleForRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
     ),
 });
 
@@ -1413,6 +1431,7 @@ export const UpdateLeaseBody = zod.object({
   monthlyRoomNightMin: zod.number().optional(),
   longStayTaxExempt: zod.boolean().optional(),
   customerId: zod.string().optional(),
+  customerResponsibleForRent: zod.boolean().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1496,6 +1515,12 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+    ),
+  customerResponsibleForRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
     ),
 });
 

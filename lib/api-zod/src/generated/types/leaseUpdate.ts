@@ -30,4 +30,5 @@ export interface LeaseUpdate {
   monthlyRoomNightMin?: number;
   longStayTaxExempt?: boolean;
   customerId?: string;
+  customerResponsibleForRent?: boolean;
 }

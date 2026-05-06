@@ -45,6 +45,7 @@ function makeProperty(overrides: Partial<PropertyRow> = {}): PropertyRow {
     notes: "",
     furnishings: [],
     customerId: "",
+    sharedWithCustomerIds: [],
     ratings: EMPTY_RATINGS,
     lat: null,
     lng: null,

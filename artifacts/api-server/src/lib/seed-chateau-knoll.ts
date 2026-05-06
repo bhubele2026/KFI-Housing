@@ -234,6 +234,7 @@ function buildLeaseRow(
     clauses: buildLeaseClauses(spec),
     buyoutAvailable: false,
     buyoutCost: null,
+    customerResponsibleForRent: spec.loiKfiResponsible,
   };
 }
 

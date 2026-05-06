@@ -43,6 +43,14 @@ export const leasesTable = pgTable("leases", {
   // Leases "By customer" view can show one lease under each. Empty
   // string ("") means "fall back to the property's customerId".
   customerId: text("customer_id").notNull().default(""),
+  // Corporate-responsibility flag (task #313). True when the customer
+  // (e.g. KFI Staffing per the 01/22/2026 Chateau Knoll LOI) is on the
+  // hook for rent, utilities, and damages on this unit — i.e. the
+  // landlord bills the customer rather than the occupant. Defaults to
+  // false so legacy rows and ordinary occupant-paid leases are unchanged.
+  customerResponsibleForRent: boolean("customer_responsible_for_rent")
+    .notNull()
+    .default(false),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

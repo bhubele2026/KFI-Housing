@@ -612,6 +612,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         guaranteedRooms: 0,
         monthlyRoomNightMin: 0,
         longStayTaxExempt: false,
+        customerResponsibleForRent: false,
       };
       addLease(newLease);
 

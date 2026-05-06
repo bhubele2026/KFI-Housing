@@ -288,12 +288,16 @@ describe("seedChateauKnollIfMissing", () => {
       const row = stores.leases.get(id)!;
       expect(String(row["notes"])).toMatch(/KFI Staffing is responsible/i);
       expect(String(row["clauses"])).toMatch(/01\/22\/2026 LOI/);
+      // Structured corporate-responsibility flag (task #313) so the
+      // leases UI can render a badge without parsing free-text notes.
+      expect(row["customerResponsibleForRent"]).toBe(true);
     }
 
     for (const unit of ["1407", "1506"]) {
       const id = SEED_CHATEAU_KNOLL_IDS.leases[unit]!;
       const row = stores.leases.get(id)!;
       expect(String(row["notes"])).not.toMatch(/KFI Staffing is responsible/i);
+      expect(row["customerResponsibleForRent"]).toBe(false);
     }
   });
 

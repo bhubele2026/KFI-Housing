@@ -390,6 +390,13 @@ customer. Empty string means "fall back to property's
 customerId".
  */
   customerId?: string;
+  /** True when the customer (not the occupant) is on the hook
+for rent, utilities, and damages on this lease — e.g.
+corporate-responsibility units like the KFI-responsible
+Chateau Knoll units called out in the 01/22/2026 LOI.
+Defaults to false. Added by task #313.
+ */
+  customerResponsibleForRent?: boolean;
 }
 
 export type LeaseUpdateStatus =
@@ -430,6 +437,7 @@ export interface LeaseUpdate {
   monthlyRoomNightMin?: number;
   longStayTaxExempt?: boolean;
   customerId?: string;
+  customerResponsibleForRent?: boolean;
 }
 
 export interface RoomNightLog {

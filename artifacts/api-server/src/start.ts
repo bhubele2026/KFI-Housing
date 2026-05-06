@@ -15,6 +15,7 @@ export interface StartDeps {
   backfillOccupantPayrollIds: () => Promise<void>;
   seedHickoryHavenIfMissing: () => Promise<void>;
   seedGreenockManorIfMissing: () => Promise<void>;
+  seedParkPlaceIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -249,6 +250,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Greenock Manor seed — continuing to serve",
+    );
+  }
+
+  // Idempotent KFI Staffing / Park Place Plymouth seed (Task #289);
+  // non-fatal for the same reason.
+  try {
+    await deps.seedParkPlaceIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Park Place seed — continuing to serve",
     );
   }
 

@@ -171,6 +171,7 @@ vi.mock("@workspace/db", () => ({
     startDate: { __col: "startDate" },
     endDate: { __col: "endDate" },
     notes: { __col: "notes" },
+    unit: { __col: "unit" },
   },
   roomsTable: {
     __table: "rooms",
@@ -283,6 +284,8 @@ describe("seedPatriotBarabooIfMissing", () => {
       expect(clauses).toContain(`Source document: ${sources[unit]}`);
       expect(String(lease["notes"])).toMatch(new RegExp(`Unit ${unit} —`));
       expect(String(lease["notes"])).toMatch(/\$10\.50 LLI/);
+      // Task #310: unit lives in a real column, not just the notes prose.
+      expect(lease["unit"]).toBe(unit);
     }
   });
 

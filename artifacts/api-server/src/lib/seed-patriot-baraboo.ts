@@ -155,6 +155,7 @@ function buildLeaseRow(
     clauses: buildClauses(spec),
     buyoutAvailable: false,
     buyoutCost: null,
+    unit: spec.unit,
   };
 }
 

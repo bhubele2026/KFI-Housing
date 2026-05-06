@@ -260,6 +260,10 @@ export const LeaseSchema = z.object({
   // safe default so legacy backups and ordinary occupant-paid leases
   // parse unchanged.
   customerResponsibleForRent: z.boolean().optional().default(false),
+  // Apartment-unit identifier inside a multi-unit property (task #310).
+  // Optional so legacy backups, manual create flows, and older API
+  // clients keep parsing. Treat `undefined` as "no unit".
+  unit: z.string().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

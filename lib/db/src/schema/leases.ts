@@ -51,6 +51,15 @@ export const leasesTable = pgTable("leases", {
   customerResponsibleForRent: boolean("customer_responsible_for_rent")
     .notNull()
     .default(false),
+  // First-class apartment-unit identifier inside a multi-unit property
+  // (task #310). Empty for single-unit / whole-house leases. The UI
+  // groups Property → Units → Lease + Occupants by this field, so two
+  // leases on the same property should never share the same non-empty
+  // unit unless they overlap in time. Stored verbatim — operators may
+  // put "509", "500-118", "Apt 3B", etc. The legacy `Unit XXX —`
+  // marker in lease notes is preserved for audit trail but no longer
+  // the source of truth.
+  unit: text("unit").notNull().default(""),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

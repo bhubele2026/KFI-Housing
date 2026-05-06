@@ -31,4 +31,5 @@ export interface LeaseUpdate {
   longStayTaxExempt?: boolean;
   customerId?: string;
   customerResponsibleForRent?: boolean;
+  unit?: string;
 }

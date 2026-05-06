@@ -284,6 +284,12 @@ export const ImportDataBody = zod.object({
         .describe(
           "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
         ),
+      unit: zod
+        .string()
+        .optional()
+        .describe(
+          'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
+        ),
     }),
   ),
   rooms: zod.array(
@@ -1033,6 +1039,12 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
     ),
+  unit: zod
+    .string()
+    .optional()
+    .describe(
+      'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1126,6 +1138,12 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
+    ),
+  unit: zod
+    .string()
+    .optional()
+    .describe(
+      'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
     ),
 });
 
@@ -1471,6 +1489,7 @@ export const UpdateLeaseBody = zod.object({
   longStayTaxExempt: zod.boolean().optional(),
   customerId: zod.string().optional(),
   customerResponsibleForRent: zod.boolean().optional(),
+  unit: zod.string().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1560,6 +1579,12 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       "True when the customer (not the occupant) is on the hook\nfor rent, utilities, and damages on this lease — e.g.\ncorporate-responsibility units like the KFI-responsible\nChateau Knoll units called out in the 01\/22\/2026 LOI.\nDefaults to false. Added by task #313.\n",
+    ),
+  unit: zod
+    .string()
+    .optional()
+    .describe(
+      'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
     ),
 });
 

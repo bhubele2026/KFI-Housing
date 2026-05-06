@@ -495,7 +495,7 @@ export default function PropertyDetail() {
   // at first render because the browser's location is the source of
   // truth.
   const PROPERTY_TABS = useMemo(
-    () => new Set(["overview", "leases", "beds", "furnishings", "utilities", "finance"]),
+    () => new Set(["overview", "leases", "units", "beds", "furnishings", "utilities", "finance"]),
     [],
   );
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -579,6 +579,42 @@ export default function PropertyDetail() {
   const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
   const propLeases = leases.filter(l => l.propertyId === id);
   const sortedPropLeases = sortLeases(propLeases);
+
+  // ── Units (task #310) ───────────────────────────────────────────
+  // First-class apartment units inside a multi-unit property. We
+  // derive the list from the new `lease.unit` column (unique,
+  // non-empty values, sorted naturally so "509" sorts before "811"
+  // and before "1010"). For each unit we collect every lease that
+  // belongs to it (active first), then resolve its occupants by
+  // matching the room named "Unit <unit>" → beds → occupants. Park
+  // Place leases live without rooms today, so the occupant list will
+  // simply be empty there until rooms are seeded — that's intentional
+  // and the UI explains it.
+  const propertyUnits = useMemo(() => {
+    const byUnit = new Map<string, Lease[]>();
+    for (const l of propLeases) {
+      const u = (l.unit ?? "").trim();
+      if (!u) continue;
+      const list = byUnit.get(u) ?? [];
+      list.push(l);
+      byUnit.set(u, list);
+    }
+    const naturalCompare = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    return Array.from(byUnit.entries())
+      .sort(([a], [b]) => naturalCompare(a, b))
+      .map(([unit, unitLeases]) => {
+        const sortedLeases = sortLeases(unitLeases);
+        const room = propRooms.find(
+          (r) => r.name === `Unit ${unit}` || r.name === unit,
+        );
+        const unitBeds = room ? propBeds.filter((b) => b.roomId === room.id) : [];
+        const unitOccupants = unitBeds
+          .map((b) => propOccupants.find((o) => o.bedId === b.id))
+          .filter((o): o is Occupant => Boolean(o));
+        return { unit, leases: sortedLeases, room, beds: unitBeds, occupants: unitOccupants };
+      });
+  }, [propLeases, propRooms, propBeds, propOccupants]);
   const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
   // A property can have more than one Active lease at a time (overlapping
   // renewals, multi-room agreements). Picking just the first match silently
@@ -781,9 +817,16 @@ export default function PropertyDetail() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-6 w-full max-w-3xl">
+          <TabsList
+            className={`grid w-full max-w-3xl ${propertyUnits.length > 0 ? "grid-cols-7" : "grid-cols-6"}`}
+          >
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
+            {propertyUnits.length > 0 && (
+              <TabsTrigger value="units" data-testid="tab-trigger-units">
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />Units
+              </TabsTrigger>
+            )}
             <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />Beds</TabsTrigger>
             <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />Furnishings</TabsTrigger>
             <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
@@ -1320,6 +1363,91 @@ export default function PropertyDetail() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* ── UNITS TAB (task #310) ──────────────────────────────
+              For multi-unit properties (Park Place, Patriot Baraboo)
+              we group leases by their `unit` field so operators can see
+              "what's going on in 509" without scanning the full lease
+              list. Each unit card shows the lease (active first), its
+              term + rent, and any occupants we can resolve via the
+              "Unit <n>" room → bed → occupant chain. */}
+          {propertyUnits.length > 0 && (
+            <TabsContent value="units" className="space-y-4" data-testid="tab-content-units">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    {propertyUnits.length} unit{propertyUnits.length === 1 ? "" : "s"} on this property
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {propertyUnits.map(({ unit, leases: unitLeases, occupants: unitOccupants, beds: unitBeds }) => {
+                    const activeLease = unitLeases.find((l) => l.status === "Active") ?? unitLeases[0];
+                    return (
+                      <div
+                        key={unit}
+                        className="border rounded-md p-3 space-y-2"
+                        data-testid={`unit-card-${unit}`}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold" data-testid={`unit-label-${unit}`}>
+                              Unit {unit}
+                            </span>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {unitLeases.length} lease{unitLeases.length === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                          {activeLease && (
+                            <Link href={`/leases/${activeLease.id}?from=${encodeURIComponent(`/properties/${id}?tab=units`)}`}>
+                              <button
+                                type="button"
+                                className="text-sm hover:underline flex items-center gap-2"
+                                data-testid={`unit-active-lease-${unit}`}
+                              >
+                                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>{activeLease.startDate || "—"} → {activeLease.endDate || "—"}</span>
+                                <Badge
+                                  variant={activeLease.status === "Active" ? "default" : activeLease.status === "Expired" ? "destructive" : "secondary"}
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {activeLease.status}
+                                </Badge>
+                                <span className="font-medium tabular-nums">${(activeLease.monthlyRent || 0).toLocaleString()}/mo</span>
+                              </button>
+                            </Link>
+                          )}
+                        </div>
+                        {unitOccupants.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5" data-testid={`unit-occupants-${unit}`}>
+                            {unitOccupants.map((o) => (
+                              <Link key={o.id} href={`/occupants/${o.id}`}>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs gap-1 hover:bg-accent cursor-pointer"
+                                  data-testid={`unit-occupant-${unit}-${o.id}`}
+                                >
+                                  <Users className="h-3 w-3" />
+                                  {o.name}
+                                </Badge>
+                              </Link>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground" data-testid={`unit-occupants-empty-${unit}`}>
+                            {unitBeds.length === 0
+                              ? "No rooms seeded for this unit yet — add a room named \"Unit " + unit + "\" on the Beds tab to link occupants."
+                              : "No active occupants assigned."}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
 
           {/* ── BEDS TAB (grouped by room, merged with occupants) ── */}
           <TabsContent value="beds" className="space-y-4">

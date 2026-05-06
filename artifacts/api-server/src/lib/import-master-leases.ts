@@ -545,6 +545,7 @@ export async function importMasterLeases(
           weeklyCost: row.weeklyCost ?? 0,
           vendor: row.vendor,
           needsReview,
+          unit: unitTokens[0] ?? "",
         };
         // Don't clobber existing rent if the existing value is non-zero
         // and we have nothing better to offer.
@@ -580,6 +581,7 @@ export async function importMasterLeases(
         weeklyCost: row.weeklyCost ?? 0,
         vendor: row.vendor,
         needsReview,
+        unit: unitTokens[0] ?? "",
       };
       const inserted = await tx
         .insert(leasesTable)

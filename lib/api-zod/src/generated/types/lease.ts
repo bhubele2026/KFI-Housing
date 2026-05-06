@@ -83,4 +83,11 @@ Chateau Knoll units called out in the 01/22/2026 LOI.
 Defaults to false. Added by task #313.
  */
   customerResponsibleForRent?: boolean;
+  /** First-class apartment-unit identifier inside a multi-unit
+property (e.g. "509", "500-118", "Apt 3B"). Empty for
+single-unit / whole-house leases. The Property detail
+page groups leases + occupants by this field. Added by
+task #310.
+ */
+  unit?: string;
 }

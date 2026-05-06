@@ -60,13 +60,57 @@ export default function Dashboard() {
     [occupants, scopedPropertyIds],
   );
 
-  // "Needs review" mirrors the badge logic in occupants.tsx — a falsy
-  // moveInDate (empty string or null) is what triggers the inline badge —
-  // so the dashboard count stays in sync with what users see on that page.
+  // "Needs review" mirrors the per-page filters that the dashboard tiles
+  // deep-link into. Each predicate matches what the corresponding page
+  // shows when `?needsReview=1` is set — keeping the counts in sync with
+  // what the operator sees after clicking through.
+  // - Occupants: falsy moveInDate (mirrors the inline badge in occupants.tsx)
+  // - Leases:    falsy endDate    (lease without an end date)
+  // - Properties: monthlyRent of 0 / unset (property missing rent)
   const needsReviewOccupantCount = useMemo(
     () => scopedOccupants.filter((o) => !o.moveInDate).length,
     [scopedOccupants],
   );
+  const needsReviewLeaseCount = useMemo(
+    () => scopedLeases.filter((l) => !l.endDate).length,
+    [scopedLeases],
+  );
+  const needsReviewPropertyCount = useMemo(
+    () => scopedProperties.filter((p) => !(p.monthlyRent && p.monthlyRent > 0)).length,
+    [scopedProperties],
+  );
+  // Suffix the deep-link with the active customer scope so the linked
+  // page lands on the same scope the operator is already looking at.
+  const customerQuerySuffix =
+    customerFilter === ALL_CUSTOMERS
+      ? ""
+      : `&customer=${encodeURIComponent(customerFilter)}`;
+  const needsReviewItems = [
+    {
+      key: "occupants" as const,
+      count: needsReviewOccupantCount,
+      label: "Occupants missing a move-in date",
+      cta: "Review occupants",
+      href: `/occupants?needsReview=1${customerQuerySuffix}`,
+      testId: "needs-review-occupants",
+    },
+    {
+      key: "leases" as const,
+      count: needsReviewLeaseCount,
+      label: "Leases missing an end date",
+      cta: "Review leases",
+      href: `/leases?needsReview=1${customerQuerySuffix}`,
+      testId: "needs-review-leases",
+    },
+    {
+      key: "properties" as const,
+      count: needsReviewPropertyCount,
+      label: "Properties missing monthly rent",
+      cta: "Review properties",
+      href: `/properties?needsReview=1${customerQuerySuffix}`,
+      testId: "needs-review-properties",
+    },
+  ].filter((item) => item.count > 0);
 
   const totalProperties = scopedProperties.length;
   const totalBeds = scopedBeds.length;
@@ -236,35 +280,44 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {needsReviewOccupantCount > 0 && (
+        {needsReviewItems.length > 0 && (
           <Card
             className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20"
             data-testid="card-needs-review"
           >
-            <CardContent className="p-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
-                <div className="flex flex-col">
-                  <p className="text-sm font-semibold">Needs review</p>
-                  <p className="text-2xl font-bold tabular-nums" data-testid="text-needs-review-count">
-                    {needsReviewOccupantCount}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {needsReviewOccupantCount === 1 ? "occupant is" : "occupants are"} missing a move-in date.
-                  </p>
-                </div>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <p className="text-sm font-semibold">Needs review</p>
               </div>
-              <Button asChild variant="outline" data-testid="button-needs-review-cta">
-                <Link
-                  href={
-                    customerFilter === ALL_CUSTOMERS
-                      ? "/occupants?needsReview=1"
-                      : `/occupants?needsReview=1&customer=${encodeURIComponent(customerFilter)}`
-                  }
-                >
-                  Review occupants
-                </Link>
-              </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {needsReviewItems.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-start gap-3 rounded-md border border-amber-200/60 dark:border-amber-800/40 bg-card/60 p-4"
+                    data-testid={`tile-${item.testId}`}
+                  >
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <p
+                        className="text-2xl font-bold tabular-nums"
+                        data-testid={`text-${item.testId}-count`}
+                      >
+                        {item.count}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{item.label}.</p>
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 self-start"
+                        data-testid={`button-${item.testId}-cta`}
+                      >
+                        <Link href={item.href}>{item.cta}</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         )}

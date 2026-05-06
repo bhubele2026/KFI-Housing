@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useLocation } from "wouter";
+import { useEffect, useMemo } from "react";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { getRenewalInfo, sortLeases } from "@/data/mockData";
@@ -25,11 +25,38 @@ import { useState } from "react";
 // what to do with it.
 type BuyoutFilter = "All" | "Yes" | "No";
 
+type NeedsReviewFilter = "All" | "NeedsReview";
+
 export default function Leases() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("All");
   const [buyoutFilter, setBuyoutFilter] = useState<BuyoutFilter>("All");
+  // URL-driven so the dashboard "Needs review" tile can deep-link straight
+  // to the subset of leases missing an end date (`?needsReview=1`), mirroring
+  // the pattern in occupants.tsx.
+  const searchString = useSearch();
+  const [needsReviewFilter, setNeedsReviewFilter] = useState<NeedsReviewFilter>(
+    () =>
+      new URLSearchParams(searchString).get("needsReview") === "1"
+        ? "NeedsReview"
+        : "All",
+  );
+  useEffect(() => {
+    const next: NeedsReviewFilter =
+      new URLSearchParams(searchString).get("needsReview") === "1"
+        ? "NeedsReview"
+        : "All";
+    setNeedsReviewFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+  const updateNeedsReviewFilter = (value: NeedsReviewFilter) => {
+    setNeedsReviewFilter(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "NeedsReview") params.set("needsReview", "1");
+    else params.delete("needsReview");
+    const qs = params.toString();
+    navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
+  };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
@@ -62,12 +89,16 @@ export default function Leases() {
             if (buyoutFilter === "Yes" && !hasBuyout) return false;
             if (buyoutFilter === "No" && hasBuyout) return false;
           }
+          // Needs review = lease has no recorded end date. Empty string is the
+          // "missing" sentinel used elsewhere; a Lease's endDate is required
+          // by the schema but operators can save blank when importing.
+          if (needsReviewFilter === "NeedsReview" && l.endDate) return false;
           if (customerFilter === ALL_CUSTOMERS) return true;
           const property = propertyById.get(l.propertyId);
           return property?.customerId === customerFilter;
         }),
       ),
-    [leases, statusFilter, buyoutFilter, customerFilter, propertyById],
+    [leases, statusFilter, buyoutFilter, needsReviewFilter, customerFilter, propertyById],
   );
 
   // Placeholder rows: every property in the active customer scope that has no
@@ -84,11 +115,15 @@ export default function Leases() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [properties, leases, customerFilter]);
 
-  // Placeholders represent "properties without a lease", so any active
-  // value-based filter (status, buyout) should hide them — there is no
-  // lease to evaluate against the filter, and showing them anyway would
-  // make the filtered count misleading.
-  const showPlaceholders = statusFilter === "All" && buyoutFilter === "All";
+  // Placeholders represent properties with no lease at all, so any
+  // value-based filter on a lease (status, buyout, needs-review) also has
+  // no rows to attach them to — hide them whenever any of those filters
+  // are narrowing the lease list. Showing them anyway would make the
+  // filtered count next to the dropdown misleading.
+  const showPlaceholders =
+    statusFilter === "All" &&
+    buyoutFilter === "All" &&
+    needsReviewFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
@@ -326,6 +361,23 @@ export default function Leases() {
                     <SelectItem value="All">Any Buyout</SelectItem>
                     <SelectItem value="Yes">Buyout available</SelectItem>
                     <SelectItem value="No">No buyout</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={needsReviewFilter}
+                  onValueChange={(v) =>
+                    updateNeedsReviewFilter(v as NeedsReviewFilter)
+                  }
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-44"
+                    data-testid="select-needs-review-filter"
+                  >
+                    <SelectValue placeholder="Needs review" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All End Dates</SelectItem>
+                    <SelectItem value="NeedsReview">Needs review</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

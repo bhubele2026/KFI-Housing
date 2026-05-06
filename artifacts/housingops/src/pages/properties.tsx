@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -265,6 +265,32 @@ export default function Properties() {
     () => initialPrefs.viewMode ?? "table",
   );
 
+  // URL-driven so the dashboard "Needs review" tile can deep-link straight
+  // to properties missing rent (`?needsReview=1`), mirroring occupants.tsx.
+  // Deliberately NOT persisted to localStorage — this is a transient
+  // triage view, not a saved preference.
+  const searchString = useSearch();
+  const [needsReviewFilter, setNeedsReviewFilter] = useState<"All" | "NeedsReview">(
+    () =>
+      new URLSearchParams(searchString).get("needsReview") === "1"
+        ? "NeedsReview"
+        : "All",
+  );
+  useEffect(() => {
+    const next: "All" | "NeedsReview" =
+      new URLSearchParams(searchString).get("needsReview") === "1"
+        ? "NeedsReview"
+        : "All";
+    setNeedsReviewFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+  const clearNeedsReviewFilter = () => {
+    setNeedsReviewFilter("All");
+    const params = new URLSearchParams(window.location.search);
+    params.delete("needsReview");
+    const qs = params.toString();
+    navigate(qs ? `/properties?${qs}` : "/properties", { replace: true });
+  };
+
   // Persist toolbar prefs whenever they change. writePersistedPrefs
   // strips defaults and removes the storage key entirely when the user
   // is back to a fully-default toolbar, so storage doesn't accumulate
@@ -340,6 +366,12 @@ export default function Properties() {
       const matchesStatus = statusFilter === "All" || p.status === statusFilter;
       const matchesCustomer =
         customerFilter === ALL_CUSTOMERS || p.customerId === customerFilter;
+      // Needs review = property missing a monthly rent (0 / unset).
+      // Mirrors the "incomplete record" pattern used by the occupants
+      // missing-move-in subset and lets the dashboard tile deep-link in.
+      if (needsReviewFilter === "NeedsReview" && (p.monthlyRent || 0) > 0) {
+        return false;
+      }
       let matchesRating = true;
       if (minRatingValue !== null) {
         // Compare against whichever rating dimension the user picked —
@@ -394,7 +426,7 @@ export default function Properties() {
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, customerById, bedStatsByPropertyId]);
+  }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, needsReviewFilter, sortKey, sortDir, ratingSortCategory, customerById, bedStatsByPropertyId]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -1157,21 +1189,42 @@ export default function Properties() {
           </>}
         />
 
-        {activeCustomerName && (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
-              <Briefcase className="h-3 w-3" />
-              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
-              <button
-                type="button"
-                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
-                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                aria-label="Clear customer filter"
-                data-testid="button-clear-customer-filter"
+        {(activeCustomerName || needsReviewFilter === "NeedsReview") && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeCustomerName && (
+              <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+                <Briefcase className="h-3 w-3" />
+                Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+                <button
+                  type="button"
+                  onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
+                  className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                  aria-label="Clear customer filter"
+                  data-testid="button-clear-customer-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {needsReviewFilter === "NeedsReview" && (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 px-2 py-1 border-amber-300 text-amber-800 bg-amber-50 dark:text-amber-200 dark:bg-amber-950/40"
+                data-testid="badge-needs-review-filter"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+                <AlertTriangle className="h-3 w-3" />
+                Showing properties missing rent
+                <button
+                  type="button"
+                  onClick={clearNeedsReviewFilter}
+                  className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                  aria-label="Clear needs-review filter"
+                  data-testid="button-clear-needs-review-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
           </div>
         )}
 

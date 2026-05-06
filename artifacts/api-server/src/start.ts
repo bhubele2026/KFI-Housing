@@ -11,6 +11,7 @@ export interface StartDeps {
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
   seedAdientIfMissing: () => Promise<void>;
+  seedPatriotBarabooIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -199,6 +200,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Adient seed — continuing to serve",
+    );
+  }
+
+  // Idempotent KFI Staffing / Patriot Properties Baraboo seed (Task #292);
+  // non-fatal for the same reason.
+  try {
+    await deps.seedPatriotBarabooIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Patriot Baraboo seed — continuing to serve",
     );
   }
 

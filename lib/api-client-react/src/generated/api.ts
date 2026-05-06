@@ -28,6 +28,7 @@ import type {
   ImportLeasePdfBody,
   ImportMasterLeasesBody,
   ImportPayload,
+  LastAutoMasterImport,
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
@@ -1400,6 +1401,92 @@ export const useImportLeasePdf = <
 > => {
   return useMutation(getImportLeasePdfMutationOptions(options));
 };
+
+/**
+ * Returns the timestamp + summary counts of the most recent
+successful boot-time auto-import of the bundled master housing
+spreadsheet (Task #318). The Leases page renders this next to
+the manual "Import master file" button so operators can confirm
+the boot import ran and spot the case where it silently failed.
+
+When the boot import has never succeeded in this api-server
+process (fresh deploy that errored on its first attempt), the
+response is `{"ranAt": null}` and all count fields are omitted.
+
+ * @summary Most recent successful boot-time master-file auto-import
+ */
+export const getGetLastAutoMasterImportUrl = () => {
+  return `/api/leases/import-master/last-auto-import`;
+};
+
+export const getLastAutoMasterImport = async (
+  options?: RequestInit,
+): Promise<LastAutoMasterImport> => {
+  return customFetch<LastAutoMasterImport>(getGetLastAutoMasterImportUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLastAutoMasterImportQueryKey = () => {
+  return [`/api/leases/import-master/last-auto-import`] as const;
+};
+
+export const getGetLastAutoMasterImportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLastAutoMasterImport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLastAutoMasterImport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLastAutoMasterImportQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLastAutoMasterImport>>
+  > = ({ signal }) => getLastAutoMasterImport({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLastAutoMasterImport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLastAutoMasterImportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLastAutoMasterImport>>
+>;
+export type GetLastAutoMasterImportQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Most recent successful boot-time master-file auto-import
+ */
+
+export function useGetLastAutoMasterImport<
+  TData = Awaited<ReturnType<typeof getLastAutoMasterImport>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLastAutoMasterImport>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLastAutoMasterImportQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Idempotent admin import of the master housing lease spreadsheet

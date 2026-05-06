@@ -816,6 +816,30 @@ export interface MasterLeaseImportResult {
 }
 
 /**
+ * Timestamp + summary counts of the most recent successful
+boot-time master-file auto-import (Task #318). When the boot
+import has never succeeded in this process, `ranAt` is `null`
+and the count fields are omitted.
+
+ */
+export interface LastAutoMasterImport {
+  /**
+   * ISO-8601 timestamp of the most recent successful boot
+import, or `null` when no boot import has succeeded yet.
+
+   * @nullable
+   */
+  ranAt: string | null;
+  customersCreated?: number;
+  customersUpdated?: number;
+  propertiesCreated?: number;
+  propertiesUpdated?: number;
+  leasesCreated?: number;
+  leasesUpdated?: number;
+  leasesSkipped?: number;
+}
+
+/**
  * A close-but-not-exact existing-occupant candidate for an
 unplaced payroll row. The dashboard renders these as
 "Did you mean: <name> @ <propertyName>?" buttons that update

@@ -132,6 +132,8 @@ const {
   importMasterLeases,
   importDefaultMasterLeasesIfMissing,
   readMasterWorkbookFromBuffer,
+  getLastBootMasterImport,
+  resetLastBootMasterImportForTests,
 } = await import("./import-master-leases");
 
 const silentLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -140,6 +142,7 @@ beforeEach(() => {
   for (const s of Object.values(stores)) s.clear();
   silentLogger.info.mockClear();
   silentLogger.warn.mockClear();
+  resetLastBootMasterImportForTests();
 });
 
 async function loadRealRows(): Promise<string[][]> {
@@ -267,5 +270,39 @@ describe("importDefaultMasterLeasesIfMissing", () => {
       properties: stores.properties.size,
       leases: stores.leases.size,
     }).toEqual(before);
+  });
+
+  // Task #318: the boot wrapper records the timestamp + summary counts
+  // of its most recent successful run so the Leases page can show
+  // operators "Last auto-imported on …" next to the manual import
+  // button. Re-runs (which produce zero new inserts) still bump the
+  // timestamp so a healthy boot is always visible.
+  it("records the timestamp + summary counts of the last successful boot import", async () => {
+    expect(getLastBootMasterImport()).toBeNull();
+
+    const before = Date.now();
+    const summary = await importDefaultMasterLeasesIfMissing({
+      logger: silentLogger,
+    });
+    const after = Date.now();
+
+    const recorded = getLastBootMasterImport();
+    expect(recorded).not.toBeNull();
+    expect(recorded?.customersCreated).toBe(summary.customersCreated);
+    expect(recorded?.leasesCreated).toBe(summary.leasesCreated);
+    expect(recorded?.propertiesCreated).toBe(summary.propertiesCreated);
+
+    const ranAtMs = new Date(recorded!.ranAt).getTime();
+    expect(ranAtMs).toBeGreaterThanOrEqual(before);
+    expect(ranAtMs).toBeLessThanOrEqual(after);
+
+    // A second (idempotent) run still updates the recorded timestamp
+    // — operators want to see that the most recent boot ran cleanly,
+    // not that some earlier boot did.
+    await new Promise((r) => setTimeout(r, 5));
+    await importDefaultMasterLeasesIfMissing({ logger: silentLogger });
+    const second = getLastBootMasterImport();
+    expect(second).not.toBeNull();
+    expect(new Date(second!.ranAt).getTime()).toBeGreaterThanOrEqual(ranAtMs);
   });
 });

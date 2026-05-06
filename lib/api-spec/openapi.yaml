@@ -342,6 +342,28 @@ paths:
         "422":
           description: The PDF could not be parsed (e.g. scanned / image-only) or extraction failed.
 
+  /leases/import-master/last-auto-import:
+    get:
+      operationId: getLastAutoMasterImport
+      tags: [leases]
+      summary: Most recent successful boot-time master-file auto-import
+      description: |
+        Returns the timestamp + summary counts of the most recent
+        successful boot-time auto-import of the bundled master housing
+        spreadsheet (Task #318). The Leases page renders this next to
+        the manual "Import master file" button so operators can confirm
+        the boot import ran and spot the case where it silently failed.
+
+        When the boot import has never succeeded in this api-server
+        process (fresh deploy that errored on its first attempt), the
+        response is `{"ranAt": null}` and all count fields are omitted.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LastAutoMasterImport" }
+
   /leases/import-master:
     post:
       operationId: importMasterLeases
@@ -1495,6 +1517,29 @@ components:
         decisions:
           type: array
           items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
+
+    LastAutoMasterImport:
+      type: object
+      required: [ranAt]
+      description: |
+        Timestamp + summary counts of the most recent successful
+        boot-time master-file auto-import (Task #318). When the boot
+        import has never succeeded in this process, `ranAt` is `null`
+        and the count fields are omitted.
+      properties:
+        ranAt:
+          type: ["string", "null"]
+          format: date-time
+          description: |
+            ISO-8601 timestamp of the most recent successful boot
+            import, or `null` when no boot import has succeeded yet.
+        customersCreated: { type: integer }
+        customersUpdated: { type: integer }
+        propertiesCreated: { type: integer }
+        propertiesUpdated: { type: integer }
+        leasesCreated: { type: integer }
+        leasesUpdated: { type: integer }
+        leasesSkipped: { type: integer }
 
     UnplacedPayrollRow:
       type: object

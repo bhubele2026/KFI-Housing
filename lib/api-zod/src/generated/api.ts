@@ -1229,6 +1229,39 @@ export const ImportLeasePdfResponse = zod.object({
 });
 
 /**
+ * Returns the timestamp + summary counts of the most recent
+successful boot-time auto-import of the bundled master housing
+spreadsheet (Task #318). The Leases page renders this next to
+the manual "Import master file" button so operators can confirm
+the boot import ran and spot the case where it silently failed.
+
+When the boot import has never succeeded in this api-server
+process (fresh deploy that errored on its first attempt), the
+response is `{"ranAt": null}` and all count fields are omitted.
+
+ * @summary Most recent successful boot-time master-file auto-import
+ */
+export const GetLastAutoMasterImportResponse = zod
+  .object({
+    ranAt: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO-8601 timestamp of the most recent successful boot\nimport, or `null` when no boot import has succeeded yet.\n",
+      ),
+    customersCreated: zod.number().optional(),
+    customersUpdated: zod.number().optional(),
+    propertiesCreated: zod.number().optional(),
+    propertiesUpdated: zod.number().optional(),
+    leasesCreated: zod.number().optional(),
+    leasesUpdated: zod.number().optional(),
+    leasesSkipped: zod.number().optional(),
+  })
+  .describe(
+    "Timestamp + summary counts of the most recent successful\nboot-time master-file auto-import (Task #318). When the boot\nimport has never succeeded in this process, `ranAt` is `null`\nand the count fields are omitted.\n",
+  );
+
+/**
  * Idempotent admin import of the master housing lease spreadsheet
 (task #288). Accepts an optional uploaded `.xlsx` file; when no
 file is provided, the bundled `attached_assets/Housing_Lease_MASTER_*.xlsx`

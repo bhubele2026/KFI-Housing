@@ -10,6 +10,7 @@ import {
   importMasterLeases,
   importDefaultMasterLeases,
   readMasterWorkbookFromBuffer,
+  getLastBootMasterImport,
 } from "../lib/import-master-leases";
 import { logger } from "../lib/logger";
 
@@ -43,6 +44,18 @@ function uploadOptionalXlsx(req: Request, res: Response, next: NextFunction): vo
     next(err);
   });
 }
+
+router.get(
+  "/leases/import-master/last-auto-import",
+  (_req, res): void => {
+    const record = getLastBootMasterImport();
+    if (!record) {
+      res.json({ ranAt: null });
+      return;
+    }
+    res.json(record);
+  },
+);
 
 router.post(
   "/leases/import-master",

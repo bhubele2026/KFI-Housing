@@ -689,6 +689,34 @@ export async function importDefaultMasterLeases(
   return importMasterLeases(rows, deps);
 }
 
+/** Counts-only view of the most recent successful boot-time import. */
+export interface LastBootImportRecord {
+  ranAt: string;
+  customersCreated: number;
+  customersUpdated: number;
+  propertiesCreated: number;
+  propertiesUpdated: number;
+  leasesCreated: number;
+  leasesUpdated: number;
+  leasesSkipped: number;
+}
+
+let lastBootImport: LastBootImportRecord | null = null;
+
+/**
+ * Returns the timestamp + summary counts of the most recent successful
+ * boot-time master import (Task #318), or `null` when the boot import
+ * has never succeeded in this process.
+ */
+export function getLastBootMasterImport(): LastBootImportRecord | null {
+  return lastBootImport;
+}
+
+/** Test-only: clears the cached boot-import record. */
+export function resetLastBootMasterImportForTests(): void {
+  lastBootImport = null;
+}
+
 /**
  * Boot-time variant: runs `importDefaultMasterLeases` so a brand-new
  * environment lands with the production customer/property/lease set
@@ -697,9 +725,23 @@ export async function importDefaultMasterLeases(
  * because `importMasterLeases` matches existing rows on natural keys
  * and only updates importer-owned fields, so it's safe to call on
  * every boot.
+ *
+ * On success, records the run timestamp + summary counts so the
+ * Leases page can surface "Last auto-imported on …" (Task #318).
  */
 export async function importDefaultMasterLeasesIfMissing(
   deps: Partial<ImportDeps> = {},
 ): Promise<ImportSummary> {
-  return importDefaultMasterLeases(deps);
+  const summary = await importDefaultMasterLeases(deps);
+  lastBootImport = {
+    ranAt: new Date().toISOString(),
+    customersCreated: summary.customersCreated,
+    customersUpdated: summary.customersUpdated,
+    propertiesCreated: summary.propertiesCreated,
+    propertiesUpdated: summary.propertiesUpdated,
+    leasesCreated: summary.leasesCreated,
+    leasesUpdated: summary.leasesUpdated,
+    leasesSkipped: summary.leasesSkipped,
+  };
+  return summary;
 }

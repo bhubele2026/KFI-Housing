@@ -600,6 +600,19 @@ describe("Properties toolbar persistence", () => {
 
     await renderPage();
 
+    // Two visible customer groups → both default-collapsed, so the
+    // property rows aren't rendered yet. Expand each one explicitly so
+    // the inline-edit cells appear in the DOM.
+    for (const cid of ["c1", "c2"]) {
+      const toggle = container.querySelector(
+        `[data-testid="button-toggle-customer-group-${cid}"]`,
+      ) as HTMLButtonElement | null;
+      if (!toggle) throw new Error(`toggle for ${cid} not found`);
+      await act(async () => {
+        toggle.click();
+      });
+    }
+
     const matchingCell = container.querySelector(
       '[data-testid="inline-edit-property-name-p1"]',
     );

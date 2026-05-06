@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw } from "lucide-react";
+import { Search, Plus, ChevronRight, ChevronDown, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw } from "lucide-react";
 import { PortfolioMap, type MappableProperty } from "@/components/portfolio-map";
 import { EmptyStateRow } from "@/components/empty-state";
 import {
@@ -96,6 +96,12 @@ interface PersistedPrefs {
   sortDir?: Exclude<SortDir, null>;
   ratingSortCategory?: RatingSortKey;
   viewMode?: ViewMode;
+  // Customer ids whose collapsible group the operator has explicitly
+  // expanded. The Properties table now groups properties by customer
+  // (one collapsible row per customer); this set captures the per-row
+  // expansion state so it survives refresh / back-navigation under the
+  // same prefs key as the rest of the toolbar.
+  expandedCustomerIds?: string[];
 }
 
 function readPersistedPrefs(): PersistedPrefs {
@@ -140,6 +146,12 @@ function readPersistedPrefs(): PersistedPrefs {
     ) {
       out.viewMode = parsed.viewMode as ViewMode;
     }
+    if (Array.isArray(parsed.expandedCustomerIds)) {
+      const ids = parsed.expandedCustomerIds.filter(
+        (x): x is string => typeof x === "string" && x.length > 0,
+      );
+      if (ids.length > 0) out.expandedCustomerIds = ids;
+    }
     return out;
   } catch {
     return {};
@@ -154,6 +166,7 @@ function writePersistedPrefs(prefs: {
   sortDir: SortDir;
   ratingSortCategory: RatingSortKey;
   viewMode: ViewMode;
+  expandedCustomerIds: string[];
 }): void {
   if (typeof window === "undefined") return;
   try {
@@ -182,6 +195,9 @@ function writePersistedPrefs(prefs: {
       cleaned.ratingSortCategory = prefs.ratingSortCategory;
     }
     if (prefs.viewMode !== "table") cleaned.viewMode = prefs.viewMode;
+    if (prefs.expandedCustomerIds.length > 0) {
+      cleaned.expandedCustomerIds = [...prefs.expandedCustomerIds];
+    }
     if (Object.keys(cleaned).length === 0) {
       window.localStorage.removeItem(PROPERTIES_PREFS_STORAGE_KEY);
     } else {
@@ -265,6 +281,15 @@ export default function Properties() {
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => initialPrefs.viewMode ?? "table",
   );
+  // Per-customer expand/collapse for the customer-grouped table. Hydrated
+  // from the same prefs key as the rest of the toolbar so a refresh /
+  // back-navigation lands on the operator's last expanded set. The
+  // "auto-expand" rules below (single-customer scope, search match,
+  // single visible group) are layered on top at render time — this set
+  // only captures the operator's manual clicks.
+  const [expandedCustomerIds, setExpandedCustomerIds] = useState<Set<string>>(
+    () => new Set(initialPrefs.expandedCustomerIds ?? []),
+  );
 
   // URL-driven so the dashboard "Needs review" tile can deep-link straight
   // to properties missing rent (`?needsReview=1`), mirroring occupants.tsx.
@@ -305,8 +330,9 @@ export default function Properties() {
       sortDir,
       ratingSortCategory,
       viewMode,
+      expandedCustomerIds: Array.from(expandedCustomerIds),
     });
-  }, [statusFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, viewMode]);
+  }, [statusFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, viewMode, expandedCustomerIds]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<PropertyDraft>(EMPTY_PROPERTY_DRAFT);
@@ -428,6 +454,89 @@ export default function Properties() {
     }
     return list;
   }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, needsReviewFilter, sortKey, sortDir, ratingSortCategory, customerById, bedStatsByPropertyId]);
+
+  // Group the already-filtered/sorted property list by customer so the
+  // table can render one collapsible row per customer with the property
+  // rows nested inside. The grouping is purely presentational — we
+  // preserve the original `filtered` order within each group so all the
+  // existing sort controls (rating, beds, etc.) still apply within the
+  // expanded section.
+  const customerGroups = useMemo(() => {
+    const map = new Map<string, Property[]>();
+    for (const p of filtered) {
+      const arr = map.get(p.customerId) ?? [];
+      arr.push(p);
+      map.set(p.customerId, arr);
+    }
+    const list: { customer: Customer; properties: Property[] }[] = [];
+    for (const [cid, props] of map) {
+      const customer = customerById.get(cid);
+      if (customer) {
+        list.push({ customer, properties: props });
+      } else {
+        // Defensive fallback: if a property points to a customerId we
+        // can't resolve (stale data, pre-load race), still surface it
+        // under a synthetic header so it isn't silently dropped.
+        list.push({
+          customer: {
+            id: cid,
+            name: "Unknown customer",
+            contactName: "",
+            email: "",
+            phone: "",
+            notes: "",
+          } as Customer,
+          properties: props,
+        });
+      }
+    }
+    // Customer groups always render alphabetically by customer name —
+    // matches the sidebar ordering and keeps the list stable as
+    // properties are added.
+    list.sort((a, b) => a.customer.name.localeCompare(b.customer.name));
+    return list;
+  }, [filtered, customerById]);
+
+  // Search auto-expands every group containing a match. Since `filtered`
+  // already excludes non-matching properties, the presence of any
+  // properties in a group while a search is active means it has a
+  // match — we don't need to re-test text here.
+  const isSearchActive = search.trim().length > 0;
+  const isCustomerScoped = customerFilter !== ALL_CUSTOMERS;
+
+  const isGroupEffectivelyExpanded = useCallback(
+    (customerId: string): boolean => {
+      // When the operator has scoped to one customer, that group is
+      // auto-expanded — picking a customer should "drop down" their
+      // properties without needing an extra click.
+      if (isCustomerScoped && customerId === customerFilter) return true;
+      // Search results auto-expand so matches are visible without the
+      // operator having to click each customer to find them.
+      if (isSearchActive) return true;
+      // When only a single group is in view (e.g. only one customer's
+      // properties match the active filters), there's nothing to hide
+      // behind a collapse — auto-expand it so the page isn't a single
+      // mystery row.
+      if (customerGroups.length === 1) return true;
+      return expandedCustomerIds.has(customerId);
+    },
+    [
+      isCustomerScoped,
+      customerFilter,
+      isSearchActive,
+      customerGroups.length,
+      expandedCustomerIds,
+    ],
+  );
+
+  const toggleCustomerGroup = useCallback((customerId: string) => {
+    setExpandedCustomerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(customerId)) next.delete(customerId);
+      else next.add(customerId);
+      return next;
+    });
+  }, []);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -1885,7 +1994,48 @@ export default function Properties() {
                     testId="empty-properties-table"
                   />
                 ) : (
-                  filtered.map((property, i) => {
+                  customerGroups.flatMap((group) => {
+                    const isExpanded = isGroupEffectivelyExpanded(group.customer.id);
+                    const headerRow = (
+                      <TableRow
+                        key={`group-${group.customer.id}`}
+                        className="cursor-pointer hover:bg-muted/40 bg-muted/20 border-b"
+                        onClick={() => toggleCustomerGroup(group.customer.id)}
+                        data-testid={`row-customer-group-${group.customer.id}`}
+                        data-expanded={isExpanded ? "true" : "false"}
+                      >
+                        <TableCell colSpan={11} className="py-2.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCustomerGroup(group.customer.id);
+                            }}
+                            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-foreground/90 focus:outline-none"
+                            aria-expanded={isExpanded}
+                            aria-controls={`group-${group.customer.id}-rows`}
+                            data-testid={`button-toggle-customer-group-${group.customer.id}`}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span>{group.customer.name}</span>
+                            <Badge
+                              variant="secondary"
+                              className="text-[11px]"
+                              data-testid={`badge-customer-group-count-${group.customer.id}`}
+                            >
+                              Properties · {group.properties.length}
+                            </Badge>
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                    if (!isExpanded) return [headerRow];
+                    const propertyRows = group.properties.map((property, i) => {
                     const propBeds = beds.filter((b) => b.propertyId === property.id);
                     const occupied = propBeds.filter((b) => b.status === "Occupied").length;
                     const vacant = propBeds.length - occupied;
@@ -2084,6 +2234,8 @@ export default function Properties() {
                         </td>
                       </motion.tr>
                     );
+                    });
+                    return [headerRow, ...propertyRows];
                   })
                 )}
               </TableBody>

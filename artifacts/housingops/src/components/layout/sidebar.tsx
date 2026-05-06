@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/kfi-staffing-logo.png";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -54,7 +55,16 @@ const NAV_ITEMS = [
   { href: "/finance", label: "Finance", icon: DollarSign },
 ];
 
-export function Sidebar() {
+export type SidebarProps = {
+  /** Render the icon-only ~56px rail (desktop only). When undefined, renders the full 256px rail. */
+  collapsed?: boolean;
+  /** When provided, shows a toggle button in the header for switching between collapsed and expanded. Omit for the mobile drawer copy. */
+  onToggleCollapsed?: () => void;
+  /** Fired after the operator activates a nav link or footer action — used by the mobile drawer to close itself. */
+  onNavigate?: () => void;
+};
+
+export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: SidebarProps = {}) {
   const [location] = useLocation();
   const { logout } = useAuth();
   const { resetToSampleData, exportData, importData, previewMergeImport, undoLastImport, customers, properties } = useData();
@@ -366,72 +376,170 @@ export function Sidebar() {
     setPendingImport(null);
   };
 
+  // When collapsed we render an icon-only rail. Each footer button and
+  // nav row is wrapped in a Tooltip so operators can still see the
+  // label on hover. The toggle button always sits in the header so
+  // the operator can flip back without leaving the rail.
+  const wrapTip = (label: string, node: React.ReactNode) =>
+    collapsed ? (
+      <Tooltip>
+        <TooltipTrigger asChild>{node}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    ) : (
+      node
+    );
+
   return (
-    <div className="flex h-screen w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl">
-      <div className="flex h-28 flex-col justify-center px-3 py-3">
-        {/* The KFI Staffing logo artwork has a dark-navy background
-            tuned to match the --sidebar token, so it sits seamlessly
-            on the sidebar with no chip or extra wordmark. */}
-        <img
-          src={logoUrl}
-          alt="KFI Staffing"
-          className="h-20 w-full rounded-md object-contain select-none"
-          draggable={false}
-          data-testid="img-sidebar-logo"
-        />
+    <div
+      className={cn(
+        "flex h-screen flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl transition-[width] duration-200",
+        collapsed ? "w-14" : "w-64",
+      )}
+      data-testid="sidebar-root"
+      data-collapsed={collapsed ? "true" : "false"}
+    >
+      <div
+        className={cn(
+          "flex flex-col px-3 py-3",
+          collapsed ? "h-14 items-center justify-center" : "h-28 justify-center",
+        )}
+      >
+        {collapsed ? (
+          // Icon-only header: just the toggle button. We drop the logo
+          // entirely at this width — it can't render legibly in 32px
+          // and operators still see the brand on the expand toggle's
+          // tooltip.
+          onToggleCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onToggleCollapsed}
+                  aria-label="Expand sidebar"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                  data-testid="button-sidebar-toggle"
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Expand sidebar</TooltipContent>
+            </Tooltip>
+          ) : null
+        ) : (
+          <div className="relative flex items-center">
+            {/* The KFI Staffing logo artwork has a dark-navy background
+                tuned to match the --sidebar token, so it sits seamlessly
+                on the sidebar with no chip or extra wordmark. */}
+            <img
+              src={logoUrl}
+              alt="KFI Staffing"
+              className="h-20 w-full rounded-md object-contain select-none"
+              draggable={false}
+              data-testid="img-sidebar-logo"
+            />
+            {onToggleCollapsed ? (
+              <button
+                type="button"
+                onClick={onToggleCollapsed}
+                aria-label="Collapse sidebar"
+                className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                data-testid="button-sidebar-toggle"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {activeScopedCustomer && (
-        <div
-          className="px-4 py-3 border-b border-sidebar-border bg-sidebar-accent/20"
-          data-testid="sidebar-customer-scope"
-        >
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/50 mb-1.5">
-            Filtered by customer
-          </p>
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-            <span
-              className="text-sm font-medium truncate flex-1"
-              title={activeScopedCustomer.name}
-              data-testid="text-sidebar-customer-name"
-            >
-              {activeScopedCustomer.name}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCustomerId(ALL_CUSTOMERS)}
-              className="rounded-sm p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-              aria-label="Clear customer filter"
-              data-testid="button-sidebar-clear-customer"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+        collapsed ? (
+          <div
+            className="px-2 py-2 border-b border-sidebar-border bg-sidebar-accent/20 flex justify-center"
+            data-testid="sidebar-customer-scope"
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => setCustomerId(ALL_CUSTOMERS)}
+                  className="relative flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-accent/40 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                  aria-label={`Filtered by customer: ${activeScopedCustomer.name}. Click to clear.`}
+                  data-testid="button-sidebar-clear-customer"
+                >
+                  <Briefcase className="h-4 w-4 text-primary" />
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Filtered: {activeScopedCustomer.name} — click to clear
+              </TooltipContent>
+            </Tooltip>
           </div>
-        </div>
+        ) : (
+          <div
+            className="px-4 py-3 border-b border-sidebar-border bg-sidebar-accent/20"
+            data-testid="sidebar-customer-scope"
+          >
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/50 mb-1.5">
+              Filtered by customer
+            </p>
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+              <span
+                className="text-sm font-medium truncate flex-1"
+                title={activeScopedCustomer.name}
+                data-testid="text-sidebar-customer-name"
+              >
+                {activeScopedCustomer.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCustomerId(ALL_CUSTOMERS)}
+                className="rounded-sm p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                aria-label="Clear customer filter"
+                data-testid="button-sidebar-clear-customer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )
       )}
 
-      <div className="px-5 pt-5 pb-2">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
-          Workspace
-        </p>
-      </div>
-      <nav className="flex-1 space-y-0.5 px-3 pb-6 overflow-y-auto">
+      {!collapsed ? (
+        <div className="px-5 pt-5 pb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
+            Workspace
+          </p>
+        </div>
+      ) : (
+        <div className="pt-3" />
+      )}
+      <nav
+        className={cn(
+          "flex-1 space-y-0.5 pb-6 overflow-y-auto",
+          collapsed ? "px-2" : "px-3",
+        )}
+      >
         {NAV_ITEMS.map((item) => {
           const isActive = location === item.href;
           const showAddressBadge =
             item.href === "/properties" && addressesNeedingFixCount > 0;
-          return (
+          const linkNode = (
             <Link key={item.href} href={item.href}>
               <span
+                onClick={onNavigate}
                 className={cn(
-                  "group relative flex items-center rounded-md px-3 py-2 text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
+                  "group relative flex items-center rounded-md text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
+                  collapsed ? "h-10 w-10 justify-center mx-auto" : "px-3 py-2",
                   isActive
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
                     : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                 )}
               >
-                {isActive && (
+                {isActive && !collapsed && (
                   <span
                     aria-hidden="true"
                     className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-sidebar-primary-foreground/80"
@@ -439,61 +547,118 @@ export function Sidebar() {
                 )}
                 <item.icon
                   className={cn(
-                    "mr-3 h-[18px] w-[18px] flex-shrink-0 transition-colors",
+                    "h-[18px] w-[18px] flex-shrink-0 transition-colors",
+                    !collapsed && "mr-3",
                     isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground"
                   )}
                   aria-hidden="true"
                 />
-                <span className="flex-1">{item.label}</span>
+                {!collapsed && <span className="flex-1">{item.label}</span>}
                 {showAddressBadge ? (
-                  <span
-                    className={cn(
-                      "ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-                      isActive
-                        ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
-                        : "bg-destructive/15 text-destructive"
-                    )}
-                    aria-label={addressesNeedingFixTooltip}
-                    title={addressesNeedingFixTooltip}
-                    data-testid="badge-properties-needing-address-fix"
-                  >
-                    {addressesNeedingFixCount}
-                  </span>
+                  collapsed ? (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-sidebar",
+                        isActive ? "bg-sidebar-primary-foreground" : "bg-destructive",
+                      )}
+                      data-testid="badge-properties-needing-address-fix"
+                    />
+                  ) : (
+                    <span
+                      className={cn(
+                        "ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+                        isActive
+                          ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
+                          : "bg-destructive/15 text-destructive"
+                      )}
+                      aria-label={addressesNeedingFixTooltip}
+                      title={addressesNeedingFixTooltip}
+                      data-testid="badge-properties-needing-address-fix"
+                    >
+                      {addressesNeedingFixCount}
+                    </span>
+                  )
                 ) : null}
               </span>
             </Link>
           );
+          const tipLabel = showAddressBadge && addressesNeedingFixTooltip
+            ? `${item.label} — ${addressesNeedingFixTooltip}`
+            : item.label;
+          return collapsed ? (
+            <Tooltip key={item.href}>
+              <TooltipTrigger asChild>{linkNode}</TooltipTrigger>
+              <TooltipContent side="right">{tipLabel}</TooltipContent>
+            </Tooltip>
+          ) : (
+            linkNode
+          );
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border/70 p-4 bg-sidebar-accent/10 space-y-1.5">
-        <div className="flex items-center mb-3 px-1">
-          <div className="h-9 w-9 rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-semibold text-sm shadow-sm ring-2 ring-sidebar-primary-foreground/10">
+      <div
+        className={cn(
+          "border-t border-sidebar-border/70 bg-sidebar-accent/10",
+          collapsed ? "p-2 space-y-1 flex flex-col items-center" : "p-4 space-y-1.5",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center mb-3",
+            collapsed ? "justify-center" : "px-1",
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-semibold shadow-sm ring-2 ring-sidebar-primary-foreground/10",
+              collapsed ? "h-8 w-8 text-xs" : "h-9 w-9 text-sm",
+            )}
+            title={collapsed ? "Admin Manager — admin@housingops.app" : undefined}
+          >
             AM
           </div>
-          <div className="ml-3 min-w-0">
-            <p className="text-sm font-semibold leading-tight truncate">Admin Manager</p>
-            <p className="text-[11px] text-sidebar-foreground/55 truncate">admin@housingops.app</p>
-          </div>
+          {!collapsed && (
+            <div className="ml-3 min-w-0">
+              <p className="text-sm font-semibold leading-tight truncate">Admin Manager</p>
+              <p className="text-[11px] text-sidebar-foreground/55 truncate">admin@housingops.app</p>
+            </div>
+          )}
         </div>
-        <Button
-          variant="outline"
-          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={handleExport}
-          data-testid="button-export-data"
-        >
-          <Download className="mr-2 h-4 w-4" />
-          Export data
-        </Button>
-        <Button
-          variant="outline"
-          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={handlePickImportFile}
-          data-testid="button-import-data"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          Import data
-        </Button>
+        {wrapTip(
+          "Export data",
+          <Button
+            variant="outline"
+            size={collapsed ? "icon" : "default"}
+            className={cn(
+              "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "h-9 w-9" : "w-full justify-start",
+            )}
+            onClick={handleExport}
+            aria-label="Export data"
+            data-testid="button-export-data"
+          >
+            <Download className={cn("h-4 w-4", !collapsed && "mr-2")} />
+            {!collapsed && "Export data"}
+          </Button>,
+        )}
+        {wrapTip(
+          "Import data",
+          <Button
+            variant="outline"
+            size={collapsed ? "icon" : "default"}
+            className={cn(
+              "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "h-9 w-9" : "w-full justify-start",
+            )}
+            onClick={handlePickImportFile}
+            aria-label="Import data"
+            data-testid="button-import-data"
+          >
+            <Upload className={cn("h-4 w-4", !collapsed && "mr-2")} />
+            {!collapsed && "Import data"}
+          </Button>,
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -502,31 +667,59 @@ export function Sidebar() {
           onChange={handleFileSelected}
           data-testid="input-import-file"
         />
-        <Button
-          variant="outline"
-          className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          onClick={() => setResetOpen(true)}
-          data-testid="button-reset-sample-data"
-        >
-          <RotateCcw className="mr-2 h-4 w-4" />
-          Reset to sample data
-        </Button>
-        {isDevBuild ? (
+        {wrapTip(
+          "Reset to sample data",
           <Button
             variant="outline"
-            className="w-full justify-start border-amber-300/60 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
-            onClick={() => setDemoResetOpen(true)}
-            data-testid="button-reset-demo-data"
-            title="Visible in development builds only"
+            size={collapsed ? "icon" : "default"}
+            className={cn(
+              "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "h-9 w-9" : "w-full justify-start",
+            )}
+            onClick={() => setResetOpen(true)}
+            aria-label="Reset to sample data"
+            data-testid="button-reset-sample-data"
           >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset demo data (dev)
-          </Button>
+            <RotateCcw className={cn("h-4 w-4", !collapsed && "mr-2")} />
+            {!collapsed && "Reset to sample data"}
+          </Button>,
+        )}
+        {isDevBuild ? (
+          wrapTip(
+            "Reset demo data (dev)",
+            <Button
+              variant="outline"
+              size={collapsed ? "icon" : "default"}
+              className={cn(
+                "border-amber-300/60 bg-amber-50 text-amber-900 hover:bg-amber-100 hover:text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40",
+                collapsed ? "h-9 w-9" : "w-full justify-start",
+              )}
+              onClick={() => setDemoResetOpen(true)}
+              aria-label="Reset demo data (dev)"
+              data-testid="button-reset-demo-data"
+              title={collapsed ? undefined : "Visible in development builds only"}
+            >
+              <RotateCcw className={cn("h-4 w-4", !collapsed && "mr-2")} />
+              {!collapsed && "Reset demo data (dev)"}
+            </Button>,
+          )
         ) : null}
-        <Button variant="outline" className="w-full justify-start text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={logout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
-        </Button>
+        {wrapTip(
+          "Log out",
+          <Button
+            variant="outline"
+            size={collapsed ? "icon" : "default"}
+            className={cn(
+              "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "h-9 w-9" : "w-full justify-start",
+            )}
+            onClick={logout}
+            aria-label="Log out"
+          >
+            <LogOut className={cn("h-4 w-4", !collapsed && "mr-2")} />
+            {!collapsed && "Log out"}
+          </Button>,
+        )}
       </div>
 
       <AlertDialog open={demoResetOpen} onOpenChange={setDemoResetOpen}>

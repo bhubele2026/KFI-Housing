@@ -62,6 +62,14 @@ export interface MappableProperty {
   occupied?: number;
   vacant?: number;
   /**
+   * Per-bed unit economics for the info bubble. `null` (rather than
+   * `undefined`) means the metric is known to be undefined for this
+   * property — typically because it has 0 beds — and the bubble
+   * renders an em-dash placeholder, mirroring the Properties table.
+   */
+  rentPerBed?: number | null;
+  netPerBedAfterElectric?: number | null;
+  /**
    * Persisted coordinates from a previous geocode. When present the
    * map uses them on the very first paint and skips the live geocode
    * round-trip entirely. When absent (`null` or `undefined`) the map
@@ -265,6 +273,48 @@ function buildInfoBubbleContent(
       stats.appendChild(vacSpan);
     }
     root.appendChild(stats);
+  }
+
+  // Per-bed unit economics row. Mirrors the Properties table's "Rent /
+  // Bed" and "Net / Bed (after electric)" columns; renders dashes when
+  // the metric is null (0 beds) so the bubble doesn't lie about $0.
+  if (
+    p.rentPerBed !== undefined ||
+    p.netPerBedAfterElectric !== undefined
+  ) {
+    const econ = document.createElement("div");
+    econ.style.display = "flex";
+    econ.style.gap = "10px";
+    econ.style.color = "#374151";
+    econ.style.marginBottom = "8px";
+    econ.style.flexWrap = "wrap";
+    econ.style.fontSize = "12px";
+
+    if (p.rentPerBed !== undefined) {
+      const span = document.createElement("span");
+      span.dataset.testid = `portfolio-map-info-rent-per-bed-${p.id}`;
+      span.title = "Monthly rent ÷ total beds";
+      const val =
+        p.rentPerBed === null
+          ? "—"
+          : `$${p.rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      span.innerHTML = `<strong>${val}</strong> / bed`;
+      econ.appendChild(span);
+    }
+    if (p.netPerBedAfterElectric !== undefined) {
+      const span = document.createElement("span");
+      span.dataset.testid = `portfolio-map-info-net-per-bed-${p.id}`;
+      span.title = "(Monthly rent − Electric) ÷ total beds";
+      const v = p.netPerBedAfterElectric;
+      const val =
+        v === null
+          ? "—"
+          : `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      if (v !== null && v < 0) span.style.color = "#b91c1c";
+      span.innerHTML = `<strong>${val}</strong> net/bed`;
+      econ.appendChild(span);
+    }
+    root.appendChild(econ);
   }
 
   if (p.renewal) {

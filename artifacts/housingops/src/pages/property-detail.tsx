@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeNetPerBedAfterElectric, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -573,6 +573,20 @@ export default function PropertyDetail() {
   const vacantBeds = propBeds.length - occupiedBeds;
   const monthlyRevenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
   const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
+  // Per-bed unit economics use property.monthlyRent (not the sum of
+  // active-lease rent) so the number matches the Properties list and
+  // Dashboard cards — those views key off the property's canonical
+  // monthly rent and don't see leases yet for greenfield properties.
+  const monthlyElectricCost = propUtils.reduce(
+    (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
+    0,
+  );
+  const rentPerBed = computeRentPerBed(property.monthlyRent, propBeds.length);
+  const netPerBedAfterElectric = computeNetPerBedAfterElectric(
+    property.monthlyRent,
+    monthlyElectricCost,
+    propBeds.length,
+  );
   const monthlyLeaseCost = activeLeases.reduce((s, l) => s + (l.monthlyRent || 0), 0);
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
@@ -666,7 +680,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-4">
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
@@ -694,6 +708,33 @@ export default function PropertyDetail() {
             }
           />
           <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
+          <StatCard
+            testId="stat-rent-per-bed"
+            label="Rent / Bed"
+            value={
+              rentPerBed === null
+                ? "—"
+                : `$${rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            }
+            icon={DollarSign}
+            sub={`Monthly rent ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+          />
+          <StatCard
+            testId="stat-net-per-bed"
+            label="Net / Bed (after electric)"
+            value={
+              netPerBedAfterElectric === null
+                ? "—"
+                : `$${netPerBedAfterElectric.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            }
+            icon={DollarSign}
+            color={
+              netPerBedAfterElectric !== null && netPerBedAfterElectric < 0
+                ? "text-destructive"
+                : undefined
+            }
+            sub={`After $${monthlyElectricCost.toLocaleString()} electric`}
+          />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
 

@@ -6,7 +6,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRoomTotals, computePricePerSqft, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeNetPerBedAfterElectric, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -228,7 +228,10 @@ const NEW_CUSTOMER_VALUE = "__new__";
 
 export default function Properties() {
   const [, navigate] = useLocation();
-  const { properties, beds, leases, rooms, customers, addProperty, addCustomer, updateProperty, isLoading } = useData();
+  // Defensive fallback to `[]` for `utilities` keeps existing tests
+  // with partial `useData` mocks from crashing on the per-bed-electric
+  // pre-compute below — production always returns an array.
+  const { properties, beds, leases, rooms, customers, utilities = [], addProperty, addCustomer, updateProperty, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -314,6 +317,20 @@ export default function Properties() {
   // pin, and the two views could drift out of sync if the table's
   // counting logic ever changed. Declared above `filtered` so the bed-
   // count column sorts can read from it without a TDZ.
+  // Pre-compute monthly Electric utility totals per property so the
+  // per-row "Net / Bed" cell, the map bubble, and the CSV export all
+  // share one pass over `utilities` instead of each filtering it
+  // separately. Properties with no Electric utilities are absent from
+  // the map (treated as 0 by callers).
+  const monthlyElectricByPropertyId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const u of utilities) {
+      if (u.type !== "Electric") continue;
+      map.set(u.propertyId, (map.get(u.propertyId) ?? 0) + (u.monthlyCost || 0));
+    }
+    return map;
+  }, [utilities]);
+
   const bedStatsByPropertyId = useMemo(() => {
     const map = new Map<
       string,
@@ -1018,13 +1035,19 @@ export default function Properties() {
         totalBeds: stats?.total ?? 0,
         occupied: stats?.occupied ?? 0,
         vacant: stats?.vacant ?? 0,
+        rentPerBed: computeRentPerBed(p.monthlyRent, stats?.total ?? 0),
+        netPerBedAfterElectric: computeNetPerBedAfterElectric(
+          p.monthlyRent,
+          monthlyElectricByPropertyId.get(p.id) ?? 0,
+          stats?.total ?? 0,
+        ),
         lat: p.lat ?? null,
         lng: p.lng ?? null,
         renewal: bubbleRenewal,
         coordsVerified: p.coordsVerified ?? false,
       };
     },
-    [bedStatsByPropertyId, customerById, leases],
+    [bedStatsByPropertyId, customerById, leases, monthlyElectricByPropertyId],
   );
 
   // Split the filtered list for the map view: properties with at least
@@ -1098,6 +1121,14 @@ export default function Properties() {
       { header: "$ / Sqft",        value: (r) => computePricePerSqft(r.roomTotals.totalMonthlyRent, r.roomTotals.totalSqft) ?? "" },
       { header: "Charge per Bed",  value: (r) => r.property.chargePerBed },
       { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
+      { header: "Rent / Bed",      value: (r) => computeRentPerBed(r.property.monthlyRent, r.propBeds.length) ?? "" },
+      {
+        header: "Net / Bed (after electric)",
+        value: (r) => {
+          const electric = monthlyElectricByPropertyId.get(r.property.id) ?? 0;
+          return computeNetPerBedAfterElectric(r.property.monthlyRent, electric, r.propBeds.length) ?? "";
+        },
+      },
       { header: "Status",          value: (r) => r.property.status },
       { header: "Overall Rating",  value: (r) => (r.overallRating === null ? "" : r.overallRating) },
       { header: "Lease End Date",  value: (r) => r.activeLease?.endDate ?? "" },
@@ -1792,6 +1823,21 @@ export default function Properties() {
                       )}
                     </button>
                   </TableHead>
+                  <TableHead
+                    className="text-right"
+                    title="Monthly rent ÷ total beds"
+                  >
+                    Rent / Bed
+                  </TableHead>
+                  <TableHead
+                    className="text-right"
+                    title="(Monthly rent − sum of Electric utility cost) ÷ total beds"
+                  >
+                    Net / Bed
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      (after electric)
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right">
                     <button
                       type="button"
@@ -1863,10 +1909,10 @@ export default function Properties() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={13} />
+                  <SkeletonRows rows={6} columns={15} />
                 ) : filtered.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={13}
+                    colSpan={15}
                     icon={Home}
                     title="No properties found"
                     description={
@@ -2051,6 +2097,51 @@ export default function Properties() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
+                        {(() => {
+                          // Per-bed unit economics. Both share the same bed
+                          // denominator as the Total Beds column above so a
+                          // 0-bed row consistently dashes out across the
+                          // table, the map bubble, and the CSV export.
+                          const bedCount = propBeds.length;
+                          const electric = monthlyElectricByPropertyId.get(property.id) ?? 0;
+                          const rentPerBed = computeRentPerBed(property.monthlyRent, bedCount);
+                          const netPerBed = computeNetPerBedAfterElectric(
+                            property.monthlyRent,
+                            electric,
+                            bedCount,
+                          );
+                          return (
+                            <>
+                              <td
+                                className="p-4 text-right text-sm tabular-nums"
+                                data-testid={`cell-rent-per-bed-${property.id}`}
+                              >
+                                {rentPerBed === null ? (
+                                  <span className="text-muted-foreground">—</span>
+                                ) : (
+                                  `$${rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                                )}
+                              </td>
+                              <td
+                                className="p-4 text-right text-sm tabular-nums"
+                                data-testid={`cell-net-per-bed-${property.id}`}
+                                title={
+                                  netPerBed === null
+                                    ? undefined
+                                    : `Rent $${property.monthlyRent.toLocaleString()} − Electric $${electric.toLocaleString()} ÷ ${bedCount} bed${bedCount === 1 ? "" : "s"}`
+                                }
+                              >
+                                {netPerBed === null ? (
+                                  <span className="text-muted-foreground">—</span>
+                                ) : (
+                                  <span className={netPerBed < 0 ? "text-destructive" : undefined}>
+                                    ${netPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                  </span>
+                                )}
+                              </td>
+                            </>
+                          );
+                        })()}
                         <td className="p-4 text-right text-sm font-medium">${property.chargePerBed.toLocaleString()}</td>
                         <td className="p-4 text-center">
                           <Badge variant={property.status === "Active" ? "default" : "secondary"}>

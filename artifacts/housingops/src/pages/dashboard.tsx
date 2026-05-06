@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeNetPerBedAfterElectric, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -70,6 +70,22 @@ export default function Dashboard() {
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
 
+  // Portfolio-wide per-bed unit economics. Sums first, then divides —
+  // not an average of per-property ratios — so a 100-bed property
+  // weighs 100x a 1-bed property and the number matches what an
+  // operator would compute with a calculator across the whole book.
+  const portfolioMonthlyRent = scopedProperties.reduce((s, p) => s + (p.monthlyRent || 0), 0);
+  const portfolioMonthlyElectric = scopedUtilities.reduce(
+    (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
+    0,
+  );
+  const portfolioRentPerBed = computeRentPerBed(portfolioMonthlyRent, totalBeds);
+  const portfolioNetPerBed = computeNetPerBedAfterElectric(
+    portfolioMonthlyRent,
+    portfolioMonthlyElectric,
+    totalBeds,
+  );
+
   const topRatedProperties = useMemo(() => {
     const scored = scopedProperties.map((p) => {
       const overall = computeOverallRating(p.ratings);
@@ -118,6 +134,24 @@ export default function Dashboard() {
     { title: "Monthly Revenue", value: `$${totalMonthlyRevenue.toLocaleString()}`, icon: TrendingUp, trend: "Target: $45k" },
     { title: "Monthly Costs", value: `$${totalMonthlyCosts.toLocaleString()}`, icon: DollarSign, trend: "Leases + Utilities" },
     { title: "Net Profit", value: `$${netProfit.toLocaleString()}`, icon: Zap, trend: netProfit >= 0 ? "+12% vs last month" : "Needs attention" },
+    {
+      title: "Rent / Bed",
+      value:
+        portfolioRentPerBed === null
+          ? "—"
+          : `$${portfolioRentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: BedDouble,
+      trend: `$${portfolioMonthlyRent.toLocaleString()} ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+    },
+    {
+      title: "Net / Bed (after electric)",
+      value:
+        portfolioNetPerBed === null
+          ? "—"
+          : `$${portfolioNetPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: DollarSign,
+      trend: `After $${portfolioMonthlyElectric.toLocaleString()} electric`,
+    },
   ];
 
   const activeCustomerName =

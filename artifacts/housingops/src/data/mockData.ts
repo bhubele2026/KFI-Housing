@@ -327,6 +327,51 @@ export function computePricePerSqft(
   return Math.round((totalMonthlyRent / totalSqft) * 100) / 100;
 }
 
+/**
+ * Sum of `monthlyCost` across every "Electric" utility for a property.
+ * Other utility types (gas, water, internet, etc.) are intentionally
+ * excluded — net-per-bed shipped as an electric-only metric so callers
+ * can compare unit economics consistently.
+ */
+export function computeMonthlyElectricCost(
+  utilities: readonly Utility[],
+  propertyId: string,
+): number {
+  return utilities.reduce(
+    (s, u) =>
+      u.propertyId === propertyId && u.type === "Electric"
+        ? s + (u.monthlyCost || 0)
+        : s,
+    0,
+  );
+}
+
+/**
+ * Monthly rent divided by the number of beds. Returns `null` when the
+ * property has 0 beds so callers can render a dashed placeholder
+ * instead of dividing by zero.
+ */
+export function computeRentPerBed(
+  monthlyRent: number,
+  bedCount: number,
+): number | null {
+  if (!bedCount) return null;
+  return Math.round((monthlyRent / bedCount) * 100) / 100;
+}
+
+/**
+ * (Monthly rent − total monthly Electric utility cost) divided by beds.
+ * Same `null`-on-zero-beds contract as {@link computeRentPerBed}.
+ */
+export function computeNetPerBedAfterElectric(
+  monthlyRent: number,
+  monthlyElectricCost: number,
+  bedCount: number,
+): number | null {
+  if (!bedCount) return null;
+  return Math.round(((monthlyRent - monthlyElectricCost) / bedCount) * 100) / 100;
+}
+
 export const BedSchema = z.object({
   id: z.string(),
   propertyId: z.string(),

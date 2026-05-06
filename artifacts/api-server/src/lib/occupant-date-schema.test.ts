@@ -51,11 +51,16 @@ function buildImportPayload(
   };
 }
 
+// Strings that must be rejected on every occupant write path. Note that the
+// empty string is intentionally NOT in this list: the OptionalLeaseDate
+// schema (see lib/api-spec/openapi.yaml) deliberately accepts "" so legacy
+// import payloads — where occupants were imported without a known move-in
+// date — keep round-tripping. The "accepts an empty-string ... date" cases
+// below pin that contract so it can't silently regress.
 const MALFORMED_DATES: ReadonlyArray<readonly [string, string]> = [
   ["space + time suffix", "2024-01-15 00:00:00"],
   ["T + time suffix", "2024-01-15T00:00:00"],
   ["full ISO with Z", "2024-01-15T00:00:00.000Z"],
-  ["empty string", ""],
   ["non-date garbage", "not-a-date"],
   ["MM/DD/YYYY", "01/15/2024"],
   ["YYYY-M-D (missing zero pad)", "2024-1-15"],
@@ -74,6 +79,23 @@ describe("CreateOccupantBody (POST /occupants)", () => {
         ...VALID_OCCUPANT,
         moveOutDate: "2025-06-30",
       }).success,
+    ).toBe(true);
+  });
+
+  // OptionalLeaseDate intentionally permits "" (see openapi.yaml). These two
+  // cases pin that contract: occupants imported without a known move-in /
+  // move-out date are stored as "" and must round-trip through the API.
+  it("accepts an empty-string moveInDate (legacy/imported records)", () => {
+    expect(
+      CreateOccupantBody.safeParse({ ...VALID_OCCUPANT, moveInDate: "" })
+        .success,
+    ).toBe(true);
+  });
+
+  it("accepts an empty-string moveOutDate (legacy/imported records)", () => {
+    expect(
+      CreateOccupantBody.safeParse({ ...VALID_OCCUPANT, moveOutDate: "" })
+        .success,
     ).toBe(true);
   });
 

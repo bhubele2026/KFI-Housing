@@ -39,11 +39,26 @@ describe("ImportLeasePdfResponse extracted dates", () => {
     ).toBe(true);
   });
 
+  // The extracted dates use OptionalLeaseDate (see openapi.yaml), which
+  // intentionally permits "" alongside null so the review-step UI can render
+  // an empty input when the LLM returned a blank string instead of null.
+  // Pin that contract here so it can't silently regress.
+  it("accepts empty-string startDate and endDate (LLM returned blanks)", () => {
+    expect(
+      ImportLeasePdfResponse.safeParse({
+        ...VALID_RESPONSE,
+        extracted: { ...VALID_EXTRACTED, startDate: "", endDate: "" },
+      }).success,
+    ).toBe(true);
+  });
+
+  // "" is intentionally accepted by OptionalLeaseDate, so it is not in this
+  // list. Anything that *looks* like a date but isn't a clean YYYY-MM-DD
+  // must still be rejected.
   it.each([
     ["space + time suffix", "2026-05-31 00:00:00"],
     ["full ISO with Z", "2026-05-31T00:00:00.000Z"],
     ["MM/DD/YYYY", "05/31/2026"],
-    ["empty string", ""],
     ["non-date garbage", "not-a-date"],
     ["missing zero pad", "2026-5-31"],
   ])("rejects malformed startDate: %s", (_label, bad) => {

@@ -11,6 +11,7 @@ vi.mock("wouter", () => ({
       {`REDIRECT_TO:${to}`}
     </div>
   ),
+  useLocation: () => ["/", vi.fn()] as const,
 }));
 
 // MainLayout reads the active customer scope to render a chip in the

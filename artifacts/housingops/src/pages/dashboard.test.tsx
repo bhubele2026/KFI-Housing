@@ -509,14 +509,16 @@ describe("Dashboard Needs review tile", () => {
   }
 
   function getCount(): string | null {
-    const el = container.querySelector('[data-testid="text-needs-review-count"]');
+    const el = container.querySelector(
+      '[data-testid="text-needs-review-occupants-count"]',
+    );
     return el ? el.textContent : null;
   }
 
   function getCtaHref(): string | null {
     // Button uses `asChild` so the anchor itself carries the test id.
     const el = container.querySelector(
-      'a[data-testid="button-needs-review-cta"]',
+      'a[data-testid="button-needs-review-occupants-cta"]',
     );
     return el ? el.getAttribute("href") : null;
   }

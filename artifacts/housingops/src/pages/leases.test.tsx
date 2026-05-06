@@ -241,6 +241,16 @@ vi.mock("@/components/upload-lease-pdf-dialog", () => ({
   UploadLeasePdfDialog: () => null,
 }));
 
+// The real ImportMasterLeasesButton uses TanStack Query (useQueryClient and
+// a generated mutation hook). The Leases page tests don't exercise that
+// flow, and wiring up a QueryClientProvider just to satisfy this button
+// would mean also stubbing out the generated API client. Stubbing the
+// component itself is the smallest change that keeps these tests focused
+// on the page's own behavior.
+vi.mock("@/components/import-master-leases-button", () => ({
+  ImportMasterLeasesButton: () => null,
+}));
+
 vi.mock("@/components/renew-lease-popover", () => ({
   RenewLeasePopover: ({ trigger }: { trigger?: ReactNode }) => <>{trigger}</>,
 }));

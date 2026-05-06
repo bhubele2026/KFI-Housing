@@ -1955,7 +1955,7 @@ export default function Properties() {
                         onClick={() => navigate(`/properties/${property.id}`)}
                         data-testid={`row-property-${property.id}`}
                       >
-                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                        <td className="p-4">
                           <InlineEdit
                             value={property.name}
                             onSave={(v) => updateProperty(property.id, { name: v })}
@@ -1964,7 +1964,7 @@ export default function Properties() {
                             testId={`inline-edit-property-name-${property.id}`}
                           />
                         </td>
-                        <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`} onClick={(e) => e.stopPropagation()}>
+                        <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`}>
                           <div className="flex items-center gap-1.5">
                             <Briefcase className="h-3 w-3 text-muted-foreground shrink-0" />
                             <Select
@@ -1974,10 +1974,11 @@ export default function Properties() {
                               <SelectTrigger
                                 className="h-7 text-sm w-44 border-transparent hover:border-border bg-transparent"
                                 data-testid={`select-customer-${property.id}`}
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 <SelectValue placeholder="Unassigned" />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent onClick={(e) => e.stopPropagation()}>
                                 {customers.map((c) => (
                                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                 ))}
@@ -2000,7 +2001,7 @@ export default function Properties() {
                             )}
                           </div>
                         </td>
-                        <td className="p-4 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                        <td className="p-4 text-sm text-muted-foreground">
                           <InlineEdit
                             value={property.address}
                             onSave={(v) => updateProperty(property.id, { address: v })}
@@ -2008,7 +2009,7 @@ export default function Properties() {
                             testId={`inline-edit-property-address-${property.id}`}
                           />
                         </td>
-                        <td className="p-4 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                        <td className="p-4 text-sm text-muted-foreground">
                           <div className="flex items-center gap-1">
                             <InlineEdit
                               value={property.city}

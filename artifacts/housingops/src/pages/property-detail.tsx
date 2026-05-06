@@ -417,7 +417,7 @@ export function InlineEdit({
         role="button"
         tabIndex={0}
         className="group flex items-center gap-1 cursor-pointer"
-        onClick={() => setEditing(true)}
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
         data-testid={testId}
       >
         {isEmpty && placeholder ? (
@@ -432,7 +432,7 @@ export function InlineEdit({
     );
   }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
       <Input
         type={type}
         value={draft}
@@ -443,8 +443,8 @@ export function InlineEdit({
         onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") cancel(); }}
         data-testid={testId ? `${testId}-input` : undefined}
       />
-      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={commit} data-testid={testId ? `${testId}-save` : undefined}><Check className="h-3 w-3 text-green-600" /></Button>
-      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={cancel} data-testid={testId ? `${testId}-cancel` : undefined}><X className="h-3 w-3 text-destructive" /></Button>
+      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); commit(); }} data-testid={testId ? `${testId}-save` : undefined}><Check className="h-3 w-3 text-green-600" /></Button>
+      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); cancel(); }} data-testid={testId ? `${testId}-cancel` : undefined}><X className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
 }

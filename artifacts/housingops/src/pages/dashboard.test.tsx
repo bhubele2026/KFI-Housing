@@ -815,6 +815,191 @@ describe("Dashboard Unplaced payroll tile", () => {
   });
 });
 
+describe("Dashboard Lease expiry alerts", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    // Freeze the system clock at 2026-05-06 so day-distance math in
+    // `daysUntil` (which calls `new Date()`) is deterministic.
+    // `vi.useFakeTimers` + `setSystemTime` controls both `Date.now` and
+    // the no-arg `new Date()` constructor, unlike a `Date.now` spy.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-06T12:00:00Z"));
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    vi.useRealTimers();
+    mockData.properties = [];
+    mockData.leases = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  function getCard() {
+    return container.querySelector('[data-testid="card-expiring-leases"]');
+  }
+
+  it("hides the card when no leases fall in the alert windows", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      // Far-future end date — outside the 90-day window.
+      { id: "l1", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2027-01-01", monthlyRent: 100 },
+      // Long-expired — outside the 30-day look-back.
+      { id: "l2", propertyId: "p1", status: "Expired", startDate: "2023-01-01", endDate: "2024-01-01", monthlyRent: 100 },
+    ];
+
+    await render();
+
+    expect(getCard()).toBeNull();
+  });
+
+  it("buckets leases into critical / warning / soon / expired and links each row to lease detail", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      // Expired 5 days ago.
+      { id: "l-exp", propertyId: "p1", status: "Expired", startDate: "2024-01-01", endDate: "2026-05-01", monthlyRent: 100 },
+      // Critical: 15 days left.
+      { id: "l-crit", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-05-21", monthlyRent: 100 },
+      // Warning: 45 days left.
+      { id: "l-warn", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-06-20", monthlyRent: 100 },
+      // Soon: 75 days left.
+      { id: "l-soon", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-07-20", monthlyRent: 100 },
+      // Out of range — no row.
+      { id: "l-far", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2027-05-06", monthlyRent: 100 },
+      // Upcoming — never alerted.
+      { id: "l-up", propertyId: "p1", status: "Upcoming", startDate: "2026-06-01", endDate: "2026-05-21", monthlyRent: 100 },
+    ];
+
+    await render();
+
+    expect(getCard()).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="text-expiring-leases-total-count"]')?.textContent,
+    ).toContain("4");
+
+    // Each bucketed lease appears as its own row with the right bucket
+    // attribute.
+    const expRow = container.querySelector('[data-testid="row-expiring-lease-l-exp"]');
+    const critRow = container.querySelector('[data-testid="row-expiring-lease-l-crit"]');
+    const warnRow = container.querySelector('[data-testid="row-expiring-lease-l-warn"]');
+    const soonRow = container.querySelector('[data-testid="row-expiring-lease-l-soon"]');
+    expect(expRow?.getAttribute("data-bucket")).toBe("expired");
+    expect(critRow?.getAttribute("data-bucket")).toBe("critical");
+    expect(warnRow?.getAttribute("data-bucket")).toBe("warning");
+    expect(soonRow?.getAttribute("data-bucket")).toBe("soon");
+
+    // Out-of-range leases must NOT appear.
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-far"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-up"]')).toBeNull();
+
+    // Bucket counter chips reflect the breakdown.
+    expect(
+      container.querySelector('[data-testid="bucket-count-expiring-leases-expired"]')?.textContent,
+    ).toContain("1");
+    expect(
+      container.querySelector('[data-testid="bucket-count-expiring-leases-critical"]')?.textContent,
+    ).toContain("1");
+    expect(
+      container.querySelector('[data-testid="bucket-count-expiring-leases-warning"]')?.textContent,
+    ).toContain("1");
+    expect(
+      container.querySelector('[data-testid="bucket-count-expiring-leases-soon"]')?.textContent,
+    ).toContain("1");
+
+    // Each row links to /leases/<id>.
+    const link = container.querySelector(
+      'a[data-testid="link-expiring-lease-l-crit"]',
+    );
+    expect(link?.getAttribute("href")).toBe("/leases/l-crit");
+
+    // The "When" cell phrases days correctly: future leases say "X days
+    // left", expired ones say "Expired N days ago".
+    expect(
+      container.querySelector('[data-testid="text-expiring-lease-l-crit-when"]')?.textContent,
+    ).toBe("15 days left");
+    expect(
+      container.querySelector('[data-testid="text-expiring-lease-l-exp-when"]')?.textContent,
+    ).toBe("Expired 5 days ago");
+  });
+
+  it("sorts most-overdue first, then soonest expiring", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "l-soon", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-07-20", monthlyRent: 100 },
+      { id: "l-crit", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-05-21", monthlyRent: 100 },
+      { id: "l-exp", propertyId: "p1", status: "Expired", startDate: "2024-01-01", endDate: "2026-05-01", monthlyRent: 100 },
+    ];
+
+    await render();
+
+    const rows = Array.from(
+      container.querySelectorAll('[data-testid^="row-expiring-lease-"]'),
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(rows).toEqual([
+      "row-expiring-lease-l-exp",
+      "row-expiring-lease-l-crit",
+      "row-expiring-lease-l-soon",
+    ]);
+  });
+
+  it("respects the active customer scope", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Hillside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "l-c1", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-05-21", monthlyRent: 100 },
+      { id: "l-c2", propertyId: "p2", status: "Active", startDate: "2025-01-01", endDate: "2026-05-21", monthlyRent: 100 },
+    ];
+
+    await render();
+
+    // All-customers default shows both.
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-c1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-c2"]')).not.toBeNull();
+
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1");
+    });
+
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-c1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-c2"]')).toBeNull();
+  });
+});
+
 describe("Dashboard Property Performance correctness", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;

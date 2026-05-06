@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2 } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,7 +16,8 @@ import {
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, daysUntil, type RatingCategoryKey, type Lease } from "@/data/mockData";
+import { formatYMDPretty } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -173,6 +174,101 @@ export default function Dashboard() {
       testId: "needs-review-hotel-rate-at-risk",
     },
   ].filter((item) => item.count > 0);
+
+  // ── Expiring-soon lease alerts (Task #326) ────────────────────────
+  // Surface leases whose end date is approaching (within 90 days) or
+  // recently passed (within the last 30 days) so operators can renew /
+  // backfill paperwork before the term silently flips to "Expired".
+  // Buckets mirror the colour scale used by `getRenewalInfo` on the
+  // Leases page so the dashboard reads consistently with the table.
+  // - critical: ≤ 30 days left (red)
+  // - warning : 31–60 days left (amber)
+  // - soon    : 61–90 days left (yellow)
+  // - expired : 1–30 days past end (slate, visually distinct)
+  // Leases with blank term dates and Upcoming leases are skipped — the
+  // first have no calendar to compare against, the second aren't an
+  // expiry risk yet.
+  type ExpiryBucket = "critical" | "warning" | "soon" | "expired";
+  interface ExpiringLease {
+    lease: Lease;
+    propertyName: string;
+    days: number;
+    bucket: ExpiryBucket;
+  }
+  const expiringLeases = useMemo<ExpiringLease[]>(() => {
+    const out: ExpiringLease[] = [];
+    for (const l of scopedLeases) {
+      if (!l.endDate) continue;
+      if (l.status === "Upcoming") continue;
+      // Intentionally NOT wrapped in try/catch: per `lib/lease-dates.ts`,
+      // `daysUntil` throws loudly on a malformed date so we never silently
+      // drop a lease that should be visible. The API boundary already
+      // rejects anything other than `^\d{4}-\d{2}-\d{2}$`, so reaching
+      // this throw means a real data bug worth surfacing.
+      const days = daysUntil(l.endDate);
+      let bucket: ExpiryBucket;
+      if (days < 0) {
+        if (days < -30) continue;
+        bucket = "expired";
+      } else if (days <= 30) {
+        bucket = "critical";
+      } else if (days <= 60) {
+        bucket = "warning";
+      } else if (days <= 90) {
+        bucket = "soon";
+      } else {
+        continue;
+      }
+      const propertyName =
+        scopedProperties.find((p) => p.id === l.propertyId)?.name ?? "—";
+      out.push({ lease: l, propertyName, days, bucket });
+    }
+    // Sort by urgency: most-overdue first (most negative), then
+    // soonest-expiring upcoming dates.
+    out.sort((a, b) => a.days - b.days);
+    return out;
+  }, [scopedLeases, scopedProperties]);
+
+  const expiringCounts = useMemo(() => {
+    const counts = { critical: 0, warning: 0, soon: 0, expired: 0 };
+    for (const e of expiringLeases) counts[e.bucket] += 1;
+    return counts;
+  }, [expiringLeases]);
+
+  const expiryBucketStyle: Record<
+    ExpiryBucket,
+    { badge: string; row: string; label: string }
+  > = {
+    expired: {
+      badge: "bg-slate-200 text-slate-800 border-slate-300",
+      row: "border-l-4 border-l-slate-400 bg-slate-50/40 dark:bg-slate-950/20",
+      label: "Expired",
+    },
+    critical: {
+      badge: "bg-red-100 text-red-800 border-red-200",
+      row: "border-l-4 border-l-red-500",
+      label: "≤ 30 days",
+    },
+    warning: {
+      badge: "bg-amber-100 text-amber-800 border-amber-200",
+      row: "border-l-4 border-l-amber-500",
+      label: "31–60 days",
+    },
+    soon: {
+      badge: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      row: "border-l-4 border-l-yellow-500",
+      label: "61–90 days",
+    },
+  };
+
+  function expiryRowLabel(days: number): string {
+    if (days < 0) {
+      const abs = Math.abs(days);
+      return `Expired ${abs} day${abs === 1 ? "" : "s"} ago`;
+    }
+    if (days === 0) return "Expires today";
+    return `${days} day${days === 1 ? "" : "s"} left`;
+  }
 
   const totalProperties = scopedProperties.length;
   const totalBeds = scopedBeds.length;
@@ -402,6 +498,121 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {expiringLeases.length > 0 && (
+          <Card data-testid="card-expiring-leases">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Lease expiry alerts</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-expiring-leases-total-count"
+                >
+                  {expiringLeases.length} lease
+                  {expiringLeases.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leases ending in the next 30 / 60 / 90 days, plus any that
+                quietly expired in the last 30 days.
+              </p>
+              <div
+                className="mt-2 flex flex-wrap gap-2 text-xs"
+                data-testid="bucket-counts-expiring-leases"
+              >
+                {expiringCounts.expired > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.expired.badge}`}
+                    data-testid="bucket-count-expiring-leases-expired"
+                  >
+                    {expiringCounts.expired} expired
+                  </span>
+                )}
+                {expiringCounts.critical > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.critical.badge}`}
+                    data-testid="bucket-count-expiring-leases-critical"
+                  >
+                    {expiringCounts.critical} ≤ 30 days
+                  </span>
+                )}
+                {expiringCounts.warning > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.warning.badge}`}
+                    data-testid="bucket-count-expiring-leases-warning"
+                  >
+                    {expiringCounts.warning} 31–60 days
+                  </span>
+                )}
+                {expiringCounts.soon > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.soon.badge}`}
+                    data-testid="bucket-count-expiring-leases-soon"
+                  >
+                    {expiringCounts.soon} 61–90 days
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Ends</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expiringLeases.map(({ lease, propertyName, days, bucket }) => {
+                    const style = expiryBucketStyle[bucket];
+                    return (
+                      <TableRow
+                        key={lease.id}
+                        className={style.row}
+                        data-testid={`row-expiring-lease-${lease.id}`}
+                        data-bucket={bucket}
+                      >
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/leases/${lease.id}`}
+                            className="hover:underline text-primary"
+                            data-testid={`link-expiring-lease-${lease.id}`}
+                          >
+                            <PropertyNameCell
+                              name={propertyName}
+                              primaryClassName="text-primary"
+                            />
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-sm tabular-nums text-muted-foreground">
+                          {formatYMDPretty(lease.endDate)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={style.badge}
+                            data-testid={`badge-expiring-lease-${lease.id}`}
+                          >
+                            {style.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell
+                          className="text-right text-sm tabular-nums"
+                          data-testid={`text-expiring-lease-${lease.id}-when`}
+                        >
+                          {expiryRowLabel(days)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}

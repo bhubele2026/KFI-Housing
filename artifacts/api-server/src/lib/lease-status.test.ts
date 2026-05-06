@@ -1,9 +1,30 @@
 import { describe, it, expect } from "vitest";
 import {
   computeLeaseStatus,
+  daysUntilExpiry,
   deriveLeaseStatus,
   todayIso,
 } from "./lease-status";
+
+describe("daysUntilExpiry", () => {
+  it("returns a positive count for leases ending in the future", () => {
+    expect(daysUntilExpiry("2026-06-05", "2026-05-06")).toBe(30);
+    expect(daysUntilExpiry("2026-08-04", "2026-05-06")).toBe(90);
+  });
+
+  it("returns 0 the day the lease ends", () => {
+    expect(daysUntilExpiry("2026-05-06", "2026-05-06")).toBe(0);
+  });
+
+  it("returns a negative count for already-expired leases", () => {
+    expect(daysUntilExpiry("2026-05-01", "2026-05-06")).toBe(-5);
+  });
+
+  it("handles month and year boundaries", () => {
+    expect(daysUntilExpiry("2027-01-05", "2026-12-31")).toBe(5);
+    expect(daysUntilExpiry("2026-03-01", "2026-02-25")).toBe(4);
+  });
+});
 
 describe("computeLeaseStatus", () => {
   it("returns Upcoming when today is before the start date", () => {

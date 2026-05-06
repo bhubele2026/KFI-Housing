@@ -28,6 +28,23 @@ export function computeLeaseStatus(
   return "Active";
 }
 
+/**
+ * Number of whole calendar days from `today` until `endDate`. Negative
+ * when the lease is already past its end date. Both inputs must be
+ * zero-padded ISO `YYYY-MM-DD` strings (the same shape the API enforces
+ * at its boundary), so we can do plain Date arithmetic without parsing
+ * a free-form string.
+ *
+ * Used by the dashboard "Expiring soon" alerts to bucket leases into
+ * 30 / 60 / 90-day windows before they actually flip to "Expired".
+ */
+export function daysUntilExpiry(endDate: string, today: string): number {
+  const end = new Date(`${endDate}T00:00:00Z`);
+  const now = new Date(`${today}T00:00:00Z`);
+  const ms = end.getTime() - now.getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24));
+}
+
 /** Format a `Date` as the same `YYYY-MM-DD` form the schema uses. */
 export function todayIso(now: Date = new Date()): string {
   const y = now.getUTCFullYear();

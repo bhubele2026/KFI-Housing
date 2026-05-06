@@ -16,6 +16,7 @@ import {
   type InsertBedRow,
   type InsertOccupantRow,
   type InsertUtilityRow,
+  type InsertRoomNightLogRow,
 } from "@workspace/db";
 import { logger } from "./logger";
 import { HOUSING_DEDUCTION_ROWS } from "./seed-housing-deductions";
@@ -512,6 +513,10 @@ interface DataBundle {
   beds: InsertBedRow[];
   occupants: InsertOccupantRow[];
   utilities: InsertUtilityRow[];
+  // Optional so callers built before task #321 (and older v1/v2 backups
+  // routed through `replaceAllData`) keep compiling. Treated as `[]`
+  // when missing.
+  roomNightLogs?: InsertRoomNightLogRow[];
 }
 
 async function wipeAll(): Promise<void> {
@@ -550,6 +555,10 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
     if (bundle.occupants.length > 0) await tx.insert(occupantsTable).values(bundle.occupants);
     if (bundle.beds.length > 0) await tx.insert(bedsTable).values(bundle.beds);
     if (bundle.utilities.length > 0) await tx.insert(utilitiesTable).values(bundle.utilities);
+    // Inserted after leases so a future FK on `lease_id` would already
+    // see its parent rows (today the column is a plain `text` ref).
+    const logs = bundle.roomNightLogs ?? [];
+    if (logs.length > 0) await tx.insert(roomNightLogsTable).values(logs);
   });
 }
 
@@ -563,6 +572,7 @@ function buildSeedBundle(): DataBundle {
     beds,
     occupants,
     utilities: SEED_UTILITIES,
+    roomNightLogs: [],
   };
 }
 
@@ -608,6 +618,7 @@ export async function replaceAllData(bundle: DataBundle): Promise<void> {
       beds: bundle.beds.length,
       occupants: bundle.occupants.length,
       utilities: bundle.utilities.length,
+      roomNightLogs: bundle.roomNightLogs?.length ?? 0,
     },
     "Replacing all data with imported bundle…",
   );

@@ -9,13 +9,16 @@ import {
   useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
   useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant, useDeleteOccupant,
   useListUtilities, getListUtilitiesQueryKey, useCreateUtility, useUpdateUtility, useDeleteUtility,
+  useListRoomNightLogs, getListRoomNightLogsQueryKey,
   useResetToSampleData,
   useImportData,
 } from "@workspace/api-client-react";
 import {
   CustomerSchema, PropertySchema, LeaseSchema, RoomSchema, BedSchema, OccupantSchema, UtilitySchema,
+  RoomNightLogSchema,
   RatingsSchema,
   type Customer, type Property, type Lease, type Room, type Bed, type Occupant, type Utility,
+  type RoomNightLog,
 } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,6 +36,10 @@ export const ExportPayloadSchema = z.object({
     beds: z.array(BedSchema),
     occupants: z.array(OccupantSchema),
     utilities: z.array(UtilitySchema),
+    // Optional for backward compatibility: backups taken before task #321
+    // shipped this field. Default to an empty array so older v3 files
+    // (and the v1/v2 migration paths) parse cleanly.
+    roomNightLogs: z.array(RoomNightLogSchema).optional().default([]),
   }),
 });
 export type ExportPayload = z.infer<typeof ExportPayloadSchema>;
@@ -147,6 +154,7 @@ export interface ImportSummary {
   beds: number;
   occupants: number;
   utilities: number;
+  roomNightLogs: number;
 }
 
 export type ImportMode = "replace" | "merge";
@@ -175,7 +183,7 @@ export interface ImportPreview {
 
 /** Sums two ImportSummary objects field-by-field. */
 export function totalImportSummary(s: ImportSummary): number {
-  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities;
+  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities + s.roomNightLogs;
 }
 
 /** A single record affected by a merge dry-run, with a human-readable label. */
@@ -203,12 +211,13 @@ export interface MergeDryRun {
   beds: MergeImpactCategory;
   occupants: MergeImpactCategory;
   utilities: MergeImpactCategory;
+  roomNightLogs: MergeImpactCategory;
 }
 
 /** Total counts across every record type in a dry run. */
 export function totalMergeDryRun(dry: MergeDryRun): { added: number; updated: number; unchanged: number } {
   let added = 0, updated = 0, unchanged = 0;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"] as const) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs"] as const) {
     added += dry[k].added;
     updated += dry[k].updated;
     unchanged += dry[k].unchanged;
@@ -224,6 +233,7 @@ const EMPTY_SUMMARY: ImportSummary = {
   beds: 0,
   occupants: 0,
   utilities: 0,
+  roomNightLogs: 0,
 };
 
 /**
@@ -270,6 +280,7 @@ export function mergeImportBundles(
     beds: mergeList(current.beds, incoming.beds, "beds"),
     occupants: mergeList(current.occupants, incoming.occupants, "occupants"),
     utilities: mergeList(current.utilities, incoming.utilities, "utilities"),
+    roomNightLogs: mergeList(current.roomNightLogs, incoming.roomNightLogs, "roomNightLogs"),
   };
 
   return { data, added, updated };
@@ -287,6 +298,7 @@ const MERGE_LABELS = {
   beds: (b: Bed) => `Bed #${b.bedNumber}`,
   occupants: (o: Occupant) => o.name || o.id,
   utilities: (u: Utility) => `${u.type}${u.company ? ` — ${u.company}` : ""}`,
+  roomNightLogs: (l: RoomNightLog) => `Log ${l.month}`,
 };
 
 const EMPTY_CATEGORY = (): MergeImpactCategory => ({
@@ -338,6 +350,7 @@ export function dryRunMergeImport(current: ExportData, incoming: ExportData): Me
     beds: diffList(current.beds, incoming.beds, MERGE_LABELS.beds),
     occupants: diffList(current.occupants, incoming.occupants, MERGE_LABELS.occupants),
     utilities: diffList(current.utilities, incoming.utilities, MERGE_LABELS.utilities),
+    roomNightLogs: diffList(current.roomNightLogs, incoming.roomNightLogs, MERGE_LABELS.roomNightLogs),
   };
 }
 
@@ -352,13 +365,13 @@ function isImportPreview(value: unknown): value is ImportPreview {
   const summary = v.summary;
   if (typeof summary !== "object" || summary === null) return false;
   const s = summary as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs"]) {
     if (typeof s[k] !== "number") return false;
   }
   const data = v.data;
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs"]) {
     if (!Array.isArray(d[k])) return false;
   }
   return true;
@@ -425,6 +438,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         beds: d.beds.length,
         occupants: d.occupants.length,
         utilities: d.utilities.length,
+        roomNightLogs: d.roomNightLogs.length,
       },
     };
   }
@@ -442,6 +456,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       beds,
       occupants: old.occupants,
       utilities: old.utilities,
+      roomNightLogs: [],
     };
     return {
       data,
@@ -455,6 +470,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         beds: data.beds.length,
         occupants: data.occupants.length,
         utilities: data.utilities.length,
+        roomNightLogs: 0,
       },
     };
   }
@@ -476,6 +492,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       beds,
       occupants: old.occupants,
       utilities: old.utilities,
+      roomNightLogs: [],
     };
     return {
       data,
@@ -489,6 +506,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         beds: data.beds.length,
         occupants: data.occupants.length,
         utilities: data.utilities.length,
+        roomNightLogs: 0,
       },
     };
   }
@@ -536,6 +554,7 @@ interface DataStore {
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
+  roomNightLogs: RoomNightLog[];
   isLoading: boolean;
   addCustomer: (customer: Customer) => Promise<Customer>;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
@@ -608,6 +627,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bedsQuery = useListBeds();
   const occupantsQuery = useListOccupants();
   const utilitiesQuery = useListUtilities();
+  const roomNightLogsQuery = useListRoomNightLogs();
 
   const customersKey = getListCustomersQueryKey();
   const propertiesKey = getListPropertiesQueryKey();
@@ -616,6 +636,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bedsKey = getListBedsQueryKey();
   const occupantsKey = getListOccupantsQueryKey();
   const utilitiesKey = getListUtilitiesQueryKey();
+  const roomNightLogsKey = getListRoomNightLogsQueryKey();
 
   const createCustomerMut = useCreateCustomer();
   const updateCustomerMut = useUpdateCustomer();
@@ -648,6 +669,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const beds = (bedsQuery.data as Bed[] | undefined) ?? EMPTY;
   const occupants = (occupantsQuery.data as Occupant[] | undefined) ?? EMPTY;
   const utilities = (utilitiesQuery.data as Utility[] | undefined) ?? EMPTY;
+  const roomNightLogs = (roomNightLogsQuery.data as RoomNightLog[] | undefined) ?? EMPTY;
 
   const isLoading =
     customersQuery.isLoading ||
@@ -656,7 +678,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     roomsQuery.isLoading ||
     bedsQuery.isLoading ||
     occupantsQuery.isLoading ||
-    utilitiesQuery.isLoading;
+    utilitiesQuery.isLoading ||
+    roomNightLogsQuery.isLoading;
 
   // ── Helpers for optimistic cache updates ────────────────────────────────
   function patchInList<T extends { id: string }>(
@@ -706,6 +729,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: bedsKey });
     queryClient.invalidateQueries({ queryKey: occupantsKey });
     queryClient.invalidateQueries({ queryKey: utilitiesKey });
+    queryClient.invalidateQueries({ queryKey: roomNightLogsKey });
   };
 
   // ── Customer mutations ──────────────────────────────────────────────────
@@ -956,7 +980,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     format: "housingops-export",
     version: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { customers, properties, leases, rooms, beds, occupants, utilities },
+    data: { customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs },
   });
 
   // Holds the pre-import bundle plus the timer that drops it after the
@@ -993,6 +1017,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
     queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
     queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
+    queryClient.setQueryData<RoomNightLog[]>(roomNightLogsKey, dataToWrite.roomNightLogs);
 
     importMut.mutate(
       { data: dataToWrite },
@@ -1029,6 +1054,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       beds: [...beds],
       occupants: [...occupants],
       utilities: [...utilities],
+      roomNightLogs: [...roomNightLogs],
     };
 
     let dataToWrite: ExportData;
@@ -1070,13 +1096,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const previewMergeImport = (preview: ImportPreview): MergeDryRun =>
     dryRunMergeImport(
-      { customers, properties, leases, rooms, beds, occupants, utilities },
+      { customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs },
       preview.data,
     );
 
   return (
     <DataContext.Provider value={{
-      customers, properties, leases, rooms, beds, occupants, utilities, isLoading,
+      customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs, isLoading,
       addCustomer, updateCustomer, deleteCustomer,
       addProperty, updateProperty, deleteProperty,
       updateLease, addLease, deleteLease,

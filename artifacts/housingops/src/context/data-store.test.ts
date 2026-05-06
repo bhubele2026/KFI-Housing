@@ -152,6 +152,7 @@ describe("inspectImportPayload", () => {
       beds: 0,
       occupants: 0,
       utilities: 0,
+      roomNightLogs: 0,
     });
     expect(preview.data.customers[0].id).toBe("c1");
     expect(preview.data.properties[0].customerId).toBe("c1");
@@ -315,6 +316,7 @@ const emptyBundle = (): ExportData => ({
   beds: [],
   occupants: [],
   utilities: [],
+  roomNightLogs: [],
 });
 
 describe("mergeImportBundles", () => {
@@ -340,6 +342,7 @@ describe("mergeImportBundles", () => {
       beds: 0,
       occupants: 0,
       utilities: 0,
+      roomNightLogs: 0,
     });
     expect(merged.updated.customers).toBe(0);
     expect(merged.updated.properties).toBe(0);
@@ -406,6 +409,7 @@ describe("mergeImportBundles", () => {
       beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Vacant" as const, occupantId: null }],
       occupants: [],
       utilities: [],
+      roomNightLogs: [],
     };
     const incoming: ExportData = {
       customers: [baseCustomer("c1", { name: "Renamed" })], // updated
@@ -415,6 +419,7 @@ describe("mergeImportBundles", () => {
       beds: [{ id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Vacant" as const, occupantId: null }], // unchanged
       occupants: [],
       utilities: [{ id: "u1", propertyId: "p1", type: "Electric" as const, company: "X", monthlyCost: 100, accountNumber: "", notes: "" }], // added
+      roomNightLogs: [],
     };
 
     const merged = mergeImportBundles(current, incoming);
@@ -427,6 +432,7 @@ describe("mergeImportBundles", () => {
       beds: 0,
       occupants: 0,
       utilities: 1,
+      roomNightLogs: 0,
     });
     expect(merged.updated).toEqual({
       customers: 1,
@@ -436,6 +442,7 @@ describe("mergeImportBundles", () => {
       beds: 0,
       occupants: 0,
       utilities: 0,
+      roomNightLogs: 0,
     });
     expect(totalImportSummary(merged.added)).toBe(2);
     expect(totalImportSummary(merged.updated)).toBe(1);
@@ -480,6 +487,39 @@ describe("dryRunMergeImport", () => {
 
     const totals = totalMergeDryRun(dry);
     expect(totals).toEqual({ added: 2, updated: 1, unchanged: 1 });
+  });
+
+  it("preserves room-night logs across an export → import round trip", () => {
+    // Reflects the real export shape: the data-store's `exportData()`
+    // wraps the in-memory bundle in this envelope, and `inspectImportPayload`
+    // is what the importer calls on the parsed file. If logs are dropped
+    // anywhere along that chain, this test goes red.
+    const sampleLogs = [
+      { id: "log-1", leaseId: "l1", month: "2026-01", roomNights: 31, notes: "January" },
+      { id: "log-2", leaseId: "l1", month: "2026-02", roomNights: 28, notes: "Feb variance: -3 vs minimum" },
+    ];
+    const exportPayload = {
+      format: "housingops-export" as const,
+      version: EXPORT_FORMAT_VERSION,
+      exportedAt,
+      data: {
+        customers: [sampleCustomer],
+        properties: [sampleProperty],
+        leases: [],
+        rooms: [sampleRoom],
+        beds: [],
+        occupants: [],
+        utilities: [],
+        roomNightLogs: sampleLogs,
+      },
+    };
+
+    // Round-trip through JSON the way a downloaded backup would.
+    const roundTripped = JSON.parse(JSON.stringify(exportPayload));
+    const preview = inspectImportPayload(roundTripped);
+
+    expect(preview.summary.roomNightLogs).toBe(2);
+    expect(preview.data.roomNightLogs).toEqual(sampleLogs);
   });
 
   it("does not mutate the inputs", () => {

@@ -5,6 +5,7 @@ import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
 import { seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
+import { seedChateauKnollIfMissing } from "./lib/seed-chateau-knoll";
 import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
 import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
@@ -47,6 +48,9 @@ void start({
   },
   seedAttachedLeasesIfMissing: async () => {
     await seedAttachedLeasesIfMissing();
+  },
+  seedChateauKnollIfMissing: async () => {
+    await seedChateauKnollIfMissing();
   },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {

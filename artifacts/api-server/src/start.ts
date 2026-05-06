@@ -21,6 +21,9 @@ export interface StartDeps {
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
   seedAttachedLeasesIfMissing: () => Promise<void>;
+  // Idempotent seed for the 6 active Chateau Knoll leases (Task #290).
+  // Non-fatal.
+  seedChateauKnollIfMissing: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -298,6 +301,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply attached-lease PDF seed — continuing to serve",
+    );
+  }
+
+  // Idempotent seed for the 6 active Chateau Knoll leases (Task #290).
+  // Non-fatal for the same reason as the other PDF-derived seeds.
+  try {
+    await deps.seedChateauKnollIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Chateau Knoll seed — continuing to serve",
     );
   }
 

@@ -6,3 +6,4 @@ export * from "./rooms";
 export * from "./beds";
 export * from "./occupants";
 export * from "./utilities";
+export * from "./insurance-certificates";

@@ -4,12 +4,17 @@ interface Row {
   id: string;
   [k: string]: unknown;
 }
-type TableName = "customers" | "properties" | "leases";
+type TableName =
+  | "customers"
+  | "properties"
+  | "leases"
+  | "insurance_certificates";
 
 const stores: Record<TableName, Map<string, Row>> = {
   customers: new Map(),
   properties: new Map(),
   leases: new Map(),
+  insurance_certificates: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -207,6 +212,12 @@ vi.mock("@workspace/db", () => ({
     notes: { __col: "notes" },
     clauses: { __col: "clauses" },
   },
+  insuranceCertificatesTable: {
+    __table: "insurance_certificates",
+    id: { __col: "id" },
+    propertyId: { __col: "propertyId" },
+    policyNumber: { __col: "policyNumber" },
+  },
 }));
 
 vi.mock("./logger", () => ({
@@ -232,6 +243,7 @@ describe("seedChateauKnollIfMissing", () => {
     expect(result.customerInserted).toBe(true);
     expect(result.propertyInserted).toBe(true);
     expect(result.leasesInserted).toBe(6);
+    expect(result.insuranceInserted).toBe(true);
     expect(result.unitsPresent.sort()).toEqual(
       ["1407", "1506", "2108", "3512", "3524", "3604"],
     );
@@ -239,6 +251,21 @@ describe("seedChateauKnollIfMissing", () => {
     expect(stores.customers.size).toBe(1);
     expect(stores.properties.size).toBe(1);
     expect(stores.leases.size).toBe(6);
+    expect(stores.insurance_certificates.size).toBe(1);
+
+    const cert = stores.insurance_certificates.get(
+      SEED_CHATEAU_KNOLL_IDS.insurance,
+    )!;
+    expect(cert).toBeDefined();
+    expect(cert["propertyId"]).toBe(SEED_CHATEAU_KNOLL_IDS.property);
+    expect(cert["carrier"]).toBe("Philadelphia Indemnity");
+    expect(cert["policyNumber"]).toBe("PHPK2653492");
+    expect(cert["insuredName"]).toBe("KFI Staffing LLC");
+    expect(cert["coverageStart"]).toBe("2026-02-04");
+    expect(cert["coverageEnd"]).toBe("2027-02-04");
+    expect(cert["documentUrl"]).toBe(
+      "Renter_s_Insurance_1778107759430.pdf",
+    );
 
     const property = stores.properties.get(SEED_CHATEAU_KNOLL_IDS.property)!;
     expect(property["address"]).toBe("2900 Middle Rd");
@@ -312,10 +339,19 @@ describe("seedChateauKnollIfMissing", () => {
       landlordEmail: "ops@chateau.example",
     });
 
+    // Operator edits the seeded insurance row.
+    const certId = SEED_CHATEAU_KNOLL_IDS.insurance;
+    const beforeCert = stores.insurance_certificates.get(certId)!;
+    stores.insurance_certificates.set(certId, {
+      ...beforeCert,
+      notes: "operator cert edit",
+    });
+
     const second = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second.customerInserted).toBe(false);
     expect(second.propertyInserted).toBe(false);
     expect(second.leasesInserted).toBe(0);
+    expect(second.insuranceInserted).toBe(false);
     expect(second.unitsPresent.sort()).toEqual(
       ["1407", "1506", "2108", "3512", "3524", "3604"],
     );
@@ -324,6 +360,49 @@ describe("seedChateauKnollIfMissing", () => {
     expect(after["notes"]).toBe("operator edit");
     expect(after["landlordEmail"]).toBe("ops@chateau.example");
     expect(stores.leases.size).toBe(6);
+    expect(stores.insurance_certificates.size).toBe(1);
+    expect(stores.insurance_certificates.get(certId)!["notes"]).toBe(
+      "operator cert edit",
+    );
+  });
+
+  it("does not duplicate the insurance cert when a prior import already wrote the same policy under a different id", async () => {
+    stores.customers.set("operator-cust", {
+      id: "operator-cust",
+      name: "Some Client",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.properties.set("operator-prop", {
+      id: "operator-prop",
+      customerId: "operator-cust",
+      name: "Chateau",
+      address: "2900 Middle Rd",
+      city: "Bettendorf",
+      state: "IA",
+      zip: "52722",
+      totalBeds: 6,
+      notes: "",
+    });
+    stores.insurance_certificates.set("upstream-cert-chateau", {
+      id: "upstream-cert-chateau",
+      propertyId: "operator-prop",
+      policyNumber: "PHPK2653492",
+      carrier: "Some Other Carrier",
+      notes: "loaded by operator",
+    });
+
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+    expect(result.insuranceInserted).toBe(false);
+    expect(stores.insurance_certificates.size).toBe(1);
+    expect(
+      stores.insurance_certificates.has(SEED_CHATEAU_KNOLL_IDS.insurance),
+    ).toBe(false);
+    expect(
+      stores.insurance_certificates.get("upstream-cert-chateau")!["carrier"],
+    ).toBe("Some Other Carrier");
   });
 
   it("reuses a pre-existing Chateau Knoll property created under another customer and bumps totalBeds when too low", async () => {

@@ -4,9 +4,11 @@ import {
   customersTable,
   propertiesTable,
   leasesTable,
+  insuranceCertificatesTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
+  type InsertInsuranceCertificateRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
@@ -14,8 +16,31 @@ import type { Logger } from "pino";
 
 export const CHATEAU_KNOLL_CUSTOMER_ID = "cust-kfi-corporate";
 export const CHATEAU_KNOLL_PROPERTY_ID = "prop-chateau-knoll-bettendorf";
+export const CHATEAU_KNOLL_INSURANCE_ID = "ins-chateau-knoll-phpk2653492";
 export const chateauKnollLeaseId = (unit: string): string =>
   `lease-chateau-knoll-u${unit}`;
+
+/**
+ * Renter's / liability insurance certificate on file for Chateau Knoll,
+ * extracted from `Renter_s_Insurance_1778107759430.pdf` (ACORD 25
+ * dated 2026-02-10). KFI Staffing LLC is the named insured; Chateau
+ * Knoll is the certificate holder. The General Liability policy covers
+ * 2026-02-04 → 2027-02-04 with $1M each occurrence / $2M aggregate.
+ */
+const CHATEAU_INSURANCE_SOURCE = "Renter_s_Insurance_1778107759430.pdf";
+const CHATEAU_INSURANCE_CARRIER = "Philadelphia Indemnity";
+const CHATEAU_INSURANCE_POLICY = "PHPK2653492";
+const CHATEAU_INSURANCE_INSURED = "KFI Staffing LLC";
+const CHATEAU_INSURANCE_START = "2026-02-04";
+const CHATEAU_INSURANCE_END = "2027-02-04";
+const CHATEAU_INSURANCE_NOTES =
+  "ACORD 25 Certificate of Liability Insurance dated 2026-02-10. " +
+  "Producer: M3 Insurance Solutions, Inc. (Madison, WI; Zachary Morrell, " +
+  "800-272-2443). Commercial General Liability policy PHPK2653492 — " +
+  "$1,000,000 each occurrence, $1,000,000 damage to rented premises, " +
+  "$2,000,000 general aggregate, $5,000,000 umbrella (PHUB899925). " +
+  "Chateau Knoll, 2900 Middle Rd, Bettendorf IA 52722 is listed as the " +
+  "certificate holder. Source: Renter_s_Insurance_1778107759430.pdf.";
 
 const CHATEAU_CUSTOMER_NAME = "KFI Staffing — Corporate";
 /**
@@ -163,7 +188,9 @@ function buildPropertyRow(
       "Middle Rd, Bettendorf IA 52722; individual units are in the same " +
       "complex. Water RUBS 100% / Gas RUBS 100% / Utility Reimbursement " +
       "Admin Fee $3.95 per unit. A renter's insurance certificate is on " +
-      "file (not loaded as a structured record). Source documents: six " +
+      "file as a structured record (see insurance_certificates: " +
+      "Philadelphia Indemnity policy PHPK2653492, KFI Staffing LLC named " +
+      "insured, coverage 2026-02-04 → 2027-02-04). Source documents: six " +
       "Chateau_Knoll_Lease_-_<unit>_1778107759*.pdf files plus " +
       "LOI_-_Chateau_Knoll_1778107759431.pdf. The image-only PDFs " +
       "Lease_buyout_procedure_-_Chateau_Knoll and BGCK_Letter were not " +
@@ -238,6 +265,23 @@ function buildLeaseRow(
   };
 }
 
+function buildInsuranceRow(
+  propertyId: string,
+): InsertInsuranceCertificateRow {
+  return {
+    id: CHATEAU_KNOLL_INSURANCE_ID,
+    propertyId,
+    leaseId: "",
+    carrier: CHATEAU_INSURANCE_CARRIER,
+    policyNumber: CHATEAU_INSURANCE_POLICY,
+    insuredName: CHATEAU_INSURANCE_INSURED,
+    coverageStart: CHATEAU_INSURANCE_START,
+    coverageEnd: CHATEAU_INSURANCE_END,
+    documentUrl: CHATEAU_INSURANCE_SOURCE,
+    notes: CHATEAU_INSURANCE_NOTES,
+  };
+}
+
 export interface SeedChateauKnollResult {
   customerInserted: boolean;
   propertyInserted: boolean;
@@ -245,6 +289,9 @@ export interface SeedChateauKnollResult {
    *  it was below the 6 active KFI corporate beds we're seeding. */
   totalBedsBumped: boolean;
   leasesInserted: number;
+  /** Whether the Chateau Knoll renter's insurance certificate row was
+   *  inserted on this run (false on idempotent re-runs). */
+  insuranceInserted: boolean;
   propertyId: string | null;
   unitsPresent: string[];
   /** Customer the property is attached to after this run. Either the
@@ -506,7 +553,34 @@ export async function seedChateauKnollIfMissing(
       }
     }
 
-    // 4. Cleanup: drop the legacy "KFI Staffing — Corporate" fallback
+    // 4. Insurance certificate upsert. Dedupe by (propertyId,
+    //    policyNumber) so an operator who already loaded the cert under
+    //    a different id is not duplicated. Insert-only — operator edits
+    //    to the cert row are preserved.
+    let insuranceInserted = false;
+    const existingCert = await tx
+      .select({ id: insuranceCertificatesTable.id })
+      .from(insuranceCertificatesTable)
+      .where(
+        and(
+          eq(insuranceCertificatesTable.propertyId, propertyId),
+          eq(
+            insuranceCertificatesTable.policyNumber,
+            CHATEAU_INSURANCE_POLICY,
+          ),
+        ),
+      )
+      .limit(1);
+    if (existingCert.length === 0) {
+      const insertedCert = await tx
+        .insert(insuranceCertificatesTable)
+        .values(buildInsuranceRow(propertyId))
+        .onConflictDoNothing()
+        .returning({ id: insuranceCertificatesTable.id });
+      insuranceInserted = insertedCert.length > 0;
+    }
+
+    // 5. Cleanup: drop the legacy "KFI Staffing — Corporate" fallback
     //    customer when nothing else still references it. Other KFI
     //    seeds (Park Place, Kolbe Wausau) own their own
     //    "KFI Staffing – <city>" customers and never read this exact
@@ -533,6 +607,7 @@ export async function seedChateauKnollIfMissing(
       propertyInserted,
       totalBedsBumped,
       leasesInserted,
+      insuranceInserted,
       propertyId,
       unitsPresent,
       customerId,
@@ -546,6 +621,7 @@ export async function seedChateauKnollIfMissing(
     result.propertyInserted ||
     result.totalBedsBumped ||
     result.leasesInserted > 0 ||
+    result.insuranceInserted ||
     result.repointedToEndClient ||
     result.fallbackCustomerDeleted
   ) {
@@ -565,6 +641,7 @@ export async function seedChateauKnollIfMissing(
 export const SEED_CHATEAU_KNOLL_IDS = {
   customer: CHATEAU_KNOLL_CUSTOMER_ID,
   property: CHATEAU_KNOLL_PROPERTY_ID,
+  insurance: CHATEAU_KNOLL_INSURANCE_ID,
   leases: Object.fromEntries(
     CHATEAU_LEASES.map((l) => [l.unit, chateauKnollLeaseId(l.unit)]),
   ) as Record<string, string>,

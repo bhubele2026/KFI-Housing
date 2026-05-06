@@ -8,6 +8,7 @@ import {
   bedsTable,
   occupantsTable,
   utilitiesTable,
+  insuranceCertificatesTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
@@ -523,6 +524,10 @@ async function wipeAll(): Promise<void> {
     await tx.delete(roomNightLogsTable);
     await tx.delete(leasesTable);
     await tx.delete(utilitiesTable);
+    // Insurance certificates reference properties (and optionally
+    // leases) by id — wipe before properties so a future FK doesn't
+    // trip on cascade order.
+    await tx.delete(insuranceCertificatesTable);
     await tx.delete(roomsTable);
     await tx.delete(propertiesTable);
     await tx.delete(customersTable);

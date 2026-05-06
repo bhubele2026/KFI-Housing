@@ -255,6 +255,14 @@ vi.mock("@/components/renew-lease-popover", () => ({
   RenewLeasePopover: ({ trigger }: { trigger?: ReactNode }) => <>{trigger}</>,
 }));
 
+// The leases page reads room-night logs to surface the hotel-rate
+// "at risk this month" tile + per-row "Below min / No log yet" pill
+// (task #319). Tests in this file don't exercise that signal directly,
+// but the hook must still resolve cleanly — return an empty array.
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 // ── Mock data store ─────────────────────────────────────────────────────
 type State = {
   customers: Array<Record<string, unknown>>;

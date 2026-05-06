@@ -4,9 +4,10 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import type { Lease, Customer, Property } from "@/data/mockData";
+import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
+import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { extractSourcePdfFilename, sourcePdfHref } from "@/lib/lease-source-pdf";
 
@@ -37,6 +38,15 @@ export interface LeasesTableProps {
    * are UI-only — they are never persisted.
    */
   placeholderProperties?: readonly Property[];
+  /**
+   * All room-night logs across hotel-rate leases (from `useListRoomNightLogs`).
+   * When provided, the Status column adds a "Below min" or "No log yet"
+   * pill for hotel-rate leases (`monthlyRoomNightMin > 0`) whose latest
+   * month is short of the minimum or missing entirely. Defaults to an
+   * empty array so callers that don't care about this signal (e.g. the
+   * per-property Leases tab) keep their current behaviour.
+   */
+  roomNightLogs?: readonly RoomNightLog[];
   /**
    * Page path (no leading hash) the user is currently on. Threaded through
    * to the lease detail page via the `?from=` query string so the back
@@ -118,6 +128,7 @@ export function LeasesTable({
   emptyMessage = "No leases found.",
   emptyAction,
   placeholderProperties = [],
+  roomNightLogs,
   originPath,
 }: LeasesTableProps) {
   const propertyById = new Map(properties.map((p) => [p.id, p] as const));
@@ -294,6 +305,39 @@ export function LeasesTable({
                           Needs review
                         </Badge>
                       )}
+                      {(() => {
+                        // Hotel-rate at-risk pill — surfaces the same "Below
+                        // min" warning that lives on the lease detail page so
+                        // operators can spot at-risk months across every
+                        // hotel-rate agreement at a glance (task #319).
+                        // Hidden entirely when the caller didn't wire the
+                        // logs prop (per-property Leases tab) — without the
+                        // logs we can't tell "no log yet" apart from "didn't
+                        // fetch", so we say nothing rather than risk a
+                        // false-positive alarm.
+                        if (!roomNightLogs) return null;
+                        const risk = getHotelRateRiskStatus(lease, roomNightLogs);
+                        if (!risk) return null;
+                        const label =
+                          risk.kind === "missing"
+                            ? "No log yet"
+                            : `Below min · ${risk.latestNights}/${risk.monthlyMin}`;
+                        const title =
+                          risk.kind === "missing"
+                            ? `No room-night log yet — minimum is ${risk.monthlyMin} nights/month.`
+                            : `Latest month ${risk.latestMonth}: ${risk.latestNights} of ${risk.monthlyMin} required nights.`;
+                        return (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 text-[11px] font-medium border-rose-300 bg-rose-50 text-rose-800"
+                            title={title}
+                            data-testid={`badge-lease-room-night-risk-${lease.id}`}
+                          >
+                            <Hotel className="h-3 w-3" />
+                            {label}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>

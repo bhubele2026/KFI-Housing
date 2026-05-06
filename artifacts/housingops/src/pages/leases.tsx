@@ -9,7 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users } from "lucide-react";
+import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users, Hotel } from "lucide-react";
+import { useListRoomNightLogs } from "@workspace/api-client-react";
+import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import {
   Accordion,
   AccordionContent,
@@ -70,6 +72,15 @@ export default function Leases() {
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
+  // Room-night logs power the hotel-rate "at risk this month" tile and
+  // the per-row "Below min / No log yet" pill on the leases table. The
+  // hook always returns a stable array (or undefined while loading) — no
+  // need to gate further interactions on its readiness.
+  const roomNightLogsQuery = useListRoomNightLogs();
+  const roomNightLogs = useMemo(
+    () => roomNightLogsQuery.data ?? [],
+    [roomNightLogsQuery.data],
+  );
   // When the PDF import fails (parse/AI error), we hand off to the manual
   // Add Lease dialog so the user can keep going without re-clicking.
   const [pdfFallbackOpen, setPdfFallbackOpen] = useState(false);
@@ -211,6 +222,33 @@ export default function Leases() {
     .filter(({ info }) => info.level !== "ok")
     .sort((a, b) => a.info.days - b.info.days);
 
+  // Hotel-rate "at risk this month" — every hotel-rate lease in the
+  // current customer scope whose current calendar month either has no
+  // log yet or logged fewer nights than the agreement's minimum. This
+  // is the dashboard-style summary the leases page surfaces in a single
+  // tile so operators don't have to open each lease detail page (task
+  // #319). Only Active / Upcoming leases count — Expired ones can't
+  // void a rate that no longer applies.
+  const currentMonth = currentMonthKey();
+  const hotelRateAtRisk = useMemo(() => {
+    return leases
+      .filter((l) => l.status === "Active" || l.status === "Upcoming")
+      .filter((l) => {
+        if (customerFilter === ALL_CUSTOMERS) return true;
+        const property = propertyById.get(l.propertyId);
+        const tenantId =
+          (l.customerId && l.customerId.length > 0
+            ? l.customerId
+            : property?.customerId) ?? "";
+        return tenantId === customerFilter;
+      })
+      .map((lease) => {
+        const risk = getHotelRateMonthRisk(lease, roomNightLogs, currentMonth);
+        return risk ? { lease, risk } : null;
+      })
+      .filter((row): row is { lease: typeof leases[number]; risk: NonNullable<ReturnType<typeof getHotelRateMonthRisk>> } => row !== null);
+  }, [leases, customerFilter, propertyById, roomNightLogs, currentMonth]);
+
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS ? null : customerById.get(customerFilter) ?? null;
 
@@ -306,6 +344,59 @@ export default function Leases() {
               </button>
             </Badge>
           </div>
+        )}
+
+        {hotelRateAtRisk.length > 0 && (
+          <Card
+            className="border-rose-200 bg-rose-50/40"
+            data-testid="card-hotel-rate-at-risk"
+          >
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 rounded-md bg-rose-100">
+                  <Hotel className="h-4 w-4 text-rose-700" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold">
+                    Hotel-rate at risk this month
+                  </h2>
+                  <p
+                    className="text-xs text-muted-foreground"
+                    data-testid="text-hotel-rate-at-risk-summary"
+                  >
+                    {hotelRateAtRisk.length} hotel-rate lease
+                    {hotelRateAtRisk.length === 1 ? "" : "s"} below minimum or
+                    missing a {currentMonth} room-night log.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {hotelRateAtRisk.map(({ lease, risk }) => {
+                  const property = propertyById.get(lease.propertyId);
+                  return (
+                    <button
+                      key={lease.id}
+                      type="button"
+                      onClick={() =>
+                        navigate(`/leases/${lease.id}?from=${encodeURIComponent("/leases")}`)
+                      }
+                      className="text-left bg-white rounded-md border border-rose-200/70 p-3 hover:shadow-sm transition-all"
+                      data-testid={`tile-hotel-rate-at-risk-${lease.id}`}
+                    >
+                      <p className="font-semibold text-sm truncate">
+                        {property?.name ?? "Unknown property"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {risk.kind === "missing"
+                          ? `No log for ${currentMonth} · min ${risk.monthlyMin}/mo`
+                          : `${risk.latestNights}/${risk.monthlyMin} nights this month`}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {renewalAlerts.length > 0 && (
@@ -515,6 +606,7 @@ export default function Leases() {
                 onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
                 onDelete={deleteLease}
                 placeholderProperties={visiblePlaceholderProperties}
+                roomNightLogs={roomNightLogs}
                 emptyAction={
                   leases.length === 0 ? (
                     <AddLeaseDialog
@@ -585,6 +677,7 @@ export default function Leases() {
                           navigate(`/properties/${propertyId}`)
                         }
                         onDelete={deleteLease}
+                        roomNightLogs={roomNightLogs}
                         originPath="/leases"
                       />
                     </AccordionContent>

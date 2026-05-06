@@ -8,6 +8,9 @@ export interface StartDeps {
   ) => Promise<PushSchemaResult>;
   seedIfEmpty: () => Promise<void>;
   backfillOccupantMoveInDates: () => Promise<void>;
+  // Idempotent Adient customer/property/lease seed; runs after
+  // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
+  seedAdientIfMissing: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -181,6 +184,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to backfill occupant move-in dates — continuing to serve",
+    );
+  }
+
+  // Idempotent Adient seed; non-fatal so a transient DB blip can't
+  // keep the server from serving traffic.
+  try {
+    await deps.seedAdientIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Adient seed — continuing to serve",
     );
   }
 

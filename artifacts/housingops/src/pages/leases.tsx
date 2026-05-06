@@ -9,7 +9,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download } from "lucide-react";
+import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { useToast } from "@/hooks/use-toast";
@@ -27,11 +33,14 @@ type BuyoutFilter = "All" | "Yes" | "No";
 
 type NeedsReviewFilter = "All" | "NeedsReview";
 
+type ViewMode = "flat" | "by-customer";
+
 export default function Leases() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("All");
   const [buyoutFilter, setBuyoutFilter] = useState<BuyoutFilter>("All");
+  const [viewMode, setViewMode] = useState<ViewMode>("flat");
   // URL-driven so the dashboard "Needs review" tile can deep-link straight
   // to the subset of leases missing an end date (`?needsReview=1`), mirroring
   // the pattern in occupants.tsx.
@@ -125,6 +134,46 @@ export default function Leases() {
     buyoutFilter === "All" &&
     needsReviewFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
+
+  // By-customer view: one group per customer with ≥1 Active lease in
+  // the filtered scope. Active-only on expand, per the task brief.
+  const customerGroups = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        customerId: string;
+        customerName: string;
+        leases: typeof filteredLeases;
+        activeCount: number;
+      }
+    >();
+    for (const lease of filteredLeases) {
+      const property = propertyById.get(lease.propertyId);
+      if (!property) continue;
+      const name = customerById.get(property.customerId);
+      if (!name) continue;
+      let group = map.get(property.customerId);
+      if (!group) {
+        group = {
+          customerId: property.customerId,
+          customerName: name,
+          leases: [],
+          activeCount: 0,
+        };
+        map.set(property.customerId, group);
+      }
+      if (lease.status === "Active") {
+        (group.leases as typeof filteredLeases) = [
+          ...group.leases,
+          lease,
+        ];
+        group.activeCount += 1;
+      }
+    }
+    return [...map.values()]
+      .filter((g) => g.activeCount > 0)
+      .sort((a, b) => a.customerName.localeCompare(b.customerName));
+  }, [filteredLeases, propertyById, customerById]);
 
   // Renewal alerts: leases that are Active or Upcoming and either expired or expire within 90 days
   const renewalAlerts = leases
@@ -381,15 +430,48 @@ export default function Leases() {
                   </SelectContent>
                 </Select>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {filteredLeases.length} of {leases.length} lease{leases.length === 1 ? "" : "s"}
-                {visiblePlaceholderProperties.length > 0 && (
-                  <span className="ml-2" data-testid="text-placeholder-count">
-                    + {visiblePlaceholderProperties.length} propert
-                    {visiblePlaceholderProperties.length === 1 ? "y" : "ies"} without a lease
-                  </span>
-                )}
-              </span>
+              <div className="flex items-center gap-3">
+                <div
+                  className="inline-flex rounded-md border bg-background p-0.5"
+                  role="group"
+                  aria-label="Lease view mode"
+                  data-testid="leases-view-toggle"
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "flat" ? "default" : "ghost"}
+                    aria-pressed={viewMode === "flat"}
+                    onClick={() => setViewMode("flat")}
+                    className="h-7 gap-1 px-2 text-xs"
+                    data-testid="button-view-mode-flat"
+                  >
+                    <Rows3 className="h-3.5 w-3.5" />
+                    All
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={viewMode === "by-customer" ? "default" : "ghost"}
+                    aria-pressed={viewMode === "by-customer"}
+                    onClick={() => setViewMode("by-customer")}
+                    className="h-7 gap-1 px-2 text-xs"
+                    data-testid="button-view-mode-by-customer"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    By customer
+                  </Button>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {filteredLeases.length} of {leases.length} lease{leases.length === 1 ? "" : "s"}
+                  {visiblePlaceholderProperties.length > 0 && (
+                    <span className="ml-2" data-testid="text-placeholder-count">
+                      + {visiblePlaceholderProperties.length} propert
+                      {visiblePlaceholderProperties.length === 1 ? "y" : "ies"} without a lease
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
 
             {/*
@@ -399,38 +481,92 @@ export default function Leases() {
               still available via the dropdown above and the "Filtered by
               customer" badge — no separate Customer column is needed here.
             */}
-            <LeasesTable
-              leases={filteredLeases}
-              properties={properties}
-              customers={customers}
-              showProperty
-              onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
-              onDelete={deleteLease}
-              placeholderProperties={visiblePlaceholderProperties}
-              emptyAction={
-                leases.length === 0 ? (
-                  <AddLeaseDialog
-                    properties={properties}
-                    customers={customers}
-                    onAdd={(lease) => {
-                      addLease(lease);
-                      const property = propertyById.get(lease.propertyId);
-                      toast({
-                        title: "Lease added",
-                        description: property
-                          ? `Added a new lease for ${property.name}.`
-                          : "New lease created.",
-                      });
-                    }}
-                  />
-                ) : undefined
-              }
-              // Threaded so the lease detail back-link returns to /leases
-              // (with our customer/status filters preserved by the URL).
-              // Placeholder rows use the same value to thread `&from=`
-              // through to the create page (`/leases/new?propertyId=…`).
-              originPath="/leases"
-            />
+            {viewMode === "flat" ? (
+              <LeasesTable
+                leases={filteredLeases}
+                properties={properties}
+                customers={customers}
+                showProperty
+                onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
+                onDelete={deleteLease}
+                placeholderProperties={visiblePlaceholderProperties}
+                emptyAction={
+                  leases.length === 0 ? (
+                    <AddLeaseDialog
+                      properties={properties}
+                      customers={customers}
+                      onAdd={(lease) => {
+                        addLease(lease);
+                        const property = propertyById.get(lease.propertyId);
+                        toast({
+                          title: "Lease added",
+                          description: property
+                            ? `Added a new lease for ${property.name}.`
+                            : "New lease created.",
+                        });
+                      }}
+                    />
+                  ) : undefined
+                }
+                // Threaded so the lease detail back-link returns to /leases
+                // (with our customer/status filters preserved by the URL).
+                // Placeholder rows use the same value to thread `&from=`
+                // through to the create page (`/leases/new?propertyId=…`).
+                originPath="/leases"
+              />
+            ) : customerGroups.length === 0 ? (
+              <div
+                className="p-8 text-center text-sm text-muted-foreground"
+                data-testid="leases-by-customer-empty"
+              >
+                No customer has an Active lease in the current filter scope.
+              </div>
+            ) : (
+              <Accordion
+                type="multiple"
+                className="px-2"
+                data-testid="leases-by-customer-accordion"
+              >
+                {customerGroups.map((group) => (
+                  <AccordionItem
+                    key={group.customerId}
+                    value={group.customerId}
+                    data-testid={`accordion-customer-${group.customerId}`}
+                  >
+                    <AccordionTrigger
+                      className="px-2"
+                      data-testid={`accordion-customer-trigger-${group.customerId}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium">{group.customerName}</span>
+                        <Badge
+                          variant="secondary"
+                          className="text-[11px] font-medium"
+                          data-testid={`badge-customer-active-count-${group.customerId}`}
+                        >
+                          {group.activeCount} Active
+                        </Badge>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent
+                      data-testid={`accordion-customer-content-${group.customerId}`}
+                    >
+                      <LeasesTable
+                        leases={group.leases}
+                        properties={properties}
+                        customers={customers}
+                        showProperty
+                        onPropertyClick={(propertyId) =>
+                          navigate(`/properties/${propertyId}`)
+                        }
+                        onDelete={deleteLease}
+                        originPath="/leases"
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
           </CardContent>
         </Card>
       </div>

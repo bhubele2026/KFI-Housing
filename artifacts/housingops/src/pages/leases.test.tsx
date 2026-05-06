@@ -55,6 +55,75 @@ vi.mock("@/components/ui/dialog", () => {
   };
 });
 
+// Mock Radix Accordion so AccordionContent renders inline when open.
+vi.mock("@/components/ui/accordion", () => {
+  const React = require("react");
+  type Ctx = {
+    open: Set<string>;
+    toggle: (v: string) => void;
+  };
+  const AccordionCtx = React.createContext<Ctx | null>(null);
+  const ItemCtx = React.createContext<string | null>(null);
+  function Accordion({
+    children,
+    ...rest
+  }: { children?: ReactNode; [k: string]: unknown }) {
+    const [open, setOpen] = React.useState<Set<string>>(new Set());
+    const ctx: Ctx = {
+      open,
+      toggle: (v: string) =>
+        setOpen((prev) => {
+          const next = new Set(prev);
+          if (next.has(v)) next.delete(v);
+          else next.add(v);
+          return next;
+        }),
+    };
+    return (
+      <AccordionCtx.Provider value={ctx}>
+        <div {...rest}>{children}</div>
+      </AccordionCtx.Provider>
+    );
+  }
+  function AccordionItem({
+    value,
+    children,
+    ...rest
+  }: { value: string; children?: ReactNode; [k: string]: unknown }) {
+    return (
+      <ItemCtx.Provider value={value}>
+        <div data-accordion-item={value} {...rest}>{children}</div>
+      </ItemCtx.Provider>
+    );
+  }
+  function AccordionTrigger({
+    children,
+    ...rest
+  }: { children?: ReactNode; [k: string]: unknown }) {
+    const ctx = React.useContext(AccordionCtx);
+    const value = React.useContext(ItemCtx);
+    return (
+      <button
+        type="button"
+        onClick={() => value && ctx?.toggle(value)}
+        {...rest}
+      >
+        {children}
+      </button>
+    );
+  }
+  function AccordionContent({
+    children,
+    ...rest
+  }: { children?: ReactNode; [k: string]: unknown }) {
+    const ctx = React.useContext(AccordionCtx);
+    const value = React.useContext(ItemCtx);
+    if (!value || !ctx?.open.has(value)) return null;
+    return <div {...rest}>{children}</div>;
+  }
+  return { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
+});
+
 vi.mock("@/components/ui/popover", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
   return {
@@ -632,5 +701,193 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     // l1 has buyout → hidden. l2 has none → still visible.
     expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
     expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
+  });
+
+  it("by-customer view shows one collapsible row per customer with at least one Active lease, badged with the active count", async () => {
+    await renderPage();
+
+    const byCustomerBtn = container.querySelector(
+      '[data-testid="button-view-mode-by-customer"]',
+    ) as HTMLButtonElement | null;
+    expect(byCustomerBtn).not.toBeNull();
+    await act(async () => byCustomerBtn!.click());
+
+    const accordion = container.querySelector(
+      '[data-testid="leases-by-customer-accordion"]',
+    );
+    expect(accordion).not.toBeNull();
+
+    const item = container.querySelector(
+      '[data-testid="accordion-customer-c1"]',
+    );
+    expect(item).not.toBeNull();
+    // Customer name on the trigger and the active-count badge are the
+    // two pieces of information the operator needs at-a-glance before
+    // expanding the group.
+    expect(item!.textContent).toContain("Acme Co");
+    const badge = container.querySelector(
+      '[data-testid="badge-customer-active-count-c1"]',
+    );
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain("2");
+
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+  });
+
+  it("expanding a customer group reveals that customer's leases via LeasesTable", async () => {
+    await renderPage();
+
+    await act(async () =>
+      (container.querySelector(
+        '[data-testid="button-view-mode-by-customer"]',
+      ) as HTMLButtonElement).click(),
+    );
+
+    const trigger = container.querySelector(
+      '[data-testid="accordion-customer-trigger-c1"]',
+    ) as HTMLButtonElement | null;
+    expect(trigger).not.toBeNull();
+    await act(async () => trigger!.click());
+
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
+
+    // Switching back to flat keeps placeholders reachable.
+    await act(async () =>
+      (container.querySelector(
+        '[data-testid="button-view-mode-flat"]',
+      ) as HTMLButtonElement).click(),
+    );
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p2"]'),
+    ).not.toBeNull();
+  });
+
+  it("by-customer view respects the status filter — Status=Expired collapses every group", async () => {
+    await renderPage();
+    await act(async () =>
+      (container.querySelector(
+        '[data-testid="button-view-mode-by-customer"]',
+      ) as HTMLButtonElement).click(),
+    );
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c1"]'),
+    ).not.toBeNull();
+    const expiredOption = container.querySelector(
+      '[data-testid="select-status-filter"] [data-select-item="Expired"]',
+    ) as HTMLButtonElement | null;
+    expect(expiredOption).not.toBeNull();
+    await act(async () => expiredOption!.click());
+
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c1"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="leases-by-customer-empty"]'),
+    ).not.toBeNull();
+  });
+
+  it("by-customer view respects the customer filter — selecting one customer hides every other group", async () => {
+    state.customers.push({
+      id: "c2",
+      name: "Beta Co",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    state.properties.push(
+      baseProperty({
+        id: "pY",
+        customerId: "c2",
+        name: "Birch",
+        address: "9 Birch Ct",
+      }),
+    );
+    state.leases.push({
+      id: "lActiveBeta",
+      propertyId: "pY",
+      startDate: "2025-06-01",
+      endDate: "2026-06-01",
+      monthlyRent: 1100,
+      securityDeposit: 0,
+      status: "Active",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    await renderPage();
+    await act(async () =>
+      (container.querySelector(
+        '[data-testid="button-view-mode-by-customer"]',
+      ) as HTMLButtonElement).click(),
+    );
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c2"]'),
+    ).not.toBeNull();
+
+    const c1Option = container.querySelector(
+      '[data-testid="select-customer-filter"] [data-select-item="c1"]',
+    ) as HTMLButtonElement | null;
+    expect(c1Option).not.toBeNull();
+    await act(async () => c1Option!.click());
+
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c2"]'),
+    ).toBeNull();
+  });
+
+  it("by-customer view hides customers whose only filtered leases are non-Active", async () => {
+    state.customers.push({
+      id: "c2",
+      name: "Beta Co",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    state.properties.push(
+      baseProperty({
+        id: "pX",
+        customerId: "c2",
+        name: "Birch",
+        address: "9 Birch Ct",
+      }),
+    );
+    state.leases.push({
+      id: "lExpired",
+      propertyId: "pX",
+      startDate: "2024-01-01",
+      endDate: "2024-12-31",
+      monthlyRent: 1200,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    await renderPage();
+    await act(async () =>
+      (container.querySelector(
+        '[data-testid="button-view-mode-by-customer"]',
+      ) as HTMLButtonElement).click(),
+    );
+
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="accordion-customer-c2"]'),
+    ).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
 import { seedIfEmpty } from "./lib/seed";
+import { seedAdientIfMissing } from "./lib/seed-adient";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
 import { start } from "./start";
 
@@ -11,6 +12,9 @@ void start({
   seedIfEmpty,
   backfillOccupantMoveInDates: async () => {
     await backfillOccupantMoveInDates();
+  },
+  seedAdientIfMissing: async () => {
+    await seedAdientIfMissing();
   },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {

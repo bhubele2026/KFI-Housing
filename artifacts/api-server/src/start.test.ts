@@ -24,6 +24,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
+    seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
     listen: vi.fn().mockResolvedValue(undefined),
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),
@@ -430,6 +431,55 @@ describe("start", () => {
 
     expect(exit).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("invokes seedAdientIfMissing after seedIfEmpty + backfill, and is non-fatal when it throws", async () => {
+    const callOrder: string[] = [];
+    const seedIfEmpty = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedIfEmpty");
+    });
+    const backfillOccupantMoveInDates = vi.fn().mockImplementation(async () => {
+      callOrder.push("backfillOccupantMoveInDates");
+    });
+    const seedAdientIfMissing = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedAdientIfMissing");
+      throw new Error("boom: simulated transient seed failure");
+    });
+    const listen = vi.fn().mockImplementation(async () => {
+      callOrder.push("listen");
+    });
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        seedIfEmpty,
+        backfillOccupantMoveInDates,
+        seedAdientIfMissing,
+        listen,
+        logger,
+        exit,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(seedAdientIfMissing).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual([
+      "seedIfEmpty",
+      "backfillOccupantMoveInDates",
+      "seedAdientIfMissing",
+      "listen",
+    ]);
+    // Non-fatal: server must still listen, exit must not be invoked,
+    // and a warning must surface so an operator can see the failure.
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+    const warnCalls = logger.warn.mock.calls;
+    expect(
+      warnCalls.some(([, message]) =>
+        /Adient seed/i.test(String(message)),
+      ),
+    ).toBe(true);
   });
 
   it("warns at startup when neither GOOGLE_MAPS_API_KEY nor VITE_GOOGLE_MAPS_API_KEY is set", async () => {

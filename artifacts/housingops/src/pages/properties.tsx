@@ -477,6 +477,17 @@ export default function Properties() {
       // list is empty by default.
       const groupIds = new Set<string>([p.customerId]);
       for (const cid of p.sharedWithCustomerIds ?? []) groupIds.add(cid);
+      // When the operator has scoped to a single customer, only emit
+      // that customer's group — otherwise a shared-housing property
+      // whose primary customerId differs from the scope (e.g. Ridge
+      // Motor Inn primary=Penda, scoped to Trienda) would still
+      // surface a Penda group containing only the shared row, which
+      // contradicts the scope chip.
+      if (customerFilter !== ALL_CUSTOMERS) {
+        for (const cid of [...groupIds]) {
+          if (cid !== customerFilter) groupIds.delete(cid);
+        }
+      }
       for (const cid of groupIds) {
         const arr = map.get(cid) ?? [];
         arr.push(p);
@@ -510,7 +521,7 @@ export default function Properties() {
     // properties are added.
     list.sort((a, b) => a.customer.name.localeCompare(b.customer.name));
     return list;
-  }, [filtered, customerById]);
+  }, [filtered, customerById, customerFilter]);
 
   // Search auto-expands every group containing a match. Since `filtered`
   // already excludes non-matching properties, the presence of any

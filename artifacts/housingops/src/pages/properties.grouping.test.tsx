@@ -417,6 +417,65 @@ describe("Properties customer grouping", () => {
     expect(get("row-property-p2")).not.toBeNull();
   });
 
+  it("surfaces a shared-housing property under every customer in sharedWithCustomerIds (task #311)", async () => {
+    // Ridge Motor Inn is shared by Penda + Trienda — modeled as one
+    // property row whose `customerId` is the primary tenant and whose
+    // `sharedWithCustomerIds` lists the additional tenants. The
+    // Properties page must surface it under EACH customer's group, not
+    // just the primary, so scoping by either customer shows the
+    // shared property.
+    state.customers = [
+      { id: "c1", name: "Penda", contactName: "", email: "", phone: "", notes: "" },
+      { id: "c2", name: "Trienda", contactName: "", email: "", phone: "", notes: "" },
+      { id: "c3", name: "Other Co", contactName: "", email: "", phone: "", notes: "" },
+    ];
+    state.properties = [
+      baseProperty({
+        id: "p-ridge",
+        customerId: "c1",
+        sharedWithCustomerIds: ["c2"],
+        name: "Ridge Motor Inn",
+      }),
+      // A non-shared property under c3 so the test can assert the
+      // shared row does NOT bleed into unrelated groups.
+      baseProperty({ id: "p-other", customerId: "c3", name: "Other House" }),
+    ];
+
+    await renderPage();
+
+    // The shared property's row appears under both Penda and Trienda
+    // groups (each gets its own row instance via React keys), and the
+    // group counts include it on both sides.
+    expect(get("row-customer-group-c1")).not.toBeNull();
+    expect(get("row-customer-group-c2")).not.toBeNull();
+    expect(get("badge-customer-group-count-c1")?.textContent).toContain("1");
+    expect(get("badge-customer-group-count-c2")?.textContent).toContain("1");
+    // It does NOT leak into Other Co's group.
+    expect(get("badge-customer-group-count-c3")?.textContent).toContain("1");
+
+    // Scoping to Trienda (c2) — historically would have hidden Ridge
+    // Motor Inn because its primary customerId is Penda. Now the
+    // customer filter checks sharedWithCustomerIds too, so the row
+    // surfaces and the group auto-expands the property row.
+    window.history.replaceState({}, "", "/properties?customer=c2");
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    await renderPage();
+
+    expect(get("row-customer-group-c1")).toBeNull();
+    expect(get("row-customer-group-c3")).toBeNull();
+    expect(get("row-customer-group-c2")?.getAttribute("data-expanded")).toBe("true");
+    expect(get("row-property-p-ridge")).not.toBeNull();
+  });
+
   it("hydrates the expanded set from localStorage on mount", async () => {
     window.localStorage.setItem(
       PREFS_KEY,

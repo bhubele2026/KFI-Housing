@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Occupants() {
-  const { occupants, properties, beds, isLoading, deleteOccupant } = useData();
+  const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
@@ -175,7 +175,39 @@ export default function Occupants() {
                         <TableCell className="font-medium">{occupant.name}</TableCell>
                         <TableCell>{property ? <PropertyNameCell name={property.name} /> : <span className="italic text-muted-foreground">—</span>}</TableCell>
                         <TableCell>{bed ? `Bed ${bed.bedNumber}` : "-"}</TableCell>
-                        <TableCell>{occupant.moveInDate}</TableCell>
+                        <TableCell>
+                          {occupant.moveInDate ? (
+                            occupant.moveInDate
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500 text-amber-700 dark:text-amber-400"
+                                data-testid={`badge-move-in-needs-review-${occupant.id}`}
+                              >
+                                Needs review
+                              </Badge>
+                              <Input
+                                type="date"
+                                aria-label={`Set move-in date for ${occupant.name}`}
+                                title="Set a move-in date"
+                                className="h-7 w-36 text-xs"
+                                data-testid={`input-move-in-date-${occupant.id}`}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  // Optimistic update — `updateOccupant` already
+                                  // toasts on mutation failure (captureRollback),
+                                  // so we deliberately don't fire a success toast
+                                  // here to avoid a false-positive when the API
+                                  // write later fails.
+                                  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+                                    updateOccupant(occupant.id, { moveInDate: v });
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">${occupant.chargePerBed}</TableCell>
                         <TableCell className="text-center">
                           <Badge variant={occupant.status === "Active" ? "default" : "secondary"}>

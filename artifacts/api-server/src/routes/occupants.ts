@@ -17,10 +17,24 @@ router.get("/occupants", async (_req, res): Promise<void> => {
   res.json(ListOccupantsResponse.parse(rows));
 });
 
+// Strict YYYY-MM-DD pattern. The shared `OptionalLeaseDate` schema
+// also accepts "" so legacy import payloads keep round-tripping, but
+// fresh occupants created via this endpoint must carry a real
+// move-in date (Task #259 — "New occupants going forward require a
+// move-in date at creation time").
+const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 router.post("/occupants", async (req, res): Promise<void> => {
   const body = CreateOccupantBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
+    return;
+  }
+  if (!STRICT_DATE_RE.test(body.data.moveInDate)) {
+    res.status(400).json({
+      error:
+        "moveInDate is required when creating an occupant and must be in YYYY-MM-DD format.",
+    });
     return;
   }
   const [row] = await db.insert(occupantsTable).values(body.data).returning();

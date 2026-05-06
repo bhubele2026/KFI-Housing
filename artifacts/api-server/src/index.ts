@@ -3,11 +3,15 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
 import { seedIfEmpty } from "./lib/seed";
+import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
 import { start } from "./start";
 
 void start({
   pushSchemaIfNeeded,
   seedIfEmpty,
+  backfillOccupantMoveInDates: async () => {
+    await backfillOccupantMoveInDates();
+  },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {
       app.listen(port, (err) => {

@@ -7,6 +7,7 @@ export interface StartDeps {
     options: PushSchemaOptions,
   ) => Promise<PushSchemaResult>;
   seedIfEmpty: () => Promise<void>;
+  backfillOccupantMoveInDates: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -168,6 +169,19 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.error({ err }, "Failed to seed database");
     deps.exit(1);
     return;
+  }
+
+  // One-shot backfill for legacy occupants whose move-in date was never
+  // captured (Task #259). Failures are logged but non-fatal — the API
+  // already tolerates empty move-in dates and the UI surfaces a "needs
+  // review" badge for any rows the backfill couldn't resolve.
+  try {
+    await deps.backfillOccupantMoveInDates();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to backfill occupant move-in dates — continuing to serve",
+    );
   }
 
   try {

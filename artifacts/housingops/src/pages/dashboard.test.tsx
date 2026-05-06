@@ -97,6 +97,7 @@ const mockData: {
   beds: unknown[];
   leases: unknown[];
   utilities: unknown[];
+  occupants: unknown[];
   customers: { id: string; name: string }[];
   isLoading: boolean;
 } = {
@@ -104,6 +105,7 @@ const mockData: {
   beds: [],
   leases: [],
   utilities: [],
+  occupants: [],
   customers: [
     { id: "c1", name: "Acme Co" },
     { id: "c2", name: "Globex" },

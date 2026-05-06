@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
@@ -22,7 +22,7 @@ import { formatPropertyName } from "@/lib/property-name";
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers } = useData();
+  const { properties, beds, leases, utilities, customers, occupants } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
@@ -50,6 +50,22 @@ export default function Dashboard() {
   const scopedUtilities = useMemo(
     () => utilities.filter((u) => scopedPropertyIds.has(u.propertyId)),
     [utilities, scopedPropertyIds],
+  );
+
+  const scopedOccupants = useMemo(
+    () =>
+      occupants.filter(
+        (o) => o.propertyId !== null && scopedPropertyIds.has(o.propertyId),
+      ),
+    [occupants, scopedPropertyIds],
+  );
+
+  // "Needs review" mirrors the badge logic in occupants.tsx — a falsy
+  // moveInDate (empty string or null) is what triggers the inline badge —
+  // so the dashboard count stays in sync with what users see on that page.
+  const needsReviewOccupantCount = useMemo(
+    () => scopedOccupants.filter((o) => !o.moveInDate).length,
+    [scopedOccupants],
   );
 
   const totalProperties = scopedProperties.length;
@@ -219,6 +235,39 @@ export default function Dashboard() {
             </motion.div>
           ))}
         </div>
+
+        {needsReviewOccupantCount > 0 && (
+          <Card
+            className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20"
+            data-testid="card-needs-review"
+          >
+            <CardContent className="p-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                <div className="flex flex-col">
+                  <p className="text-sm font-semibold">Needs review</p>
+                  <p className="text-2xl font-bold tabular-nums" data-testid="text-needs-review-count">
+                    {needsReviewOccupantCount}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {needsReviewOccupantCount === 1 ? "occupant is" : "occupants are"} missing a move-in date.
+                  </p>
+                </div>
+              </div>
+              <Button asChild variant="outline" data-testid="button-needs-review-cta">
+                <Link
+                  href={
+                    customerFilter === ALL_CUSTOMERS
+                      ? "/occupants?needsReview=1"
+                      : `/occupants?needsReview=1&customer=${encodeURIComponent(customerFilter)}`
+                  }
+                >
+                  Review occupants
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

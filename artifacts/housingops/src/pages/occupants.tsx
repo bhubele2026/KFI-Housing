@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -24,12 +24,41 @@ export default function Occupants() {
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  // Move-in filter is URL-driven so the dashboard "Needs review" card can deep
+  // link straight into the missing-move-in subset (`?needsReview=1`). We seed
+  // state from the search string and write back on change so refresh/back work.
+  const searchString = useSearch();
+  const [, navigate] = useLocation();
+  const [moveInFilter, setMoveInFilter] = useState<"All" | "NeedsReview">(() =>
+    new URLSearchParams(searchString).get("needsReview") === "1"
+      ? "NeedsReview"
+      : "All",
+  );
+
+  useEffect(() => {
+    const next =
+      new URLSearchParams(searchString).get("needsReview") === "1"
+        ? "NeedsReview"
+        : "All";
+    setMoveInFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+
+  const updateMoveInFilter = (value: "All" | "NeedsReview") => {
+    setMoveInFilter(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "NeedsReview") params.set("needsReview", "1");
+    else params.delete("needsReview");
+    const qs = params.toString();
+    navigate(qs ? `/occupants?${qs}` : "/occupants", { replace: true });
+  };
 
   const filteredOccupants = occupants.filter((o) => {
     const matchesSearch = o.name.toLowerCase().includes(search.toLowerCase());
     const matchesProperty = propertyFilter === "All" || o.propertyId === propertyFilter;
     const matchesStatus = statusFilter === "All" || o.status === statusFilter;
-    return matchesSearch && matchesProperty && matchesStatus;
+    const matchesMoveIn =
+      moveInFilter === "All" ? true : !o.moveInDate;
+    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn;
   });
 
   const handleDownloadCsv = () => {
@@ -125,6 +154,21 @@ export default function Occupants() {
                   <SelectItem value="All">All Statuses</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Former">Former</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={moveInFilter}
+                onValueChange={(v) => updateMoveInFilter(v as "All" | "NeedsReview")}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-44"
+                  data-testid="select-move-in-filter"
+                >
+                  <SelectValue placeholder="Move-in" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Move-ins</SelectItem>
+                  <SelectItem value="NeedsReview">Needs review</SelectItem>
                 </SelectContent>
               </Select>
             </div>

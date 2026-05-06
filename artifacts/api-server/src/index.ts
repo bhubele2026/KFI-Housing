@@ -5,6 +5,7 @@ import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
 import { seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
+import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
@@ -29,6 +30,9 @@ void start({
   },
   seedHickoryHavenIfMissing: async () => {
     await seedHickoryHavenIfMissing();
+  },
+  seedGreenockManorIfMissing: async () => {
+    await seedGreenockManorIfMissing();
   },
   seedHousingDeductions: async () => {
     await seedHousingDeductions();

@@ -14,6 +14,7 @@ export interface StartDeps {
   seedPatriotBarabooIfMissing: () => Promise<void>;
   backfillOccupantPayrollIds: () => Promise<void>;
   seedHickoryHavenIfMissing: () => Promise<void>;
+  seedGreenockManorIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -237,6 +238,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Hickory Haven seed — continuing to serve",
+    );
+  }
+
+  // Idempotent KFI Staffing / Greenock Manor (Mick's Properties LLC,
+  // McKeesport PA) seed (Task #293); non-fatal for the same reason.
+  try {
+    await deps.seedGreenockManorIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Greenock Manor seed — continuing to serve",
     );
   }
 

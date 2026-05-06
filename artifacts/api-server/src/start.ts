@@ -23,6 +23,11 @@ export interface StartDeps {
   seedGreenockManorIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
   seedKolbeWausauIfMissing: () => Promise<void>;
+  // Idempotent backfill of payroll people who appear on the weekly
+  // housing deduction roster but do not yet exist as occupants
+  // (Task #305). Runs before `seedHousingDeductions` so the deduction
+  // matcher resolves them via `employeeId == personId`.
+  seedPayrollOccupantsIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -296,6 +301,19 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Kolbe Wausau seed — continuing to serve",
+    );
+  }
+
+  // Idempotent seed for payroll-roster people who don't yet exist as
+  // occupants (Task #305). Must run before `seedHousingDeductions` so
+  // the deduction matcher resolves them via `employeeId == personId`
+  // and they drop off the unmatched / unplaced-payroll list.
+  try {
+    await deps.seedPayrollOccupantsIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply payroll-occupants seed — continuing to serve",
     );
   }
 

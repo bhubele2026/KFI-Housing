@@ -68,6 +68,7 @@ export interface MappableProperty {
    * renders an em-dash placeholder, mirroring the Properties table.
    */
   rentPerBed?: number | null;
+  electricPerBed?: number | null;
   rentPlusElectricPerBed?: number | null;
   /**
    * Persisted coordinates from a previous geocode. When present the
@@ -280,6 +281,7 @@ function buildInfoBubbleContent(
   // the metric is null (0 beds) so the bubble doesn't lie about $0.
   if (
     p.rentPerBed !== undefined ||
+    p.electricPerBed !== undefined ||
     p.rentPlusElectricPerBed !== undefined
   ) {
     const econ = document.createElement("div");
@@ -299,6 +301,17 @@ function buildInfoBubbleContent(
           ? "—"
           : `$${p.rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
       span.innerHTML = `<strong>${val}</strong> / bed`;
+      econ.appendChild(span);
+    }
+    if (p.electricPerBed !== undefined) {
+      const span = document.createElement("span");
+      span.dataset.testid = `portfolio-map-info-electric-per-bed-${p.id}`;
+      span.title = "Electric ÷ total beds";
+      const val =
+        p.electricPerBed === null
+          ? "—"
+          : `$${p.electricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+      span.innerHTML = `<strong>${val}</strong> elec/bed`;
       econ.appendChild(span);
     }
     if (p.rentPlusElectricPerBed !== undefined) {

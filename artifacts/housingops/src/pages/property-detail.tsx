@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -582,6 +582,7 @@ export default function PropertyDetail() {
     0,
   );
   const rentPerBed = computeRentPerBed(property.monthlyRent, propBeds.length);
+  const electricPerBed = computeElectricPerBed(monthlyElectricCost, propBeds.length);
   const rentPlusElectricPerBed = computeRentPlusElectricPerBed(
     property.monthlyRent,
     monthlyElectricCost,
@@ -680,7 +681,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
@@ -718,6 +719,17 @@ export default function PropertyDetail() {
             }
             icon={DollarSign}
             sub={`Monthly rent ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+          />
+          <StatCard
+            testId="stat-electric-per-bed"
+            label="Electric / Bed"
+            value={
+              electricPerBed === null
+                ? "—"
+                : `$${electricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            }
+            icon={Zap}
+            sub={`$${monthlyElectricCost.toLocaleString()} electric ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard
             testId="stat-rent-plus-electric-per-bed"

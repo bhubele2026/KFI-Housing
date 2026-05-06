@@ -6,7 +6,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -996,6 +996,10 @@ export default function Properties() {
         occupied: stats?.occupied ?? 0,
         vacant: stats?.vacant ?? 0,
         rentPerBed: computeRentPerBed(p.monthlyRent, stats?.total ?? 0),
+        electricPerBed: computeElectricPerBed(
+          monthlyElectricByPropertyId.get(p.id) ?? 0,
+          stats?.total ?? 0,
+        ),
         rentPlusElectricPerBed: computeRentPlusElectricPerBed(
           p.monthlyRent,
           monthlyElectricByPropertyId.get(p.id) ?? 0,

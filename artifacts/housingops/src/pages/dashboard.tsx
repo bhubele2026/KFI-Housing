@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -80,6 +80,7 @@ export default function Dashboard() {
     0,
   );
   const portfolioRentPerBed = computeRentPerBed(portfolioMonthlyRent, totalBeds);
+  const portfolioElectricPerBed = computeElectricPerBed(portfolioMonthlyElectric, totalBeds);
   const portfolioRentPlusElectricPerBed = computeRentPlusElectricPerBed(
     portfolioMonthlyRent,
     portfolioMonthlyElectric,
@@ -142,6 +143,15 @@ export default function Dashboard() {
           : `$${portfolioRentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
       icon: BedDouble,
       trend: `$${portfolioMonthlyRent.toLocaleString()} ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+    },
+    {
+      title: "Electric / Bed",
+      value:
+        portfolioElectricPerBed === null
+          ? "—"
+          : `$${portfolioElectricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      icon: Zap,
+      trend: `$${portfolioMonthlyElectric.toLocaleString()} electric ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
     },
     {
       title: "Rent + Electric / Bed",

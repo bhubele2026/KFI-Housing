@@ -360,6 +360,19 @@ export function computeRentPerBed(
 }
 
 /**
+ * Monthly Electric utility cost divided by beds — the per-bed share of
+ * the electric bill alone. Same `null`-on-zero-beds contract as
+ * {@link computeRentPerBed}.
+ */
+export function computeElectricPerBed(
+  monthlyElectricCost: number,
+  bedCount: number,
+): number | null {
+  if (!bedCount) return null;
+  return Math.round((monthlyElectricCost / bedCount) * 100) / 100;
+}
+
+/**
  * (Monthly rent + total monthly Electric utility cost) divided by beds —
  * the all-in per-bed cost the operator is responsible for each month
  * (rent plus electric utility outlay). Same `null`-on-zero-beds contract

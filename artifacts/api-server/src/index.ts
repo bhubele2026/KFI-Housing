@@ -6,6 +6,7 @@ import { seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
+import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
 import { backfillOccupantPayrollIds } from "./lib/backfill-occupant-payroll-ids";
 import { seedHousingDeductions } from "./lib/seed-housing-deductions";
@@ -25,6 +26,9 @@ void start({
   },
   backfillOccupantPayrollIds: async () => {
     await backfillOccupantPayrollIds();
+  },
+  seedHickoryHavenIfMissing: async () => {
+    await seedHickoryHavenIfMissing();
   },
   seedHousingDeductions: async () => {
     await seedHousingDeductions();

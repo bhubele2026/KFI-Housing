@@ -13,6 +13,7 @@ export interface StartDeps {
   seedAdientIfMissing: () => Promise<void>;
   seedPatriotBarabooIfMissing: () => Promise<void>;
   backfillOccupantPayrollIds: () => Promise<void>;
+  seedHickoryHavenIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -226,6 +227,16 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to backfill occupant payroll IDs — continuing to serve",
+    );
+  }
+
+  // Idempotent Hickory Haven (Gilman, WI) seed (Task #294); non-fatal.
+  try {
+    await deps.seedHickoryHavenIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Hickory Haven seed — continuing to serve",
     );
   }
 

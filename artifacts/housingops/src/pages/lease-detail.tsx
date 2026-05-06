@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, CalendarPlus, DollarSign, Trash2,
-  Save, Hotel, Plus, ExternalLink, CheckCircle2,
+  Save, Hotel, Plus, ExternalLink, CheckCircle2, ChevronDown,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -306,6 +306,114 @@ function RoomNightLogSection({
           </div>
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Inline preview of the lease's source PDF — collapsed by default so the
+ * lease page stays compact, expandable when an operator wants to compare
+ * the record against the original document line-by-line (Task #325).
+ *
+ * The browser's native PDF viewer renders the embedded `<iframe>`, which
+ * works for every PDF served from `/api/attached-assets/:filename`. We
+ * defer mounting the iframe until the section is opened the first time
+ * so closed cards never trigger a download.
+ *
+ * Missing-file fallback: the api-server returns a JSON 404 when the file
+ * isn't on disk; rendering that JSON inside the iframe would be ugly, so
+ * we HEAD-check on first open and swap in a small "file not found" notice
+ * instead. The "View source PDF" link in the page header is unchanged
+ * either way so operators always have an out.
+ */
+function LeaseSourcePdfPreview({ filename }: { filename: string }) {
+  const [open, setOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
+  const [missing, setMissing] = useState<boolean | null>(null);
+  const href = sourcePdfHref(filename);
+
+  useEffect(() => {
+    if (!hasOpened) return;
+    if (missing !== null) return;
+    let cancelled = false;
+    fetch(href, { method: "HEAD" })
+      .then((res) => {
+        if (cancelled) return;
+        setMissing(!res.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setMissing(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasOpened, href, missing]);
+
+  return (
+    <Card data-testid="card-lease-source-pdf-preview">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Source PDF Preview
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="gap-1.5 h-7"
+            aria-expanded={open}
+            onClick={() => {
+              setOpen((o) => {
+                const next = !o;
+                if (next) setHasOpened(true);
+                return next;
+              });
+            }}
+            data-testid="button-toggle-source-pdf-preview"
+          >
+            <ChevronDown
+              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+            />
+            {open ? "Hide" : "Show"}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      {open && (
+        <CardContent>
+          <p
+            className="text-xs text-muted-foreground mb-2 truncate"
+            title={filename}
+          >
+            {filename}
+          </p>
+          {missing === true ? (
+            <div
+              className="rounded border border-dashed border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground"
+              data-testid="text-source-pdf-missing"
+            >
+              The source PDF is no longer available on disk. The link in the
+              page header will also fail until the file is restored.
+            </div>
+          ) : missing === null ? (
+            // Hold the slot at the same height as the iframe while the HEAD
+            // check is in flight. Without this, the iframe would render
+            // first and could briefly display the api-server's JSON 404
+            // payload before the fallback message swaps in.
+            <Skeleton
+              className="w-full h-[70vh] rounded"
+              data-testid="skeleton-source-pdf"
+            />
+          ) : (
+            <iframe
+              src={href}
+              title={`Source PDF: ${filename}`}
+              className="w-full h-[70vh] rounded border border-border bg-muted"
+              data-testid="iframe-source-pdf"
+            />
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
@@ -837,6 +945,17 @@ export default function LeaseDetail() {
 
         {/* Two-column form layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* ── Source PDF inline preview (spans both columns when open) ── */}
+          {!isCreateMode && (() => {
+            const sourcePdf = extractSourcePdfFilename(lease.notes, lease.clauses);
+            if (!sourcePdf) return null;
+            return (
+              <div className="lg:col-span-2">
+                <LeaseSourcePdfPreview filename={sourcePdf} />
+              </div>
+            );
+          })()}
+
           {/* ── Lease Terms ── */}
           <Card>
             <CardHeader className="pb-3">

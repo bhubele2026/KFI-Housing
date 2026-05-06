@@ -427,6 +427,133 @@ describe("Dashboard customer filter back/forward navigation", () => {
   });
 });
 
+describe("Dashboard Needs review tile", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  function getCard() {
+    return container.querySelector('[data-testid="card-needs-review"]');
+  }
+
+  function getCount(): string | null {
+    const el = container.querySelector('[data-testid="text-needs-review-count"]');
+    return el ? el.textContent : null;
+  }
+
+  function getCtaHref(): string | null {
+    // Button uses `asChild` so the anchor itself carries the test id.
+    const el = container.querySelector(
+      'a[data-testid="button-needs-review-cta"]',
+    );
+    return el ? el.getAttribute("href") : null;
+  }
+
+  it("hides the tile when every occupant has a move-in date", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.occupants = [
+      { id: "o1", propertyId: "p1", moveInDate: "2024-01-01" },
+      { id: "o2", propertyId: "p1", moveInDate: "2024-02-01" },
+    ];
+
+    await render();
+
+    expect(getCard()).toBeNull();
+  });
+
+  it("shows the tile with the right count when some occupants are missing a move-in date", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.occupants = [
+      { id: "o1", propertyId: "p1", moveInDate: "2024-01-01" },
+      { id: "o2", propertyId: "p1", moveInDate: "" },
+      { id: "o3", propertyId: "p1", moveInDate: null },
+    ];
+
+    await render();
+
+    expect(getCard()).not.toBeNull();
+    expect(getCount()).toBe("2");
+    // Without a customer scope, the CTA deep-links to the bare needsReview URL.
+    expect(getCtaHref()).toBe("/occupants?needsReview=1");
+  });
+
+  it("respects the active customer scope when counting and linking", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Hillside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.occupants = [
+      // c1: 1 missing move-in
+      { id: "o1", propertyId: "p1", moveInDate: "" },
+      { id: "o2", propertyId: "p1", moveInDate: "2024-01-01" },
+      // c2: 2 missing — should NOT count when scoped to c1.
+      { id: "o3", propertyId: "p2", moveInDate: null },
+      { id: "o4", propertyId: "p2", moveInDate: "" },
+      // Unassigned occupant — never counts since it has no propertyId.
+      { id: "o5", propertyId: null, moveInDate: "" },
+    ];
+
+    await render();
+
+    // All-customers default: 3 missing across both customers (the
+    // unassigned occupant is excluded by scopedOccupants).
+    expect(getCount()).toBe("3");
+
+    // Scope to c1 via the dashboard customer filter.
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1");
+    });
+
+    expect(getCount()).toBe("1");
+    // CTA carries the active customer through to the occupants page.
+    expect(getCtaHref()).toBe("/occupants?needsReview=1&customer=c1");
+
+    // Scope to c2 — count flips to 2 and the CTA re-targets c2.
+    await act(async () => {
+      handler.onValueChange("c2");
+    });
+    expect(getCount()).toBe("2");
+    expect(getCtaHref()).toBe("/occupants?needsReview=1&customer=c2");
+  });
+});
+
 describe("Dashboard Property Performance correctness", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;

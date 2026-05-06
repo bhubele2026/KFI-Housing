@@ -569,6 +569,55 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     ).toBeNull();
   });
 
+  // ── Needs review filter (?needsReview=1) (task #276) ─────────────────
+  // The dashboard "Needs review" tile deep-links to /leases?needsReview=1
+  // and the Leases page is expected to (a) filter to leases missing an
+  // end date on first paint and (b) reflect that selection in the
+  // "Needs review" select so the operator can see why the list is short.
+  // Without the URL→state sync the deep link would land on a full list
+  // with no indication of why some rows are missing.
+  it("?needsReview=1 filters to leases missing an end date and the Needs review select stays in sync", async () => {
+    // Add a third lease with an empty endDate so the filter has a target.
+    // l1 and l2 both already have end dates, so they should be hidden.
+    state.leases.push({
+      id: "l3",
+      propertyId: "p2",
+      startDate: "2025-03-01",
+      endDate: "",
+      monthlyRent: 1000,
+      securityDeposit: 0,
+      // Status intentionally NOT Active/Upcoming — the renewal-alerts
+      // panel computes days-until-end on those statuses and would throw
+      // on this row's empty endDate. Real "needs review" leases tend
+      // to be partial imports without enough data to be active anyway.
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    const { Harness } = makeHarness("/leases?needsReview=1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+
+    // Only the lease without an end date is visible.
+    expect(container.querySelector('[data-testid="row-lease-l3"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();
+
+    // The Needs review select reflects the URL state — without this a
+    // deep-link from the dashboard would silently leave the dropdown on
+    // "All End Dates", making the truncated list look like a bug.
+    expect(
+      container
+        .querySelector('[data-testid="select-needs-review-filter"]')
+        ?.getAttribute("data-current"),
+    ).toBe("NeedsReview");
+  });
+
   it("filtering by Buyout=No hides leases that have a buyout", async () => {
     await renderPage();
 

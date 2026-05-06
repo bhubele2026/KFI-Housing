@@ -512,6 +512,70 @@ describe("Properties toolbar persistence", () => {
     expect(window.localStorage.getItem(PREFS_KEY)).toBeNull();
   });
 
+  // ── Needs review filter (?needsReview=1) (task #276) ──────────────────
+  // The dashboard "Needs review" tile deep-links the operator straight
+  // into /properties?needsReview=1. The Properties page is expected to
+  // (a) hide every property with a non-zero monthlyRent on first paint
+  // and (b) render the amber "Showing properties missing rent" badge,
+  // whose dismiss button must clear BOTH the URL param and the filter
+  // state so the operator can return to the full list with one click.
+  // Without these, deep links would either render the full list
+  // (silent failure) or strand the operator in a filtered view they
+  // can't get out of without editing the URL.
+  it("?needsReview=1 hides properties with a non-zero monthlyRent on first paint", async () => {
+    // p1 has rent (so it must be hidden); p2 and p3 stay at the
+    // default monthlyRent of 0 (so they're the only rows visible).
+    state.properties = [
+      baseProperty({ id: "p1", customerId: "c1", name: "Maple", monthlyRent: 1500 }),
+      baseProperty({ id: "p2", customerId: "c1", name: "Oak",   monthlyRent: 0 }),
+      baseProperty({ id: "p3", customerId: "c1", name: "Pine",  monthlyRent: 0 }),
+    ];
+    window.history.replaceState({}, "", "/properties?needsReview=1");
+
+    await renderPage();
+
+    expect(container.querySelector('[data-testid="row-property-p1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-property-p2"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-property-p3"]')).not.toBeNull();
+    // The amber badge is the only on-page indicator that the list is
+    // filtered — without it the truncated table would look like a bug.
+    expect(
+      container.querySelector('[data-testid="badge-needs-review-filter"]'),
+    ).not.toBeNull();
+  });
+
+  it("clearing the amber 'Showing properties missing rent' badge removes both the filter and the ?needsReview URL param", async () => {
+    state.properties = [
+      baseProperty({ id: "p1", customerId: "c1", name: "Maple", monthlyRent: 1500 }),
+      baseProperty({ id: "p2", customerId: "c1", name: "Oak",   monthlyRent: 0 }),
+      baseProperty({ id: "p3", customerId: "c1", name: "Pine",  monthlyRent: 0 }),
+    ];
+    window.history.replaceState({}, "", "/properties?needsReview=1");
+
+    await renderPage();
+
+    // Sanity: filter is active before the click.
+    expect(container.querySelector('[data-testid="row-property-p1"]')).toBeNull();
+
+    const clearBtn = container.querySelector(
+      '[data-testid="button-clear-needs-review-filter"]',
+    ) as HTMLButtonElement | null;
+    expect(clearBtn).not.toBeNull();
+    await act(async () => {
+      clearBtn!.click();
+    });
+
+    // The previously-hidden property is back…
+    expect(container.querySelector('[data-testid="row-property-p1"]')).not.toBeNull();
+    // …the badge is gone…
+    expect(
+      container.querySelector('[data-testid="badge-needs-review-filter"]'),
+    ).toBeNull();
+    // …and the URL param has been removed (an empty search string is the
+    // signal other surfaces use to know no transient triage view is active).
+    expect(window.location.search).toBe("");
+  });
+
   it("does NOT persist the customer filter (it owns its own ?customer= URL contract)", async () => {
     await renderPage();
 

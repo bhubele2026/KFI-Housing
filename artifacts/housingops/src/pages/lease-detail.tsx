@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, CalendarPlus, DollarSign, Trash2,
-  Save, Hotel, Plus,
+  Save, Hotel, Plus, ExternalLink,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import {
   useDeleteRoomNightLog,
   getListRoomNightLogsQueryKey,
 } from "@workspace/api-client-react";
+import { extractSourcePdfFilename, sourcePdfHref } from "@/lib/lease-source-pdf";
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -694,6 +695,37 @@ export default function LeaseDetail() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/*
+              "View source PDF" — every seeded lease records the original
+              PDF filename in its notes/clauses (e.g. `Source:
+              Lease_-1331_..._kfi-staff_1778107848648.pdf`). Surface a
+              one-click link to the api-server's attached-assets endpoint
+              so audits don't require digging through the workspace by
+              hand (Task #308). Hidden when no source is recorded.
+            */}
+            {!isCreateMode && (() => {
+              const sourcePdf = extractSourcePdfFilename(lease.notes, lease.clauses);
+              if (!sourcePdf) return null;
+              return (
+                <a
+                  href={sourcePdfHref(sourcePdf)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-lease-source-pdf"
+                >
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    title={sourcePdf}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    View source PDF
+                    <ExternalLink className="h-3 w-3 opacity-60" />
+                  </Button>
+                </a>
+              );
+            })()}
             {isCreateMode ? (
               // Create mode: a single "Save lease" CTA replaces Renew + Delete
               // since neither makes sense before the lease exists. The button

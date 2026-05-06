@@ -14,6 +14,7 @@ import bedsRouter from "./beds";
 import occupantsRouter from "./occupants";
 import utilitiesRouter from "./utilities";
 import payrollRouter from "./payroll";
+import attachedAssetsRouter from "./attached-assets";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(bedsRouter);
 router.use(occupantsRouter);
 router.use(utilitiesRouter);
 router.use(payrollRouter);
+router.use(attachedAssetsRouter);
 
 export default router;

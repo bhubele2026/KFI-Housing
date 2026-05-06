@@ -4,10 +4,11 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { extractSourcePdfFilename, sourcePdfHref } from "@/lib/lease-source-pdf";
 
 export interface LeasesTableProps {
   leases: readonly Lease[];
@@ -313,6 +314,42 @@ export function LeasesTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      {/*
+                        "View source PDF" quick action — every seeded lease
+                        records its originating PDF filename in notes/clauses
+                        (e.g. `Source: Lease_-1331_..._kfi-staff_…pdf`). When
+                        present, render a small external-link icon that opens
+                        the bundled file via the api-server's attached-assets
+                        route in a new tab (Task #308). Hidden for leases
+                        with no source — no broken UI.
+                      */}
+                      {(() => {
+                        const sourcePdf = extractSourcePdfFilename(
+                          lease.notes,
+                          lease.clauses,
+                        );
+                        if (!sourcePdf) return null;
+                        return (
+                          <a
+                            href={sourcePdfHref(sourcePdf)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`link-lease-source-pdf-${lease.id}`}
+                            title={`Open source PDF: ${sourcePdf}`}
+                          >
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              aria-label="View source PDF"
+                              tabIndex={-1}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </a>
+                        );
+                      })()}
                       {lease.needsReview && (
                         // Quick-fix shortcut for flagged leases. Threads the
                         // origin path through (so the back-link returns

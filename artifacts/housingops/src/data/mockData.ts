@@ -48,6 +48,10 @@ export const CustomerSchema = z.object({
   email: z.string(),
   phone: z.string(),
   notes: z.string(),
+  // Two-letter US state code (e.g. "WI", "MN"). Empty string when unknown.
+  // Marked optional + defaulted so older API payloads (and existing test
+  // fixtures) continue to parse without each one having to be updated.
+  state: z.string().optional().default(""),
 });
 export type Customer = z.infer<typeof CustomerSchema>;
 
@@ -579,9 +583,9 @@ export const UtilitySchema = z.object({
 export type Utility = z.infer<typeof UtilitySchema>;
 
 export const MOCK_CUSTOMERS: Customer[] = [
-  { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing." },
-  { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing." },
-  { id: "c3", name: "Sunrise Logistics",  contactName: "Hannah Park",  email: "hannah.park@sunriselogistics.com",  phone: "713-555-1300", notes: "Seasonal warehouse staff. Flexible occupancy needed." },
+  { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX" },
+  { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX" },
+  { id: "c3", name: "Sunrise Logistics",  contactName: "Hannah Park",  email: "hannah.park@sunriselogistics.com",  phone: "713-555-1300", notes: "Seasonal warehouse staff. Flexible occupancy needed.",   state: "TX" },
 ];
 
 export const MOCK_PROPERTIES: Property[] = [

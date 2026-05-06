@@ -667,6 +667,7 @@ export default function Properties() {
             email: newCustomer.email.trim(),
             phone: newCustomer.phone.trim(),
             notes: "",
+            state: "",
           });
         } catch {
           toast({

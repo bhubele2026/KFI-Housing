@@ -38,7 +38,18 @@ const EMPTY_DRAFT: Customer = {
   email: "",
   phone: "",
   notes: "",
+  state: "",
 };
+
+const UNASSIGNED_STATE_LABEL = "Other / Unassigned";
+
+// Normalize whatever the importer / operator typed into a stable two-letter
+// bucket key. Empty / whitespace-only values fall through to the
+// "Other / Unassigned" bucket so we never render a blank section header.
+function stateBucketKey(raw: string | undefined): string {
+  const trimmed = (raw ?? "").trim().toUpperCase();
+  return trimmed === "" ? UNASSIGNED_STATE_LABEL : trimmed;
+}
 
 export default function Customers() {
   const [location, navigate] = useLocation();
@@ -189,6 +200,28 @@ export default function Customers() {
     return list;
   }, [customers, search, sortKey, sortDir, statsByCustomer]);
 
+  // Bucket the visible customers by US state so the table can render a
+  // section header per state. Buckets are ordered alphabetically by state
+  // code (A → Z) with the catch-all "Other / Unassigned" pinned to the
+  // bottom. Within each bucket we preserve the order produced by `filtered`
+  // so any active sort/search still applies.
+  const grouped = useMemo(() => {
+    const buckets = new Map<string, Customer[]>();
+    for (const c of filtered) {
+      const key = stateBucketKey(c.state);
+      const list = buckets.get(key) ?? [];
+      list.push(c);
+      buckets.set(key, list);
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => {
+        if (a === UNASSIGNED_STATE_LABEL) return 1;
+        if (b === UNASSIGNED_STATE_LABEL) return -1;
+        return a.localeCompare(b);
+      })
+      .map(([state, rows]) => ({ state, rows }));
+  }, [filtered]);
+
   // Tri-state cycle: unsorted -> asc -> desc -> unsorted. Switching to a new
   // column always restarts at ascending, matching the Properties page UX.
   const cycleSort = (key: SortKey) => {
@@ -246,6 +279,7 @@ export default function Customers() {
       email: draft.email.trim(),
       phone: draft.phone.trim(),
       notes: draft.notes,
+      state: (draft.state ?? "").trim().toUpperCase(),
     };
     if (editing) {
       updateCustomer(editing.id, payload);
@@ -264,6 +298,7 @@ export default function Customers() {
       { header: "Contact Name",    value: (c) => c.contactName },
       { header: "Email",           value: (c) => c.email },
       { header: "Phone",           value: (c) => c.phone },
+      { header: "State",           value: (c) => c.state ?? "" },
       { header: "# Properties",    value: (c) => statsByCustomer.get(c.id)?.propertyCount ?? 0 },
       { header: "Total Beds",      value: (c) => statsByCustomer.get(c.id)?.totalBeds ?? 0 },
       { header: "Occupied Beds",   value: (c) => statsByCustomer.get(c.id)?.occupiedBeds ?? 0 },
@@ -499,7 +534,32 @@ export default function Customers() {
                     testId="empty-customers-table"
                   />
                 ) : (
-                  filtered.map((c, i) => {
+                  grouped.flatMap((group, groupIdx) => {
+                    let rowIndex = -1;
+                    return [
+                      <tr
+                        key={`state-header-${group.state}`}
+                        className="bg-muted/40 border-b"
+                        data-testid={`row-state-group-${group.state}`}
+                      >
+                        <th
+                          colSpan={8}
+                          scope="colgroup"
+                          className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <span data-testid={`text-state-group-label-${group.state}`}>
+                              {group.state}
+                            </span>
+                            <span className="text-muted-foreground/70 normal-case font-normal">
+                              · {group.rows.length} customer{group.rows.length === 1 ? "" : "s"}
+                            </span>
+                          </span>
+                        </th>
+                      </tr>,
+                      ...group.rows.map((c) => {
+                        rowIndex += 1;
+                        const i = groupIdx * 100 + rowIndex;
                     const stats = statsByCustomer.get(c.id);
                     const count = stats?.propertyCount ?? 0;
                     const totalBeds = stats?.totalBeds ?? 0;
@@ -682,6 +742,8 @@ export default function Customers() {
                         </td>
                       </motion.tr>
                     );
+                  }),
+                    ];
                   })
                 )}
               </TableBody>
@@ -731,6 +793,30 @@ export default function Customers() {
                 placeholder="555-555-1234"
                 data-testid="input-customer-phone"
               />
+            </div>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="cust-state">State</Label>
+              <Input
+                id="cust-state"
+                value={draft.state ?? ""}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    // Force uppercase so "wi" and "WI" land in the same
+                    // bucket. Trim length so an accidental "Wisconsin"
+                    // doesn't break the two-letter convention used by
+                    // the master-lease importer.
+                    state: e.target.value.toUpperCase().slice(0, 2),
+                  })
+                }
+                placeholder="WI"
+                maxLength={2}
+                className="uppercase"
+                data-testid="input-customer-state"
+              />
+              <p className="text-xs text-muted-foreground">
+                Two-letter US state code. Used to group customers on the Customers page.
+              </p>
             </div>
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="cust-email">Email</Label>

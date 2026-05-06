@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, readLastRoute } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,10 @@ export default function Login() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     login();
-    setLocation("/dashboard");
+    // Drop the operator back on the page they were last viewing before
+    // the tab closed; falls back to /dashboard for first-time logins or
+    // when localStorage is unreadable.
+    setLocation(readLastRoute() ?? "/dashboard");
   };
 
   return (

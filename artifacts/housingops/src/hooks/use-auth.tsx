@@ -9,6 +9,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = "housingops_auth";
+const LAST_ROUTE_STORAGE_KEY = "housingops:last-route";
 
 function readAuthFromStorage(): boolean {
   if (typeof window === "undefined") return false;
@@ -16,6 +17,43 @@ function readAuthFromStorage(): boolean {
     return window.localStorage.getItem(AUTH_STORAGE_KEY) === "true";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Returns the last route the operator was viewing before they closed the
+ * tab, or null if nothing was saved (or storage is unavailable). The caller
+ * is responsible for falling back to /dashboard. We require a leading "/"
+ * and reject "/login" so a stale value can never trap the user on the
+ * sign-in screen after they authenticate.
+ */
+export function readLastRoute(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(LAST_ROUTE_STORAGE_KEY);
+    if (!value || !value.startsWith("/") || value === "/login") return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastRoute(path: string): void {
+  if (typeof window === "undefined") return;
+  if (!path.startsWith("/") || path === "/login") return;
+  try {
+    window.localStorage.setItem(LAST_ROUTE_STORAGE_KEY, path);
+  } catch {
+    // Best-effort persistence — Safari Private Mode etc.
+  }
+}
+
+function clearLastRoute(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
+  } catch {
+    // ignored
   }
 }
 
@@ -38,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    clearLastRoute();
     setIsAuthenticated(false);
   };
 

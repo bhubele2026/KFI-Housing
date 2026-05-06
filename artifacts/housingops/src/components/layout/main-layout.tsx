@@ -1,8 +1,8 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./sidebar";
-import { useAuth } from "@/hooks/use-auth";
-import { Redirect } from "wouter";
+import { useAuth, writeLastRoute } from "@/hooks/use-auth";
+import { Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,18 @@ function readPersistedCollapsed(): boolean {
 
 export function MainLayout({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
+  const [location] = useLocation();
   const [collapsed, setCollapsed] = useState<boolean>(readPersistedCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Remember the last authenticated page so reopening the tab lands the
+  // operator back where they left off instead of always on /dashboard.
+  // Scoped to MainLayout so the /login route — which never mounts this
+  // component — can't poison the value.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    writeLastRoute(location);
+  }, [isAuthenticated, location]);
 
   useEffect(() => {
     try {

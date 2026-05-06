@@ -2,7 +2,7 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/hooks/use-auth";
+import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -37,7 +37,7 @@ const queryClient = new QueryClient({
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={() => <Redirect to="/dashboard" />} />
+      <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
       <Route path="/login" component={Login} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/customers" component={Customers} />

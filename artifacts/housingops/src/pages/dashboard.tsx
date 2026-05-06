@@ -466,9 +466,18 @@ export default function Dashboard() {
                                 className="mt-1 flex flex-wrap items-center gap-1"
                                 data-testid={`suggestions-unplaced-${row.personId}`}
                               >
-                                <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                                <span
+                                  className={
+                                    "text-xs inline-flex items-center gap-1 " +
+                                    (row.suggestions[0]!.crossEmployer
+                                      ? "text-amber-700 dark:text-amber-400"
+                                      : "text-muted-foreground")
+                                  }
+                                >
                                   <Wand2 className="h-3 w-3" />
-                                  Did you mean:
+                                  {row.suggestions[0]!.crossEmployer
+                                    ? "Did you mean (different employer):"
+                                    : "Did you mean:"}
                                 </span>
                                 {row.suggestions.map((s) => (
                                   <Button
@@ -476,17 +485,31 @@ export default function Dashboard() {
                                     type="button"
                                     size="sm"
                                     variant="ghost"
-                                    className="h-6 px-2 text-xs"
+                                    className={
+                                      "h-6 px-2 text-xs " +
+                                      (s.crossEmployer
+                                        ? "text-amber-700 dark:text-amber-400"
+                                        : "")
+                                    }
                                     onClick={() => {
                                       // Apply payroll's recurring rate to the
                                       // existing occupant. The seeder will then
                                       // match this row by name+company on the
                                       // next refetch and drop it from the list.
+                                      // For a cross-employer suggestion, also
+                                      // overwrite the occupant's company so the
+                                      // record now sits under the correct
+                                      // customer (the operator implicitly
+                                      // confirmed the employer change by
+                                      // clicking the warning-labeled button).
                                       updateOccupant(s.occupantId, {
                                         chargePerBed: row.weekly,
                                         billingFrequency: "Weekly",
                                         ...(row.personId
                                           ? { employeeId: row.personId }
+                                          : {}),
+                                        ...(s.crossEmployer
+                                          ? { company: row.customer }
                                           : {}),
                                       });
                                       queryClient.invalidateQueries({
@@ -497,6 +520,7 @@ export default function Dashboard() {
                                   >
                                     {s.name}
                                     {s.propertyName ? ` @ ${s.propertyName}` : " (unassigned)"}
+                                    {s.crossEmployer ? ` — ${s.company}` : ""}
                                   </Button>
                                 ))}
                               </div>

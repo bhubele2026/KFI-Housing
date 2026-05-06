@@ -75,8 +75,10 @@ describe("GET /payroll/unplaced", () => {
             {
               occupantId: "occ-1",
               name: "Gerard Derby",
+              company: "Bell Timber, Inc.",
               propertyName: "Maple Court",
               score: 0.85,
+              crossEmployer: false,
             },
           ],
         },
@@ -97,8 +99,10 @@ describe("GET /payroll/unplaced", () => {
           {
             occupantId: "occ-1",
             name: "Gerard Derby",
+            company: "Bell Timber, Inc.",
             propertyName: "Maple Court",
             score: 0.85,
+            crossEmployer: false,
           },
         ],
       },

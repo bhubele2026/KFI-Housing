@@ -92,6 +92,75 @@ describe("rankSuggestions", () => {
     const result = rankSuggestions("Jane Smith", "Adient", many, new Map(), { limit: 3 });
     expect(result.length).toBe(3);
   });
+
+  it("flags same-employer results with crossEmployer = false and includes company", () => {
+    const result = rankSuggestions("JANE A SMITH", "Adient", candidates, propertyNames);
+    expect(result.length).toBeGreaterThan(0);
+    for (const s of result) {
+      expect(s.crossEmployer).toBe(false);
+      expect(s.company).toBe("Adient");
+    }
+  });
+
+  it("cross-employer mode only returns candidates from a different employer, all flagged", () => {
+    const result = rankSuggestions(
+      "JANE A SMITH",
+      "Adient",
+      candidates,
+      propertyNames,
+      { employerMode: "cross" },
+    );
+    // occ-3 ("Jane Smith" @ Penda Corp) should be the top hit; the
+    // Adient candidates must be excluded entirely.
+    const ids = result.map((s) => s.occupantId);
+    expect(ids).toContain("occ-3");
+    expect(ids).not.toContain("occ-1");
+    expect(ids).not.toContain("occ-2");
+    expect(ids).not.toContain("occ-5");
+    for (const s of result) {
+      expect(s.crossEmployer).toBe(true);
+      expect(s.company.toLowerCase()).not.toBe("adient");
+    }
+  });
+});
+
+describe("seedHousingDeductions cross-employer fallback", () => {
+  // Black-box behavior: when same-employer suggestions are empty the
+  // seeder must still return cross-employer hits flagged accordingly.
+  // Exercised at the rankSuggestions level — the seeder's only logic
+  // here is "if same-employer is empty, run cross-employer". We assert
+  // both branches return their expected shapes for the same input.
+  it("returns same-employer hits when available, none flagged crossEmployer", () => {
+    const same = rankSuggestions("JANE A SMITH", "Adient", candidates, propertyNames);
+    expect(same.length).toBeGreaterThan(0);
+    expect(same.every((s) => !s.crossEmployer)).toBe(true);
+  });
+
+  it("falls back to cross-employer hits when same-employer is empty", () => {
+    // No Penda Corp candidate exists in the fixture aside from occ-3,
+    // and "Jane Smith" matches it across employers.
+    const onlyPendaSearchSpace: SuggestionCandidate[] = [
+      { id: "occ-3", name: "Jane Smith", company: "Penda Corp", propertyId: "prop-1" },
+    ];
+    const same = rankSuggestions(
+      "JANE SMITH",
+      "Adient",
+      onlyPendaSearchSpace,
+      propertyNames,
+    );
+    expect(same).toEqual([]);
+    const cross = rankSuggestions(
+      "JANE SMITH",
+      "Adient",
+      onlyPendaSearchSpace,
+      propertyNames,
+      { employerMode: "cross" },
+    );
+    expect(cross.length).toBe(1);
+    expect(cross[0]!.crossEmployer).toBe(true);
+    expect(cross[0]!.company).toBe("Penda Corp");
+    expect(cross[0]!.propertyName).toBe("Maple Court");
+  });
 });
 
 // ---------------------------------------------------------------------------

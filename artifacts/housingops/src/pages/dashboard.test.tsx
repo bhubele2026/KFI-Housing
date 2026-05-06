@@ -127,7 +127,7 @@ vi.mock("@/context/data-store", () => ({
   }),
 }));
 
-const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number; suggestions: Array<{ occupantId: string; name: string; propertyName: string | null; score: number }> }> } = {
+const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number; suggestions: Array<{ occupantId: string; name: string; company: string; propertyName: string | null; score: number; crossEmployer: boolean }> }> } = {
   rows: [],
 };
 const invalidateQueriesMock = vi.fn();
@@ -690,6 +690,98 @@ describe("Dashboard Unplaced payroll tile", () => {
 
     expect(container.querySelector('[data-testid="group-unplaced-Acme Co"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="group-unplaced-Globex"]')).toBeNull();
+  });
+
+  it("renders a distinct 'different employer' label and overwrites company on confirm for cross-employer suggestions", async () => {
+    unplacedPayrollState.rows = [
+      {
+        customer: "Penda Corp",
+        name: "JANE A SMITH",
+        personId: "EMP9",
+        weekly: 175,
+        suggestions: [
+          {
+            occupantId: "occ-cross",
+            name: "Jane Smith",
+            company: "Trienda Holdings",
+            propertyName: "Maple Court",
+            score: 0.95,
+            crossEmployer: true,
+          },
+        ],
+      },
+    ];
+
+    await render();
+
+    const wrap = container.querySelector(
+      '[data-testid="suggestions-unplaced-EMP9"]',
+    );
+    expect(wrap).not.toBeNull();
+    expect(wrap?.textContent ?? "").toContain("different employer");
+    const btn = container.querySelector(
+      '[data-testid="button-apply-suggestion-EMP9-occ-cross"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    // Display includes the candidate's current employer so the operator
+    // sees what they're switching away from.
+    expect(btn?.textContent ?? "").toContain("Trienda Holdings");
+
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(updateOccupantMock).toHaveBeenCalledWith("occ-cross", {
+      chargePerBed: 175,
+      billingFrequency: "Weekly",
+      employeeId: "EMP9",
+      company: "Penda Corp",
+    });
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ["/payroll/unplaced"],
+    });
+  });
+
+  it("renders the plain 'Did you mean:' label and does NOT touch company for same-employer suggestions", async () => {
+    unplacedPayrollState.rows = [
+      {
+        customer: "Acme Co",
+        name: "JANE A SMITH",
+        personId: "EMP10",
+        weekly: 100,
+        suggestions: [
+          {
+            occupantId: "occ-same",
+            name: "Jane Smith",
+            company: "Acme Co",
+            propertyName: "Maple Court",
+            score: 0.95,
+            crossEmployer: false,
+          },
+        ],
+      },
+    ];
+
+    await render();
+
+    const wrap = container.querySelector(
+      '[data-testid="suggestions-unplaced-EMP10"]',
+    );
+    expect(wrap?.textContent ?? "").toContain("Did you mean:");
+    expect(wrap?.textContent ?? "").not.toContain("different employer");
+
+    const btn = container.querySelector(
+      '[data-testid="button-apply-suggestion-EMP10-occ-same"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(updateOccupantMock).toHaveBeenCalledWith("occ-same", {
+      chargePerBed: 100,
+      billingFrequency: "Weekly",
+      employeeId: "EMP10",
+    });
   });
 
   it("on assign: writes occupant + bed and invalidates the unplaced list so the row drops off", async () => {

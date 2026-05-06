@@ -22,10 +22,15 @@ export interface UnplacedPayrollRow {
   personId: string;
   /** Recurring weekly deduction amount (USD). */
   weekly: number;
-  /** Up to 3 likely existing occupants at the same employer whose
-name closely resembles the payroll row's name (typo /
-initial / formatting differences). Sorted by descending
-similarity. Empty when no candidate scores ≥ 0.6.
+  /** Up to 3 likely existing occupants whose name closely
+resembles the payroll row's name (typo / initial /
+formatting differences). Sorted by descending similarity.
+Same-employer candidates are preferred; if none clear the
+threshold the seeder falls back to cross-employer
+candidates flagged with `crossEmployer = true` so the
+dashboard can warn the operator that confirming will also
+change the occupant's employer. Empty when nothing scores
+≥ 0.6 in either pass.
  */
   suggestions: UnplacedPayrollSuggestion[];
 }

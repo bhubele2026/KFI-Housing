@@ -16,15 +16,24 @@ export interface HousingDeductionRow {
  * operator can fix a payroll typo (e.g. "JANE A SMITH" vs the existing
  * "Jane Smith") in one click instead of creating a duplicate occupant.
  *
- * Candidates are restricted to occupants whose `company` matches the
- * payroll row's `customer` (case-insensitive) so a similarly-named
- * employee at a different employer can never be suggested.
+ * Same-employer candidates (occupants whose `company` matches the
+ * payroll row's `customer`, case-insensitive) are preferred — a
+ * similarly-named employee at a different employer is never silently
+ * picked. As a fallback, when zero same-employer candidates clear the
+ * threshold the seeder offers cross-employer candidates flagged with
+ * `crossEmployer = true`. The dashboard renders those with a distinct
+ * label so the operator knows confirming will also change the
+ * occupant's employer (common when shared housing means an occupant
+ * was originally created against the wrong customer — e.g. Penda vs
+ * Trienda at the same property).
  */
 export interface UnplacedPayrollSuggestion {
   occupantId: string;
   name: string;
+  company: string;
   propertyName: string | null;
   score: number;
+  crossEmployer: boolean;
 }
 
 export interface UnplacedPayrollUnmatchedRow {
@@ -300,31 +309,44 @@ export interface SuggestionCandidate {
 
 /**
  * Pure scoring helper exported for unit tests. Returns up to `limit`
- * candidates whose `company` matches `customer` (case-insensitive),
- * scored by name similarity ≥ `threshold`, sorted descending.
+ * candidates scored by name similarity ≥ `threshold`, sorted descending.
+ *
+ * Default mode (`employerMode: "same"`) restricts candidates to those
+ * whose `company` matches `customer` (case-insensitive) — the safe
+ * path. `employerMode: "cross"` does the inverse: only candidates
+ * whose `company` differs from `customer`, with each result flagged
+ * `crossEmployer = true` so the dashboard can render them as
+ * employer-change confirmations rather than typo fixes. The seeder
+ * uses cross-employer as a fallback when the same-employer pass
+ * returns nothing.
  */
 export function rankSuggestions(
   payrollName: string,
   customer: string,
   candidates: SuggestionCandidate[],
   propertyNameById: Map<string, string>,
-  options: { limit?: number; threshold?: number } = {},
+  options: { limit?: number; threshold?: number; employerMode?: "same" | "cross" } = {},
 ): UnplacedPayrollSuggestion[] {
   const limit = options.limit ?? 3;
   const threshold = options.threshold ?? 0.6;
+  const employerMode = options.employerMode ?? "same";
   const customerKey = customer.trim().toLowerCase();
   const scored: UnplacedPayrollSuggestion[] = [];
   for (const c of candidates) {
-    if (c.company.trim().toLowerCase() !== customerKey) continue;
+    const sameEmployer = c.company.trim().toLowerCase() === customerKey;
+    if (employerMode === "same" && !sameEmployer) continue;
+    if (employerMode === "cross" && sameEmployer) continue;
     const score = nameSimilarity(payrollName, c.name);
     if (score < threshold) continue;
     scored.push({
       occupantId: c.id,
       name: c.name,
+      company: c.company,
       propertyName: c.propertyId
         ? propertyNameById.get(c.propertyId) ?? null
         : null,
       score,
+      crossEmployer: employerMode === "cross",
     });
   }
   scored.sort((a, b) => b.score - a.score);
@@ -339,6 +361,8 @@ export function rankSuggestions(
  * inserts new occupants — unmatched rows are reported only, with up to
  * 3 fuzzy-match suggestions (same employer, name similarity ≥ 0.6) so
  * the dashboard can offer "Did you mean: …" one-click fixes for typos.
+ * When zero same-employer candidates clear the threshold, falls back
+ * to up to 3 cross-employer candidates flagged with `crossEmployer`.
  *
  * Idempotent: re-running yields the same result and only writes to rows
  * whose values would change (`alreadyCorrect` covers the no-op path).
@@ -443,17 +467,32 @@ export async function seedHousingDeductions(
     }
 
     if (!target) {
+      // Prefer same-employer suggestions (typo / initial fixes). If
+      // none clear the threshold, fall back to a cross-employer pass —
+      // this catches occupants that were originally created against
+      // the wrong customer (common when shared housing means a single
+      // property serves two customers like Penda + Trienda).
+      let suggestions = rankSuggestions(
+        row.name,
+        row.customer,
+        suggestionCandidates,
+        propertyNameById,
+      );
+      if (suggestions.length === 0) {
+        suggestions = rankSuggestions(
+          row.name,
+          row.customer,
+          suggestionCandidates,
+          propertyNameById,
+          { employerMode: "cross" },
+        );
+      }
       unmatched.push({
         customer: row.customer,
         name: row.name,
         personId: row.personId,
         weekly: row.weekly,
-        suggestions: rankSuggestions(
-          row.name,
-          row.customer,
-          suggestionCandidates,
-          propertyNameById,
-        ),
+        suggestions,
       });
       continue;
     }

@@ -19,6 +19,11 @@ export interface UnplacedPayrollSuggestion {
   occupantId: string;
   /** Existing occupant's name as stored in HousingOps. */
   name: string;
+  /** Existing occupant's employer as stored in HousingOps.
+Surfaced so the dashboard can show the cross-employer
+warning ("… — Penda Corp?") without an extra lookup.
+ */
+  company: string;
   /**
    * Property the candidate is currently assigned to, or null
 when the occupant isn't assigned to a property yet.
@@ -28,4 +33,11 @@ when the occupant isn't assigned to a property yet.
   propertyName: string | null;
   /** Name similarity in [0, 1]. Higher is closer. */
   score: number;
+  /** True when this candidate's employer differs from the
+payroll row's customer. Only set on the cross-employer
+fallback pass; the dashboard uses this to render a
+distinct "Did you mean (different employer): …" label and
+to also overwrite the occupant's company on confirm.
+ */
+  crossEmployer: boolean;
 }

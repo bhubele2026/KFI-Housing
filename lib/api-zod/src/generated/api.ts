@@ -1995,6 +1995,11 @@ export const ListUnplacedPayrollResponseItem = zod
             name: zod
               .string()
               .describe("Existing occupant's name as stored in HousingOps."),
+            company: zod
+              .string()
+              .describe(
+                'Existing occupant\'s employer as stored in HousingOps.\nSurfaced so the dashboard can show the cross-employer\nwarning (\"… — Penda Corp?\") without an extra lookup.\n',
+              ),
             propertyName: zod
               .string()
               .nullable()
@@ -2004,13 +2009,18 @@ export const ListUnplacedPayrollResponseItem = zod
             score: zod
               .number()
               .describe("Name similarity in [0, 1]. Higher is closer."),
+            crossEmployer: zod
+              .boolean()
+              .describe(
+                "True when this candidate's employer differs from the\npayroll row's customer. Only set on the cross-employer\nfallback pass; the dashboard uses this to render a\ndistinct \"Did you mean (different employer): …\" label and\nto also overwrite the occupant's company on confirm.\n",
+              ),
           })
           .describe(
             'A close-but-not-exact existing-occupant candidate for an\nunplaced payroll row. The dashboard renders these as\n\"Did you mean: <name> @ <propertyName>?\" buttons that update\nthe existing occupant\'s chargePerBed\/billingFrequency from the\npayroll row instead of creating a duplicate.\n',
           ),
       )
       .describe(
-        "Up to 3 likely existing occupants at the same employer whose\nname closely resembles the payroll row's name (typo \/\ninitial \/ formatting differences). Sorted by descending\nsimilarity. Empty when no candidate scores ≥ 0.6.\n",
+        "Up to 3 likely existing occupants whose name closely\nresembles the payroll row's name (typo \/ initial \/\nformatting differences). Sorted by descending similarity.\nSame-employer candidates are preferred; if none clear the\nthreshold the seeder falls back to cross-employer\ncandidates flagged with `crossEmployer = true` so the\ndashboard can warn the operator that confirming will also\nchange the occupant's employer. Empty when nothing scores\n≥ 0.6 in either pass.\n",
       ),
   })
   .describe(

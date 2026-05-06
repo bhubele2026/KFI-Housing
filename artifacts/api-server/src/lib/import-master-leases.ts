@@ -681,3 +681,18 @@ export async function importDefaultMasterLeases(
   const rows = await readMasterWorkbook(filePath);
   return importMasterLeases(rows, deps);
 }
+
+/**
+ * Boot-time variant: runs `importDefaultMasterLeases` so a brand-new
+ * environment lands with the production customer/property/lease set
+ * without an operator having to remember to click the "Import master
+ * file" button on the Leases page (Task #302). Re-runs are zero-effect
+ * because `importMasterLeases` matches existing rows on natural keys
+ * and only updates importer-owned fields, so it's safe to call on
+ * every boot.
+ */
+export async function importDefaultMasterLeasesIfMissing(
+  deps: Partial<ImportDeps> = {},
+): Promise<ImportSummary> {
+  return importDefaultMasterLeases(deps);
+}

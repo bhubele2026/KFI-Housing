@@ -11,6 +11,12 @@ export interface StartDeps {
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
   seedAdientIfMissing: () => Promise<void>;
+  // Boot-time auto-import of the bundled Housing_Lease_MASTER workbook
+  // (Task #302). Runs after seedAdientIfMissing so a fresh DB lands
+  // with the production customer/property/lease set without an
+  // operator having to click "Import master file". Idempotent and
+  // non-fatal — re-runs are zero-effect.
+  importDefaultMasterLeasesIfMissing: () => Promise<void>;
   seedPatriotBarabooIfMissing: () => Promise<void>;
   backfillOccupantPayrollIds: () => Promise<void>;
   seedHickoryHavenIfMissing: () => Promise<void>;
@@ -208,6 +214,20 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Adient seed — continuing to serve",
+    );
+  }
+
+  // Auto-import the bundled master housing-lease workbook on every
+  // boot (Task #302). Mirrors `seedAdientIfMissing`: idempotent and
+  // non-fatal, so a brand-new environment lands with the production
+  // customer/property/lease set without an operator having to click
+  // the "Import master file" button on the Leases page.
+  try {
+    await deps.importDefaultMasterLeasesIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to auto-import master housing-lease workbook — continuing to serve",
     );
   }
 

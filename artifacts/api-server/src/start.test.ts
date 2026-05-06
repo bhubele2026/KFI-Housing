@@ -25,6 +25,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
     seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
+    importDefaultMasterLeasesIfMissing: vi.fn().mockResolvedValue(undefined),
     seedPatriotBarabooIfMissing: vi.fn().mockResolvedValue(undefined),
     backfillOccupantPayrollIds: vi.fn().mockResolvedValue(undefined),
     seedHickoryHavenIfMissing: vi.fn().mockResolvedValue(undefined),
@@ -487,6 +488,60 @@ describe("start", () => {
     expect(
       warnCalls.some(([, message]) =>
         /Adient seed/i.test(String(message)),
+      ),
+    ).toBe(true);
+  });
+
+  it("invokes importDefaultMasterLeasesIfMissing after seedAdientIfMissing, and is non-fatal when it throws", async () => {
+    const callOrder: string[] = [];
+    const seedIfEmpty = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedIfEmpty");
+    });
+    const backfillOccupantMoveInDates = vi.fn().mockImplementation(async () => {
+      callOrder.push("backfillOccupantMoveInDates");
+    });
+    const seedAdientIfMissing = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedAdientIfMissing");
+    });
+    const importDefaultMasterLeasesIfMissing = vi
+      .fn()
+      .mockImplementation(async () => {
+        callOrder.push("importDefaultMasterLeasesIfMissing");
+        throw new Error("boom: simulated transient import failure");
+      });
+    const listen = vi.fn().mockImplementation(async () => {
+      callOrder.push("listen");
+    });
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        seedIfEmpty,
+        backfillOccupantMoveInDates,
+        seedAdientIfMissing,
+        importDefaultMasterLeasesIfMissing,
+        listen,
+        logger,
+        exit,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(importDefaultMasterLeasesIfMissing).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual([
+      "seedIfEmpty",
+      "backfillOccupantMoveInDates",
+      "seedAdientIfMissing",
+      "importDefaultMasterLeasesIfMissing",
+      "listen",
+    ]);
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+    const warnCalls = logger.warn.mock.calls;
+    expect(
+      warnCalls.some(([, message]) =>
+        /master housing-lease workbook/i.test(String(message)),
       ),
     ).toBe(true);
   });

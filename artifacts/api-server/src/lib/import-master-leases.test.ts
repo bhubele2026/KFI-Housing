@@ -130,6 +130,7 @@ vi.mock("drizzle-orm", () => ({
 
 const {
   importMasterLeases,
+  importDefaultMasterLeasesIfMissing,
   readMasterWorkbookFromBuffer,
 } = await import("./import-master-leases");
 
@@ -235,5 +236,36 @@ describe("importMasterLeases", () => {
     expect(summary.customersUpdated).toBeGreaterThanOrEqual(1);
     // Operator notes preserved.
     expect(adients[0].notes).toBe("operator note");
+  });
+});
+
+describe("importDefaultMasterLeasesIfMissing", () => {
+  // Mirrors the boot-time idempotency test in seed-adient.test.ts:
+  // calling the boot wrapper twice on a fresh DB must produce zero new
+  // inserts the second time. This locks in the contract that
+  // start.ts relies on (Task #302) — the wrapper is safe to invoke on
+  // every server boot.
+  it("is idempotent on re-run when called as the boot-time wrapper", async () => {
+    await importDefaultMasterLeasesIfMissing({ logger: silentLogger });
+    const before = {
+      customers: stores.customers.size,
+      properties: stores.properties.size,
+      leases: stores.leases.size,
+    };
+    expect(before.customers).toBeGreaterThan(0);
+    expect(before.properties).toBeGreaterThan(0);
+    expect(before.leases).toBeGreaterThan(0);
+
+    const second = await importDefaultMasterLeasesIfMissing({
+      logger: silentLogger,
+    });
+    expect(second.customersCreated).toBe(0);
+    expect(second.propertiesCreated).toBe(0);
+    expect(second.leasesCreated).toBe(0);
+    expect({
+      customers: stores.customers.size,
+      properties: stores.properties.size,
+      leases: stores.leases.size,
+    }).toEqual(before);
   });
 });

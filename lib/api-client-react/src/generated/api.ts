@@ -39,6 +39,7 @@ import type {
   Room,
   RoomUpdate,
   RuntimeConfig,
+  UnplacedPayrollRow,
   Utility,
   UtilityUpdate,
 } from "./api.schemas";
@@ -2979,3 +2980,86 @@ export const useDeleteUtility = <
 > => {
   return useMutation(getDeleteUtilityMutationOptions(options));
 };
+
+/**
+ * Re-runs the idempotent payroll → occupant reconciler (the same
+seeder that runs at startup) and returns the rows that still
+don't match any occupant by `(employeeId)`, `(name + company)`,
+or unique `(name)`. Each row carries the customer, employee
+name, payroll Person Id, and the recurring weekly deduction so
+leasing can pre-fill an Assign-to-bed dialog and either place
+the person or correct the payroll record.
+
+ * @summary List payroll deductions with no matching occupant yet
+ */
+export const getListUnplacedPayrollUrl = () => {
+  return `/api/payroll/unplaced`;
+};
+
+export const listUnplacedPayroll = async (
+  options?: RequestInit,
+): Promise<UnplacedPayrollRow[]> => {
+  return customFetch<UnplacedPayrollRow[]>(getListUnplacedPayrollUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListUnplacedPayrollQueryKey = () => {
+  return [`/api/payroll/unplaced`] as const;
+};
+
+export const getListUnplacedPayrollQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUnplacedPayroll>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listUnplacedPayroll>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListUnplacedPayrollQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listUnplacedPayroll>>
+  > = ({ signal }) => listUnplacedPayroll({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUnplacedPayroll>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUnplacedPayrollQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUnplacedPayroll>>
+>;
+export type ListUnplacedPayrollQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List payroll deductions with no matching occupant yet
+ */
+
+export function useListUnplacedPayroll<
+  TData = Awaited<ReturnType<typeof listUnplacedPayroll>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listUnplacedPayroll>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUnplacedPayrollQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

@@ -35,6 +35,7 @@ import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { NotFoundScreen } from "@/components/not-found-screen";
+import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -1680,11 +1681,10 @@ export default function PropertyDetail() {
                                           <>
                                             <TableCell colSpan={9}>
                                               <AssignOccupantDialog
-                                                bedId={bed.id}
-                                                propertyId={id}
-                                                onAssign={(occ) => {
+                                                bed={{ id: bed.id, propertyId: id }}
+                                                onAssign={(occ, b) => {
                                                   addOccupant(occ);
-                                                  updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
+                                                  updateBed(b.id, { status: "Occupied", occupantId: occ.id });
                                                 }}
                                               />
                                             </TableCell>
@@ -1948,74 +1948,9 @@ export default function PropertyDetail() {
 // can be used on both the per-property tab (with propertyId pre-bound) and
 // the global Leases page (with a property picker).
 
-function AssignOccupantDialog({ bedId, propertyId, onAssign }: {
-  bedId: string;
-  propertyId: string;
-  onAssign: (o: Occupant) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", billingFrequency: "Monthly" as typeof BILLING_FREQUENCIES[number], email: "", phone: "" });
-
-  const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
-
-  const submit = () => {
-    if (!form.name) return;
-    onAssign({
-      id: `occ-${Date.now()}`,
-      propertyId,
-      bedId,
-      name: form.name,
-      employeeId: form.employeeId,
-      company: form.company,
-      moveInDate: form.moveInDate || new Date().toISOString().split("T")[0],
-      moveOutDate: null,
-      status: "Active",
-      chargePerBed: parseFloat(form.chargePerBed) || 0,
-      billingFrequency: form.billingFrequency,
-      email: form.email,
-      phone: form.phone,
-    });
-    setOpen(false);
-    setForm({ name: "", employeeId: "", company: "", moveInDate: "", chargePerBed: "", billingFrequency: "Monthly", email: "", phone: "" });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button className="text-xs text-muted-foreground hover:text-foreground italic flex items-center gap-1 transition-colors">
-          <Plus className="h-3 w-3" />Assign occupant
-        </button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Assign Occupant to Bed</DialogTitle></DialogHeader>
-        <div className="space-y-3 pt-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><Label>Full Name *</Label><Input value={form.name} onChange={f("name")} placeholder="Jane Smith" /></div>
-            <div><Label>Employee ID</Label><Input value={form.employeeId} onChange={f("employeeId")} placeholder="EMP-001" /></div>
-            <div><Label>Company</Label><Input value={form.company} onChange={f("company")} placeholder="Acme Corp" /></div>
-            <div><Label>Move-in Date</Label><Input type="date" value={form.moveInDate} onChange={f("moveInDate")} /></div>
-            <div><Label>Charge / Bed ($)</Label><Input type="number" value={form.chargePerBed} onChange={f("chargePerBed")} placeholder="0.00" /></div>
-            <div>
-              <Label>Billing Frequency</Label>
-              <Select value={form.billingFrequency} onValueChange={v => setForm(p => ({ ...p, billingFrequency: v as typeof BILLING_FREQUENCIES[number] }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {BILLING_FREQUENCIES.map(fr => <SelectItem key={fr} value={fr}>{fr}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div><Label>Email</Label><Input value={form.email} onChange={f("email")} placeholder="jane@company.com" /></div>
-            <div><Label>Phone</Label><Input value={form.phone} onChange={f("phone")} placeholder="555-000-0000" /></div>
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={submit} disabled={!form.name}>Assign</Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// AssignOccupantDialog moved to @/components/assign-occupant-dialog so the
+// same dialog can be reused on the dashboard's "Unplaced payroll" tile
+// pre-filled with name + company + weekly deduction.
 
 function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; onAdd: (u: Utility) => void; trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);

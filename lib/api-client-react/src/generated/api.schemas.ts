@@ -643,6 +643,23 @@ export interface MasterLeaseImportResult {
   decisions: MasterLeaseImportRowDecision[];
 }
 
+/**
+ * A payroll row that should be deducting weekly housing rent for an
+employee, but doesn't match any occupant in HousingOps yet.
+Returned by `GET /payroll/unplaced`.
+
+ */
+export interface UnplacedPayrollRow {
+  /** Customer / employer name as it appears in the payroll export. */
+  customer: string;
+  /** Employee full name as it appears in the payroll export. */
+  name: string;
+  /** Payroll Person Id (employeeId) for the employee. */
+  personId: string;
+  /** Recurring weekly deduction amount (USD). */
+  weekly: number;
+}
+
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];

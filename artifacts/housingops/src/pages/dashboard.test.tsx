@@ -113,8 +113,46 @@ const mockData: {
   isLoading: false,
 };
 
+const addOccupantMock = vi.fn();
+const updateBedMock = vi.fn();
+
 vi.mock("@/context/data-store", () => ({
-  useData: () => mockData,
+  useData: () => ({
+    ...mockData,
+    addOccupant: addOccupantMock,
+    updateBed: updateBedMock,
+  }),
+}));
+
+const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number }> } = {
+  rows: [],
+};
+const invalidateQueriesMock = vi.fn();
+
+vi.mock("@workspace/api-client-react", () => ({
+  useListUnplacedPayroll: () => ({ data: unplacedPayrollState.rows }),
+  getListUnplacedPayrollQueryKey: () => ["/payroll/unplaced"],
+}));
+
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query",
+  );
+  return {
+    ...actual,
+    useQueryClient: () => ({ invalidateQueries: invalidateQueriesMock }),
+  };
+});
+
+// The shared dialog pulls in `useData` for its property/bed picker. The
+// dashboard test only cares that the trigger renders with the right
+// pre-fill, so stub the dialog out and capture its props.
+const dialogProps: Array<Record<string, unknown>> = [];
+vi.mock("@/components/assign-occupant-dialog", () => ({
+  AssignOccupantDialog: (props: Record<string, unknown>) => {
+    dialogProps.push(props);
+    return <div data-testid={`assign-dialog-stub-${(props as { testIdSuffix?: string }).testIdSuffix ?? ""}`} />;
+  },
 }));
 
 import Dashboard from "./dashboard";
@@ -551,6 +589,132 @@ describe("Dashboard Needs review tile", () => {
     });
     expect(getCount()).toBe("2");
     expect(getCtaHref()).toBe("/occupants?needsReview=1&customer=c2");
+  });
+});
+
+describe("Dashboard Unplaced payroll tile", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    dialogProps.length = 0;
+    invalidateQueriesMock.mockReset();
+    addOccupantMock.mockReset();
+    updateBedMock.mockReset();
+    unplacedPayrollState.rows = [];
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    unplacedPayrollState.rows = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  it("hides the tile when the payroll list is empty", async () => {
+    unplacedPayrollState.rows = [];
+    await render();
+    expect(container.querySelector('[data-testid="card-unplaced-payroll"]')).toBeNull();
+  });
+
+  it("groups rows by customer, shows weekly totals, and pre-fills the assign dialog", async () => {
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
+      { customer: "Acme Co", name: "John Doe", personId: "EMP2", weekly: 75 },
+      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200 },
+    ];
+
+    await render();
+
+    const card = container.querySelector('[data-testid="card-unplaced-payroll"]');
+    expect(card).not.toBeNull();
+    // Total row count badge.
+    expect(
+      container.querySelector('[data-testid="text-unplaced-payroll-total-count"]')?.textContent,
+    ).toContain("3");
+    // Both customer groups present.
+    expect(container.querySelector('[data-testid="group-unplaced-Acme Co"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="group-unplaced-Globex"]')).not.toBeNull();
+    // Three dialog stubs (one per row), each pre-filled with the row data.
+    expect(dialogProps).toHaveLength(3);
+    const acmeJane = dialogProps.find((p) => (p.testIdSuffix as string) === "EMP1");
+    expect(acmeJane?.initial).toEqual({
+      name: "Jane Smith",
+      company: "Acme Co",
+      employeeId: "EMP1",
+      chargePerBed: 100,
+      billingFrequency: "Weekly",
+    });
+  });
+
+  it("scopes the list to the active customer filter", async () => {
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
+      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200 },
+    ];
+
+    await render();
+
+    // All-customers default shows both groups.
+    expect(container.querySelector('[data-testid="group-unplaced-Acme Co"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="group-unplaced-Globex"]')).not.toBeNull();
+
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1"); // Acme Co
+    });
+
+    expect(container.querySelector('[data-testid="group-unplaced-Acme Co"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="group-unplaced-Globex"]')).toBeNull();
+  });
+
+  it("on assign: writes occupant + bed and invalidates the unplaced list so the row drops off", async () => {
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
+    ];
+
+    await render();
+
+    const props = dialogProps[0];
+    expect(props).toBeDefined();
+    const onAssign = props.onAssign as (
+      occ: { id: string },
+      bed: { id: string; propertyId: string },
+    ) => void;
+    await act(async () => {
+      onAssign(
+        { id: "occ-new" } as { id: string },
+        { id: "bed-1", propertyId: "p1" },
+      );
+    });
+
+    expect(addOccupantMock).toHaveBeenCalledTimes(1);
+    expect(updateBedMock).toHaveBeenCalledWith("bed-1", {
+      status: "Occupied",
+      occupantId: "occ-new",
+    });
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({
+      queryKey: ["/payroll/unplaced"],
+    });
   });
 });
 

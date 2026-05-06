@@ -1532,3 +1532,36 @@ export const UpdateUtilityResponse = zod.object({
 export const DeleteUtilityParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * Re-runs the idempotent payroll → occupant reconciler (the same
+seeder that runs at startup) and returns the rows that still
+don't match any occupant by `(employeeId)`, `(name + company)`,
+or unique `(name)`. Each row carries the customer, employee
+name, payroll Person Id, and the recurring weekly deduction so
+leasing can pre-fill an Assign-to-bed dialog and either place
+the person or correct the payroll record.
+
+ * @summary List payroll deductions with no matching occupant yet
+ */
+export const ListUnplacedPayrollResponseItem = zod
+  .object({
+    customer: zod
+      .string()
+      .describe(
+        "Customer \/ employer name as it appears in the payroll export.",
+      ),
+    name: zod
+      .string()
+      .describe("Employee full name as it appears in the payroll export."),
+    personId: zod
+      .string()
+      .describe("Payroll Person Id (employeeId) for the employee."),
+    weekly: zod.number().describe("Recurring weekly deduction amount (USD)."),
+  })
+  .describe(
+    "A payroll row that should be deducting weekly housing rent for an\nemployee, but doesn't match any occupant in HousingOps yet.\nReturned by `GET \/payroll\/unplaced`.\n",
+  );
+export const ListUnplacedPayrollResponse = zod.array(
+  ListUnplacedPayrollResponseItem,
+);

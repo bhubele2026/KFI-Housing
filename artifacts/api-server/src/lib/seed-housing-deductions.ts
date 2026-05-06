@@ -15,7 +15,9 @@ export interface SeedHousingDeductionsResult {
   matched: number;
   updated: number;
   alreadyCorrect: number;
-  unmatched: Array<Pick<HousingDeductionRow, "customer" | "name" | "personId">>;
+  unmatched: Array<
+    Pick<HousingDeductionRow, "customer" | "name" | "personId" | "weekly">
+  >;
   // Per-path match counters so we can verify in the workflow log that
   // employeeId is the dominant matcher and the fragile name-only
   // fallback resolves at most a handful of rows. Sum equals `matched`.
@@ -299,6 +301,7 @@ export async function seedHousingDeductions(
         customer: row.customer,
         name: row.name,
         personId: row.personId,
+        weekly: row.weekly,
       });
       continue;
     }

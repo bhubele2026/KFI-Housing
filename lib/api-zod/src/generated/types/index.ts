@@ -54,6 +54,7 @@ export * from "./ratings";
 export * from "./room";
 export * from "./roomUpdate";
 export * from "./runtimeConfig";
+export * from "./unplacedPayrollRow";
 export * from "./utility";
 export * from "./utilityType";
 export * from "./utilityUpdate";

@@ -12,6 +12,7 @@ import roomsRouter from "./rooms";
 import bedsRouter from "./beds";
 import occupantsRouter from "./occupants";
 import utilitiesRouter from "./utilities";
+import payrollRouter from "./payroll";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(roomsRouter);
 router.use(bedsRouter);
 router.use(occupantsRouter);
 router.use(utilitiesRouter);
+router.use(payrollRouter);
 
 export default router;

@@ -4,8 +4,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListUnplacedPayroll,
+  getListUnplacedPayrollQueryKey,
+  type UnplacedPayrollRow,
+} from "@workspace/api-client-react";
+import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
 import { StarRating } from "@/components/star-rating";
@@ -22,7 +29,9 @@ import { formatPropertyName } from "@/lib/property-name";
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers, occupants } = useData();
+  const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed } = useData();
+  const queryClient = useQueryClient();
+  const { data: unplacedPayroll } = useListUnplacedPayroll();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
@@ -224,6 +233,28 @@ export default function Dashboard() {
     },
   ];
 
+  // Unplaced payroll = deduction rows the seeder couldn't match to an
+  // active occupant. Group by customer so the operator can attack one
+  // company at a time. Respect the dashboard's customer filter.
+  const scopedUnplacedPayroll = useMemo<UnplacedPayrollRow[]>(() => {
+    const rows = unplacedPayroll ?? [];
+    if (customerFilter === ALL_CUSTOMERS) return rows;
+    const customerName = customers.find((c) => c.id === customerFilter)?.name;
+    if (!customerName) return [];
+    return rows.filter((r) => r.customer === customerName);
+  }, [unplacedPayroll, customerFilter, customers]);
+
+  const unplacedByCustomer = useMemo(() => {
+    const map = new Map<string, { customer: string; rows: UnplacedPayrollRow[]; weeklyTotal: number }>();
+    for (const r of scopedUnplacedPayroll) {
+      const existing = map.get(r.customer) ?? { customer: r.customer, rows: [], weeklyTotal: 0 };
+      existing.rows.push(r);
+      existing.weeklyTotal += r.weekly;
+      map.set(r.customer, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => b.weeklyTotal - a.weeklyTotal);
+  }, [scopedUnplacedPayroll]);
+
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS
       ? null
@@ -318,6 +349,98 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {unplacedByCustomer.length > 0 && (
+          <Card data-testid="card-unplaced-payroll">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Unplaced payroll</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-unplaced-payroll-total-count"
+                >
+                  {scopedUnplacedPayroll.length} row{scopedUnplacedPayroll.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Payroll deductions that don't yet match an active occupant. Assign each
+                person to a bed and the row will drop off after the next sync.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {unplacedByCustomer.map((group) => (
+                <div
+                  key={group.customer}
+                  data-testid={`group-unplaced-${group.customer}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">{group.customer}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {group.rows.length} row{group.rows.length === 1 ? "" : "s"} · $
+                      {group.weeklyTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}/wk
+                    </p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="text-right">Weekly</TableHead>
+                        <TableHead className="w-32" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.rows.map((row) => (
+                        <TableRow
+                          key={`${row.customer}::${row.personId}`}
+                          data-testid={`row-unplaced-${row.personId}`}
+                        >
+                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            ${row.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <AssignOccupantDialog
+                              testIdSuffix={row.personId}
+                              initial={{
+                                name: row.name,
+                                company: row.customer,
+                                employeeId: row.personId,
+                                chargePerBed: row.weekly,
+                                billingFrequency: "Weekly",
+                              }}
+                              trigger={
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  data-testid={`button-assign-unplaced-${row.personId}`}
+                                >
+                                  Assign to bed
+                                </Button>
+                              }
+                              onAssign={(occ, bed) => {
+                                addOccupant(occ);
+                                updateBed(bed.id, {
+                                  status: "Occupied",
+                                  occupantId: occ.id,
+                                });
+                                // Re-run the seeder server-side and refetch
+                                // the unplaced list so this row drops off.
+                                queryClient.invalidateQueries({
+                                  queryKey: getListUnplacedPayrollQueryKey(),
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

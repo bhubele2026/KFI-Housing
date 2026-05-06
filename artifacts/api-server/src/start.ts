@@ -12,6 +12,9 @@ export interface StartDeps {
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
   seedAdientIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
+  // Idempotent seed for the active leases extracted from attached PDFs
+  // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
+  seedAttachedLeasesIfMissing: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -210,6 +213,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply payroll-derived weekly housing deductions — continuing to serve",
+    );
+  }
+
+  // Idempotent seed for active leases extracted from attached PDFs
+  // (Task #287). Non-fatal for the same reason as the Adient seed.
+  try {
+    await deps.seedAttachedLeasesIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply attached-lease PDF seed — continuing to serve",
     );
   }
 

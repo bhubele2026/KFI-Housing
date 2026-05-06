@@ -26,6 +26,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
     seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
     seedHousingDeductions: vi.fn().mockResolvedValue(undefined),
+    seedAttachedLeasesIfMissing: vi.fn().mockResolvedValue(undefined),
     listen: vi.fn().mockResolvedValue(undefined),
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),
@@ -479,6 +480,60 @@ describe("start", () => {
     expect(
       warnCalls.some(([, message]) =>
         /Adient seed/i.test(String(message)),
+      ),
+    ).toBe(true);
+  });
+
+  it("invokes seedAttachedLeasesIfMissing after seedAdientIfMissing, and is non-fatal when it throws", async () => {
+    const callOrder: string[] = [];
+    const seedIfEmpty = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedIfEmpty");
+    });
+    const backfillOccupantMoveInDates = vi.fn().mockImplementation(async () => {
+      callOrder.push("backfillOccupantMoveInDates");
+    });
+    const seedAdientIfMissing = vi.fn().mockImplementation(async () => {
+      callOrder.push("seedAdientIfMissing");
+    });
+    const seedAttachedLeasesIfMissing = vi
+      .fn()
+      .mockImplementation(async () => {
+        callOrder.push("seedAttachedLeasesIfMissing");
+        throw new Error("boom: simulated transient seed failure");
+      });
+    const listen = vi.fn().mockImplementation(async () => {
+      callOrder.push("listen");
+    });
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        seedIfEmpty,
+        backfillOccupantMoveInDates,
+        seedAdientIfMissing,
+        seedAttachedLeasesIfMissing,
+        listen,
+        logger,
+        exit,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(seedAttachedLeasesIfMissing).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual([
+      "seedIfEmpty",
+      "backfillOccupantMoveInDates",
+      "seedAdientIfMissing",
+      "seedAttachedLeasesIfMissing",
+      "listen",
+    ]);
+    expect(exit).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+    const warnCalls = logger.warn.mock.calls;
+    expect(
+      warnCalls.some(([, message]) =>
+        /attached-lease/i.test(String(message)),
       ),
     ).toBe(true);
   });

@@ -7,6 +7,7 @@
  */
 import type { OccupantCreateBillingFrequency } from "./occupantCreateBillingFrequency";
 import type { OccupantCreateChargeSource } from "./occupantCreateChargeSource";
+import type { OccupantCreateShift } from "./occupantCreateShift";
 import type { OccupantCreateStatus } from "./occupantCreateStatus";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
@@ -29,4 +30,6 @@ export interface OccupantCreate {
   chargeSource?: OccupantCreateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
+  /** @nullable */
+  shift?: OccupantCreateShift;
 }

@@ -7,6 +7,7 @@
  */
 import type { OccupantBillingFrequency } from "./occupantBillingFrequency";
 import type { OccupantChargeSource } from "./occupantChargeSource";
+import type { OccupantShift } from "./occupantShift";
 import type { OccupantStatus } from "./occupantStatus";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
@@ -29,4 +30,14 @@ export interface Occupant {
   chargeSource: OccupantChargeSource;
   chargeSourceCustomer: string;
   chargeSourcePersonId: string;
+  /**
+   * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
+2pm–midnight. Null for properties where shift assignments
+don't apply (most of the portfolio). Surfaced for hot-bedded
+units like 1850 W. Pine St. Baraboo where two shifts share
+the same bedroom (task #315).
+
+   * @nullable
+   */
+  shift: OccupantShift;
 }

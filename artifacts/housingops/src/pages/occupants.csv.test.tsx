@@ -231,7 +231,7 @@ describe("Occupants CSV download", () => {
 
     const lines = readCsvLines();
     expect(lines[0]).toBe(
-      "Name,Email,Phone,Company,Employee ID,Property,Bed,Move In,Move Out,Charge per Bed,Billing Frequency,Status",
+      "Name,Email,Phone,Company,Employee ID,Property,Bed,Move In,Move Out,Charge per Bed,Billing Frequency,Shift,Status",
     );
 
     // 1 header + 2 occupant rows
@@ -239,10 +239,10 @@ describe("Occupants CSV download", () => {
 
     // p1's name "Maple, Apt 1" has a comma so the cell must be quoted as one field.
     expect(lines[1]).toBe(
-      'Alice Johnson,alice@example.com,555-1234,Acme,E-100,"Maple, Apt 1",Bed 1,2024-01-15,,1500,Monthly,Active',
+      'Alice Johnson,alice@example.com,555-1234,Acme,E-100,"Maple, Apt 1",Bed 1,2024-01-15,,1500,Monthly,,Active',
     );
     expect(lines[2]).toBe(
-      "Bob Lee,bob@example.com,555-9999,Globex,E-200,Oak,Bed 2,2024-03-01,2024-09-30,2400,Monthly,Former",
+      "Bob Lee,bob@example.com,555-9999,Globex,E-200,Oak,Bed 2,2024-03-01,2024-09-30,2400,Monthly,,Former",
     );
 
     // Sanity: cells must NOT contain "$" formatting anywhere in the file.

@@ -23,6 +23,11 @@ export const occupantsTable = pgTable("occupants", {
   chargeSource: text("charge_source").notNull().default(""),
   chargeSourceCustomer: text("charge_source_customer").notNull().default(""),
   chargeSourcePersonId: text("charge_source_person_id").notNull().default(""),
+  // Crew shift this occupant works (e.g. "1st", "2nd"). Null for properties
+  // where shift assignments don't apply (most of the portfolio). Surfaced
+  // for hot-bedded units like 1850 W. Pine St. Baraboo where bedrooms are
+  // shared across two shifts (task #315).
+  shift: text("shift"),
 });
 
 export type OccupantRow = typeof occupantsTable.$inferSelect;

@@ -1572,6 +1572,7 @@ export default function PropertyDetail() {
                                     <TableHead>Occupant Name</TableHead>
                                     <TableHead>Employee ID</TableHead>
                                     <TableHead>Company</TableHead>
+                                    <TableHead>Shift</TableHead>
                                     <TableHead>Move-in</TableHead>
                                     <TableHead className="text-right">Charge</TableHead>
                                     <TableHead>Billing</TableHead>
@@ -1586,7 +1587,7 @@ export default function PropertyDetail() {
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={14}
+                                      colSpan={15}
                                       icon={BedDouble}
                                       title="No beds in this room yet"
                                       description={`Add the first bed to ${room.name} so you can assign an occupant.`}
@@ -1659,6 +1660,25 @@ export default function PropertyDetail() {
                                             </TableCell>
                                             <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
+                                            <TableCell data-testid={`cell-occupant-shift-${occ.id}`}>
+                                              <Select
+                                                value={occ.shift ?? "none"}
+                                                onValueChange={v =>
+                                                  updateOccupant(occ.id, {
+                                                    shift: v === "none" ? null : (v as "1st" | "2nd"),
+                                                  })
+                                                }
+                                              >
+                                                <SelectTrigger className="h-7 text-xs w-20" data-testid={`select-occupant-shift-${occ.id}`}>
+                                                  <SelectValue placeholder="—" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="none">—</SelectItem>
+                                                  <SelectItem value="1st">1st</SelectItem>
+                                                  <SelectItem value="2nd">2nd</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                            </TableCell>
                                             <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex items-center justify-end gap-1.5">
@@ -1710,7 +1730,7 @@ export default function PropertyDetail() {
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={9}>
+                                            <TableCell colSpan={10}>
                                               <AssignOccupantDialog
                                                 bed={{ id: bed.id, propertyId: id }}
                                                 onAssign={(occ, b) => {

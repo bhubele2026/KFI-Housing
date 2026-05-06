@@ -329,6 +329,9 @@ export const ImportDataBody = zod.object({
       chargeSource: zod.enum(["", "payroll"]).optional(),
       chargeSourceCustomer: zod.string().optional(),
       chargeSourcePersonId: zod.string().optional(),
+      shift: zod
+        .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+        .nullish(),
     }),
   ),
   utilities: zod.array(
@@ -1710,6 +1713,12 @@ export const ListOccupantsResponseItem = zod.object({
   chargeSource: zod.enum(["", "payroll"]),
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
+  shift: zod
+    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .nullable()
+    .describe(
+      'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+    ),
 });
 export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
 
@@ -1743,6 +1752,9 @@ export const CreateOccupantBody = zod.object({
   chargeSource: zod.enum(["", "payroll"]).optional(),
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
+  shift: zod
+    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .nullish(),
 });
 
 /**
@@ -1780,6 +1792,9 @@ export const UpdateOccupantBody = zod.object({
   chargeSource: zod.enum(["", "payroll"]).optional(),
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
+  shift: zod
+    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .nullish(),
 });
 
 export const updateOccupantResponseMoveInDateRegExp = new RegExp(
@@ -1809,6 +1824,12 @@ export const UpdateOccupantResponse = zod.object({
   chargeSource: zod.enum(["", "payroll"]),
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
+  shift: zod
+    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .nullable()
+    .describe(
+      'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+    ),
 });
 
 /**

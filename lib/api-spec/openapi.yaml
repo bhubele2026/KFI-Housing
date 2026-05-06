@@ -1254,6 +1254,7 @@ components:
         - chargeSource
         - chargeSourceCustomer
         - chargeSourcePersonId
+        - shift
       properties:
         id: { type: string }
         name: { type: string }
@@ -1280,6 +1281,15 @@ components:
         chargeSource: { type: string, enum: ["", "payroll"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
+        shift:
+          type: ["string", "null"]
+          enum: ["1st", "2nd", null]
+          description: |
+            Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
+            2pm–midnight. Null for properties where shift assignments
+            don't apply (most of the portfolio). Surfaced for hot-bedded
+            units like 1850 W. Pine St. Baraboo where two shifts share
+            the same bedroom (task #315).
     # Like `Occupant` but with the chargeSource* provenance fields
     # optional — newly-created occupants are assumed to be manually
     # entered, and the seeder is the only writer that stamps these.
@@ -1321,6 +1331,9 @@ components:
         chargeSource: { type: string, enum: ["", "payroll"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
+        shift:
+          type: ["string", "null"]
+          enum: ["1st", "2nd", null]
     OccupantUpdate:
       type: object
       properties:
@@ -1344,6 +1357,9 @@ components:
         chargeSource: { type: string, enum: ["", "payroll"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
+        shift:
+          type: ["string", "null"]
+          enum: ["1st", "2nd", null]
 
     Utility:
       type: object

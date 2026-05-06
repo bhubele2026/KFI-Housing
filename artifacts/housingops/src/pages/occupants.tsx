@@ -79,6 +79,7 @@ export default function Occupants() {
       { header: "Move Out",          value: (o) => o.moveOutDate ?? "" },
       { header: "Charge per Bed",    value: (o) => o.chargePerBed },
       { header: "Billing Frequency", value: (o) => o.billingFrequency },
+      { header: "Shift",             value: (o) => o.shift ?? "" },
       { header: "Status",            value: (o) => o.status },
     ]);
     downloadCsv(timestampedCsvName("housingops-occupants"), csv);
@@ -181,6 +182,7 @@ export default function Occupants() {
                   <TableHead>Property</TableHead>
                   <TableHead>Bed</TableHead>
                   <TableHead>Move In</TableHead>
+                  <TableHead>Shift</TableHead>
                   <TableHead className="text-right">Weekly Deduction</TableHead>
                   <TableHead className="text-right">Monthly Equivalent</TableHead>
                   <TableHead className="text-center">Status</TableHead>
@@ -189,10 +191,10 @@ export default function Occupants() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={8} />
+                  <SkeletonRows rows={6} columns={9} />
                 ) : filteredOccupants.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={8}
+                    colSpan={9}
                     icon={Users}
                     title="No occupants found"
                     description={
@@ -252,6 +254,13 @@ export default function Occupants() {
                                 }}
                               />
                             </div>
+                          )}
+                        </TableCell>
+                        <TableCell data-testid={`cell-occupant-shift-${occupant.id}`}>
+                          {occupant.shift ? (
+                            <Badge variant="outline" className="font-normal">{occupant.shift} shift</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell

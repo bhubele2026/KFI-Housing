@@ -467,6 +467,10 @@ export const OccupantSchema = z.object({
   chargeSource: z.enum(["", "payroll"]).default(""),
   chargeSourceCustomer: z.string().default(""),
   chargeSourcePersonId: z.string().default(""),
+  // Crew shift this occupant works (e.g. "1st", "2nd"). Null for properties
+  // where shift assignments don't apply. Surfaced for hot-bedded units like
+  // 1850 W. Pine St. Baraboo (task #315).
+  shift: z.enum(["1st", "2nd"]).nullable().default(null),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
 
@@ -890,6 +894,7 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
       chargeSource: "",
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
+      shift: null,
     };
   });
 

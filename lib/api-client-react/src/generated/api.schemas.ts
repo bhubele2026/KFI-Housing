@@ -538,6 +538,24 @@ export const OccupantChargeSource = {
   payroll: "payroll",
 } as const;
 
+/**
+ * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
+2pm–midnight. Null for properties where shift assignments
+don't apply (most of the portfolio). Surfaced for hot-bedded
+units like 1850 W. Pine St. Baraboo where two shifts share
+the same bedroom (task #315).
+
+ * @nullable
+ */
+export type OccupantShift =
+  | (typeof OccupantShift)[keyof typeof OccupantShift]
+  | null;
+
+export const OccupantShift = {
+  "1st": "1st",
+  "2nd": "2nd",
+} as const;
+
 export interface Occupant {
   id: string;
   name: string;
@@ -557,6 +575,16 @@ export interface Occupant {
   chargeSource: OccupantChargeSource;
   chargeSourceCustomer: string;
   chargeSourcePersonId: string;
+  /**
+   * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
+2pm–midnight. Null for properties where shift assignments
+don't apply (most of the portfolio). Surfaced for hot-bedded
+units like 1850 W. Pine St. Baraboo where two shifts share
+the same bedroom (task #315).
+
+   * @nullable
+   */
+  shift: OccupantShift;
 }
 
 export type OccupantCreateStatus =
@@ -584,6 +612,18 @@ export const OccupantCreateChargeSource = {
   payroll: "payroll",
 } as const;
 
+/**
+ * @nullable
+ */
+export type OccupantCreateShift =
+  | (typeof OccupantCreateShift)[keyof typeof OccupantCreateShift]
+  | null;
+
+export const OccupantCreateShift = {
+  "1st": "1st",
+  "2nd": "2nd",
+} as const;
+
 export interface OccupantCreate {
   id: string;
   name: string;
@@ -603,6 +643,8 @@ export interface OccupantCreate {
   chargeSource?: OccupantCreateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
+  /** @nullable */
+  shift?: OccupantCreateShift;
 }
 
 export type OccupantUpdateStatus =
@@ -630,6 +672,18 @@ export const OccupantUpdateChargeSource = {
   payroll: "payroll",
 } as const;
 
+/**
+ * @nullable
+ */
+export type OccupantUpdateShift =
+  | (typeof OccupantUpdateShift)[keyof typeof OccupantUpdateShift]
+  | null;
+
+export const OccupantUpdateShift = {
+  "1st": "1st",
+  "2nd": "2nd",
+} as const;
+
 export interface OccupantUpdate {
   name?: string;
   email?: string;
@@ -648,6 +702,8 @@ export interface OccupantUpdate {
   chargeSource?: OccupantUpdateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
+  /** @nullable */
+  shift?: OccupantUpdateShift;
 }
 
 export type UtilityType = (typeof UtilityType)[keyof typeof UtilityType];

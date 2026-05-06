@@ -7,6 +7,7 @@
  */
 import type { OccupantUpdateBillingFrequency } from "./occupantUpdateBillingFrequency";
 import type { OccupantUpdateChargeSource } from "./occupantUpdateChargeSource";
+import type { OccupantUpdateShift } from "./occupantUpdateShift";
 import type { OccupantUpdateStatus } from "./occupantUpdateStatus";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
@@ -28,4 +29,6 @@ export interface OccupantUpdate {
   chargeSource?: OccupantUpdateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
+  /** @nullable */
+  shift?: OccupantUpdateShift;
 }

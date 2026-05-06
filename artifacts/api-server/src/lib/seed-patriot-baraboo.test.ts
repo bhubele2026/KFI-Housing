@@ -28,6 +28,7 @@ function tableNameOf(t: unknown): TableName {
 type Predicate =
   | { kind: "eq"; col: string; value: unknown }
   | { kind: "like"; col: string; pattern: string }
+  | { kind: "isNull"; col: string }
   | { kind: "and"; parts: Predicate[] };
 
 function rowField(row: Row, col: string): unknown {
@@ -45,6 +46,10 @@ function likeMatch(haystack: unknown, pattern: string): boolean {
 function matches(row: Row, p: Predicate): boolean {
   if (p.kind === "eq") return rowField(row, p.col) === p.value;
   if (p.kind === "like") return likeMatch(rowField(row, p.col), p.pattern);
+  if (p.kind === "isNull") {
+    const v = rowField(row, p.col);
+    return v === null || v === undefined;
+  }
   return p.parts.every((q) => matches(row, q));
 }
 
@@ -138,6 +143,10 @@ vi.mock("drizzle-orm", () => ({
     col: col.__col,
     pattern,
   }),
+  isNull: (col: { __col: string }) => ({
+    kind: "isNull" as const,
+    col: col.__col,
+  }),
   and: (...parts: Predicate[]) => ({ kind: "and" as const, parts }),
 }));
 
@@ -183,6 +192,7 @@ vi.mock("@workspace/db", () => ({
     id: { __col: "id" },
     propertyId: { __col: "propertyId" },
     name: { __col: "name" },
+    shift: { __col: "shift" },
   },
 }));
 
@@ -317,6 +327,45 @@ describe("seedPatriotBarabooIfMissing", () => {
     expect(stores.rooms.size).toBe(5);
   });
 
+  it("backfills shift on previously-seeded occupants that were missing it (task #315)", async () => {
+    // Seed once, then null out shift on every occupant to simulate a DB
+    // that was seeded before the shift column existed. Re-running the
+    // seed should backfill the shift on every roster occupant without
+    // overwriting any other fields.
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    for (const [id, row] of stores.occupants) {
+      stores.occupants.set(id, { ...row, shift: null });
+    }
+
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(result.occupantsInserted).toBe(0);
+
+    const expectedShiftBySlot: Record<number, "1st" | "2nd"> = {
+      1: "1st",
+      2: "2nd",
+      3: "1st",
+      4: "2nd",
+    };
+    for (const unit of UNITS) {
+      for (let slot = 1; slot <= 4; slot++) {
+        const occ = stores.occupants.get(patriotBarabooOccupantId(unit, slot))!;
+        expect(occ["shift"]).toBe(expectedShiftBySlot[slot]);
+      }
+    }
+  });
+
+  it("does not overwrite an operator-edited shift on a re-run (task #315)", async () => {
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    const occId = patriotBarabooOccupantId("509", 1);
+    const occ = stores.occupants.get(occId)!;
+    // Operator manually moved this person to the 2nd shift even though
+    // the roster says 1st. The seed must not clobber that edit.
+    stores.occupants.set(occId, { ...occ, shift: "2nd" });
+
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(stores.occupants.get(occId)!["shift"]).toBe("2nd");
+  });
+
   it("reuses a pre-existing KFI Staffing customer matched by name LIKE", async () => {
     stores.customers.set("operator-cust-kfi", {
       id: "operator-cust-kfi",
@@ -371,6 +420,17 @@ describe("seedPatriotBarabooIfMissing", () => {
   it("attaches the typed roster to the right unit/bed with correct move-in dates", async () => {
     await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
+    // Slot pattern across all units: 1 & 3 are 1st shift (5am–2pm), 2 & 4
+     // are 2nd shift (2pm–midnight) — slots 1/2 share bedroom A, slots 3/4
+     // share bedroom B, so the pairs alternate shifts so each bedroom is
+     // occupied around the clock without two tenants sleeping at the same
+     // time (task #315).
+    const SHIFT_BY_SLOT: Record<number, "1st" | "2nd"> = {
+      1: "1st",
+      2: "2nd",
+      3: "1st",
+      4: "2nd",
+    };
     const expected: Record<string, { names: string[]; moveIn: string }> = {
       "509": {
         names: [
@@ -432,6 +492,7 @@ describe("seedPatriotBarabooIfMissing", () => {
         expect(occ["status"]).toBe("Active");
         expect(occ["company"]).toBe(PATRIOT_BARABOO_END_CLIENT);
         expect(occ["chargePerBed"]).toBeCloseTo(1675 / 4, 2);
+        expect(occ["shift"]).toBe(SHIFT_BY_SLOT[slot]);
       });
     }
   });

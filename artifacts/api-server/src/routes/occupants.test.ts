@@ -62,6 +62,7 @@ function validBody() {
     billingFrequency: "Monthly",
     employeeId: "e-1",
     company: "Acme",
+    shift: null,
   };
 }
 

@@ -1,4 +1,4 @@
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, isNull, like } from "drizzle-orm";
 import {
   db,
   customersTable,
@@ -250,6 +250,7 @@ function buildOccupantRow(
     billingFrequency: "Monthly",
     employeeId: "",
     company: PATRIOT_BARABOO_END_CLIENT,
+    shift: spec.shift,
   };
 }
 
@@ -480,6 +481,18 @@ export async function seedPatriotBarabooIfMissing(
       let occupantWasInserted = false;
       if (existingOcc.length > 0) {
         occupantId = existingOcc[0]!.id;
+        // Backfill shift on previously-seeded occupants that pre-date
+        // the shift column (task #315). Only fill when shift IS NULL so
+        // we never overwrite an operator-edited value.
+        await tx
+          .update(occupantsTable)
+          .set({ shift: spec.shift })
+          .where(
+            and(
+              eq(occupantsTable.id, occupantId),
+              isNull(occupantsTable.shift),
+            ),
+          );
       } else {
         const row = { ...buildOccupantRow(spec, propertyId), bedId };
         const inserted = await tx

@@ -180,6 +180,7 @@ export function AssignOccupantDialog({
       chargeSource: "",
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
+      shift: null,
     };
     onAssign(occ, resolvedBed);
     setOpen(false);

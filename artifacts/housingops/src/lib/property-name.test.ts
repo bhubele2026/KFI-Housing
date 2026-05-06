@@ -58,6 +58,55 @@ describe("formatPropertyName", () => {
   });
 });
 
+describe("formatPropertyName with customerName", () => {
+  it("strips the customer prefix when the leading segment matches (case-insensitive)", () => {
+    expect(
+      formatPropertyName("Burnett — WEBSTER", { customerName: "burnett" }),
+    ).toEqual({ primary: "Webster", secondary: null });
+  });
+
+  it("strips the customer prefix from a parenthesised secondary too", () => {
+    expect(
+      formatPropertyName("InterWire (Bloomfield Gardens)", {
+        customerName: "InterWire",
+      }),
+    ).toEqual({ primary: "Bloomfield Gardens", secondary: null });
+  });
+
+  it("trims surrounding whitespace on the customer name before comparing", () => {
+    expect(
+      formatPropertyName("Burnett — WEBSTER", { customerName: "  Burnett  " }),
+    ).toEqual({ primary: "Webster", secondary: null });
+  });
+
+  it("leaves the formatted result alone when the leading segment doesn't match the customer", () => {
+    expect(
+      formatPropertyName("Prairie Hill Village (Baraboo, WI)", {
+        customerName: "MV",
+      }),
+    ).toEqual({ primary: "Prairie Hill Village", secondary: "Baraboo, WI" });
+  });
+
+  it("does nothing when there is no secondary segment (single-word name)", () => {
+    expect(formatPropertyName("DeLallo", { customerName: "DeLallo" })).toEqual({
+      primary: "DeLallo",
+      secondary: null,
+    });
+  });
+
+  it("does nothing when the customer name is missing or blank", () => {
+    expect(
+      formatPropertyName("Burnett — WEBSTER", { customerName: undefined }),
+    ).toEqual({ primary: "Burnett", secondary: "Webster" });
+    expect(
+      formatPropertyName("Burnett — WEBSTER", { customerName: null }),
+    ).toEqual({ primary: "Burnett", secondary: "Webster" });
+    expect(
+      formatPropertyName("Burnett — WEBSTER", { customerName: "   " }),
+    ).toEqual({ primary: "Burnett", secondary: "Webster" });
+  });
+});
+
 describe("shortPropertyName", () => {
   it("joins primary and secondary with a bullet", () => {
     expect(shortPropertyName("Burnett — SIREN")).toBe("Burnett • Siren");

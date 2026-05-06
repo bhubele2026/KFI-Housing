@@ -24,29 +24,55 @@ function toTitleCase(value: string): string {
     .join("");
 }
 
-export function formatPropertyName(name: string | null | undefined): FormattedPropertyName {
+export type FormatPropertyNameOptions = {
+  /**
+   * When provided, and the leading segment of `name` matches this customer
+   * (case-insensitive, trimmed), the customer prefix is stripped: the
+   * formatted secondary is promoted to the primary and no secondary is
+   * returned. Used by surfaces that already display the customer in an
+   * adjacent column so the property cell doesn't redundantly repeat it.
+   */
+  customerName?: string | null;
+};
+
+export function formatPropertyName(
+  name: string | null | undefined,
+  options: FormatPropertyNameOptions = {},
+): FormattedPropertyName {
   const raw = (name ?? "").trim();
   if (!raw) return { primary: "", secondary: null };
 
+  let formatted: FormattedPropertyName;
   const parenMatch = raw.match(TRAILING_PAREN);
   if (parenMatch) {
-    return {
+    formatted = {
       primary: parenMatch[1].trim(),
       secondary: parenMatch[2].trim(),
     };
+  } else {
+    const dashIdx = raw.search(EM_DASH);
+    if (dashIdx > 0) {
+      const primary = raw.slice(0, dashIdx).trim();
+      const secondary = raw.slice(dashIdx).replace(EM_DASH, "").trim();
+      formatted = {
+        primary,
+        secondary: toTitleCase(secondary),
+      };
+    } else {
+      formatted = { primary: raw, secondary: null };
+    }
   }
 
-  const dashIdx = raw.search(EM_DASH);
-  if (dashIdx > 0) {
-    const primary = raw.slice(0, dashIdx).trim();
-    const secondary = raw.slice(dashIdx).replace(EM_DASH, "").trim();
-    return {
-      primary,
-      secondary: toTitleCase(secondary),
-    };
+  const customer = (options.customerName ?? "").trim();
+  if (
+    customer &&
+    formatted.secondary &&
+    formatted.primary.toLowerCase() === customer.toLowerCase()
+  ) {
+    return { primary: formatted.secondary, secondary: null };
   }
 
-  return { primary: raw, secondary: null };
+  return formatted;
 }
 
 export function shortPropertyName(name: string | null | undefined): string {

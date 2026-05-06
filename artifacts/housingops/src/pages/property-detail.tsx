@@ -374,7 +374,7 @@ export function NotesEditor({ value, onSave, className }: { value: string; onSav
 
 export function InlineEdit({
   value, onSave, type = "text", prefix,
-  placeholder, displayClassName, inputClassName, testId,
+  placeholder, displayClassName, inputClassName, testId, displayValue,
 }: {
   value: string | number;
   onSave: (v: string) => void;
@@ -384,6 +384,13 @@ export function InlineEdit({
   displayClassName?: string;
   inputClassName?: string;
   testId?: string;
+  /**
+   * Optional override for the collapsed (non-editing) display only — the
+   * editor still operates on `value`. Used when the column wants to show a
+   * derived label (e.g. customer prefix stripped) while preserving the
+   * underlying stored value for editing and persistence.
+   */
+  displayValue?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
@@ -426,7 +433,7 @@ export function InlineEdit({
             {placeholder}
           </span>
         ) : (
-          <span className={`text-sm ${displayClassName ?? ""}`}>{prefix}{value}</span>
+          <span className={`text-sm ${displayClassName ?? ""}`}>{prefix}{displayValue ?? value}</span>
         )}
         <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
       </span>

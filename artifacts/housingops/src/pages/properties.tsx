@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
+import { formatPropertyName } from "@/lib/property-name";
 import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -1905,13 +1906,35 @@ export default function Properties() {
                         data-testid={`row-property-${property.id}`}
                       >
                         <td className="p-4">
-                          <InlineEdit
-                            value={property.name}
-                            onSave={(v) => updateProperty(property.id, { name: v })}
-                            displayClassName="font-semibold"
-                            inputClassName="w-56"
-                            testId={`inline-edit-property-name-${property.id}`}
-                          />
+                          {(() => {
+                            // Only override the displayed text when the
+                            // customer-aware helper actually stripped the
+                            // customer prefix (i.e. the result differs from
+                            // the raw name). For non-matching rows we leave
+                            // the original `property.name` untouched so we
+                            // don't accidentally hide secondary segments
+                            // like `(Baraboo, WI)` that aren't a customer
+                            // duplicate.
+                            const formatted = formatPropertyName(property.name, {
+                              customerName: customer?.name,
+                            });
+                            const stripped =
+                              !!customer?.name &&
+                              formatted.secondary === null &&
+                              formatted.primary !== (property.name ?? "").trim();
+                            return (
+                              <InlineEdit
+                                value={property.name}
+                                displayValue={stripped ? formatted.primary : undefined}
+                                onSave={(v) =>
+                                  updateProperty(property.id, { name: v })
+                                }
+                                displayClassName="font-semibold"
+                                inputClassName="w-56"
+                                testId={`inline-edit-property-name-${property.id}`}
+                              />
+                            );
+                          })()}
                         </td>
                         <td className="p-4 text-sm" data-testid={`cell-customer-${property.id}`}>
                           <div className="flex items-center gap-1.5">

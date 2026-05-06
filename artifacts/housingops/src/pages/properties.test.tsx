@@ -576,6 +576,59 @@ describe("Properties toolbar persistence", () => {
     expect(window.location.search).toBe("");
   });
 
+  // ── Customer-prefix stripping in the Property cell (task #155) ───────
+  // The Property column sits right next to the Customer column, so when
+  // a property name leads with the customer (e.g. `Burnett — WEBSTER`
+  // for customer `Burnett`) the bold line should show the real
+  // property name (`Webster`), not the redundant customer prefix. Rows
+  // whose leading segment doesn't match the customer must render
+  // unchanged so we don't accidentally hide legitimate name parts.
+  it("Property cell shows the real property name when the leading segment matches the customer", async () => {
+    state.customers = [
+      { id: "c1", name: "Burnett", contactName: "", email: "", phone: "", notes: "" },
+      { id: "c2", name: "MV", contactName: "", email: "", phone: "", notes: "" },
+    ];
+    state.properties = [
+      baseProperty({ id: "p1", customerId: "c1", name: "Burnett — WEBSTER" }),
+      baseProperty({
+        id: "p2",
+        customerId: "c2",
+        name: "Prairie Hill Village (Baraboo, WI)",
+      }),
+    ];
+    state.rooms = [];
+
+    await renderPage();
+
+    const matchingCell = container.querySelector(
+      '[data-testid="inline-edit-property-name-p1"]',
+    );
+    if (!matchingCell) throw new Error("matching property cell not found");
+    const matchingText = matchingCell.textContent ?? "";
+    expect(matchingText).toContain("Webster");
+    // Customer name must NOT appear inside the property cell — it
+    // already lives in the adjacent Customer column.
+    expect(matchingText).not.toContain("Burnett");
+
+    // Non-matching row keeps the existing display text — both the
+    // primary AND the parenthesized secondary must still be present.
+    // Without this assertion, an earlier regression that always
+    // displayed only the formatted primary (dropping `(Baraboo, WI)`
+    // for non-matching rows too) would slip through unnoticed.
+    const nonMatchingCell = container.querySelector(
+      '[data-testid="inline-edit-property-name-p2"]',
+    );
+    if (!nonMatchingCell) throw new Error("non-matching property cell not found");
+    const nonMatchingText = nonMatchingCell.textContent ?? "";
+    expect(nonMatchingText).toContain("Prairie Hill Village");
+    expect(nonMatchingText).toContain("(Baraboo, WI)");
+
+    // Row test ids stay stable so other surfaces deep-linking by id
+    // (and the ?needsReview tests above) keep working.
+    expect(container.querySelector('[data-testid="row-property-p1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-property-p2"]')).not.toBeNull();
+  });
+
   it("does NOT persist the customer filter (it owns its own ?customer= URL contract)", async () => {
     await renderPage();
 

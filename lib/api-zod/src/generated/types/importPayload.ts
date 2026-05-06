@@ -11,6 +11,7 @@ import type { Lease } from "./lease";
 import type { Occupant } from "./occupant";
 import type { Property } from "./property";
 import type { Room } from "./room";
+import type { RoomNightLog } from "./roomNightLog";
 import type { Utility } from "./utility";
 
 export interface ImportPayload {
@@ -21,4 +22,9 @@ export interface ImportPayload {
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
+  /** Optional. Room-night log entries against hotel-rate leases.
+Older backups (pre task #299) won't include this — the
+importer treats a missing array as empty.
+ */
+  roomNightLogs?: RoomNightLog[];
 }

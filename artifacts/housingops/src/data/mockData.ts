@@ -234,8 +234,26 @@ export const LeaseSchema = z.object({
   weeklyCost: z.number().optional(),
   vendor: z.string().optional(),
   needsReview: z.boolean().optional(),
+  // Hotel-rate / room-night agreement fields (task #299). Optional with
+  // safe defaults so legacy backups + monthly leases parse unchanged.
+  rateType: z.enum(["monthly", "room-night"]).optional().default("monthly"),
+  nightlyRate: z.number().optional().default(0),
+  guaranteedRooms: z.number().optional().default(0),
+  monthlyRoomNightMin: z.number().optional().default(0),
+  longStayTaxExempt: z.boolean().optional().default(false),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
+
+// Room-night log entry — actual revenue-producing nights consumed against
+// a hotel-rate lease in a given month. `month` is `YYYY-MM`.
+export const RoomNightLogSchema = z.object({
+  id: z.string(),
+  leaseId: z.string(),
+  month: z.string(),
+  roomNights: z.number(),
+  notes: z.string(),
+});
+export type RoomNightLog = z.infer<typeof RoomNightLogSchema>;
 
 // ── Lease aggregation helpers ──────────────────────────────────────────
 // Centralized so the property header, finance tab, and any future caller
@@ -855,6 +873,11 @@ const LEASE_EXTENDED_DEFAULTS = {
   clauses: "",
   buyoutAvailable: false,
   buyoutCost: null as number | null,
+  rateType: "monthly" as const,
+  nightlyRate: 0,
+  guaranteedRooms: 0,
+  monthlyRoomNightMin: 0,
+  longStayTaxExempt: false,
 };
 
 export const MOCK_LEASES: Lease[] = [

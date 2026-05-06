@@ -3,6 +3,7 @@ import {
   customersTable,
   propertiesTable,
   leasesTable,
+  roomNightLogsTable,
   roomsTable,
   bedsTable,
   occupantsTable,
@@ -499,6 +500,10 @@ async function wipeAll(): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(bedsTable);
     await tx.delete(occupantsTable);
+    // Room-night logs reference leases by id — wipe before leases so a
+    // future FK doesn't trip on cascade order. Today the column is a
+    // plain `text` reference, but ordering future-proofs the wipe.
+    await tx.delete(roomNightLogsTable);
     await tx.delete(leasesTable);
     await tx.delete(utilitiesTable);
     await tx.delete(roomsTable);

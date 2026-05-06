@@ -1,4 +1,4 @@
-import { pgTable, text, doublePrecision, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, doublePrecision, boolean, integer } from "drizzle-orm/pg-core";
 
 export const leasesTable = pgTable("leases", {
   id: text("id").primaryKey(),
@@ -26,6 +26,15 @@ export const leasesTable = pgTable("leases", {
   weeklyCost: doublePrecision("weekly_cost").notNull().default(0),
   vendor: text("vendor").notNull().default(""),
   needsReview: boolean("needs_review").notNull().default(false),
+  // Hotel/room-night agreement fields (task #299). Most leases are a flat
+  // monthly rent (`rateType = "monthly"`); hotel-rate agreements like the
+  // Ridge Motor Inn are billed per room-night and use the four fields
+  // below instead. Defaults keep monthly leases unchanged.
+  rateType: text("rate_type").notNull().default("monthly"),
+  nightlyRate: doublePrecision("nightly_rate").notNull().default(0),
+  guaranteedRooms: integer("guaranteed_rooms").notNull().default(0),
+  monthlyRoomNightMin: integer("monthly_room_night_min").notNull().default(0),
+  longStayTaxExempt: boolean("long_stay_tax_exempt").notNull().default(false),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

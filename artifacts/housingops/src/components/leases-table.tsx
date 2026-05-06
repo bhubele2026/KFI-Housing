@@ -468,8 +468,14 @@ export function LeasesTable({
 function LeaseTermsBadges({ lease }: { lease: Lease }) {
   const hasBuyout = lease.buyoutAvailable ?? false;
   const hasClauses = (lease.clauses ?? "").trim().length > 0;
+  // Hotel-rate (room-night) agreements are surfaced as a distinct pill so
+  // operators can tell at a glance which rows are billed per night vs.
+  // monthly. The nightly rate (when set) is rolled into the badge label so
+  // the most useful number is visible without opening the lease detail.
+  const isRateBased = lease.rateType === "room-night";
+  const nightlyRate = lease.nightlyRate ?? 0;
 
-  if (!hasBuyout && !hasClauses) {
+  if (!hasBuyout && !hasClauses && !isRateBased) {
     return (
       <span
         className="text-sm text-muted-foreground"
@@ -482,6 +488,18 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
 
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {isRateBased && (
+        <Badge
+          variant="default"
+          className="gap-1 text-[11px] font-medium"
+          data-testid={`badge-lease-hotel-rate-${lease.id}`}
+        >
+          <DollarSign className="h-3 w-3" />
+          {nightlyRate > 0
+            ? `Hotel rate · $${nightlyRate.toLocaleString()}/night`
+            : "Hotel rate"}
+        </Badge>
+      )}
       {hasBuyout && (
         <Badge
           variant="secondary"

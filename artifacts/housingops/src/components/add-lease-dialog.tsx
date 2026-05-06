@@ -104,6 +104,11 @@ export function AddLeaseDialog({
       clauses: "",
       buyoutAvailable: false,
       buyoutCost: null,
+      rateType: "monthly",
+      nightlyRate: 0,
+      guaranteedRooms: 0,
+      monthlyRoomNightMin: 0,
+      longStayTaxExempt: false,
     });
     setOpen(false);
   };

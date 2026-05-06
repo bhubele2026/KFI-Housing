@@ -85,6 +85,9 @@ export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
 export const importDataBodyOccupantsItemMoveOutDateOneRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const importDataBodyRoomNightLogsItemMonthRegExp = new RegExp(
+  "^\\d{4}-\\d{2}$",
+);
 
 export const ImportDataBody = zod.object({
   customers: zod.array(
@@ -233,6 +236,36 @@ export const ImportDataBody = zod.object({
         .describe(
           "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
         ),
+      rateType: zod
+        .enum(["monthly", "room-night"])
+        .optional()
+        .describe(
+          "Pricing model. `monthly` (default) uses `monthlyRent`.\n`room-night` is a hotel-rate agreement priced per\noccupied night via `nightlyRate` + the room-night minimums\nbelow. Added by task #299.\n",
+        ),
+      nightlyRate: zod
+        .number()
+        .optional()
+        .describe(
+          "Per room-night rate in USD. Only meaningful when\n`rateType = room-night`. Added by task #299.\n",
+        ),
+      guaranteedRooms: zod
+        .number()
+        .optional()
+        .describe(
+          "Number of rooms the hotel guarantees to keep available.\nOnly meaningful when `rateType = room-night`. Added by\ntask #299.\n",
+        ),
+      monthlyRoomNightMin: zod
+        .number()
+        .optional()
+        .describe(
+          "Minimum revenue-producing room-nights per month — falling\nbelow this can void the negotiated rate. Only meaningful\nwhen `rateType = room-night`. Added by task #299.\n",
+        ),
+      longStayTaxExempt: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
+        ),
     }),
   ),
   rooms: zod.array(
@@ -296,6 +329,31 @@ export const ImportDataBody = zod.object({
       notes: zod.string(),
     }),
   ),
+  roomNightLogs: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        leaseId: zod.string(),
+        month: zod
+          .string()
+          .regex(importDataBodyRoomNightLogsItemMonthRegExp)
+          .describe("Calendar month the log covers, formatted as YYYY-MM."),
+        roomNights: zod
+          .number()
+          .describe(
+            "Actual revenue-producing room-nights consumed in `month`.",
+          ),
+        notes: zod
+          .string()
+          .describe(
+            "Free-form notes (variance vs. minimum, billing reference, etc.).",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional. Room-night log entries against hotel-rate leases.\nOlder backups (pre task #299) won't include this — the\nimporter treats a missing array as empty.\n",
+    ),
 });
 
 export const ImportDataResponse = zod.object({
@@ -885,6 +943,36 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
     ),
+  rateType: zod
+    .enum(["monthly", "room-night"])
+    .optional()
+    .describe(
+      "Pricing model. `monthly` (default) uses `monthlyRent`.\n`room-night` is a hotel-rate agreement priced per\noccupied night via `nightlyRate` + the room-night minimums\nbelow. Added by task #299.\n",
+    ),
+  nightlyRate: zod
+    .number()
+    .optional()
+    .describe(
+      "Per room-night rate in USD. Only meaningful when\n`rateType = room-night`. Added by task #299.\n",
+    ),
+  guaranteedRooms: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of rooms the hotel guarantees to keep available.\nOnly meaningful when `rateType = room-night`. Added by\ntask #299.\n",
+    ),
+  monthlyRoomNightMin: zod
+    .number()
+    .optional()
+    .describe(
+      "Minimum revenue-producing room-nights per month — falling\nbelow this can void the negotiated rate. Only meaningful\nwhen `rateType = room-night`. Added by task #299.\n",
+    ),
+  longStayTaxExempt: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -936,6 +1024,36 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+    ),
+  rateType: zod
+    .enum(["monthly", "room-night"])
+    .optional()
+    .describe(
+      "Pricing model. `monthly` (default) uses `monthlyRent`.\n`room-night` is a hotel-rate agreement priced per\noccupied night via `nightlyRate` + the room-night minimums\nbelow. Added by task #299.\n",
+    ),
+  nightlyRate: zod
+    .number()
+    .optional()
+    .describe(
+      "Per room-night rate in USD. Only meaningful when\n`rateType = room-night`. Added by task #299.\n",
+    ),
+  guaranteedRooms: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of rooms the hotel guarantees to keep available.\nOnly meaningful when `rateType = room-night`. Added by\ntask #299.\n",
+    ),
+  monthlyRoomNightMin: zod
+    .number()
+    .optional()
+    .describe(
+      "Minimum revenue-producing room-nights per month — falling\nbelow this can void the negotiated rate. Only meaningful\nwhen `rateType = room-night`. Added by task #299.\n",
+    ),
+  longStayTaxExempt: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
     ),
 });
 
@@ -1116,6 +1234,104 @@ export const ImportMasterLeasesResponse = zod.object({
 });
 
 /**
+ * Returns every room-night log entry across all hotel-rate leases.
+Logs record the actual room-nights consumed in a given calendar
+month against a lease whose `rateType` is `room-night`. Added
+by task #299.
+
+ * @summary List all room-night logs
+ */
+export const listRoomNightLogsResponseMonthRegExp = new RegExp(
+  "^\\d{4}-\\d{2}$",
+);
+
+export const ListRoomNightLogsResponseItem = zod.object({
+  id: zod.string(),
+  leaseId: zod.string(),
+  month: zod
+    .string()
+    .regex(listRoomNightLogsResponseMonthRegExp)
+    .describe("Calendar month the log covers, formatted as YYYY-MM."),
+  roomNights: zod
+    .number()
+    .describe("Actual revenue-producing room-nights consumed in `month`."),
+  notes: zod
+    .string()
+    .describe(
+      "Free-form notes (variance vs. minimum, billing reference, etc.).",
+    ),
+});
+export const ListRoomNightLogsResponse = zod.array(
+  ListRoomNightLogsResponseItem,
+);
+
+/**
+ * @summary Create a room-night log entry
+ */
+export const createRoomNightLogBodyMonthRegExp = new RegExp("^\\d{4}-\\d{2}$");
+
+export const CreateRoomNightLogBody = zod.object({
+  id: zod.string(),
+  leaseId: zod.string(),
+  month: zod
+    .string()
+    .regex(createRoomNightLogBodyMonthRegExp)
+    .describe("Calendar month the log covers, formatted as YYYY-MM."),
+  roomNights: zod
+    .number()
+    .describe("Actual revenue-producing room-nights consumed in `month`."),
+  notes: zod
+    .string()
+    .describe(
+      "Free-form notes (variance vs. minimum, billing reference, etc.).",
+    ),
+});
+
+/**
+ * @summary Update a room-night log entry
+ */
+export const UpdateRoomNightLogParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateRoomNightLogBodyMonthRegExp = new RegExp("^\\d{4}-\\d{2}$");
+
+export const UpdateRoomNightLogBody = zod.object({
+  leaseId: zod.string().optional(),
+  month: zod.string().regex(updateRoomNightLogBodyMonthRegExp).optional(),
+  roomNights: zod.number().optional(),
+  notes: zod.string().optional(),
+});
+
+export const updateRoomNightLogResponseMonthRegExp = new RegExp(
+  "^\\d{4}-\\d{2}$",
+);
+
+export const UpdateRoomNightLogResponse = zod.object({
+  id: zod.string(),
+  leaseId: zod.string(),
+  month: zod
+    .string()
+    .regex(updateRoomNightLogResponseMonthRegExp)
+    .describe("Calendar month the log covers, formatted as YYYY-MM."),
+  roomNights: zod
+    .number()
+    .describe("Actual revenue-producing room-nights consumed in `month`."),
+  notes: zod
+    .string()
+    .describe(
+      "Free-form notes (variance vs. minimum, billing reference, etc.).",
+    ),
+});
+
+/**
+ * @summary Delete a room-night log entry
+ */
+export const DeleteRoomNightLogParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary Update a lease
  */
 export const UpdateLeaseParams = zod.object({
@@ -1143,6 +1359,11 @@ export const UpdateLeaseBody = zod.object({
   weeklyCost: zod.number().optional(),
   vendor: zod.string().optional(),
   needsReview: zod.boolean().optional(),
+  rateType: zod.enum(["monthly", "room-night"]).optional(),
+  nightlyRate: zod.number().optional(),
+  guaranteedRooms: zod.number().optional(),
+  monthlyRoomNightMin: zod.number().optional(),
+  longStayTaxExempt: zod.boolean().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1190,6 +1411,36 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+    ),
+  rateType: zod
+    .enum(["monthly", "room-night"])
+    .optional()
+    .describe(
+      "Pricing model. `monthly` (default) uses `monthlyRent`.\n`room-night` is a hotel-rate agreement priced per\noccupied night via `nightlyRate` + the room-night minimums\nbelow. Added by task #299.\n",
+    ),
+  nightlyRate: zod
+    .number()
+    .optional()
+    .describe(
+      "Per room-night rate in USD. Only meaningful when\n`rateType = room-night`. Added by task #299.\n",
+    ),
+  guaranteedRooms: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of rooms the hotel guarantees to keep available.\nOnly meaningful when `rateType = room-night`. Added by\ntask #299.\n",
+    ),
+  monthlyRoomNightMin: zod
+    .number()
+    .optional()
+    .describe(
+      "Minimum revenue-producing room-nights per month — falling\nbelow this can void the negotiated rate. Only meaningful\nwhen `rateType = room-night`. Added by task #299.\n",
+    ),
+  longStayTaxExempt: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
     ),
 });
 

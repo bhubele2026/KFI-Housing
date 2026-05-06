@@ -1,6 +1,7 @@
 export * from "./customers";
 export * from "./properties";
 export * from "./leases";
+export * from "./room-night-logs";
 export * from "./rooms";
 export * from "./beds";
 export * from "./occupants";

@@ -297,6 +297,20 @@ export const LeaseStatus = {
   Upcoming: "Upcoming",
 } as const;
 
+/**
+ * Pricing model. `monthly` (default) uses `monthlyRent`.
+`room-night` is a hotel-rate agreement priced per
+occupied night via `nightlyRate` + the room-night minimums
+below. Added by task #299.
+
+ */
+export type LeaseRateType = (typeof LeaseRateType)[keyof typeof LeaseRateType];
+
+export const LeaseRateType = {
+  monthly: "monthly",
+  "room-night": "room-night",
+} as const;
+
 export interface Lease {
   id: string;
   propertyId: string;
@@ -330,6 +344,30 @@ descriptive cost text) and an operator must triage the
 lease before treating it as Active. Added by task #288.
  */
   needsReview?: boolean;
+  /** Pricing model. `monthly` (default) uses `monthlyRent`.
+`room-night` is a hotel-rate agreement priced per
+occupied night via `nightlyRate` + the room-night minimums
+below. Added by task #299.
+ */
+  rateType?: LeaseRateType;
+  /** Per room-night rate in USD. Only meaningful when
+`rateType = room-night`. Added by task #299.
+ */
+  nightlyRate?: number;
+  /** Number of rooms the hotel guarantees to keep available.
+Only meaningful when `rateType = room-night`. Added by
+task #299.
+ */
+  guaranteedRooms?: number;
+  /** Minimum revenue-producing room-nights per month — falling
+below this can void the negotiated rate. Only meaningful
+when `rateType = room-night`. Added by task #299.
+ */
+  monthlyRoomNightMin?: number;
+  /** True when stays of 30+ days are tax exempt under the
+agreement (Long Stay rule). Added by task #299.
+ */
+  longStayTaxExempt?: boolean;
 }
 
 export type LeaseUpdateStatus =
@@ -339,6 +377,14 @@ export const LeaseUpdateStatus = {
   Active: "Active",
   Expired: "Expired",
   Upcoming: "Upcoming",
+} as const;
+
+export type LeaseUpdateRateType =
+  (typeof LeaseUpdateRateType)[keyof typeof LeaseUpdateRateType];
+
+export const LeaseUpdateRateType = {
+  monthly: "monthly",
+  "room-night": "room-night",
 } as const;
 
 export interface LeaseUpdate {
@@ -356,6 +402,33 @@ export interface LeaseUpdate {
   weeklyCost?: number;
   vendor?: string;
   needsReview?: boolean;
+  rateType?: LeaseUpdateRateType;
+  nightlyRate?: number;
+  guaranteedRooms?: number;
+  monthlyRoomNightMin?: number;
+  longStayTaxExempt?: boolean;
+}
+
+export interface RoomNightLog {
+  id: string;
+  leaseId: string;
+  /**
+   * Calendar month the log covers, formatted as YYYY-MM.
+   * @pattern ^\d{4}-\d{2}$
+   */
+  month: string;
+  /** Actual revenue-producing room-nights consumed in `month`. */
+  roomNights: number;
+  /** Free-form notes (variance vs. minimum, billing reference, etc.). */
+  notes: string;
+}
+
+export interface RoomNightLogUpdate {
+  leaseId?: string;
+  /** @pattern ^\d{4}-\d{2}$ */
+  month?: string;
+  roomNights?: number;
+  notes?: string;
 }
 
 export interface Room {
@@ -668,6 +741,11 @@ export interface ImportPayload {
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
+  /** Optional. Room-night log entries against hotel-rate leases.
+Older backups (pre task #299) won't include this — the
+importer treats a missing array as empty.
+ */
+  roomNightLogs?: RoomNightLog[];
 }
 
 export type DeleteCustomer409 = {

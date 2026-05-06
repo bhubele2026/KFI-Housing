@@ -191,6 +191,13 @@ interface LeaseSpec {
   source: string;
   notes: string;
   clauses: string;
+  // Hotel-rate / room-night fields (task #299). Defaults assume a regular
+  // monthly lease so existing entries don't have to spell them out.
+  rateType?: "monthly" | "room-night";
+  nightlyRate?: number;
+  guaranteedRooms?: number;
+  monthlyRoomNightMin?: number;
+  longStayTaxExempt?: boolean;
 }
 
 const LEASES: readonly LeaseSpec[] = [
@@ -277,6 +284,11 @@ const LEASES: readonly LeaseSpec[] = [
     monthlyRent: 0,
     securityDeposit: 0,
     source: "The_Ridge_Motor_Inn_1778107885976.pdf",
+    rateType: "room-night",
+    nightlyRate: 53,
+    guaranteedRooms: 10,
+    monthlyRoomNightMin: 10,
+    longStayTaxExempt: true,
     notes:
       "The Ridge Motor Inn — KFI Staffing LLC negotiated hotel rate agreement " +
       "(not a per-unit apartment lease). Initial Term 04/06/2026 – 04/05/2027, " +
@@ -358,6 +370,11 @@ function buildLeaseRow(spec: LeaseSpec, propertyId: string): InsertLeaseRow {
     clauses: spec.clauses,
     buyoutAvailable: false,
     buyoutCost: null,
+    rateType: spec.rateType ?? "monthly",
+    nightlyRate: spec.nightlyRate ?? 0,
+    guaranteedRooms: spec.guaranteedRooms ?? 0,
+    monthlyRoomNightMin: spec.monthlyRoomNightMin ?? 0,
+    longStayTaxExempt: spec.longStayTaxExempt ?? false,
   };
 }
 

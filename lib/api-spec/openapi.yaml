@@ -387,6 +387,72 @@ paths:
         "500":
           description: Importer failed (transaction rolled back).
 
+  /room-night-logs:
+    get:
+      operationId: listRoomNightLogs
+      tags: [leases]
+      summary: List all room-night logs
+      description: |
+        Returns every room-night log entry across all hotel-rate leases.
+        Logs record the actual room-nights consumed in a given calendar
+        month against a lease whose `rateType` is `room-night`. Added
+        by task #299.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RoomNightLog" }
+    post:
+      operationId: createRoomNightLog
+      tags: [leases]
+      summary: Create a room-night log entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoomNightLog" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomNightLog" }
+  /room-night-logs/{id}:
+    patch:
+      operationId: updateRoomNightLog
+      tags: [leases]
+      summary: Update a room-night log entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoomNightLogUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoomNightLog" }
+    delete:
+      operationId: deleteRoomNightLog
+      tags: [leases]
+      summary: Delete a room-night log entry
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
   /leases/{id}:
     patch:
       operationId: updateLease
@@ -991,6 +1057,36 @@ components:
             True when the source row had ambiguous values (TBD, n/a,
             descriptive cost text) and an operator must triage the
             lease before treating it as Active. Added by task #288.
+        rateType:
+          type: string
+          enum: [monthly, room-night]
+          description: |
+            Pricing model. `monthly` (default) uses `monthlyRent`.
+            `room-night` is a hotel-rate agreement priced per
+            occupied night via `nightlyRate` + the room-night minimums
+            below. Added by task #299.
+        nightlyRate:
+          type: number
+          description: |
+            Per room-night rate in USD. Only meaningful when
+            `rateType = room-night`. Added by task #299.
+        guaranteedRooms:
+          type: integer
+          description: |
+            Number of rooms the hotel guarantees to keep available.
+            Only meaningful when `rateType = room-night`. Added by
+            task #299.
+        monthlyRoomNightMin:
+          type: integer
+          description: |
+            Minimum revenue-producing room-nights per month — falling
+            below this can void the negotiated rate. Only meaningful
+            when `rateType = room-night`. Added by task #299.
+        longStayTaxExempt:
+          type: boolean
+          description: |
+            True when stays of 30+ days are tax exempt under the
+            agreement (Long Stay rule). Added by task #299.
     LeaseUpdate:
       type: object
       properties:
@@ -1008,6 +1104,37 @@ components:
         weeklyCost: { type: number }
         vendor: { type: string }
         needsReview: { type: boolean }
+        rateType: { type: string, enum: [monthly, room-night] }
+        nightlyRate: { type: number }
+        guaranteedRooms: { type: integer }
+        monthlyRoomNightMin: { type: integer }
+        longStayTaxExempt: { type: boolean }
+
+    RoomNightLog:
+      type: object
+      required: [id, leaseId, month, roomNights, notes]
+      properties:
+        id: { type: string }
+        leaseId: { type: string }
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+          description: Calendar month the log covers, formatted as YYYY-MM.
+        roomNights:
+          type: integer
+          description: Actual revenue-producing room-nights consumed in `month`.
+        notes:
+          type: string
+          description: Free-form notes (variance vs. minimum, billing reference, etc.).
+    RoomNightLogUpdate:
+      type: object
+      properties:
+        leaseId: { type: string }
+        month:
+          type: string
+          pattern: '^\d{4}-\d{2}$'
+        roomNights: { type: integer }
+        notes: { type: string }
 
     Room:
       type: object
@@ -1324,3 +1451,10 @@ components:
         utilities:
           type: array
           items: { $ref: "#/components/schemas/Utility" }
+        roomNightLogs:
+          type: array
+          description: |
+            Optional. Room-night log entries against hotel-rate leases.
+            Older backups (pre task #299) won't include this — the
+            importer treats a missing array as empty.
+          items: { $ref: "#/components/schemas/RoomNightLog" }

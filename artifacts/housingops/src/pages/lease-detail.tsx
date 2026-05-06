@@ -5,8 +5,16 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, CalendarPlus, DollarSign, Trash2,
-  Save,
+  Save, Hotel, Plus,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListRoomNightLogs,
+  useCreateRoomNightLog,
+  useUpdateRoomNightLog,
+  useDeleteRoomNightLog,
+  getListRoomNightLogsQueryKey,
+} from "@workspace/api-client-react";
 
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -121,7 +129,183 @@ function makeCreateDraft(propertyId: string): Lease {
     clauses: "",
     buyoutAvailable: false,
     buyoutCost: null,
+    rateType: "monthly",
+    nightlyRate: 0,
+    guaranteedRooms: 0,
+    monthlyRoomNightMin: 0,
+    longStayTaxExempt: false,
   };
+}
+
+/**
+ * Room-night log editor — list + add/delete entries for a hotel-rate lease.
+ * Entries are stored against the lease via the `/room-night-logs` API
+ * (added with task #299). We keep the UI deliberately simple: one row per
+ * (month, nights, notes) record so staff can just type the month and the
+ * number of nights consumed.
+ */
+function RoomNightLogSection({
+  leaseId,
+  monthlyRoomNightMin,
+}: {
+  leaseId: string;
+  monthlyRoomNightMin: number;
+}) {
+  const queryClient = useQueryClient();
+  const logsQuery = useListRoomNightLogs();
+  const createLog = useCreateRoomNightLog();
+  const updateLog = useUpdateRoomNightLog();
+  const deleteLog = useDeleteRoomNightLog();
+
+  const allLogs = logsQuery.data ?? [];
+  const logs = useMemo(
+    () =>
+      allLogs
+        .filter((l) => l.leaseId === leaseId)
+        .slice()
+        .sort((a, b) => (a.month < b.month ? 1 : -1)),
+    [allLogs, leaseId],
+  );
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: getListRoomNightLogsQueryKey() });
+
+  const today = new Date();
+  const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const [draftMonth, setDraftMonth] = useState(defaultMonth);
+  const [draftNights, setDraftNights] = useState("");
+  const [draftNotes, setDraftNotes] = useState("");
+
+  const handleAdd = async () => {
+    const nights = parseInt(draftNights, 10);
+    if (!/^\d{4}-\d{2}$/.test(draftMonth) || !Number.isFinite(nights)) return;
+    await createLog.mutateAsync({
+      data: {
+        id: `rnl-${leaseId}-${draftMonth}-${Date.now()}`,
+        leaseId,
+        month: draftMonth,
+        roomNights: nights,
+        notes: draftNotes,
+      },
+    });
+    setDraftNights("");
+    setDraftNotes("");
+    void invalidate();
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Calendar className="h-4 w-4" />
+          Room-Night Log
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3" data-testid="room-night-log-section">
+        <p className="text-xs text-muted-foreground">
+          Record actual revenue-producing room-nights consumed each month.
+          {monthlyRoomNightMin > 0
+            ? ` Minimum is ${monthlyRoomNightMin} nights/month — months below this are flagged.`
+            : ""}
+        </p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col">
+            <Label htmlFor="rnl-month" className="text-xs text-muted-foreground">Month</Label>
+            <Input
+              id="rnl-month"
+              type="month"
+              value={draftMonth}
+              onChange={(e) => setDraftMonth(e.target.value)}
+              className="h-8 w-36"
+              data-testid="input-rnl-month"
+            />
+          </div>
+          <div className="flex flex-col">
+            <Label htmlFor="rnl-nights" className="text-xs text-muted-foreground">Nights</Label>
+            <Input
+              id="rnl-nights"
+              type="number"
+              min={0}
+              value={draftNights}
+              onChange={(e) => setDraftNights(e.target.value)}
+              className="h-8 w-24"
+              data-testid="input-rnl-nights"
+            />
+          </div>
+          <div className="flex flex-col grow min-w-[160px]">
+            <Label htmlFor="rnl-notes" className="text-xs text-muted-foreground">Notes</Label>
+            <Input
+              id="rnl-notes"
+              value={draftNotes}
+              onChange={(e) => setDraftNotes(e.target.value)}
+              className="h-8"
+              placeholder="Optional"
+              data-testid="input-rnl-notes"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleAdd}
+            disabled={createLog.isPending || draftNights === ""}
+            data-testid="button-add-rnl"
+          >
+            <Plus className="h-3 w-3 mr-1" /> Log
+          </Button>
+        </div>
+        {logs.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">No entries yet.</p>
+        ) : (
+          <div className="space-y-1">
+            {logs.map((log) => {
+              const belowMin =
+                monthlyRoomNightMin > 0 && log.roomNights < monthlyRoomNightMin;
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between gap-2 py-1 border-b border-dashed border-border/40 text-sm"
+                  data-testid={`rnl-row-${log.id}`}
+                >
+                  <span className="font-mono w-20 shrink-0">{log.month}</span>
+                  <InlineEdit
+                    value={log.roomNights}
+                    type="number"
+                    onSave={async (v) => {
+                      await updateLog.mutateAsync({
+                        id: log.id,
+                        data: { roomNights: parseInt(v, 10) || 0 },
+                      });
+                      void invalidate();
+                    }}
+                    testId={`inline-rnl-nights-${log.id}`}
+                  />
+                  {belowMin && (
+                    <Badge variant="destructive" className="text-[10px]">Below min</Badge>
+                  )}
+                  <span className="grow text-xs text-muted-foreground truncate" title={log.notes}>
+                    {log.notes}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={async () => {
+                      await deleteLog.mutateAsync({ id: log.id });
+                      void invalidate();
+                    }}
+                    data-testid={`button-delete-rnl-${log.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function LeaseDetail() {
@@ -831,6 +1015,100 @@ export default function LeaseDetail() {
               />
             </CardContent>
           </Card>
+
+          {/* ── Hotel / Room-Night Agreement ── */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Hotel className="h-4 w-4" />
+                Hotel / Room-Night Agreement
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <Label htmlFor="rate-type" className="text-sm">
+                    Rate type
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    Switch to "Room-night" for hotel-rate agreements like a motel block.
+                  </span>
+                </div>
+                <Select
+                  value={lease.rateType ?? "monthly"}
+                  onValueChange={(v) =>
+                    applyUpdate({ rateType: v as "monthly" | "room-night" })
+                  }
+                >
+                  <SelectTrigger className="h-7 text-sm w-40" data-testid="select-rate-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="room-night">Room-night</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(lease.rateType ?? "monthly") === "room-night" && (
+                <div className="space-y-3 pt-2 border-t border-dashed border-border/50">
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-sm text-muted-foreground w-44 shrink-0">Nightly rate</span>
+                    <InlineEdit
+                      value={lease.nightlyRate ?? 0}
+                      prefix="$"
+                      type="number"
+                      onSave={(v) => applyUpdate({ nightlyRate: parseFloat(v) || 0 })}
+                      testId="inline-nightly-rate"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-sm text-muted-foreground w-44 shrink-0">Guaranteed rooms</span>
+                    <InlineEdit
+                      value={lease.guaranteedRooms ?? 0}
+                      type="number"
+                      onSave={(v) => applyUpdate({ guaranteedRooms: parseInt(v, 10) || 0 })}
+                      testId="inline-guaranteed-rooms"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-sm text-muted-foreground w-44 shrink-0">Monthly room-night min</span>
+                    <InlineEdit
+                      value={lease.monthlyRoomNightMin ?? 0}
+                      type="number"
+                      onSave={(v) => applyUpdate({ monthlyRoomNightMin: parseInt(v, 10) || 0 })}
+                      testId="inline-monthly-room-night-min"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 py-1">
+                    <div className="flex flex-col">
+                      <Label htmlFor="long-stay-tax-exempt" className="text-sm">
+                        Long Stay (30+ day) tax exempt
+                      </Label>
+                      <span className="text-xs text-muted-foreground">
+                        Stays of 30+ consecutive nights are exempt from lodging tax.
+                      </span>
+                    </div>
+                    <Switch
+                      id="long-stay-tax-exempt"
+                      checked={lease.longStayTaxExempt ?? false}
+                      onCheckedChange={(checked) =>
+                        applyUpdate({ longStayTaxExempt: checked })
+                      }
+                      data-testid="switch-long-stay-tax-exempt"
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Room-Night Log (only meaningful for hotel-rate leases) ── */}
+          {!isCreateMode && (lease.rateType ?? "monthly") === "room-night" && (
+            <RoomNightLogSection
+              leaseId={lease.id}
+              monthlyRoomNightMin={lease.monthlyRoomNightMin ?? 0}
+            />
+          )}
 
           {/* ── Buyout ── */}
           <Card>

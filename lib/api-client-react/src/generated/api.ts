@@ -37,6 +37,8 @@ import type {
   Property,
   PropertyUpdate,
   Room,
+  RoomNightLog,
+  RoomNightLogUpdate,
   RoomUpdate,
   RuntimeConfig,
   UnplacedPayrollRow,
@@ -1499,6 +1501,343 @@ export const useImportMasterLeases = <
   TContext
 > => {
   return useMutation(getImportMasterLeasesMutationOptions(options));
+};
+
+/**
+ * Returns every room-night log entry across all hotel-rate leases.
+Logs record the actual room-nights consumed in a given calendar
+month against a lease whose `rateType` is `room-night`. Added
+by task #299.
+
+ * @summary List all room-night logs
+ */
+export const getListRoomNightLogsUrl = () => {
+  return `/api/room-night-logs`;
+};
+
+export const listRoomNightLogs = async (
+  options?: RequestInit,
+): Promise<RoomNightLog[]> => {
+  return customFetch<RoomNightLog[]>(getListRoomNightLogsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRoomNightLogsQueryKey = () => {
+  return [`/api/room-night-logs`] as const;
+};
+
+export const getListRoomNightLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRoomNightLogs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRoomNightLogs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRoomNightLogsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRoomNightLogs>>
+  > = ({ signal }) => listRoomNightLogs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRoomNightLogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRoomNightLogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRoomNightLogs>>
+>;
+export type ListRoomNightLogsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all room-night logs
+ */
+
+export function useListRoomNightLogs<
+  TData = Awaited<ReturnType<typeof listRoomNightLogs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listRoomNightLogs>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRoomNightLogsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a room-night log entry
+ */
+export const getCreateRoomNightLogUrl = () => {
+  return `/api/room-night-logs`;
+};
+
+export const createRoomNightLog = async (
+  roomNightLog: RoomNightLog,
+  options?: RequestInit,
+): Promise<RoomNightLog> => {
+  return customFetch<RoomNightLog>(getCreateRoomNightLogUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(roomNightLog),
+  });
+};
+
+export const getCreateRoomNightLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRoomNightLog>>,
+    TError,
+    { data: BodyType<RoomNightLog> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRoomNightLog>>,
+  TError,
+  { data: BodyType<RoomNightLog> },
+  TContext
+> => {
+  const mutationKey = ["createRoomNightLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRoomNightLog>>,
+    { data: BodyType<RoomNightLog> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createRoomNightLog(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRoomNightLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRoomNightLog>>
+>;
+export type CreateRoomNightLogMutationBody = BodyType<RoomNightLog>;
+export type CreateRoomNightLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a room-night log entry
+ */
+export const useCreateRoomNightLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRoomNightLog>>,
+    TError,
+    { data: BodyType<RoomNightLog> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createRoomNightLog>>,
+  TError,
+  { data: BodyType<RoomNightLog> },
+  TContext
+> => {
+  return useMutation(getCreateRoomNightLogMutationOptions(options));
+};
+
+/**
+ * @summary Update a room-night log entry
+ */
+export const getUpdateRoomNightLogUrl = (id: string) => {
+  return `/api/room-night-logs/${id}`;
+};
+
+export const updateRoomNightLog = async (
+  id: string,
+  roomNightLogUpdate: RoomNightLogUpdate,
+  options?: RequestInit,
+): Promise<RoomNightLog> => {
+  return customFetch<RoomNightLog>(getUpdateRoomNightLogUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(roomNightLogUpdate),
+  });
+};
+
+export const getUpdateRoomNightLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRoomNightLog>>,
+    TError,
+    { id: string; data: BodyType<RoomNightLogUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateRoomNightLog>>,
+  TError,
+  { id: string; data: BodyType<RoomNightLogUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateRoomNightLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateRoomNightLog>>,
+    { id: string; data: BodyType<RoomNightLogUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateRoomNightLog(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateRoomNightLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateRoomNightLog>>
+>;
+export type UpdateRoomNightLogMutationBody = BodyType<RoomNightLogUpdate>;
+export type UpdateRoomNightLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a room-night log entry
+ */
+export const useUpdateRoomNightLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateRoomNightLog>>,
+    TError,
+    { id: string; data: BodyType<RoomNightLogUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateRoomNightLog>>,
+  TError,
+  { id: string; data: BodyType<RoomNightLogUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateRoomNightLogMutationOptions(options));
+};
+
+/**
+ * @summary Delete a room-night log entry
+ */
+export const getDeleteRoomNightLogUrl = (id: string) => {
+  return `/api/room-night-logs/${id}`;
+};
+
+export const deleteRoomNightLog = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteRoomNightLogUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteRoomNightLogMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRoomNightLog>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRoomNightLog>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteRoomNightLog"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRoomNightLog>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteRoomNightLog(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRoomNightLogMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRoomNightLog>>
+>;
+
+export type DeleteRoomNightLogMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a room-night log entry
+ */
+export const useDeleteRoomNightLog = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRoomNightLog>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRoomNightLog>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteRoomNightLogMutationOptions(options));
 };
 
 /**

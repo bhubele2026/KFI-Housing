@@ -602,6 +602,15 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         clauses: reviewingItem.leaseDraft.clauses,
         buyoutAvailable,
         buyoutCost,
+        // Hotel-rate fields (task #299) aren't extracted from PDFs yet —
+        // default to "monthly" so PDF-imported leases keep behaving as
+        // standard monthly leases. Operators can flip them on from the
+        // lease detail page when needed.
+        rateType: "monthly",
+        nightlyRate: 0,
+        guaranteedRooms: 0,
+        monthlyRoomNightMin: 0,
+        longStayTaxExempt: false,
       };
       addLease(newLease);
 

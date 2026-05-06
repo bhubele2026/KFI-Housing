@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeaseDate } from "./leaseDate";
+import type { LeaseUpdateRateType } from "./leaseUpdateRateType";
 import type { LeaseUpdateStatus } from "./leaseUpdateStatus";
 
 export interface LeaseUpdate {
@@ -23,4 +24,9 @@ export interface LeaseUpdate {
   weeklyCost?: number;
   vendor?: string;
   needsReview?: boolean;
+  rateType?: LeaseUpdateRateType;
+  nightlyRate?: number;
+  guaranteedRooms?: number;
+  monthlyRoomNightMin?: number;
+  longStayTaxExempt?: boolean;
 }

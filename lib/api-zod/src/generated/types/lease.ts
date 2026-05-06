@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeaseDate } from "./leaseDate";
+import type { LeaseRateType } from "./leaseRateType";
 import type { LeaseStatus } from "./leaseStatus";
 
 export interface Lease {
@@ -41,4 +42,28 @@ descriptive cost text) and an operator must triage the
 lease before treating it as Active. Added by task #288.
  */
   needsReview?: boolean;
+  /** Pricing model. `monthly` (default) uses `monthlyRent`.
+`room-night` is a hotel-rate agreement priced per
+occupied night via `nightlyRate` + the room-night minimums
+below. Added by task #299.
+ */
+  rateType?: LeaseRateType;
+  /** Per room-night rate in USD. Only meaningful when
+`rateType = room-night`. Added by task #299.
+ */
+  nightlyRate?: number;
+  /** Number of rooms the hotel guarantees to keep available.
+Only meaningful when `rateType = room-night`. Added by
+task #299.
+ */
+  guaranteedRooms?: number;
+  /** Minimum revenue-producing room-nights per month — falling
+below this can void the negotiated rate. Only meaningful
+when `rateType = room-night`. Added by task #299.
+ */
+  monthlyRoomNightMin?: number;
+  /** True when stays of 30+ days are tax exempt under the
+agreement (Long Stay rule). Added by task #299.
+ */
+  longStayTaxExempt?: boolean;
 }

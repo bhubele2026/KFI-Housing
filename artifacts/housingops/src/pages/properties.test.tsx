@@ -2,14 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React, { act, isValidElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-// These tests pin down the Total Sqft column on the Properties listing.
-// The column reads `computeRoomTotals(propRooms).totalSqft` per row, so
-// regressions can come from three places:
-//   • The helper itself (covered by mockData.test.ts).
-//   • The page filtering rooms by propertyId.
-//   • The cell's "0 → em-dash" placeholder branch.
-// A test that only checked one row would let "rows quietly all show the
-// same number" bugs through; we render multiple rows on purpose.
+// These tests pin down behaviors of the Properties listing page. The
+// per-property Total Sqft column was removed from this overview list
+// (it still appears on the individual Property page); related tests
+// were dropped along with it.
 
 vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -270,113 +266,6 @@ function PropertiesUnderTest() {
   );
 }
 
-describe("Properties listing — Total Sqft column", () => {
-  let container: HTMLDivElement;
-  let root: Root | null = null;
-
-  beforeEach(() => {
-    state = makeFreshState();
-    Object.values(storeMocks).forEach((m) => m.mockReset());
-    // Each test starts on /properties with no persisted scope so the
-    // CustomerScopeProvider defaults to "All Customers".
-    window.sessionStorage.clear();
-    window.localStorage.clear();
-    window.history.replaceState({}, "", "/properties");
-    container = document.createElement("div");
-    document.body.appendChild(container);
-  });
-
-  afterEach(async () => {
-    if (root) {
-      const r = root;
-      await act(async () => {
-        r.unmount();
-      });
-      root = null;
-    }
-    container.remove();
-  });
-
-  async function renderPage() {
-    await act(async () => {
-      root = createRoot(container);
-      root.render(<PropertiesUnderTest />);
-    });
-  }
-
-  function getTotalSqftCell(propertyId: string): HTMLElement {
-    const el = container.querySelector(
-      `[data-testid="cell-total-sqft-${propertyId}"]`,
-    );
-    if (!el) throw new Error(`cell-total-sqft-${propertyId} not found`);
-    return el as HTMLElement;
-  }
-
-  it("renders the Total Sqft column header", async () => {
-    // Sanity check: if a future refactor renames or removes the column
-    // header (e.g. swaps it for "Square footage"), the per-row tests
-    // below would still pass via testid but the user-facing label would
-    // have silently changed. This guards the visible header text too.
-    // The header now doubles as the $/sqft sort trigger, so its
-    // visible label is "Total Sqft / $/sqft".
-    await renderPage();
-    const headerCells = Array.from(container.querySelectorAll("thead th"));
-    const labels = headerCells.map((c) => c.textContent?.trim() ?? "");
-    expect(labels).toContain("Total Sqft / $/sqft");
-  });
-
-  it("sums sqft across every room of a property (multi-room row)", async () => {
-    // p1 has two rooms: 200 + 320 = 520. The cell renders
-    // `520.toLocaleString()` followed by a "sqft" suffix.
-    await renderPage();
-    const cell = getTotalSqftCell("p1");
-    expect(cell.textContent).toContain("520");
-    expect(cell.textContent).toContain("sqft");
-    // The em-dash placeholder must NOT appear on a non-zero row.
-    expect(cell.textContent).not.toContain("—");
-  });
-
-  it("shows the single room's sqft on a single-room row", async () => {
-    // Guards against a regression that summed across the wrong key
-    // (e.g. summing every room in `state.rooms` instead of filtering
-    // by propertyId) — that bug would put 670 (200+320+150) here.
-    await renderPage();
-    const cell = getTotalSqftCell("p2");
-    expect(cell.textContent).toContain("150");
-    expect(cell.textContent).toContain("sqft");
-    expect(cell.textContent).not.toContain("520");
-    expect(cell.textContent).not.toContain("670");
-  });
-
-  it("renders an em-dash (—) and no sqft suffix when the property has no rooms", async () => {
-    // p3 has zero rooms → totalSqft is 0 → cell falls into the
-    // placeholder branch. A regression that always rendered
-    // "0.toLocaleString() sqft" would put "0 sqft" in front of the
-    // user, which reads as "we measured this and it's zero" rather than
-    // the truthful "we don't know yet".
-    await renderPage();
-    const cell = getTotalSqftCell("p3");
-    expect(cell.textContent?.trim()).toBe("—");
-    expect(cell.textContent).not.toContain("0 sqft");
-    expect(cell.textContent).not.toContain("sqft");
-  });
-
-  it("formats sqft totals ≥ 1,000 with a thousands separator", async () => {
-    // Bump p1's rooms so the total crosses 1,000 → toLocaleString should
-    // add the comma. Without it the column reads "1234 sqft" instead of
-    // "1,234 sqft" — a minor but visible regression we'd rather catch
-    // here than from a customer screenshot.
-    state.rooms = [
-      { id: "r1", propertyId: "p1", name: "Master", sqft: 800, bathrooms: 1, monthlyRent: 0 },
-      { id: "r2", propertyId: "p1", name: "Guest",  sqft: 434, bathrooms: 1, monthlyRent: 0 },
-    ];
-    await renderPage();
-
-    const cell = getTotalSqftCell("p1");
-    expect(cell.textContent).toContain("1,234");
-    expect(cell.textContent).toContain("sqft");
-  });
-});
 
 // ── Toolbar persistence ────────────────────────────────────────────────
 //

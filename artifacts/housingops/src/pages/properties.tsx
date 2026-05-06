@@ -6,7 +6,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeNetPerBedAfterElectric, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeNetPerBedAfterElectric, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,7 +44,7 @@ import { CheckedAgoLabel } from "@/components/checked-ago-label";
 import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 
 type SortDir = "asc" | "desc" | null;
-type SortKey = "customer" | "rating" | "sqft" | "totalBeds" | "occupied" | "vacant" | "chargePerBed";
+type SortKey = "customer" | "rating" | "totalBeds" | "occupied" | "vacant";
 type MinRating = "any" | "3" | "4" | "5";
 type RatingSortKey = "overall" | RatingCategoryKey;
 // The category the Min-rating filter applies to. Mirrors the rating
@@ -80,7 +80,7 @@ function getRatingValueFor(p: Property, key: RatingSortKey): number | null {
 const PROPERTIES_PREFS_STORAGE_KEY = "housingops:properties:prefs";
 const VALID_STATUS_FILTERS = new Set<string>(["All", "Active", "Inactive"]);
 const VALID_MIN_RATINGS = new Set<MinRating>(["any", "3", "4", "5"]);
-const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating", "sqft", "totalBeds", "occupied", "vacant", "chargePerBed"]);
+const VALID_SORT_KEYS = new Set<SortKey>(["customer", "rating", "totalBeds", "occupied", "vacant"]);
 const VALID_SORT_DIRS = new Set<Exclude<SortDir, null>>(["asc", "desc"]);
 const VALID_RATING_SORT_KEYS = new Set<RatingSortKey>(
   RATING_SORT_OPTIONS.map((o) => o.key),
@@ -231,7 +231,7 @@ export default function Properties() {
   // Defensive fallback to `[]` for `utilities` keeps existing tests
   // with partial `useData` mocks from crashing on the per-bed-electric
   // pre-compute below — production always returns an array.
-  const { properties, beds, leases, rooms, customers, utilities = [], addProperty, addCustomer, updateProperty, isLoading } = useData();
+  const { properties, beds, leases, customers, utilities = [], addProperty, addCustomer, updateProperty, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -292,25 +292,6 @@ export default function Properties() {
     return map;
   }, [customers]);
 
-  // Pre-compute $/sqft for every property so the sort comparator stays O(n log n)
-  // instead of re-filtering `rooms` for every comparison. `null` when the
-  // property has no rent or no sqft — those rows always sort to the end.
-  const pricePerSqftByPropertyId = useMemo(() => {
-    const totalsByProperty = new Map<string, { totalSqft: number; totalMonthlyRent: number }>();
-    for (const r of rooms) {
-      const cur = totalsByProperty.get(r.propertyId) ?? { totalSqft: 0, totalMonthlyRent: 0 };
-      cur.totalSqft += r.sqft || 0;
-      cur.totalMonthlyRent += r.monthlyRent || 0;
-      totalsByProperty.set(r.propertyId, cur);
-    }
-    const map = new Map<string, number | null>();
-    for (const p of properties) {
-      const t = totalsByProperty.get(p.id);
-      map.set(p.id, t ? computePricePerSqft(t.totalMonthlyRent, t.totalSqft) : null);
-    }
-    return map;
-  }, [properties, rooms]);
-
   // Pre-compute total/occupied/vacant bed counts per property so both
   // the table cells AND the map's info bubble pull from the same source
   // — the bubble would otherwise have to re-filter `beds` for every
@@ -318,10 +299,8 @@ export default function Properties() {
   // counting logic ever changed. Declared above `filtered` so the bed-
   // count column sorts can read from it without a TDZ.
   // Pre-compute monthly Electric utility totals per property so the
-  // per-row "Net / Bed" cell, the map bubble, and the CSV export all
-  // share one pass over `utilities` instead of each filtering it
-  // separately. Properties with no Electric utilities are absent from
-  // the map (treated as 0 by callers).
+  // map bubble's net-per-bed metric shares one pass over `utilities`
+  // instead of filtering it per pin.
   const monthlyElectricByPropertyId = useMemo(() => {
     const map = new Map<string, number>();
     for (const u of utilities) {
@@ -392,26 +371,11 @@ export default function Properties() {
           const cmp = ar - br;
           return sortDir === "asc" ? cmp : -cmp;
         });
-      } else if (sortKey === "sqft") {
-        list.sort((a, b) => {
-          const ap = pricePerSqftByPropertyId.get(a.id) ?? null;
-          const bp = pricePerSqftByPropertyId.get(b.id) ?? null;
-          // Properties without a $/sqft (no rent or no sqft) always sort
-          // to the end so the active list shows comparable rows first.
-          if (ap === null && bp === null) return 0;
-          if (ap === null) return 1;
-          if (bp === null) return -1;
-          const cmp = ap - bp;
-          return sortDir === "asc" ? cmp : -cmp;
-        });
-      } else if (sortKey === "totalBeds" || sortKey === "occupied" || sortKey === "vacant" || sortKey === "chargePerBed") {
+      } else if (sortKey === "totalBeds" || sortKey === "occupied" || sortKey === "vacant") {
         // Numeric column sort. Zero / missing values always sort to the
-        // end so an unbedded (or unpriced) property doesn't push real
-        // rows out of view when sorting ascending.
+        // end so an unbedded property doesn't push real rows out of
+        // view when sorting ascending.
         const valueOf = (p: Property): number | null => {
-          if (sortKey === "chargePerBed") {
-            return p.chargePerBed > 0 ? p.chargePerBed : null;
-          }
           const stats = bedStatsByPropertyId.get(p.id);
           if (!stats || stats.total === 0) return null;
           if (sortKey === "totalBeds") return stats.total;
@@ -430,7 +394,7 @@ export default function Properties() {
       }
     }
     return list;
-  }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, customerById, pricePerSqftByPropertyId, bedStatsByPropertyId]);
+  }, [properties, search, statusFilter, customerFilter, minRating, ratingFilterCategory, sortKey, sortDir, ratingSortCategory, customerById, bedStatsByPropertyId]);
 
   const cycleSort = (key: SortKey) => {
     if (sortKey !== key) {
@@ -450,11 +414,9 @@ export default function Properties() {
   };
 
   const toggleCustomerSort = () => cycleSort("customer");
-  const toggleSqftSort = () => cycleSort("sqft");
   const toggleTotalBedsSort = () => cycleSort("totalBeds");
   const toggleOccupiedSort = () => cycleSort("occupied");
   const toggleVacantSort = () => cycleSort("vacant");
-  const toggleChargePerBedSort = () => cycleSort("chargePerBed");
 
   /**
    * Cycle through the rating sort for the chosen category. Picking a different
@@ -480,11 +442,9 @@ export default function Properties() {
 
   const customerSortDir: SortDir = sortKey === "customer" ? sortDir : null;
   const ratingSortDir: SortDir = sortKey === "rating" ? sortDir : null;
-  const sqftSortDir: SortDir = sortKey === "sqft" ? sortDir : null;
   const totalBedsSortDir: SortDir = sortKey === "totalBeds" ? sortDir : null;
   const occupiedSortDir: SortDir = sortKey === "occupied" ? sortDir : null;
   const vacantSortDir: SortDir = sortKey === "vacant" ? sortDir : null;
-  const chargePerBedSortDir: SortDir = sortKey === "chargePerBed" ? sortDir : null;
 
   // Shared icon for the new numeric column sort headers — keeps every
   // header rendering identical chevrons without each one repeating the
@@ -1103,9 +1063,7 @@ export default function Properties() {
       const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
       const overallRating = computeOverallRating(property.ratings);
       const customer = customerById.get(property.customerId);
-      const propRooms = rooms.filter((r) => r.propertyId === property.id);
-      const roomTotals = computeRoomTotals(propRooms);
-      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating, roomTotals };
+      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating };
     });
     const csv = toCsv(rows, [
       { header: "Property",        value: (r) => r.property.name },
@@ -1117,18 +1075,7 @@ export default function Properties() {
       { header: "Total Beds",      value: (r) => r.propBeds.length },
       { header: "Occupied",        value: (r) => r.occupied },
       { header: "Vacant",          value: (r) => r.vacant },
-      { header: "Total Sqft",      value: (r) => r.roomTotals.totalSqft },
-      { header: "$ / Sqft",        value: (r) => computePricePerSqft(r.roomTotals.totalMonthlyRent, r.roomTotals.totalSqft) ?? "" },
-      { header: "Charge per Bed",  value: (r) => r.property.chargePerBed },
       { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
-      { header: "Rent / Bed",      value: (r) => computeRentPerBed(r.property.monthlyRent, r.propBeds.length) ?? "" },
-      {
-        header: "Net / Bed (after electric)",
-        value: (r) => {
-          const electric = monthlyElectricByPropertyId.get(r.property.id) ?? 0;
-          return computeNetPerBedAfterElectric(r.property.monthlyRent, electric, r.propBeds.length) ?? "";
-        },
-      },
       { header: "Status",          value: (r) => r.property.status },
       { header: "Overall Rating",  value: (r) => (r.overallRating === null ? "" : r.overallRating) },
       { header: "Lease End Date",  value: (r) => r.activeLease?.endDate ?? "" },
@@ -1799,57 +1746,6 @@ export default function Properties() {
                       {numericSortIcon(vacantSortDir)}
                     </button>
                   </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      onClick={toggleSqftSort}
-                      className="inline-flex items-center gap-1 hover:text-foreground transition-colors ml-auto"
-                      data-testid="button-sort-sqft"
-                      aria-label={`Sort by price per square foot (currently ${
-                        sqftSortDir
-                          ? sqftSortDir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "unsorted"
-                      })`}
-                    >
-                      Total Sqft / $/sqft
-                      {sqftSortDir === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5" />
-                      ) : sqftSortDir === "desc" ? (
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      ) : (
-                        <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
-                      )}
-                    </button>
-                  </TableHead>
-                  <TableHead
-                    className="text-right"
-                    title="Monthly rent ÷ total beds"
-                  >
-                    Rent / Bed
-                  </TableHead>
-                  <TableHead
-                    className="text-right"
-                    title="(Monthly rent − sum of Electric utility cost) ÷ total beds"
-                  >
-                    Net / Bed
-                    <span className="block text-[10px] font-normal text-muted-foreground">
-                      (after electric)
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <button
-                      type="button"
-                      onClick={toggleChargePerBedSort}
-                      className="inline-flex items-center gap-1 ml-auto hover:text-foreground transition-colors"
-                      data-testid="button-sort-charge-per-bed"
-                      aria-label={`Sort by charge per bed${sortAriaSuffix(chargePerBedSortDir)}`}
-                    >
-                      Charge / Bed
-                      {numericSortIcon(chargePerBedSortDir)}
-                    </button>
-                  </TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead>
                     <DropdownMenu>
@@ -1909,10 +1805,10 @@ export default function Properties() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={15} />
+                  <SkeletonRows rows={6} columns={11} />
                 ) : filtered.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={15}
+                    colSpan={11}
                     icon={Home}
                     title="No properties found"
                     description={
@@ -1940,10 +1836,6 @@ export default function Properties() {
                     const showRenewal = renewal && renewal.level !== "ok";
                     const overallRating = computeOverallRating(property.ratings);
                     const customer = customerById.get(property.customerId);
-                    const propRooms = rooms.filter((r) => r.propertyId === property.id);
-                    const propTotals = computeRoomTotals(propRooms);
-                    const totalSqft = propTotals.totalSqft;
-                    const pricePerSqft = computePricePerSqft(propTotals.totalMonthlyRent, totalSqft);
 
                     return (
                       <motion.tr
@@ -2033,117 +1925,6 @@ export default function Properties() {
                         <td className="p-4 text-center">
                           <span className={`text-sm font-medium ${vacant > 0 ? "text-amber-500" : "text-muted-foreground"}`}>{vacant}</span>
                         </td>
-                        <td
-                          className="p-4 text-right text-sm tabular-nums"
-                          data-testid={`cell-total-sqft-${property.id}`}
-                        >
-                          {totalSqft > 0 ? (
-                            pricePerSqft !== null ? (
-                              // Both sqft and rent are non-zero → surface the
-                              // derived $/sqft via hover so customers can
-                              // compare pricing across properties without
-                              // adding a whole new column.
-                              <HoverCard openDelay={120} closeDelay={80}>
-                                <HoverCardTrigger asChild>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    aria-label={`${property.name} total square footage and price per square foot`}
-                                    data-testid={`price-per-sqft-trigger-${property.id}`}
-                                  >
-                                    {totalSqft.toLocaleString()}
-                                    <span className="text-xs text-muted-foreground"> sqft</span>
-                                    <span
-                                      className="block text-xs text-muted-foreground tabular-nums"
-                                      data-testid={`cell-price-per-sqft-${property.id}`}
-                                    >
-                                      ${pricePerSqft.toFixed(2)}/sqft
-                                    </span>
-                                  </button>
-                                </HoverCardTrigger>
-                                <HoverCardContent
-                                  align="end"
-                                  sideOffset={6}
-                                  className="w-56 p-3 text-xs"
-                                  onClick={(e) => e.stopPropagation()}
-                                  data-testid={`price-per-sqft-breakdown-${property.id}`}
-                                >
-                                  <p className="font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Price per sqft
-                                  </p>
-                                  <dl className="space-y-1">
-                                    <div className="flex justify-between gap-2">
-                                      <dt className="text-muted-foreground">Room rent</dt>
-                                      <dd className="font-medium tabular-nums">${propTotals.totalMonthlyRent.toLocaleString()}/mo</dd>
-                                    </div>
-                                    <div className="flex justify-between gap-2">
-                                      <dt className="text-muted-foreground">Total sqft</dt>
-                                      <dd className="font-medium tabular-nums">{totalSqft.toLocaleString()}</dd>
-                                    </div>
-                                    <div className="flex justify-between gap-2 border-t pt-1 mt-1">
-                                      <dt className="font-semibold">$ / sqft</dt>
-                                      <dd className="font-semibold tabular-nums">${pricePerSqft.toFixed(2)}</dd>
-                                    </div>
-                                  </dl>
-                                </HoverCardContent>
-                              </HoverCard>
-                            ) : (
-                              <>
-                                {totalSqft.toLocaleString()}
-                                <span className="text-xs text-muted-foreground"> sqft</span>
-                              </>
-                            )
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        {(() => {
-                          // Per-bed unit economics. Both share the same bed
-                          // denominator as the Total Beds column above so a
-                          // 0-bed row consistently dashes out across the
-                          // table, the map bubble, and the CSV export.
-                          const bedCount = propBeds.length;
-                          const electric = monthlyElectricByPropertyId.get(property.id) ?? 0;
-                          const rentPerBed = computeRentPerBed(property.monthlyRent, bedCount);
-                          const netPerBed = computeNetPerBedAfterElectric(
-                            property.monthlyRent,
-                            electric,
-                            bedCount,
-                          );
-                          return (
-                            <>
-                              <td
-                                className="p-4 text-right text-sm tabular-nums"
-                                data-testid={`cell-rent-per-bed-${property.id}`}
-                              >
-                                {rentPerBed === null ? (
-                                  <span className="text-muted-foreground">—</span>
-                                ) : (
-                                  `$${rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-                                )}
-                              </td>
-                              <td
-                                className="p-4 text-right text-sm tabular-nums"
-                                data-testid={`cell-net-per-bed-${property.id}`}
-                                title={
-                                  netPerBed === null
-                                    ? undefined
-                                    : `Rent $${property.monthlyRent.toLocaleString()} − Electric $${electric.toLocaleString()} ÷ ${bedCount} bed${bedCount === 1 ? "" : "s"}`
-                                }
-                              >
-                                {netPerBed === null ? (
-                                  <span className="text-muted-foreground">—</span>
-                                ) : (
-                                  <span className={netPerBed < 0 ? "text-destructive" : undefined}>
-                                    ${netPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                                  </span>
-                                )}
-                              </td>
-                            </>
-                          );
-                        })()}
-                        <td className="p-4 text-right text-sm font-medium">${property.chargePerBed.toLocaleString()}</td>
                         <td className="p-4 text-center">
                           <Badge variant={property.status === "Active" ? "default" : "secondary"}>
                             {property.status}

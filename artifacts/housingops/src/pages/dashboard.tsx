@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,7 +29,7 @@ import { formatPropertyName } from "@/lib/property-name";
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed } = useData();
+  const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
   const queryClient = useQueryClient();
   const { data: unplacedPayroll } = useListUnplacedPayroll();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
@@ -398,7 +398,49 @@ export default function Dashboard() {
                           key={`${row.customer}::${row.personId}`}
                           data-testid={`row-unplaced-${row.personId}`}
                         >
-                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell className="font-medium">
+                            <div>{row.name}</div>
+                            {row.suggestions.length > 0 && (
+                              <div
+                                className="mt-1 flex flex-wrap items-center gap-1"
+                                data-testid={`suggestions-unplaced-${row.personId}`}
+                              >
+                                <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                                  <Wand2 className="h-3 w-3" />
+                                  Did you mean:
+                                </span>
+                                {row.suggestions.map((s) => (
+                                  <Button
+                                    key={s.occupantId}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-2 text-xs"
+                                    onClick={() => {
+                                      // Apply payroll's recurring rate to the
+                                      // existing occupant. The seeder will then
+                                      // match this row by name+company on the
+                                      // next refetch and drop it from the list.
+                                      updateOccupant(s.occupantId, {
+                                        chargePerBed: row.weekly,
+                                        billingFrequency: "Weekly",
+                                        ...(row.personId
+                                          ? { employeeId: row.personId }
+                                          : {}),
+                                      });
+                                      queryClient.invalidateQueries({
+                                        queryKey: getListUnplacedPayrollQueryKey(),
+                                      });
+                                    }}
+                                    data-testid={`button-apply-suggestion-${row.personId}-${s.occupantId}`}
+                                  >
+                                    {s.name}
+                                    {s.propertyName ? ` @ ${s.propertyName}` : " (unassigned)"}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             ${row.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </TableCell>

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { UnplacedPayrollSuggestion } from "./unplacedPayrollSuggestion";
 
 /**
  * A payroll row that should be deducting weekly housing rent for an
@@ -21,4 +22,10 @@ export interface UnplacedPayrollRow {
   personId: string;
   /** Recurring weekly deduction amount (USD). */
   weekly: number;
+  /** Up to 3 likely existing occupants at the same employer whose
+name closely resembles the payroll row's name (typo /
+initial / formatting differences). Sorted by descending
+similarity. Empty when no candidate scores ≥ 0.6.
+ */
+  suggestions: UnplacedPayrollSuggestion[];
 }

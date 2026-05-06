@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db, occupantsTable } from "@workspace/db";
+import { db, occupantsTable, propertiesTable } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
 
@@ -10,14 +10,37 @@ export interface HousingDeductionRow {
   weekly: number;
 }
 
+/**
+ * A close-but-not-exact match for an unplaced payroll row. Surfaced on
+ * the dashboard as "Did you mean: <name> @ <propertyName>?" so the
+ * operator can fix a payroll typo (e.g. "JANE A SMITH" vs the existing
+ * "Jane Smith") in one click instead of creating a duplicate occupant.
+ *
+ * Candidates are restricted to occupants whose `company` matches the
+ * payroll row's `customer` (case-insensitive) so a similarly-named
+ * employee at a different employer can never be suggested.
+ */
+export interface UnplacedPayrollSuggestion {
+  occupantId: string;
+  name: string;
+  propertyName: string | null;
+  score: number;
+}
+
+export interface UnplacedPayrollUnmatchedRow {
+  customer: string;
+  name: string;
+  personId: string;
+  weekly: number;
+  suggestions: UnplacedPayrollSuggestion[];
+}
+
 export interface SeedHousingDeductionsResult {
   totalRows: number;
   matched: number;
   updated: number;
   alreadyCorrect: number;
-  unmatched: Array<
-    Pick<HousingDeductionRow, "customer" | "name" | "personId" | "weekly">
-  >;
+  unmatched: UnplacedPayrollUnmatchedRow[];
   // Per-path match counters so we can verify in the workflow log that
   // employeeId is the dominant matcher and the fragile name-only
   // fallback resolves at most a handful of rows. Sum equals `matched`.
@@ -206,12 +229,116 @@ export const HOUSING_DEDUCTION_ROWS: HousingDeductionRow[] = [
   { customer: "WB Manufacturing", name: "STERLIN C ADAMS", personId: "2005036", weekly: 107.0 },
 ];
 
+/** Lowercase, strip non-alpha, collapse whitespace. */
+function normalizeName(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Significant tokens (drops single-letter middle initials). */
+function significantTokens(raw: string): string[] {
+  return normalizeName(raw)
+    .split(" ")
+    .filter((t) => t.length > 1);
+}
+
+/** Standard iterative Levenshtein edit distance. O(|a|·|b|). */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = new Array<number>(b.length + 1);
+  let curr = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1]! + 1, prev[j]! + 1, prev[j - 1]! + cost);
+    }
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length]!;
+}
+
+/**
+ * Name similarity in [0, 1]. Combines token-set Jaccard (catches
+ * reorderings and dropped middle initials) with character-level
+ * Levenshtein (catches typos within a token). Returns the max so
+ * either signal is enough to surface a candidate.
+ */
+export function nameSimilarity(a: string, b: string): number {
+  const an = normalizeName(a);
+  const bn = normalizeName(b);
+  if (an === "" || bn === "") return 0;
+  const at = significantTokens(a);
+  const bt = significantTokens(b);
+  let jaccard = 0;
+  if (at.length > 0 && bt.length > 0) {
+    const setA = new Set(at);
+    const setB = new Set(bt);
+    let inter = 0;
+    for (const t of setA) if (setB.has(t)) inter++;
+    const uni = new Set([...at, ...bt]).size;
+    jaccard = uni === 0 ? 0 : inter / uni;
+  }
+  const m = Math.max(an.length, bn.length);
+  const lev = m === 0 ? 0 : 1 - levenshtein(an, bn) / m;
+  return Math.max(jaccard, lev);
+}
+
+export interface SuggestionCandidate {
+  id: string;
+  name: string;
+  company: string;
+  propertyId: string | null;
+}
+
+/**
+ * Pure scoring helper exported for unit tests. Returns up to `limit`
+ * candidates whose `company` matches `customer` (case-insensitive),
+ * scored by name similarity ≥ `threshold`, sorted descending.
+ */
+export function rankSuggestions(
+  payrollName: string,
+  customer: string,
+  candidates: SuggestionCandidate[],
+  propertyNameById: Map<string, string>,
+  options: { limit?: number; threshold?: number } = {},
+): UnplacedPayrollSuggestion[] {
+  const limit = options.limit ?? 3;
+  const threshold = options.threshold ?? 0.6;
+  const customerKey = customer.trim().toLowerCase();
+  const scored: UnplacedPayrollSuggestion[] = [];
+  for (const c of candidates) {
+    if (c.company.trim().toLowerCase() !== customerKey) continue;
+    const score = nameSimilarity(payrollName, c.name);
+    if (score < threshold) continue;
+    scored.push({
+      occupantId: c.id,
+      name: c.name,
+      propertyName: c.propertyId
+        ? propertyNameById.get(c.propertyId) ?? null
+        : null,
+      score,
+    });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
 /**
  * Apply weekly housing deductions from the payroll export to existing
  * occupants. Matches first by `employeeId == personId`, then falls back
  * to a case-insensitive `(name, company)` exact match. Updates set
  * `chargePerBed = weekly` and `billingFrequency = "Weekly"`. Never
- * inserts new occupants — unmatched rows are reported only.
+ * inserts new occupants — unmatched rows are reported only, with up to
+ * 3 fuzzy-match suggestions (same employer, name similarity ≥ 0.6) so
+ * the dashboard can offer "Did you mean: …" one-click fixes for typos.
  *
  * Idempotent: re-running yields the same result and only writes to rows
  * whose values would change (`alreadyCorrect` covers the no-op path).
@@ -232,10 +359,26 @@ export async function seedHousingDeductions(
       name: occupantsTable.name,
       company: occupantsTable.company,
       employeeId: occupantsTable.employeeId,
+      propertyId: occupantsTable.propertyId,
       chargePerBed: occupantsTable.chargePerBed,
       billingFrequency: occupantsTable.billingFrequency,
     })
     .from(occupantsTable);
+
+  // Pull every property name once so we can label suggestions
+  // ("Did you mean: Jane Smith @ Maple Court?") without an N+1 lookup
+  // per unmatched row. Volume is small (tens) so a full scan is fine.
+  const allProperties = await database
+    .select({ id: propertiesTable.id, name: propertiesTable.name })
+    .from(propertiesTable);
+  const propertyNameById = new Map<string, string>();
+  for (const p of allProperties) propertyNameById.set(p.id, p.name);
+  const suggestionCandidates: SuggestionCandidate[] = allOccupants.map((o) => ({
+    id: o.id,
+    name: o.name,
+    company: o.company,
+    propertyId: o.propertyId,
+  }));
 
   const byEmployeeId = new Map<string, (typeof allOccupants)[number]>();
   for (const o of allOccupants) {
@@ -302,6 +445,12 @@ export async function seedHousingDeductions(
         name: row.name,
         personId: row.personId,
         weekly: row.weekly,
+        suggestions: rankSuggestions(
+          row.name,
+          row.customer,
+          suggestionCandidates,
+          propertyNameById,
+        ),
       });
       continue;
     }

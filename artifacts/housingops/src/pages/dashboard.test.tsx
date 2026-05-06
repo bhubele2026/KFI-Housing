@@ -116,15 +116,18 @@ const mockData: {
 const addOccupantMock = vi.fn();
 const updateBedMock = vi.fn();
 
+const updateOccupantMock = vi.fn();
+
 vi.mock("@/context/data-store", () => ({
   useData: () => ({
     ...mockData,
     addOccupant: addOccupantMock,
     updateBed: updateBedMock,
+    updateOccupant: updateOccupantMock,
   }),
 }));
 
-const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number }> } = {
+const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number; suggestions: Array<{ occupantId: string; name: string; propertyName: string | null; score: number }> }> } = {
   rows: [],
 };
 const invalidateQueriesMock = vi.fn();
@@ -637,9 +640,9 @@ describe("Dashboard Unplaced payroll tile", () => {
 
   it("groups rows by customer, shows weekly totals, and pre-fills the assign dialog", async () => {
     unplacedPayrollState.rows = [
-      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
-      { customer: "Acme Co", name: "John Doe", personId: "EMP2", weekly: 75 },
-      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200 },
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100, suggestions: [] },
+      { customer: "Acme Co", name: "John Doe", personId: "EMP2", weekly: 75, suggestions: [] },
+      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200, suggestions: [] },
     ];
 
     await render();
@@ -667,8 +670,8 @@ describe("Dashboard Unplaced payroll tile", () => {
 
   it("scopes the list to the active customer filter", async () => {
     unplacedPayrollState.rows = [
-      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
-      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200 },
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100, suggestions: [] },
+      { customer: "Globex", name: "Sarah Lee", personId: "EMP3", weekly: 200, suggestions: [] },
     ];
 
     await render();
@@ -689,7 +692,7 @@ describe("Dashboard Unplaced payroll tile", () => {
 
   it("on assign: writes occupant + bed and invalidates the unplaced list so the row drops off", async () => {
     unplacedPayrollState.rows = [
-      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100 },
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100, suggestions: [] },
     ];
 
     await render();

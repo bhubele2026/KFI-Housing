@@ -1809,6 +1809,35 @@ export const ListUnplacedPayrollResponseItem = zod
       .string()
       .describe("Payroll Person Id (employeeId) for the employee."),
     weekly: zod.number().describe("Recurring weekly deduction amount (USD)."),
+    suggestions: zod
+      .array(
+        zod
+          .object({
+            occupantId: zod
+              .string()
+              .describe(
+                "Id of the existing occupant the suggestion points at.",
+              ),
+            name: zod
+              .string()
+              .describe("Existing occupant's name as stored in HousingOps."),
+            propertyName: zod
+              .string()
+              .nullable()
+              .describe(
+                "Property the candidate is currently assigned to, or null\nwhen the occupant isn't assigned to a property yet.\n",
+              ),
+            score: zod
+              .number()
+              .describe("Name similarity in [0, 1]. Higher is closer."),
+          })
+          .describe(
+            'A close-but-not-exact existing-occupant candidate for an\nunplaced payroll row. The dashboard renders these as\n\"Did you mean: <name> @ <propertyName>?\" buttons that update\nthe existing occupant\'s chargePerBed\/billingFrequency from the\npayroll row instead of creating a duplicate.\n',
+          ),
+      )
+      .describe(
+        "Up to 3 likely existing occupants at the same employer whose\nname closely resembles the payroll row's name (typo \/\ninitial \/ formatting differences). Sorted by descending\nsimilarity. Empty when no candidate scores ≥ 0.6.\n",
+      ),
   })
   .describe(
     "A payroll row that should be deducting weekly housing rent for an\nemployee, but doesn't match any occupant in HousingOps yet.\nReturned by `GET \/payroll\/unplaced`.\n",

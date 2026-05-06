@@ -64,12 +64,21 @@ describe("GET /payroll/unplaced", () => {
           name: "ANDREW GRANVILLE",
           personId: "2004810",
           weekly: 25,
+          suggestions: [],
         },
         {
           customer: "Bell Timber, Inc.",
           name: "GERARD A DERBY",
           personId: "2004445",
           weekly: 150.5,
+          suggestions: [
+            {
+              occupantId: "occ-1",
+              name: "Gerard Derby",
+              propertyName: "Maple Court",
+              score: 0.85,
+            },
+          ],
         },
       ],
     });
@@ -78,8 +87,21 @@ describe("GET /payroll/unplaced", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual([
-      { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25 },
-      { customer: "Bell Timber, Inc.", name: "GERARD A DERBY", personId: "2004445", weekly: 150.5 },
+      { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25, suggestions: [] },
+      {
+        customer: "Bell Timber, Inc.",
+        name: "GERARD A DERBY",
+        personId: "2004445",
+        weekly: 150.5,
+        suggestions: [
+          {
+            occupantId: "occ-1",
+            name: "Gerard Derby",
+            propertyName: "Maple Court",
+            score: 0.85,
+          },
+        ],
+      },
     ]);
     // Re-running the seeder on every request is the contract — the
     // dashboard relies on this so a freshly assigned occupant disappears

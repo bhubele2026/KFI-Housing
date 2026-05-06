@@ -59,6 +59,7 @@ export * from "./roomNightLogUpdate";
 export * from "./roomUpdate";
 export * from "./runtimeConfig";
 export * from "./unplacedPayrollRow";
+export * from "./unplacedPayrollSuggestion";
 export * from "./utility";
 export * from "./utilityType";
 export * from "./utilityUpdate";

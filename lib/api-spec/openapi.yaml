@@ -1407,7 +1407,7 @@ components:
 
     UnplacedPayrollRow:
       type: object
-      required: [customer, name, personId, weekly]
+      required: [customer, name, personId, weekly, suggestions]
       description: |
         A payroll row that should be deducting weekly housing rent for an
         employee, but doesn't match any occupant in HousingOps yet.
@@ -1425,6 +1425,39 @@ components:
         weekly:
           type: number
           description: Recurring weekly deduction amount (USD).
+        suggestions:
+          type: array
+          description: |
+            Up to 3 likely existing occupants at the same employer whose
+            name closely resembles the payroll row's name (typo /
+            initial / formatting differences). Sorted by descending
+            similarity. Empty when no candidate scores ≥ 0.6.
+          items: { $ref: "#/components/schemas/UnplacedPayrollSuggestion" }
+
+    UnplacedPayrollSuggestion:
+      type: object
+      required: [occupantId, name, propertyName, score]
+      description: |
+        A close-but-not-exact existing-occupant candidate for an
+        unplaced payroll row. The dashboard renders these as
+        "Did you mean: <name> @ <propertyName>?" buttons that update
+        the existing occupant's chargePerBed/billingFrequency from the
+        payroll row instead of creating a duplicate.
+      properties:
+        occupantId:
+          type: string
+          description: Id of the existing occupant the suggestion points at.
+        name:
+          type: string
+          description: Existing occupant's name as stored in HousingOps.
+        propertyName:
+          type: ["string", "null"]
+          description: |
+            Property the candidate is currently assigned to, or null
+            when the occupant isn't assigned to a property yet.
+        score:
+          type: number
+          description: Name similarity in [0, 1]. Higher is closer.
 
     ImportPayload:
       type: object

@@ -717,6 +717,30 @@ export interface MasterLeaseImportResult {
 }
 
 /**
+ * A close-but-not-exact existing-occupant candidate for an
+unplaced payroll row. The dashboard renders these as
+"Did you mean: <name> @ <propertyName>?" buttons that update
+the existing occupant's chargePerBed/billingFrequency from the
+payroll row instead of creating a duplicate.
+
+ */
+export interface UnplacedPayrollSuggestion {
+  /** Id of the existing occupant the suggestion points at. */
+  occupantId: string;
+  /** Existing occupant's name as stored in HousingOps. */
+  name: string;
+  /**
+   * Property the candidate is currently assigned to, or null
+when the occupant isn't assigned to a property yet.
+
+   * @nullable
+   */
+  propertyName: string | null;
+  /** Name similarity in [0, 1]. Higher is closer. */
+  score: number;
+}
+
+/**
  * A payroll row that should be deducting weekly housing rent for an
 employee, but doesn't match any occupant in HousingOps yet.
 Returned by `GET /payroll/unplaced`.
@@ -731,6 +755,12 @@ export interface UnplacedPayrollRow {
   personId: string;
   /** Recurring weekly deduction amount (USD). */
   weekly: number;
+  /** Up to 3 likely existing occupants at the same employer whose
+name closely resembles the payroll row's name (typo /
+initial / formatting differences). Sorted by descending
+similarity. Empty when no candidate scores ≥ 0.6.
+ */
+  suggestions: UnplacedPayrollSuggestion[];
 }
 
 export interface ImportPayload {

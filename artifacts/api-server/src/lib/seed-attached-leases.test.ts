@@ -174,7 +174,7 @@ beforeEach(() => {
 
 describe("seedAttachedLeasesIfMissing", () => {
   it("inserts the 3 customers, 4 properties, and 4 active leases on a fresh DB", async () => {
-    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result).toEqual({
       customersInserted: 3,
@@ -200,7 +200,7 @@ describe("seedAttachedLeasesIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, dates, status, and source PDF marker", async () => {
-    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const ids = SEED_ATTACHED_LEASES_IDS;
 
@@ -261,7 +261,7 @@ describe("seedAttachedLeasesIfMissing", () => {
   });
 
   it("links properties to the correct customers", async () => {
-    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     const ids = SEED_ATTACHED_LEASES_IDS;
 
     expect(
@@ -293,7 +293,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       zip: "",
     });
 
-    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const ridge = stores.properties.get(ids.properties.ridgeMotorInn)!;
     expect(ridge["address"]).toBe("2900 New Pinery Road");
@@ -323,7 +323,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       zip: "54321",
     });
 
-    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const ridge = stores.properties.get(ids.properties.ridgeMotorInn)!;
     expect(ridge["address"]).toBe("999 Operator Override Rd");
@@ -332,7 +332,7 @@ describe("seedAttachedLeasesIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     const ids = SEED_ATTACHED_LEASES_IDS;
 
     const before = stores.properties.get(ids.properties.zielsdorf)!;
@@ -342,7 +342,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       landlordEmail: "ops@eureka.example",
     });
 
-    const second = await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    const second = await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second).toEqual({
       customersInserted: 0,
       propertiesInserted: 0,
@@ -375,7 +375,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       notes: "operator property notes",
     });
 
-    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     const ids = SEED_ATTACHED_LEASES_IDS;
 
     expect(result.customersInserted).toBe(2);
@@ -429,7 +429,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       notes: "Pre-existing Ridge agreement from master file (no source marker).",
     });
 
-    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger });
+    const result = await seedAttachedLeasesIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     const ids = SEED_ATTACHED_LEASES_IDS;
 
     // The Ridge customer/property/lease must NOT be re-inserted.

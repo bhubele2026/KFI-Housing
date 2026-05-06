@@ -15,6 +15,7 @@ import {
   type InsertOccupantRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 export const PATRIOT_BARABOO_CUSTOMER_ID = "cust-kfi-baraboo";
@@ -136,6 +137,7 @@ function buildLeaseRow(
   id: string,
   propertyId: string,
   spec: PatriotBarabooLeaseSpec,
+  status: "Active" | "Expired" | "Upcoming",
 ): InsertLeaseRow {
   return {
     id,
@@ -144,7 +146,7 @@ function buildLeaseRow(
     endDate: PATRIOT_LEASE_END,
     monthlyRent: PATRIOT_RENT,
     securityDeposit: PATRIOT_DEPOSIT,
-    status: "Active",
+    status,
     notes:
       `${unitMarker(spec.unit)} 12-month corporate lease; KFI to notify ` +
       `Patriot Properties of any tenant changes. Total billed $1,690 ` +
@@ -263,6 +265,7 @@ export interface SeedPatriotBarabooResult {
 export interface SeedPatriotBarabooDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 /**
@@ -279,6 +282,8 @@ export async function seedPatriotBarabooIfMissing(
 ): Promise<SeedPatriotBarabooResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
+  const status = computeLeaseStatus(PATRIOT_LEASE_START, PATRIOT_LEASE_END, today);
 
   const result = await database.transaction(async (tx) => {
     const existingCustomer = await tx
@@ -368,7 +373,7 @@ export async function seedPatriotBarabooIfMissing(
       const inserted = await tx
         .insert(leasesTable)
         .values(
-          buildLeaseRow(patriotBarabooLeaseId(spec.unit), propertyId, spec),
+          buildLeaseRow(patriotBarabooLeaseId(spec.unit), propertyId, spec, status),
         )
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });

@@ -227,7 +227,7 @@ beforeEach(() => {
 
 describe("seedChateauKnollIfMissing", () => {
   it("inserts the corporate customer, the property, and 6 active leases on a fresh DB", async () => {
-    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(true);
     expect(result.propertyInserted).toBe(true);
@@ -251,7 +251,7 @@ describe("seedChateauKnollIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, dates, deposit, and unit marker in notes", async () => {
-    await seedChateauKnollIfMissing({ logger: silentLogger });
+    await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const expected: Record<
       string,
@@ -280,7 +280,7 @@ describe("seedChateauKnollIfMissing", () => {
   });
 
   it("flags units 2108, 3512, 3524, 3604 as KFI-responsible per the LOI", async () => {
-    await seedChateauKnollIfMissing({ logger: silentLogger });
+    await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const loiUnits = ["2108", "3512", "3524", "3604"];
     for (const unit of loiUnits) {
@@ -298,7 +298,7 @@ describe("seedChateauKnollIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedChateauKnollIfMissing({ logger: silentLogger });
+    await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const propId = SEED_CHATEAU_KNOLL_IDS.property;
     const before = stores.properties.get(propId)!;
@@ -308,7 +308,7 @@ describe("seedChateauKnollIfMissing", () => {
       landlordEmail: "ops@chateau.example",
     });
 
-    const second = await seedChateauKnollIfMissing({ logger: silentLogger });
+    const second = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second.customerInserted).toBe(false);
     expect(second.propertyInserted).toBe(false);
     expect(second.leasesInserted).toBe(0);
@@ -343,7 +343,7 @@ describe("seedChateauKnollIfMissing", () => {
       notes: "operator notes",
     });
 
-    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(false);
@@ -383,7 +383,7 @@ describe("seedChateauKnollIfMissing", () => {
       notes: "",
     });
 
-    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(result.totalBedsBumped).toBe(false);
     expect(stores.properties.get("operator-prop")!["totalBeds"]).toBe(12);
   });
@@ -569,7 +569,7 @@ describe("seedChateauKnollIfMissing", () => {
       clauses: "",
     });
 
-    const result = await seedChateauKnollIfMissing({ logger: silentLogger });
+    const result = await seedChateauKnollIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     // 2108 and 3512 should be detected as already present — only the
     // remaining 4 should be inserted.

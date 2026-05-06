@@ -9,6 +9,7 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 export const CHATEAU_KNOLL_CUSTOMER_ID = "cust-kfi-corporate";
@@ -219,6 +220,7 @@ function buildLeaseRow(
   id: string,
   propertyId: string,
   spec: ChateauLeaseSpec,
+  today: string,
 ): InsertLeaseRow {
   return {
     id,
@@ -227,7 +229,7 @@ function buildLeaseRow(
     endDate: spec.endDate,
     monthlyRent: spec.monthlyRent,
     securityDeposit: spec.securityDeposit,
-    status: "Active",
+    status: computeLeaseStatus(spec.startDate, spec.endDate, today),
     notes: buildLeaseNotes(spec),
     clauses: buildLeaseClauses(spec),
     buyoutAvailable: false,
@@ -260,6 +262,7 @@ export interface SeedChateauKnollResult {
 export interface SeedChateauKnollDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 /**
@@ -282,6 +285,7 @@ export async function seedChateauKnollIfMissing(
 ): Promise<SeedChateauKnollResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
 
   const result = await database.transaction(async (tx) => {
     // 0. Look up the downstream end-client (Greystone Manufacturing) up
@@ -492,7 +496,7 @@ export async function seedChateauKnollIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(chateauKnollLeaseId(spec.unit), propertyId, spec))
+        .values(buildLeaseRow(chateauKnollLeaseId(spec.unit), propertyId, spec, today))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) {

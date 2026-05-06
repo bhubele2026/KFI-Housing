@@ -206,7 +206,7 @@ beforeEach(() => {
 
 describe("seedGreenockManorIfMissing", () => {
   it("inserts customer, property, and 6 active leases on a fresh DB", async () => {
-    const result = await seedGreenockManorIfMissing({ logger: silentLogger });
+    const result = await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result).toEqual({
       customerInserted: true,
@@ -221,7 +221,7 @@ describe("seedGreenockManorIfMissing", () => {
   });
 
   it("seeds the property with Greenock Manor / Mick's Properties details", async () => {
-    await seedGreenockManorIfMissing({ logger: silentLogger });
+    await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const property = stores.properties.get(GREENOCK_MANOR_PROPERTY_ID)!;
     expect(property["name"]).toMatch(/Greenock Manor/);
@@ -235,7 +235,7 @@ describe("seedGreenockManorIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, deposit, term, and status", async () => {
-    await seedGreenockManorIfMissing({ logger: silentLogger });
+    await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     for (const unit of UNITS) {
       const lease = stores.leases.get(greenockManorLeaseId(unit))!;
@@ -252,7 +252,7 @@ describe("seedGreenockManorIfMissing", () => {
   });
 
   it("uses the amended 12/01/2025 start for Unit 32 (not the original 2024 lease)", async () => {
-    await seedGreenockManorIfMissing({ logger: silentLogger });
+    await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const unit32 = stores.leases.get(greenockManorLeaseId("32"))!;
     expect(unit32["startDate"]).toBe("2025-12-01");
@@ -261,14 +261,14 @@ describe("seedGreenockManorIfMissing", () => {
   });
 
   it("flags Unit 49 notes as transcribed because the source PDF is image-only", async () => {
-    await seedGreenockManorIfMissing({ logger: silentLogger });
+    await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const unit49 = stores.leases.get(greenockManorLeaseId("49"))!;
     expect(String(unit49["notes"])).toMatch(/image-only/);
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedGreenockManorIfMissing({ logger: silentLogger });
+    await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const before = stores.properties.get(GREENOCK_MANOR_PROPERTY_ID)!;
     stores.properties.set(GREENOCK_MANOR_PROPERTY_ID, {
@@ -277,7 +277,7 @@ describe("seedGreenockManorIfMissing", () => {
       landlordEmail: "ops@micksproperties.example",
     });
 
-    const second = await seedGreenockManorIfMissing({ logger: silentLogger });
+    const second = await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second).toEqual({
       customerInserted: false,
       propertyInserted: false,
@@ -299,7 +299,7 @@ describe("seedGreenockManorIfMissing", () => {
       notes: "operator notes",
     });
 
-    const result = await seedGreenockManorIfMissing({ logger: silentLogger });
+    const result = await seedGreenockManorIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(true);

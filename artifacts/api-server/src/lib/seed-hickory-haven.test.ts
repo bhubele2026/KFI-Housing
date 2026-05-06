@@ -188,7 +188,7 @@ beforeEach(() => {
 
 describe("seedHickoryHavenIfMissing", () => {
   it("inserts customer, property, and 4 leases on a fresh DB", async () => {
-    const result = await seedHickoryHavenIfMissing({ logger: silentLogger });
+    const result = await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result).toEqual({
       customerInserted: true,
@@ -203,7 +203,7 @@ describe("seedHickoryHavenIfMissing", () => {
   });
 
   it("seeds the property at 600 W Hickory St, Gilman, WI with the right landlord", async () => {
-    await seedHickoryHavenIfMissing({ logger: silentLogger });
+    await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const property = stores.properties.get(HICKORY_HAVEN_PROPERTY_ID)!;
     expect(property["address"]).toBe("600 W Hickory St");
@@ -221,7 +221,7 @@ describe("seedHickoryHavenIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, deposit, term, status, and source PDF", async () => {
-    await seedHickoryHavenIfMissing({ logger: silentLogger });
+    await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     for (const unit of UNITS) {
       const lease = stores.leases.get(hickoryHavenLeaseId(unit))!;
@@ -245,7 +245,7 @@ describe("seedHickoryHavenIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedHickoryHavenIfMissing({ logger: silentLogger });
+    await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const before = stores.properties.get(HICKORY_HAVEN_PROPERTY_ID)!;
     stores.properties.set(HICKORY_HAVEN_PROPERTY_ID, {
@@ -254,7 +254,7 @@ describe("seedHickoryHavenIfMissing", () => {
       landlordEmail: "ops@hickoryhaven.example",
     });
 
-    const second = await seedHickoryHavenIfMissing({ logger: silentLogger });
+    const second = await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second).toEqual({
       customerInserted: false,
       propertyInserted: false,
@@ -277,7 +277,7 @@ describe("seedHickoryHavenIfMissing", () => {
       notes: "operator notes",
     });
 
-    const result = await seedHickoryHavenIfMissing({ logger: silentLogger });
+    const result = await seedHickoryHavenIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(true);

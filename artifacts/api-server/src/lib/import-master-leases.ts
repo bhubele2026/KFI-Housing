@@ -494,7 +494,14 @@ export async function importMasterLeases(
       action: "created" | "updated" | "skipped";
     }> {
       const needsReview = row.reviewReasons.length > 0 || row.weeklyCost === null;
-      const status = needsReview ? "Upcoming" : "Active";
+      // Master-file rows do not carry term dates, so we cannot derive
+      // status from a calendar at insert time. Persist a placeholder
+      // ("Upcoming" when triage is required, otherwise "Active"). The
+      // GET /leases route uses the shared `deriveLeaseStatus` helper,
+      // which falls back to this stored value whenever term dates are
+      // blank — so the placeholder is what the operator sees until they
+      // fill in dates, after which the status is computed dynamically.
+      const status: "Active" | "Upcoming" = needsReview ? "Upcoming" : "Active";
       const monthly = row.weeklyCost !== null ? Math.round(row.weeklyCost * 4.33 * 100) / 100 : 0;
       const desiredNotes = buildLeaseNotes(row);
 

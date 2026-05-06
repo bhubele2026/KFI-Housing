@@ -9,6 +9,7 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 /**
@@ -204,6 +205,7 @@ function buildLeaseRow(
   id: string,
   propertyId: string,
   spec: GreenockLeaseSpec,
+  today: string,
 ): InsertLeaseRow {
   const extra = spec.extraNote ? ` ${spec.extraNote}` : "";
   return {
@@ -213,7 +215,7 @@ function buildLeaseRow(
     endDate: spec.endDate,
     monthlyRent: spec.monthlyRent,
     securityDeposit: spec.securityDeposit,
-    status: "Active",
+    status: computeLeaseStatus(spec.startDate, spec.endDate, today),
     notes:
       `${unitMarker(spec.unit)} ${spec.street} Apt. ${spec.unit}, ` +
       `McKeesport PA 15135 — KFI Staffing (signer: ${spec.signer}). ` +
@@ -235,6 +237,7 @@ export interface SeedGreenockManorResult {
 export interface SeedGreenockManorDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 export async function seedGreenockManorIfMissing(
@@ -242,6 +245,7 @@ export async function seedGreenockManorIfMissing(
 ): Promise<SeedGreenockManorResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
 
   const result = await database.transaction(async (tx) => {
     const existingCustomer = await tx
@@ -330,7 +334,7 @@ export async function seedGreenockManorIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(greenockManorLeaseId(spec.unit), propertyId, spec))
+        .values(buildLeaseRow(greenockManorLeaseId(spec.unit), propertyId, spec, today))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) leasesInserted += 1;

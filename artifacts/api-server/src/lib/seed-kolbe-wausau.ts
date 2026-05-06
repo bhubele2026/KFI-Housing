@@ -9,6 +9,7 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 export const KOLBE_WAUSAU_CUSTOMER_ID = "cust-kfi-wausau";
@@ -137,6 +138,7 @@ function buildLeaseRow(
   id: string,
   propertyId: string,
   spec: KolbeLeaseSpec,
+  today: string,
 ): InsertLeaseRow {
   return {
     id,
@@ -145,7 +147,7 @@ function buildLeaseRow(
     endDate: spec.endDate,
     monthlyRent: spec.monthlyRent,
     securityDeposit: spec.securityDeposit,
-    status: "Active",
+    status: computeLeaseStatus(spec.startDate, spec.endDate, today),
     notes:
       `${unitMarker(spec.unit)} ${spec.buildingAddress}, Wausau WI 54401. ` +
       `KFI Staffing LLC; 6-month lease ${spec.startDate} → ${spec.endDate}. ` +
@@ -165,6 +167,7 @@ export interface SeedKolbeWausauResult {
 export interface SeedKolbeWausauDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 /**
@@ -181,6 +184,7 @@ export async function seedKolbeWausauIfMissing(
 ): Promise<SeedKolbeWausauResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
 
   const result = await database.transaction(async (tx) => {
     const existingCustomer = await tx
@@ -269,7 +273,7 @@ export async function seedKolbeWausauIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(kolbeWausauLeaseId(spec.unit), propertyId, spec))
+        .values(buildLeaseRow(kolbeWausauLeaseId(spec.unit), propertyId, spec, today))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) leasesInserted += 1;

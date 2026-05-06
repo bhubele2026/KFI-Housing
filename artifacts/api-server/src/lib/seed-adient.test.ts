@@ -156,7 +156,7 @@ beforeEach(() => {
 
 describe("seedAdientIfMissing", () => {
   it("inserts customer, property, and 5 leases on a fresh DB", async () => {
-    const result = await seedAdientIfMissing({ logger: silentLogger });
+    const result = await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
 
     expect(result).toEqual({
       customerInserted: true,
@@ -171,7 +171,7 @@ describe("seedAdientIfMissing", () => {
   });
 
   it("seeds the property with the Versailles address and Dunn landlord", async () => {
-    await seedAdientIfMissing({ logger: silentLogger });
+    await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
 
     const property = stores.properties.get(ADIENT_PROPERTY_ID)!;
     expect(property["address"]).toBe("308 Fairgrounds Rd");
@@ -184,7 +184,7 @@ describe("seedAdientIfMissing", () => {
   });
 
   it("seeds each lease with the correct deposit, term, and verbatim source PDF filename", async () => {
-    await seedAdientIfMissing({ logger: silentLogger });
+    await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
 
     const expected: Record<number, { deposit: number; source: string }> = {
       3:  { deposit: 0,    source: "Lease_Agreement_-_308_Fairground_Unit_3_1778105368416.pdf" },
@@ -211,7 +211,7 @@ describe("seedAdientIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedAdientIfMissing({ logger: silentLogger });
+    await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
 
     const before = stores.properties.get(ADIENT_PROPERTY_ID)!;
     stores.properties.set(ADIENT_PROPERTY_ID, {
@@ -220,7 +220,7 @@ describe("seedAdientIfMissing", () => {
       landlordEmail: "ops@dunnproperties.example",
     });
 
-    const second = await seedAdientIfMissing({ logger: silentLogger });
+    const second = await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
     expect(second).toEqual({
       customerInserted: false,
       propertyInserted: false,
@@ -266,7 +266,7 @@ describe("seedAdientIfMissing", () => {
       buyoutCost: null,
     });
 
-    const result = await seedAdientIfMissing({ logger: silentLogger });
+    const result = await seedAdientIfMissing({ logger: silentLogger, now: () => new Date("2025-06-15T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(false);

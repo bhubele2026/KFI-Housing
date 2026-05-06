@@ -9,6 +9,7 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 export const ADIENT_CUSTOMER_ID = "cust-adient";
@@ -122,6 +123,7 @@ function buildLeaseRow(
   id: string,
   propertyId: string,
   spec: AdientLeaseSpec,
+  status: "Active" | "Expired" | "Upcoming",
 ): InsertLeaseRow {
   return {
     id,
@@ -130,7 +132,7 @@ function buildLeaseRow(
     endDate: ADIENT_LEASE_END,
     monthlyRent: 1000,
     securityDeposit: spec.deposit,
-    status: "Active",
+    status,
     notes:
       `${unitMarker(spec.unit)} KFI Staffing (Adient). Utilities (trash/lawn/electric/water) ` +
       "included; tenant pays cable/internet. Late fee $100 after the 5th @ 4pm. " +
@@ -150,6 +152,7 @@ export interface SeedAdientResult {
 export interface SeedAdientDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 /**
@@ -164,6 +167,8 @@ export async function seedAdientIfMissing(
 ): Promise<SeedAdientResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
+  const status = computeLeaseStatus(ADIENT_LEASE_START, ADIENT_LEASE_END, today);
 
   const result = await database.transaction(async (tx) => {
     const existingCustomer = await tx
@@ -252,7 +257,7 @@ export async function seedAdientIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(adientLeaseId(spec.unit), propertyId, spec))
+        .values(buildLeaseRow(adientLeaseId(spec.unit), propertyId, spec, status))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) leasesInserted += 1;

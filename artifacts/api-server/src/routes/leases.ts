@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, leasesTable } from "@workspace/db";
+import { db, leasesTable, type LeaseRow } from "@workspace/db";
 import {
   ListLeasesResponse,
   CreateLeaseBody,
@@ -9,12 +9,23 @@ import {
   UpdateLeaseResponse,
   DeleteLeaseParams,
 } from "@workspace/api-zod";
+import { deriveLeaseStatus } from "../lib/lease-status";
 
 const router: IRouter = Router();
 
+// Lease status (Active / Expired / Upcoming) is derived from term dates
+// against today's date on read, so a lease seeded as "Active"
+// automatically transitions to "Expired" the day after its end date —
+// without any re-import or background job. The stored `status` column is
+// only used as a fallback for rows whose term dates are still blank
+// (e.g. master-import rows awaiting review).
+function withDerivedStatus(row: LeaseRow): LeaseRow {
+  return { ...row, status: deriveLeaseStatus(row) };
+}
+
 router.get("/leases", async (_req, res): Promise<void> => {
   const rows = await db.select().from(leasesTable).orderBy(leasesTable.id);
-  res.json(ListLeasesResponse.parse(rows));
+  res.json(ListLeasesResponse.parse(rows.map(withDerivedStatus)));
 });
 
 // Note on date validation: the lease `startDate` / `endDate` fields are
@@ -30,7 +41,7 @@ router.post("/leases", async (req, res): Promise<void> => {
     return;
   }
   const [row] = await db.insert(leasesTable).values(body.data).returning();
-  res.status(201).json(UpdateLeaseResponse.parse(row));
+  res.status(201).json(UpdateLeaseResponse.parse(withDerivedStatus(row)));
 });
 
 router.patch("/leases/:id", async (req, res): Promise<void> => {
@@ -53,7 +64,7 @@ router.patch("/leases/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Lease not found" });
     return;
   }
-  res.json(UpdateLeaseResponse.parse(row));
+  res.json(UpdateLeaseResponse.parse(withDerivedStatus(row)));
 });
 
 router.delete("/leases/:id", async (req, res): Promise<void> => {

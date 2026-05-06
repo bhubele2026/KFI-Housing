@@ -9,7 +9,15 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import {
+  computeLeaseStatus as sharedComputeLeaseStatus,
+  todayIso as sharedTodayIso,
+} from "./lease-status";
 import type { Logger } from "pino";
+
+// Re-export from the shared helper so callers (and the existing test that
+// imports `computeLeaseStatus` from this module) keep working unchanged.
+export const computeLeaseStatus = sharedComputeLeaseStatus;
 
 export const PARK_PLACE_CUSTOMER_ID = "cust-kfi-park-place";
 export const PARK_PLACE_PROPERTY_ID = "prop-park-place-plymouth";
@@ -137,28 +145,7 @@ function unitMarker(unit: string): string {
   return `Unit ${unit} —`;
 }
 
-/**
- * Lease status derived from term dates relative to `today` (YYYY-MM-DD).
- * Today before start → "Upcoming"; today after end → "Expired"; otherwise
- * "Active". Lexicographic compare is correct because all dates are
- * zero-padded ISO strings.
- */
-export function computeLeaseStatus(
-  startDate: string,
-  endDate: string,
-  today: string,
-): "Active" | "Expired" | "Upcoming" {
-  if (today < startDate) return "Upcoming";
-  if (today > endDate) return "Expired";
-  return "Active";
-}
-
-function todayIso(now: Date): string {
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(now.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+const todayIso = sharedTodayIso;
 
 function buildCustomerRow(id: string): InsertCustomerRow {
   return {

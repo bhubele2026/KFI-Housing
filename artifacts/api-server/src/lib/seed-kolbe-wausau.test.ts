@@ -158,7 +158,7 @@ beforeEach(() => {
 
 describe("seedKolbeWausauIfMissing", () => {
   it("inserts customer, property, and 2 leases on a fresh DB", async () => {
-    const result = await seedKolbeWausauIfMissing({ logger: silentLogger });
+    const result = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(result).toEqual({
       customerInserted: true,
       propertyInserted: true,
@@ -172,7 +172,7 @@ describe("seedKolbeWausauIfMissing", () => {
   });
 
   it("seeds the property with Kolbe Apartments + Wausau address fields", async () => {
-    await seedKolbeWausauIfMissing({ logger: silentLogger });
+    await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const property = stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!;
     expect(property["address"]).toBe("1331 South 8th Ave");
@@ -187,7 +187,7 @@ describe("seedKolbeWausauIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, deposit, term, status, and source PDF", async () => {
-    await seedKolbeWausauIfMissing({ logger: silentLogger });
+    await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const expected = {
       "108": {
@@ -228,7 +228,7 @@ describe("seedKolbeWausauIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedKolbeWausauIfMissing({ logger: silentLogger });
+    await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const before = stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!;
     stores.properties.set(KOLBE_WAUSAU_PROPERTY_ID, {
@@ -237,7 +237,7 @@ describe("seedKolbeWausauIfMissing", () => {
       landlordEmail: "ops@kolbe.example",
     });
 
-    const second = await seedKolbeWausauIfMissing({ logger: silentLogger });
+    const second = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second).toEqual({
       customerInserted: false,
       propertyInserted: false,
@@ -259,7 +259,7 @@ describe("seedKolbeWausauIfMissing", () => {
       notes: "operator notes",
     });
 
-    const result = await seedKolbeWausauIfMissing({ logger: silentLogger });
+    const result = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(true);

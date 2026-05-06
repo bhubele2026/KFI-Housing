@@ -9,6 +9,7 @@ import {
   type InsertLeaseRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { computeLeaseStatus, todayIso } from "./lease-status";
 import type { Logger } from "pino";
 
 /**
@@ -357,7 +358,11 @@ function buildPropertyRow(
   };
 }
 
-function buildLeaseRow(spec: LeaseSpec, propertyId: string): InsertLeaseRow {
+function buildLeaseRow(
+  spec: LeaseSpec,
+  propertyId: string,
+  today: string,
+): InsertLeaseRow {
   return {
     id: spec.id,
     propertyId,
@@ -365,7 +370,7 @@ function buildLeaseRow(spec: LeaseSpec, propertyId: string): InsertLeaseRow {
     endDate: spec.endDate,
     monthlyRent: spec.monthlyRent,
     securityDeposit: spec.securityDeposit,
-    status: "Active",
+    status: computeLeaseStatus(spec.startDate, spec.endDate, today),
     notes: spec.notes,
     clauses: spec.clauses,
     buyoutAvailable: false,
@@ -387,6 +392,7 @@ export interface SeedAttachedLeasesResult {
 export interface SeedAttachedLeasesDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
+  now: () => Date;
 }
 
 /**
@@ -403,6 +409,7 @@ export async function seedAttachedLeasesIfMissing(
 ): Promise<SeedAttachedLeasesResult> {
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
+  const today = todayIso((deps.now ?? (() => new Date()))());
 
   const result = await database.transaction(async (tx) => {
     const customerIdByKey = new Map<string, string>();
@@ -561,7 +568,7 @@ export async function seedAttachedLeasesIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(spec, propertyId))
+        .values(buildLeaseRow(spec, propertyId, today))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) leasesInserted += 1;

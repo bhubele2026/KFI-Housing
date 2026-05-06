@@ -211,7 +211,7 @@ beforeEach(() => {
 
 describe("seedPatriotBarabooIfMissing", () => {
   it("inserts customer, property, and 5 leases on a fresh DB", async () => {
-    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result).toEqual({
       customerInserted: true,
@@ -236,7 +236,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("seeds the property with the Baraboo address and Patriot landlord", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const property = stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!;
     expect(property["address"]).toBe("1850 W. Pine St.");
@@ -250,7 +250,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("seeds each lease with the correct rent, deposit, term, status, and source PDF", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const sources: Record<string, string> = {
       "509": "Lease_Agreement_-_509_1778107818114.pdf",
@@ -277,7 +277,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const before = stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!;
     stores.properties.set(PATRIOT_BARABOO_PROPERTY_ID, {
@@ -294,7 +294,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       email: "operator@example.com",
     });
 
-    const second = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const second = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(second).toEqual({
       customerInserted: false,
       propertyInserted: false,
@@ -327,7 +327,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       notes: "operator notes",
     });
 
-    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(result.customerInserted).toBe(false);
     expect(result.propertyInserted).toBe(true);
@@ -345,7 +345,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("seeds 1 room per unit and 4 beds per unit, all wired to the same property", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     expect(stores.rooms.size).toBe(5);
     expect(stores.beds.size).toBe(20);
@@ -369,7 +369,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("attaches the typed roster to the right unit/bed with correct move-in dates", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     const expected: Record<string, { names: string[]; moveIn: string }> = {
       "509": {
@@ -438,7 +438,7 @@ describe("seedPatriotBarabooIfMissing", () => {
 
   it("attaches an occupant to a pre-existing empty bed without duplicating the bed", async () => {
     // Seed customer + property + leases + 4 of the 5 unit setups.
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     // Wipe seeded room/bed/occupant rows for unit 509 and replace with
     // an operator-created room and an unoccupied bed at slot 1.
@@ -464,7 +464,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       occupantId: null,
     });
 
-    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     // Slot 1 bed is the operator's, slots 2-4 are newly inserted.
     expect(result.bedsInserted).toBe(3);
     expect(result.occupantsInserted).toBe(4);
@@ -481,7 +481,7 @@ describe("seedPatriotBarabooIfMissing", () => {
     expect(occ["bedId"]).toBe(opBedId);
 
     // Re-running is a no-op now that everything is linked.
-    const third = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const third = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(third.bedsInserted).toBe(0);
     expect(third.occupantsInserted).toBe(0);
     expect(stores.beds.get(opBedId)!["occupantId"]).toBe(
@@ -490,7 +490,7 @@ describe("seedPatriotBarabooIfMissing", () => {
   });
 
   it("does not overwrite a pre-existing bed already assigned to another tenant", async () => {
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     // Operator pre-assigned a different worker to unit 509 / slot 1.
     stores.rooms.delete(patriotBarabooRoomId("509"));
@@ -524,7 +524,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       occupantId: opOccId,
     });
 
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
 
     // Operator's assignment was preserved.
     expect(stores.beds.get(opBedId)!["occupantId"]).toBe(opOccId);
@@ -549,7 +549,7 @@ describe("seedPatriotBarabooIfMissing", () => {
 
   it("reuses an operator-created room for a unit instead of duplicating it", async () => {
     // Pre-seed customer + property + an operator-named room for unit 509.
-    await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     // Wipe seeded room/bed/occupant rows for unit 509 and replace with
     // an operator row using a different id but the same natural key.
     stores.rooms.delete(patriotBarabooRoomId("509"));
@@ -565,7 +565,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       monthlyRent: 0,
     });
 
-    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger });
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(result.roomsInserted).toBe(0);
     expect(result.bedsInserted).toBe(4);
     expect(result.occupantsInserted).toBe(4);

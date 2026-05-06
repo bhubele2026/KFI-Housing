@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, CalendarPlus, DollarSign, Trash2,
-  Save, Hotel, Plus, ExternalLink,
+  Save, Hotel, Plus, ExternalLink, CheckCircle2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -691,6 +691,16 @@ export default function LeaseDetail() {
                     {customer.name}
                   </Badge>
                 )}
+                {!isCreateMode && lease.needsReview && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 text-[11px] font-medium border-amber-300 bg-amber-50 text-amber-800"
+                    data-testid="badge-lease-needs-review"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    Needs review
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -741,6 +751,33 @@ export default function LeaseDetail() {
               </Button>
             ) : (
               <>
+                {lease.needsReview && (
+                  // Explicit "Mark as reviewed" action so operators can clear
+                  // the importer-set flag once they've corrected the data.
+                  // Without this, the badge only goes away by editing the
+                  // underlying `needsReview` field — which the UI never
+                  // exposed — so flagged leases lingered forever (Task #317).
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900"
+                    onClick={() => {
+                      if (!realLease) return;
+                      // Route through the same applyUpdate funnel every other
+                      // editor on this page uses so the optimistic-save path
+                      // and dirty-flag bookkeeping stay consistent.
+                      applyUpdate({ needsReview: false });
+                      toast({
+                        title: "Marked as reviewed",
+                        description: "The 'Needs review' flag has been cleared.",
+                      });
+                    }}
+                    data-testid="button-mark-lease-reviewed"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Mark as reviewed
+                  </Button>
+                )}
                 <RenewLeasePopover
                   currentEndDate={lease.endDate}
                   currentStatus={lease.status}

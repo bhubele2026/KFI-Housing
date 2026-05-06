@@ -460,6 +460,42 @@ describe("LeaseDetail — buyout toggle", () => {
   });
 });
 
+describe("LeaseDetail — Mark as reviewed (task #317)", () => {
+  // Operators need an explicit way to clear the importer-set `needsReview`
+  // flag once they've fixed the underlying data — without it the amber
+  // badge and dashboard count never go down.
+  it("renders the badge + 'Mark as reviewed' button only when needsReview is true", () => {
+    dataState.leases = [buildLease({ needsReview: false })];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    expect(container.querySelector('[data-testid="badge-lease-needs-review"]')).toBeNull();
+    expect(container.querySelector('[data-testid="button-mark-lease-reviewed"]')).toBeNull();
+  });
+
+  it("clicking 'Mark as reviewed' calls updateLease with needsReview=false", () => {
+    dataState.leases = [buildLease({ needsReview: true })];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    expect(container.querySelector('[data-testid="badge-lease-needs-review"]')).not.toBeNull();
+    const btn = container.querySelector(
+      '[data-testid="button-mark-lease-reviewed"]',
+    ) as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+
+    act(() => btn.click());
+
+    expect(updateLeaseMock).toHaveBeenCalledTimes(1);
+    expect(updateLeaseMock).toHaveBeenCalledWith("lease-1", { needsReview: false });
+    expect(toastMock).toHaveBeenCalled();
+  });
+});
+
 describe("LeaseDetail — origin-aware back link", () => {
   it("defaults the back link to /leases when no `?from=` is present", () => {
     dataState.leases = [buildLease()];

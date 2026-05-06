@@ -6,7 +6,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeNetPerBedAfterElectric, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -299,7 +299,7 @@ export default function Properties() {
   // counting logic ever changed. Declared above `filtered` so the bed-
   // count column sorts can read from it without a TDZ.
   // Pre-compute monthly Electric utility totals per property so the
-  // map bubble's net-per-bed metric shares one pass over `utilities`
+  // map bubble's rent+electric/bed metric shares one pass over `utilities`
   // instead of filtering it per pin.
   const monthlyElectricByPropertyId = useMemo(() => {
     const map = new Map<string, number>();
@@ -996,7 +996,7 @@ export default function Properties() {
         occupied: stats?.occupied ?? 0,
         vacant: stats?.vacant ?? 0,
         rentPerBed: computeRentPerBed(p.monthlyRent, stats?.total ?? 0),
-        netPerBedAfterElectric: computeNetPerBedAfterElectric(
+        rentPlusElectricPerBed: computeRentPlusElectricPerBed(
           p.monthlyRent,
           monthlyElectricByPropertyId.get(p.id) ?? 0,
           stats?.total ?? 0,

@@ -68,7 +68,7 @@ export interface MappableProperty {
    * renders an em-dash placeholder, mirroring the Properties table.
    */
   rentPerBed?: number | null;
-  netPerBedAfterElectric?: number | null;
+  rentPlusElectricPerBed?: number | null;
   /**
    * Persisted coordinates from a previous geocode. When present the
    * map uses them on the very first paint and skips the live geocode
@@ -276,11 +276,11 @@ function buildInfoBubbleContent(
   }
 
   // Per-bed unit economics row. Mirrors the Properties table's "Rent /
-  // Bed" and "Net / Bed (after electric)" columns; renders dashes when
+  // Bed" and "Rent + Electric / Bed" metrics; renders dashes when
   // the metric is null (0 beds) so the bubble doesn't lie about $0.
   if (
     p.rentPerBed !== undefined ||
-    p.netPerBedAfterElectric !== undefined
+    p.rentPlusElectricPerBed !== undefined
   ) {
     const econ = document.createElement("div");
     econ.style.display = "flex";
@@ -301,17 +301,16 @@ function buildInfoBubbleContent(
       span.innerHTML = `<strong>${val}</strong> / bed`;
       econ.appendChild(span);
     }
-    if (p.netPerBedAfterElectric !== undefined) {
+    if (p.rentPlusElectricPerBed !== undefined) {
       const span = document.createElement("span");
-      span.dataset.testid = `portfolio-map-info-net-per-bed-${p.id}`;
-      span.title = "(Monthly rent − Electric) ÷ total beds";
-      const v = p.netPerBedAfterElectric;
+      span.dataset.testid = `portfolio-map-info-rent-plus-electric-per-bed-${p.id}`;
+      span.title = "(Monthly rent + Electric) ÷ total beds";
+      const v = p.rentPlusElectricPerBed;
       const val =
         v === null
           ? "—"
           : `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-      if (v !== null && v < 0) span.style.color = "#b91c1c";
-      span.innerHTML = `<strong>${val}</strong> net/bed`;
+      span.innerHTML = `<strong>${val}</strong> rent+elec/bed`;
       econ.appendChild(span);
     }
     root.appendChild(econ);

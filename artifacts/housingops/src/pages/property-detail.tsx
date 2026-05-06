@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeNetPerBedAfterElectric, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -582,7 +582,7 @@ export default function PropertyDetail() {
     0,
   );
   const rentPerBed = computeRentPerBed(property.monthlyRent, propBeds.length);
-  const netPerBedAfterElectric = computeNetPerBedAfterElectric(
+  const rentPlusElectricPerBed = computeRentPlusElectricPerBed(
     property.monthlyRent,
     monthlyElectricCost,
     propBeds.length,
@@ -720,20 +720,15 @@ export default function PropertyDetail() {
             sub={`Monthly rent ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard
-            testId="stat-net-per-bed"
-            label="Net / Bed (after electric)"
+            testId="stat-rent-plus-electric-per-bed"
+            label="Rent + Electric / Bed"
             value={
-              netPerBedAfterElectric === null
+              rentPlusElectricPerBed === null
                 ? "—"
-                : `$${netPerBedAfterElectric.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                : `$${rentPlusElectricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
             }
             icon={DollarSign}
-            color={
-              netPerBedAfterElectric !== null && netPerBedAfterElectric < 0
-                ? "text-destructive"
-                : undefined
-            }
-            sub={`After $${monthlyElectricCost.toLocaleString()} electric`}
+            sub={`(Rent + $${monthlyElectricCost.toLocaleString()} electric) ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>

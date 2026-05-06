@@ -5,6 +5,7 @@ import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
 import { seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
+import { seedHousingDeductions } from "./lib/seed-housing-deductions";
 import { start } from "./start";
 
 void start({
@@ -15,6 +16,9 @@ void start({
   },
   seedAdientIfMissing: async () => {
     await seedAdientIfMissing();
+  },
+  seedHousingDeductions: async () => {
+    await seedHousingDeductions();
   },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {

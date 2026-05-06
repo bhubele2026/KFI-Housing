@@ -423,6 +423,27 @@ export function toMonthlyCharge(charge: number, freq: BillingFrequency): number 
   return charge;
 }
 
+// Inverse of `toMonthlyCharge`. Used by the Occupants and per-property
+// views to surface a weekly deduction next to its monthly equivalent
+// regardless of which cadence the underlying `chargePerBed` was stored
+// in. Rounded to cents so the UI never displays floating-point noise.
+export function toWeeklyCharge(charge: number, freq: BillingFrequency): number {
+  if (freq === "Weekly")   return Math.round(charge * 100) / 100;
+  if (freq === "Biweekly") return Math.round((charge / 2) * 100) / 100;
+  // Monthly → weekly: monthly * 12 / 52
+  return Math.round(charge * (12 / 52) * 100) / 100;
+}
+
+// Currency formatter shared by the deduction columns so weekly +
+// monthly values render consistently across views.
+const USD = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+export function formatUsd(amount: number): string {
+  return USD.format(amount);
+}
+
 // ── Lease renewal helpers ──────────────────────────────────────────────
 export type RenewalUrgency = "expired" | "critical" | "warning" | "soon" | "ok";
 

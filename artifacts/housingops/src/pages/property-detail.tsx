@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -1566,6 +1566,8 @@ export default function PropertyDetail() {
                                     <TableHead>Move-in</TableHead>
                                     <TableHead className="text-right">Charge</TableHead>
                                     <TableHead>Billing</TableHead>
+                                    <TableHead className="text-right">Weekly Deduction</TableHead>
+                                    <TableHead className="text-right">Monthly Equivalent</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Phone</TableHead>
                                     <TableHead className="w-36">Room</TableHead>
@@ -1575,7 +1577,7 @@ export default function PropertyDetail() {
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={12}
+                                      colSpan={14}
                                       icon={BedDouble}
                                       title="No beds in this room yet"
                                       description={`Add the first bed to ${room.name} so you can assign an occupant.`}
@@ -1658,12 +1660,25 @@ export default function PropertyDetail() {
                                                 </SelectContent>
                                               </Select>
                                             </TableCell>
+                                            <TableCell
+                                              className="text-right tabular-nums"
+                                              data-testid={`cell-bed-weekly-${bed.id}`}
+                                            >
+                                              {formatUsd(toWeeklyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
+                                            </TableCell>
+                                            <TableCell
+                                              className="text-right tabular-nums text-muted-foreground"
+                                              data-testid={`cell-bed-monthly-${bed.id}`}
+                                              title="Monthly equivalent = weekly × 52 / 12"
+                                            >
+                                              {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
+                                            </TableCell>
                                             <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={7}>
+                                            <TableCell colSpan={9}>
                                               <AssignOccupantDialog
                                                 bedId={bed.id}
                                                 propertyId={id}

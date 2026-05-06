@@ -11,6 +11,7 @@ export interface StartDeps {
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
   seedAdientIfMissing: () => Promise<void>;
+  seedHousingDeductions: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -195,6 +196,20 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Adient seed — continuing to serve",
+    );
+  }
+
+  // One-shot seeder for weekly housing deductions sourced from the
+  // payroll export (Task #282). Idempotent: only writes when a matched
+  // occupant's chargePerBed/billingFrequency would change. Failures are
+  // logged but non-fatal — the rest of the app keeps the previous
+  // values, and unmatched rows are surfaced for manual reconciliation.
+  try {
+    await deps.seedHousingDeductions();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply payroll-derived weekly housing deductions — continuing to serve",
     );
   }
 

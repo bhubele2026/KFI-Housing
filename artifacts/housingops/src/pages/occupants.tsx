@@ -17,6 +17,7 @@ import { SkeletonRows } from "@/components/skeleton-rows";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
+import { toWeeklyCharge, toMonthlyCharge, formatUsd } from "@/data/mockData";
 
 export default function Occupants() {
   const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
@@ -180,17 +181,18 @@ export default function Occupants() {
                   <TableHead>Property</TableHead>
                   <TableHead>Bed</TableHead>
                   <TableHead>Move In</TableHead>
-                  <TableHead className="text-right">Charge/Bed</TableHead>
+                  <TableHead className="text-right">Weekly Deduction</TableHead>
+                  <TableHead className="text-right">Monthly Equivalent</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={7} />
+                  <SkeletonRows rows={6} columns={8} />
                 ) : filteredOccupants.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={7}
+                    colSpan={8}
                     icon={Users}
                     title="No occupants found"
                     description={
@@ -252,7 +254,29 @@ export default function Occupants() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">${occupant.chargePerBed}</TableCell>
+                        <TableCell
+                          className="text-right tabular-nums"
+                          data-testid={`cell-occupant-weekly-${occupant.id}`}
+                        >
+                          {formatUsd(
+                            toWeeklyCharge(
+                              occupant.chargePerBed,
+                              occupant.billingFrequency ?? "Monthly",
+                            ),
+                          )}
+                        </TableCell>
+                        <TableCell
+                          className="text-right tabular-nums text-muted-foreground"
+                          data-testid={`cell-occupant-monthly-${occupant.id}`}
+                          title="Monthly equivalent = weekly × 52 / 12"
+                        >
+                          {formatUsd(
+                            toMonthlyCharge(
+                              occupant.chargePerBed,
+                              occupant.billingFrequency ?? "Monthly",
+                            ),
+                          )}
+                        </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={occupant.status === "Active" ? "default" : "secondary"}>
                             {occupant.status}

@@ -42,11 +42,28 @@ export default function Finance() {
     // more than one (e.g. overlapping renewals or multi-room agreements).
     // Picking just the first match silently under-reports rent and profit.
     const leaseCost = sumActiveRent(leases, p.id);
-    const utilCost = utilities.filter(u => u.propertyId === p.id).reduce((s, u) => s + u.monthlyCost, 0);
+    const propUtils = utilities.filter(u => u.propertyId === p.id);
+    const utilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
+    // Per-bed "electric" specifically excludes water/internet/etc, matching
+    // the Dashboard and Property Detail Electric / Bed cards. Total Utility
+    // Cost above keeps summing every utility type.
+    const electricCost = propUtils.reduce(
+      (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
+      0,
+    );
     const totalCost = leaseCost + utilCost;
     const occupiedBeds = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length;
     const totalBeds = beds.filter(b => b.propertyId === p.id).length;
     const customerName = p.customerId ? customerById.get(p.customerId) : undefined;
+    // Per-bed unit economics. `null` on zero beds so the cell renders an
+    // em-dash instead of a misleading $0 — same contract as the helpers
+    // in mockData.ts (computeRentPerBed et al).
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const rentPerBed = totalBeds ? round2(leaseCost / totalBeds) : null;
+    const electricPerBed = totalBeds ? round2(electricCost / totalBeds) : null;
+    const rentPlusElectricPerBed = totalBeds
+      ? round2((leaseCost + electricCost) / totalBeds)
+      : null;
 
     return {
       id: p.id,
@@ -57,10 +74,14 @@ export default function Finance() {
       revenue,
       leaseCost,
       utilCost,
+      electricCost,
       totalCost,
       profit: revenue - totalCost,
       occupiedBeds,
       totalBeds,
+      rentPerBed,
+      electricPerBed,
+      rentPlusElectricPerBed,
     };
   });
 
@@ -69,11 +90,21 @@ export default function Finance() {
       revenue: acc.revenue + d.revenue,
       leaseCost: acc.leaseCost + d.leaseCost,
       utilCost: acc.utilCost + d.utilCost,
+      electricCost: acc.electricCost + d.electricCost,
       totalCost: acc.totalCost + d.totalCost,
       profit: acc.profit + d.profit,
+      totalBeds: acc.totalBeds + d.totalBeds,
     }),
-    { revenue: 0, leaseCost: 0, utilCost: 0, totalCost: 0, profit: 0 }
+    { revenue: 0, leaseCost: 0, utilCost: 0, electricCost: 0, totalCost: 0, profit: 0, totalBeds: 0 }
   );
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const totalsRentPerBed = totals.totalBeds ? round2(totals.leaseCost / totals.totalBeds) : null;
+  const totalsElectricPerBed = totals.totalBeds ? round2(totals.electricCost / totals.totalBeds) : null;
+  const totalsRentPlusElectricPerBed = totals.totalBeds
+    ? round2((totals.leaseCost + totals.electricCost) / totals.totalBeds)
+    : null;
+  const fmtPerBed = (v: number | null) =>
+    v === null ? "—" : `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS ? null : customerById.get(customerFilter) ?? null;
@@ -81,7 +112,7 @@ export default function Finance() {
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
   const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
-  const tableColCount = showCustomerColumn ? 8 : 7;
+  const tableColCount = showCustomerColumn ? 11 : 10;
 
   const { toast } = useToast();
 
@@ -98,6 +129,9 @@ export default function Finance() {
       { header: "Utility Cost", value: (d: typeof financialData[number]) => d.utilCost },
       { header: "Total Cost", value: (d: typeof financialData[number]) => d.totalCost },
       { header: "Net Profit", value: (d: typeof financialData[number]) => d.profit },
+      { header: "Rent / Bed", value: (d: typeof financialData[number]) => d.rentPerBed ?? "" },
+      { header: "Electric / Bed", value: (d: typeof financialData[number]) => d.electricPerBed ?? "" },
+      { header: "Rent + Electric / Bed", value: (d: typeof financialData[number]) => d.rentPlusElectricPerBed ?? "" },
     ];
     const totalsRow: typeof financialData[number] = {
       id: "__totals__",
@@ -108,14 +142,21 @@ export default function Finance() {
       revenue: totals.revenue,
       leaseCost: totals.leaseCost,
       utilCost: totals.utilCost,
+      electricCost: totals.electricCost,
       totalCost: totals.totalCost,
       profit: totals.profit,
       occupiedBeds: 0,
       totalBeds: 0,
+      rentPerBed: totalsRentPerBed,
+      electricPerBed: totalsElectricPerBed,
+      rentPlusElectricPerBed: totalsRentPlusElectricPerBed,
     };
     // Blank out the non-numeric columns (Customer, Occupied/Total Beds) so the
     // totals row only carries summed values alongside its label.
-    const numericHeaders = new Set(["Revenue", "Lease Cost", "Utility Cost", "Total Cost", "Net Profit"]);
+    const numericHeaders = new Set([
+      "Revenue", "Lease Cost", "Utility Cost", "Total Cost", "Net Profit",
+      "Rent / Bed", "Electric / Bed", "Rent + Electric / Bed",
+    ]);
     const totalsColumns = columns.map((col) =>
       col.header === "Property" || numericHeaders.has(col.header)
         ? col
@@ -264,6 +305,9 @@ export default function Finance() {
                   <TableHead className="text-right">Utility Cost</TableHead>
                   <TableHead className="text-right">Total Cost</TableHead>
                   <TableHead className="text-right">Net Profit</TableHead>
+                  <TableHead className="text-right">Rent / Bed</TableHead>
+                  <TableHead className="text-right">Electric / Bed</TableHead>
+                  <TableHead className="text-right">Rent + Electric / Bed</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -340,6 +384,24 @@ export default function Finance() {
                             {d.profit >= 0 ? "+" : "-"}${Math.abs(d.profit).toLocaleString()}
                           </Badge>
                         </td>
+                        <td
+                          className="p-4 text-right text-sm tabular-nums"
+                          data-testid={`text-finance-rent-per-bed-${d.id}`}
+                        >
+                          {fmtPerBed(d.rentPerBed)}
+                        </td>
+                        <td
+                          className="p-4 text-right text-sm tabular-nums"
+                          data-testid={`text-finance-electric-per-bed-${d.id}`}
+                        >
+                          {fmtPerBed(d.electricPerBed)}
+                        </td>
+                        <td
+                          className="p-4 text-right text-sm font-medium tabular-nums"
+                          data-testid={`text-finance-rent-plus-electric-per-bed-${d.id}`}
+                        >
+                          {fmtPerBed(d.rentPlusElectricPerBed)}
+                        </td>
                       </motion.tr>
                     ))}
                     <tr className="bg-muted/50 border-t-2 border-border">
@@ -358,6 +420,9 @@ export default function Finance() {
                           {totals.profit >= 0 ? "+" : "-"}${Math.abs(totals.profit).toLocaleString()}
                         </Badge>
                       </td>
+                      <td className="p-4 text-right font-bold tabular-nums">{fmtPerBed(totalsRentPerBed)}</td>
+                      <td className="p-4 text-right font-bold tabular-nums">{fmtPerBed(totalsElectricPerBed)}</td>
+                      <td className="p-4 text-right font-bold tabular-nums">{fmtPerBed(totalsRentPlusElectricPerBed)}</td>
                     </tr>
                   </>
                 )}

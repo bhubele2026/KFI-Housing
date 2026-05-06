@@ -6,6 +6,7 @@ import { seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
+import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { seedParkPlaceIfMissing } from "./lib/seed-park-place";
@@ -37,6 +38,9 @@ void start({
   },
   seedParkPlaceIfMissing: async () => {
     await seedParkPlaceIfMissing();
+  },
+  seedKolbeWausauIfMissing: async () => {
+    await seedKolbeWausauIfMissing();
   },
   seedHousingDeductions: async () => {
     await seedHousingDeductions();

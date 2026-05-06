@@ -16,6 +16,7 @@ export interface StartDeps {
   seedHickoryHavenIfMissing: () => Promise<void>;
   seedGreenockManorIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
+  seedKolbeWausauIfMissing: () => Promise<void>;
   seedHousingDeductions: () => Promise<void>;
   // Idempotent seed for the active leases extracted from attached PDFs
   // (Task #287). Runs after seedAdientIfMissing. Non-fatal.
@@ -261,6 +262,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Park Place seed — continuing to serve",
+    );
+  }
+
+  // Idempotent KFI Staffing / Kolbe Apartments Wausau seed (Task #291);
+  // non-fatal for the same reason.
+  try {
+    await deps.seedKolbeWausauIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Kolbe Wausau seed — continuing to serve",
     );
   }
 

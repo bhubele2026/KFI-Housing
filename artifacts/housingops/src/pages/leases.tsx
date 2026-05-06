@@ -106,8 +106,17 @@ export default function Leases() {
           // weekly cost / vendor cleanup pass.
           if (needsReviewFilter === "NeedsReview" && !l.needsReview) return false;
           if (customerFilter === ALL_CUSTOMERS) return true;
+          // Lease's tenant: explicit `lease.customerId` (set on shared-
+          // housing leases — task #295) takes precedence over the
+          // property's primary customerId so a Trienda lease against a
+          // Ridge Motor Inn property primarily owned by Penda still
+          // matches the Trienda customer filter.
           const property = propertyById.get(l.propertyId);
-          return property?.customerId === customerFilter;
+          const tenantId =
+            (l.customerId && l.customerId.length > 0
+              ? l.customerId
+              : property?.customerId) ?? "";
+          return tenantId === customerFilter;
         }),
       ),
     [leases, statusFilter, buyoutFilter, needsReviewFilter, customerFilter, propertyById],
@@ -153,17 +162,25 @@ export default function Leases() {
     for (const lease of filteredLeases) {
       const property = propertyById.get(lease.propertyId);
       if (!property) continue;
-      const name = customerById.get(property.customerId);
+      // Tenant resolution: explicit `lease.customerId` wins over the
+      // property's primary customerId. This is how shared-housing
+      // leases (task #295 — Penda + Trienda Ridge Motor Inn) surface
+      // one lease under each tenant on the by-customer view.
+      const tenantId =
+        lease.customerId && lease.customerId.length > 0
+          ? lease.customerId
+          : property.customerId;
+      const name = customerById.get(tenantId);
       if (!name) continue;
-      let group = map.get(property.customerId);
+      let group = map.get(tenantId);
       if (!group) {
         group = {
-          customerId: property.customerId,
+          customerId: tenantId,
           customerName: name,
           leases: [],
           activeCount: 0,
         };
-        map.set(property.customerId, group);
+        map.set(tenantId, group);
       }
       if (lease.status === "Active") {
         (group.leases as typeof filteredLeases) = [
@@ -184,7 +201,11 @@ export default function Leases() {
     .filter((l) => {
       if (customerFilter === ALL_CUSTOMERS) return true;
       const property = propertyById.get(l.propertyId);
-      return property?.customerId === customerFilter;
+      const tenantId =
+        (l.customerId && l.customerId.length > 0
+          ? l.customerId
+          : property?.customerId) ?? "";
+      return tenantId === customerFilter;
     })
     .map((l) => ({ lease: l, info: getRenewalInfo(l.endDate) }))
     .filter(({ info }) => info.level !== "ok")

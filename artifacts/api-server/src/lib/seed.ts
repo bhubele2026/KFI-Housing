@@ -19,6 +19,23 @@ import {
 import { logger } from "./logger";
 import { HOUSING_DEDUCTION_ROWS } from "./seed-housing-deductions";
 
+// Re-exports of post-master-import seeds. Owning these from `seed.ts`
+// keeps the boot-sequence integration point aligned with the rest of
+// the seeding code: callers (`start.ts` / `index.ts`) only ever import
+// from this module, and the boot ordering is documented here.
+//
+// Order on boot, after `seedIfEmpty()`:
+//   1. seedAdientIfMissing       — task #271
+//   2. seedPatriotBarabooIfMissing
+//   3. seedAttachedLeasesIfMissing — task #287 (PDFs)
+//   4. importMaster (#288)        — Housing_Lease_MASTER (when triggered)
+//   5. seedRidgeMotorInnIfMissing — task #295 (Penda + Trienda shared
+//                                   housing). Depends on Penda &
+//                                   Trienda customers existing, which
+//                                   come from #288. Skips with a
+//                                   warning if they don't yet.
+export { seedRidgeMotorInnIfMissing } from "./seed-ridge-motor-inn";
+
 const SEED_CUSTOMERS: InsertCustomerRow[] = [
   {
     id: "c1",

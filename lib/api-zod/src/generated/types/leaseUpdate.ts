@@ -29,4 +29,5 @@ export interface LeaseUpdate {
   guaranteedRooms?: number;
   monthlyRoomNightMin?: number;
   longStayTaxExempt?: boolean;
+  customerId?: string;
 }

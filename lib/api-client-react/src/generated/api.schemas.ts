@@ -179,6 +179,14 @@ export interface Property {
   notes: string;
   furnishings: string[];
   customerId: string;
+  /** Additional customers that also use this property. Empty for
+the common single-tenant case; populated when a property is
+shared between multiple customers (e.g. Ridge Motor Inn —
+shared by Penda + Trienda KFI crews, task #295). The
+Properties page surfaces the property under each of these
+customers in addition to the primary `customerId`.
+ */
+  sharedWithCustomerIds?: string[];
   ratings?: Ratings;
   /** Cached geographic latitude resolved from the property's
 address. Persisted on the server so the portfolio map can
@@ -269,6 +277,10 @@ export interface PropertyUpdate {
   notes?: string;
   furnishings?: string[];
   customerId?: string;
+  /** Additional customers that also use this property. See
+`Property.sharedWithCustomerIds` for the full contract.
+ */
+  sharedWithCustomerIds?: string[];
   ratings?: Ratings;
   lat?: number | null;
   lng?: number | null;
@@ -368,6 +380,16 @@ when `rateType = room-night`. Added by task #299.
 agreement (Long Stay rule). Added by task #299.
  */
   longStayTaxExempt?: boolean;
+  /** Optional override for the tenant on this lease. Leases
+normally inherit the tenant from the property's
+`customerId`; this field is set only for shared-housing
+properties used by multiple customers (e.g. Ridge Motor Inn
+shared by Penda + Trienda KFI crews — task #295) so the
+Leases "By customer" view can show one lease under each
+customer. Empty string means "fall back to property's
+customerId".
+ */
+  customerId?: string;
 }
 
 export type LeaseUpdateStatus =
@@ -407,6 +429,7 @@ export interface LeaseUpdate {
   guaranteedRooms?: number;
   monthlyRoomNightMin?: number;
   longStayTaxExempt?: boolean;
+  customerId?: string;
 }
 
 export interface RoomNightLog {

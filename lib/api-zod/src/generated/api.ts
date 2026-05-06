@@ -139,6 +139,12 @@ export const ImportDataBody = zod.object({
       notes: zod.string(),
       furnishings: zod.array(zod.string()),
       customerId: zod.string(),
+      sharedWithCustomerIds: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Additional customers that also use this property. Empty for\nthe common single-tenant case; populated when a property is\nshared between multiple customers (e.g. Ridge Motor Inn —\nshared by Penda + Trienda KFI crews, task #295). The\nProperties page surfaces the property under each of these\ncustomers in addition to the primary `customerId`.\n",
+        ),
       ratings: zod
         .object({
           landlord: zod
@@ -265,6 +271,12 @@ export const ImportDataBody = zod.object({
         .optional()
         .describe(
           "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
+        ),
+      customerId: zod
+        .string()
+        .optional()
+        .describe(
+          'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
         ),
     }),
   ),
@@ -489,6 +501,12 @@ export const ListPropertiesResponseItem = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  sharedWithCustomerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Additional customers that also use this property. Empty for\nthe common single-tenant case; populated when a property is\nshared between multiple customers (e.g. Ridge Motor Inn —\nshared by Penda + Trienda KFI crews, task #295). The\nProperties page surfaces the property under each of these\ncustomers in addition to the primary `customerId`.\n",
+    ),
   ratings: zod
     .object({
       landlord: zod
@@ -600,6 +618,12 @@ export const CreatePropertyBody = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  sharedWithCustomerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Additional customers that also use this property. Empty for\nthe common single-tenant case; populated when a property is\nshared between multiple customers (e.g. Ridge Motor Inn —\nshared by Penda + Trienda KFI crews, task #295). The\nProperties page surfaces the property under each of these\ncustomers in addition to the primary `customerId`.\n",
+    ),
   ratings: zod
     .object({
       landlord: zod
@@ -739,6 +763,12 @@ export const UpdatePropertyBody = zod.object({
   notes: zod.string().optional(),
   furnishings: zod.array(zod.string()).optional(),
   customerId: zod.string().optional(),
+  sharedWithCustomerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Additional customers that also use this property. See\n`Property.sharedWithCustomerIds` for the full contract.\n",
+    ),
   ratings: zod
     .object({
       landlord: zod
@@ -830,6 +860,12 @@ export const UpdatePropertyResponse = zod.object({
   notes: zod.string(),
   furnishings: zod.array(zod.string()),
   customerId: zod.string(),
+  sharedWithCustomerIds: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Additional customers that also use this property. Empty for\nthe common single-tenant case; populated when a property is\nshared between multiple customers (e.g. Ridge Motor Inn —\nshared by Penda + Trienda KFI crews, task #295). The\nProperties page surfaces the property under each of these\ncustomers in addition to the primary `customerId`.\n",
+    ),
   ratings: zod
     .object({
       landlord: zod
@@ -973,6 +1009,12 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
     ),
+  customerId: zod
+    .string()
+    .optional()
+    .describe(
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1054,6 +1096,12 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
+    ),
+  customerId: zod
+    .string()
+    .optional()
+    .describe(
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
     ),
 });
 
@@ -1364,6 +1412,7 @@ export const UpdateLeaseBody = zod.object({
   guaranteedRooms: zod.number().optional(),
   monthlyRoomNightMin: zod.number().optional(),
   longStayTaxExempt: zod.boolean().optional(),
+  customerId: zod.string().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1441,6 +1490,12 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       "True when stays of 30+ days are tax exempt under the\nagreement (Long Stay rule). Added by task #299.\n",
+    ),
+  customerId: zod
+    .string()
+    .optional()
+    .describe(
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
     ),
 });
 

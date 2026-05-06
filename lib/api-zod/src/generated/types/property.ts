@@ -37,6 +37,14 @@ export interface Property {
   notes: string;
   furnishings: string[];
   customerId: string;
+  /** Additional customers that also use this property. Empty for
+the common single-tenant case; populated when a property is
+shared between multiple customers (e.g. Ridge Motor Inn —
+shared by Penda + Trienda KFI crews, task #295). The
+Properties page surfaces the property under each of these
+customers in addition to the primary `customerId`.
+ */
+  sharedWithCustomerIds?: string[];
   ratings?: Ratings;
   /** Cached geographic latitude resolved from the property's
 address. Persisted on the server so the portfolio map can

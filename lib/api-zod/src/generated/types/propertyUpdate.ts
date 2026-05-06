@@ -35,6 +35,10 @@ export interface PropertyUpdate {
   notes?: string;
   furnishings?: string[];
   customerId?: string;
+  /** Additional customers that also use this property. See
+`Property.sharedWithCustomerIds` for the full contract.
+ */
+  sharedWithCustomerIds?: string[];
   ratings?: Ratings;
   lat?: number | null;
   lng?: number | null;

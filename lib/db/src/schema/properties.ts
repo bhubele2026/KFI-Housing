@@ -45,6 +45,15 @@ export const propertiesTable = pgTable("properties", {
   notes: text("notes").notNull().default(""),
   furnishings: text("furnishings").array().notNull().default([]),
   customerId: text("customer_id").notNull().default(""),
+  // Additional customers that also use this property. Empty for the
+  // common single-tenant case; populated when a property is shared
+  // (e.g. the Ridge Motor Inn used by both Penda and Trienda KFI
+  // crews — task #295). The Properties page surfaces the property
+  // under each customer in this list as well as `customerId`.
+  sharedWithCustomerIds: text("shared_with_customer_ids")
+    .array()
+    .notNull()
+    .default([]),
   ratings: jsonb("ratings")
     .$type<PropertyRatings>()
     .notNull()

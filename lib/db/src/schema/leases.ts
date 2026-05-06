@@ -35,6 +35,14 @@ export const leasesTable = pgTable("leases", {
   guaranteedRooms: integer("guaranteed_rooms").notNull().default(0),
   monthlyRoomNightMin: integer("monthly_room_night_min").notNull().default(0),
   longStayTaxExempt: boolean("long_stay_tax_exempt").notNull().default(false),
+  // Optional override for the tenant on this lease. Leases normally
+  // inherit their tenant from `propertiesTable.customerId`, but for
+  // shared-housing properties used by multiple customers (e.g. the
+  // Ridge Motor Inn shared by Penda + Trienda KFI crews — task #295)
+  // each lease points at the specific customer it belongs to so the
+  // Leases "By customer" view can show one lease under each. Empty
+  // string ("") means "fall back to the property's customerId".
+  customerId: text("customer_id").notNull().default(""),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

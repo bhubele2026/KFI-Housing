@@ -391,8 +391,14 @@ export default function Properties() {
         p.city.toLowerCase().includes(q) ||
         customerName.toLowerCase().includes(q);
       const matchesStatus = statusFilter === "All" || p.status === statusFilter;
+      // Shared-housing properties (task #295) also surface under each
+      // customer in `sharedWithCustomerIds` in addition to the primary
+      // `customerId`, so the customer filter must check both.
+      const sharedIds = p.sharedWithCustomerIds ?? [];
       const matchesCustomer =
-        customerFilter === ALL_CUSTOMERS || p.customerId === customerFilter;
+        customerFilter === ALL_CUSTOMERS ||
+        p.customerId === customerFilter ||
+        sharedIds.includes(customerFilter);
       // Needs review = property missing a monthly rent (0 / unset).
       // Mirrors the "incomplete record" pattern used by the occupants
       // missing-move-in subset and lets the dashboard tile deep-link in.
@@ -464,9 +470,18 @@ export default function Properties() {
   const customerGroups = useMemo(() => {
     const map = new Map<string, Property[]>();
     for (const p of filtered) {
-      const arr = map.get(p.customerId) ?? [];
-      arr.push(p);
-      map.set(p.customerId, arr);
+      // Surface shared-housing properties (task #295) under every
+      // customer that uses them — the primary `customerId` AND every
+      // entry in `sharedWithCustomerIds`. Single-tenant properties
+      // (the common case) only land in one group because the shared
+      // list is empty by default.
+      const groupIds = new Set<string>([p.customerId]);
+      for (const cid of p.sharedWithCustomerIds ?? []) groupIds.add(cid);
+      for (const cid of groupIds) {
+        const arr = map.get(cid) ?? [];
+        arr.push(p);
+        map.set(cid, arr);
+      }
     }
     const list: { customer: Customer; properties: Property[] }[] = [];
     for (const [cid, props] of map) {

@@ -36,6 +36,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     seedHousingDeductions: vi.fn().mockResolvedValue(undefined),
     seedAttachedLeasesIfMissing: vi.fn().mockResolvedValue(undefined),
     seedChateauKnollIfMissing: vi.fn().mockResolvedValue(undefined),
+    seedRidgeMotorInnIfMissing: vi.fn().mockResolvedValue(undefined),
     listen: vi.fn().mockResolvedValue(undefined),
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     logger: fakeLogger(),

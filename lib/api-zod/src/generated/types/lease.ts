@@ -66,4 +66,14 @@ when `rateType = room-night`. Added by task #299.
 agreement (Long Stay rule). Added by task #299.
  */
   longStayTaxExempt?: boolean;
+  /** Optional override for the tenant on this lease. Leases
+normally inherit the tenant from the property's
+`customerId`; this field is set only for shared-housing
+properties used by multiple customers (e.g. Ridge Motor Inn
+shared by Penda + Trienda KFI crews — task #295) so the
+Leases "By customer" view can show one lease under each
+customer. Empty string means "fall back to property's
+customerId".
+ */
+  customerId?: string;
 }

@@ -11,6 +11,10 @@ import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { seedParkPlaceIfMissing } from "./lib/seed-park-place";
+// Re-exported from `./lib/seed` so the boot-sequence integration point
+// for post-master-import seeds (#295 and friends) lives next to the
+// other seed entry points.
+import { seedRidgeMotorInnIfMissing } from "./lib/seed";
 import { backfillOccupantMoveInDates } from "./lib/backfill-occupant-move-in";
 import { backfillOccupantPayrollIds } from "./lib/backfill-occupant-payroll-ids";
 import { seedHousingDeductions } from "./lib/seed-housing-deductions";
@@ -59,6 +63,9 @@ void start({
   },
   seedChateauKnollIfMissing: async () => {
     await seedChateauKnollIfMissing();
+  },
+  seedRidgeMotorInnIfMissing: async () => {
+    await seedRidgeMotorInnIfMissing();
   },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {

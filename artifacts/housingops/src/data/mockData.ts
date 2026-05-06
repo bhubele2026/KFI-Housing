@@ -82,6 +82,11 @@ export const PropertySchema = z.object({
   notes: z.string(),
   furnishings: z.array(z.string()).default([]),
   ratings: RatingsSchema.optional(),
+  // Additional customer ids that share this property (e.g. Penda + Trienda
+  // both housing employees at the Ridge Motor Inn). Optional so legacy
+  // backups and seed literals parse cleanly; the API populates it on the
+  // wire and callers default to `[]` when reading.
+  sharedWithCustomerIds: z.array(z.string()).optional(),
   // Cached geocoded coordinates. Persisted on the server so the
   // portfolio map renders instantly on subsequent loads instead of
   // re-geocoding on every visit. Cleared whenever the address fields
@@ -245,6 +250,10 @@ export const LeaseSchema = z.object({
   guaranteedRooms: z.number().optional().default(0),
   monthlyRoomNightMin: z.number().optional().default(0),
   longStayTaxExempt: z.boolean().optional().default(false),
+  // Customer this lease is billed to. Optional so legacy backups and seed
+  // literals parse cleanly; the API populates it on the wire. Callers
+  // fall back to the parent property's customerId when absent.
+  customerId: z.string().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

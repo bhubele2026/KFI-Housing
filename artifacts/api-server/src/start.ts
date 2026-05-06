@@ -35,6 +35,9 @@ export interface StartDeps {
   // Idempotent seed for the 6 active Chateau Knoll leases (Task #290).
   // Non-fatal.
   seedChateauKnollIfMissing: () => Promise<void>;
+  // Idempotent Ridge Motor Inn (Portage, WI) shared-housing seed
+  // (Task #295). Runs after the master-file import seed. Non-fatal.
+  seedRidgeMotorInnIfMissing: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -350,6 +353,17 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.warn(
       { err },
       "Failed to apply Chateau Knoll seed — continuing to serve",
+    );
+  }
+
+  // Idempotent Ridge Motor Inn (Portage, WI) shared-housing seed
+  // (Task #295). Non-fatal — the rest of the app keeps serving.
+  try {
+    await deps.seedRidgeMotorInnIfMissing();
+  } catch (err) {
+    deps.logger.warn(
+      { err },
+      "Failed to apply Ridge Motor Inn seed — continuing to serve",
     );
   }
 

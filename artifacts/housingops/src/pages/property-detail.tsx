@@ -34,6 +34,7 @@ import { LeasesTable } from "@/components/leases-table";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
+import { NotFoundScreen } from "@/components/not-found-screen";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -543,10 +544,16 @@ export default function PropertyDetail() {
   if (!property) {
     return (
       <MainLayout>
-        <div className="p-8 text-center">
-          <p className="text-muted-foreground">Property not found.</p>
-          <Link href="/properties"><Button variant="link" className="mt-2">Back to Properties</Button></Link>
-        </div>
+        <NotFoundScreen
+          title="Property not found"
+          description="This property may have been deleted. Head back to the dashboard or pick another property from the list."
+          secondary={{
+            label: "Back to Properties",
+            href: "/properties",
+            testId: "button-back-to-properties",
+          }}
+          testId="property-detail-not-found"
+        />
       </MainLayout>
     );
   }

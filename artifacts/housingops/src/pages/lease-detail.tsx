@@ -82,6 +82,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { NotFoundScreen } from "@/components/not-found-screen";
 
 // We deliberately reuse the inline editors from the Property Detail page so
 // every lease field on this page commits with the same save-on-blur +
@@ -321,24 +322,16 @@ export default function LeaseDetail() {
   if (!isCreateMode && !realLease) {
     return (
       <MainLayout>
-        <div className="p-8 max-w-5xl mx-auto">
-          <Card>
-            <CardContent className="p-12 text-center space-y-3">
-              <AlertTriangle className="h-8 w-8 text-amber-500 mx-auto" />
-              <h2 className="text-lg font-semibold">Lease not found</h2>
-              <p className="text-sm text-muted-foreground">
-                This lease may have been deleted. Head back to the Leases page
-                to see what's available.
-              </p>
-              <Link href={origin.path}>
-                <Button variant="outline" data-testid="button-back-to-leases">
-                  <ChevronLeft className="h-4 w-4 mr-1.5" />
-                  {backLabel}
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+        <NotFoundScreen
+          title="Lease not found"
+          description="This lease may have been deleted. Head back to the dashboard or pick another lease from the list."
+          secondary={{
+            label: backLabel,
+            href: origin.path,
+            testId: "button-back-to-leases",
+          }}
+          testId="lease-detail-not-found"
+        />
       </MainLayout>
     );
   }

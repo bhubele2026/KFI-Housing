@@ -20,6 +20,7 @@ import {
 } from "recharts";
 import { InlineEdit, NotesEditor } from "./property-detail";
 import { useToast } from "@/hooks/use-toast";
+import { NotFoundScreen } from "@/components/not-found-screen";
 
 function StatCard({
   label, value, sub, icon: Icon, color = "text-foreground", testId,
@@ -212,12 +213,16 @@ export default function CustomerDetail() {
   if (!customer) {
     return (
       <MainLayout>
-        <div className="p-8 text-center" data-testid="customer-detail-not-found">
-          <p className="text-muted-foreground">Customer not found.</p>
-          <Link href="/customers">
-            <Button variant="link" className="mt-2">Back to Customers</Button>
-          </Link>
-        </div>
+        <NotFoundScreen
+          title="Customer not found"
+          description="This customer may have been deleted. Head back to the dashboard or pick another customer from the list."
+          secondary={{
+            label: "Back to Customers",
+            href: "/customers",
+            testId: "button-back-to-customers",
+          }}
+          testId="customer-detail-not-found"
+        />
       </MainLayout>
     );
   }

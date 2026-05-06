@@ -227,6 +227,13 @@ export const LeaseSchema = z.object({
   clauses: z.string().optional().default(""),
   buyoutAvailable: z.boolean().optional().default(false),
   buyoutCost: z.number().nullable().optional().default(null),
+  // Master-importer fields (task #301). Set on rows whose source cell was
+  // ambiguous so operators can see and clean them up later. All `.optional()`
+  // with safe defaults so legacy backups (no keys) and the manual create
+  // flow (which never sets them) keep parsing.
+  weeklyCost: z.number().optional(),
+  vendor: z.string().optional(),
+  needsReview: z.boolean().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

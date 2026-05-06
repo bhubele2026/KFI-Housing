@@ -638,16 +638,18 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     ).toBeNull();
   });
 
-  // ── Needs review filter (?needsReview=1) (task #276) ─────────────────
+  // ── Needs review filter (?needsReview=1) (tasks #276, #301) ──────────
   // The dashboard "Needs review" tile deep-links to /leases?needsReview=1
-  // and the Leases page is expected to (a) filter to leases missing an
-  // end date on first paint and (b) reflect that selection in the
-  // "Needs review" select so the operator can see why the list is short.
-  // Without the URL→state sync the deep link would land on a full list
-  // with no indication of why some rows are missing.
-  it("?needsReview=1 filters to leases missing an end date and the Needs review select stays in sync", async () => {
-    // Add a third lease with an empty endDate so the filter has a target.
-    // l1 and l2 both already have end dates, so they should be hidden.
+  // and the Leases page is expected to (a) filter to leases the master
+  // importer flagged via `needsReview: true` on first paint and (b)
+  // reflect that selection in the "Needs review" select so the operator
+  // can see why the list is short. Without the URL→state sync the deep
+  // link would land on a full list with no indication of why some rows
+  // are missing.
+  it("?needsReview=1 filters to importer-flagged leases and the Needs review select stays in sync", async () => {
+    // Add a third lease flagged by the master importer (task #301). l1 and
+    // l2 both have `needsReview: false` (the default), so they should be
+    // hidden when the filter is active.
     state.leases.push({
       id: "l3",
       propertyId: "p2",
@@ -660,10 +662,13 @@ describe("Leases page — placeholder rows for properties without a lease", () =
       // on this row's empty endDate. Real "needs review" leases tend
       // to be partial imports without enough data to be active anyway.
       status: "Expired",
-      notes: "",
+      notes: "Needs review: weekly cost not numeric: \"$69.23???\". Source: master file row 12.",
       clauses: "",
       buyoutAvailable: false,
       buyoutCost: null,
+      weeklyCost: 0,
+      vendor: "",
+      needsReview: true,
     });
 
     const { Harness } = makeHarness("/leases?needsReview=1");
@@ -672,7 +677,7 @@ describe("Leases page — placeholder rows for properties without a lease", () =
       root.render(<Harness />);
     });
 
-    // Only the lease without an end date is visible.
+    // Only the importer-flagged lease (l3) is visible.
     expect(container.querySelector('[data-testid="row-lease-l3"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
     expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();

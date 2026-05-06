@@ -74,14 +74,14 @@ export default function Dashboard() {
   // shows when `?needsReview=1` is set — keeping the counts in sync with
   // what the operator sees after clicking through.
   // - Occupants: falsy moveInDate (mirrors the inline badge in occupants.tsx)
-  // - Leases:    falsy endDate    (lease without an end date)
+  // - Leases:    importer-flagged needsReview (ambiguous source cell)
   // - Properties: monthlyRent of 0 / unset (property missing rent)
   const needsReviewOccupantCount = useMemo(
     () => scopedOccupants.filter((o) => !o.moveInDate).length,
     [scopedOccupants],
   );
   const needsReviewLeaseCount = useMemo(
-    () => scopedLeases.filter((l) => !l.endDate).length,
+    () => scopedLeases.filter((l) => l.needsReview).length,
     [scopedLeases],
   );
   const needsReviewPropertyCount = useMemo(
@@ -106,7 +106,7 @@ export default function Dashboard() {
     {
       key: "leases" as const,
       count: needsReviewLeaseCount,
-      label: "Leases missing an end date",
+      label: "Leases flagged for review",
       cta: "Review leases",
       href: `/leases?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-leases",

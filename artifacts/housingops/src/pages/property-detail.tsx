@@ -376,6 +376,7 @@ export function NotesEditor({ value, onSave, className }: { value: string; onSav
 export function InlineEdit({
   value, onSave, type = "text", prefix,
   placeholder, displayClassName, inputClassName, testId, displayValue,
+  startEditing = false,
 }: {
   value: string | number;
   onSave: (v: string) => void;
@@ -392,8 +393,15 @@ export function InlineEdit({
    * underlying stored value for editing and persistence.
    */
   displayValue?: string;
+  /**
+   * When true on first mount, open the editor immediately so the input is
+   * focused. Used by the lease detail "Fix" deep-link (`?focus=rent`) to
+   * land the operator straight on the rent field. Has no effect after the
+   * first render — operators can still cancel or commit normally.
+   */
+  startEditing?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(startEditing);
   const [draft, setDraft] = useState(String(value));
   const lastIncomingRef = useRef(String(value));
 

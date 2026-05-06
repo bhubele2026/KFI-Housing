@@ -4,8 +4,8 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText } from "lucide-react";
-import { useLocation } from "wouter";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench } from "lucide-react";
+import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property } from "@/data/mockData";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 
@@ -63,6 +63,25 @@ function truncateNotes(notes: string): string {
   const trimmed = notes.trim();
   if (trimmed.length <= NOTES_PREVIEW_LIMIT) return trimmed;
   return trimmed.slice(0, NOTES_PREVIEW_LIMIT - 1).trimEnd() + "…";
+}
+
+/**
+ * The master importer prefixes the explanation of why a row was flagged with
+ * `Needs review:` in the lease's notes (see `buildLeaseNotes` in
+ * `artifacts/api-server/src/lib/import-master-leases.ts`). Pull just that
+ * sentence out so the badge tooltip can show the operator-friendly reason
+ * without the rest of the import metadata. Falls back to a generic message
+ * when the notes were edited or the row was flagged via another path.
+ */
+function extractNeedsReviewReason(notes: string): string {
+  // Capture everything between "Needs review:" and the next importer
+  // sentence ("Source: master file row …"), or to end-of-string when the
+  // notes were trimmed. The reason itself can contain periods (e.g.
+  // `weekly cost not numeric: "$69.23???"`), so a simple `[^.]+` cuts the
+  // text in half — match against the known follow-on sentence instead.
+  const match = notes.match(/Needs review:\s*(.+?)(?:\s*Source:|$)/is);
+  if (match && match[1]) return match[1].trim().replace(/\.$/, "");
+  return "This lease was flagged during import. Open it to clean up the data.";
 }
 
 function formatMoney(n: number): string {
@@ -246,18 +265,35 @@ export function LeasesTable({
                     {formatMoney(lease.securityDeposit)}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        lease.status === "Active"
-                          ? "default"
-                          : lease.status === "Expired"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                      data-testid={`badge-lease-status-${lease.id}`}
-                    >
-                      {lease.status}
-                    </Badge>
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge
+                        variant={
+                          lease.status === "Active"
+                            ? "default"
+                            : lease.status === "Expired"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                        data-testid={`badge-lease-status-${lease.id}`}
+                      >
+                        {lease.status}
+                      </Badge>
+                      {lease.needsReview && (
+                        // Title attribute pulls the importer's reason out of
+                        // notes so a hover preview answers "why is this
+                        // flagged?" without coupling to the App-root Tooltip
+                        // provider (which is absent in unit tests).
+                        <Badge
+                          variant="outline"
+                          className="gap-1 text-[11px] font-medium border-amber-300 bg-amber-50 text-amber-800"
+                          title={extractNeedsReviewReason(lease.notes)}
+                          data-testid={`badge-lease-needs-review-${lease.id}`}
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Needs review
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <LeaseTermsBadges lease={lease} />
@@ -276,12 +312,37 @@ export function LeasesTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    {/* AlertDialog confirms the delete so a stray row-trash
-                        click doesn't permanently remove a lease during the
-                        demo. The trigger Button still calls stopPropagation
-                        so the row's click handler doesn't ALSO navigate to
-                        the lease detail page when opening the dialog. */}
-                    <ConfirmDeleteButton
+                    <div className="flex items-center justify-end gap-1">
+                      {lease.needsReview && (
+                        // Quick-fix shortcut for flagged leases. Threads the
+                        // origin path through (so the back-link returns
+                        // here) and adds `?focus=rent` so lease-detail
+                        // opens with the rent inline editor pre-focused.
+                        <Link
+                          href={
+                            `/leases/${lease.id}?focus=rent` +
+                            (originPath ? `&from=${encodeURIComponent(originPath)}` : "")
+                          }
+                        >
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-amber-700 hover:text-amber-800"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`button-fix-lease-${lease.id}`}
+                            aria-label="Fix flagged lease"
+                            title="Fix flagged lease"
+                          >
+                            <Wrench className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                      )}
+                      {/* AlertDialog confirms the delete so a stray row-trash
+                          click doesn't permanently remove a lease during the
+                          demo. The trigger Button still calls stopPropagation
+                          so the row's click handler doesn't ALSO navigate to
+                          the lease detail page when opening the dialog. */}
+                      <ConfirmDeleteButton
                       title="Delete this lease?"
                       description={
                         <>
@@ -312,6 +373,7 @@ export function LeasesTable({
                         </Button>
                       }
                     />
+                    </div>
                   </TableCell>
                 </TableRow>
               );

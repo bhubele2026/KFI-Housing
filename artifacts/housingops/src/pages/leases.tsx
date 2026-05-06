@@ -99,10 +99,12 @@ export default function Leases() {
             if (buyoutFilter === "Yes" && !hasBuyout) return false;
             if (buyoutFilter === "No" && hasBuyout) return false;
           }
-          // Needs review = lease has no recorded end date. Empty string is the
-          // "missing" sentinel used elsewhere; a Lease's endDate is required
-          // by the schema but operators can save blank when importing.
-          if (needsReviewFilter === "NeedsReview" && l.endDate) return false;
+          // Needs review = the master importer flagged this row's source
+          // cell as ambiguous (TBD, n/a, "$69.23???", descriptive prose,
+          // etc.) and set `lease.needsReview = true`. Operators triaging
+          // import quality use this to find the exact rows that need a
+          // weekly cost / vendor cleanup pass.
+          if (needsReviewFilter === "NeedsReview" && !l.needsReview) return false;
           if (customerFilter === ALL_CUSTOMERS) return true;
           const property = propertyById.get(l.propertyId);
           return property?.customerId === customerFilter;
@@ -427,7 +429,7 @@ export default function Leases() {
                     <SelectValue placeholder="Needs review" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All End Dates</SelectItem>
+                    <SelectItem value="All">All Leases</SelectItem>
                     <SelectItem value="NeedsReview">Needs review</SelectItem>
                   </SelectContent>
                 </Select>

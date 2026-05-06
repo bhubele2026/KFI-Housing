@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link, useLocation, useSearch } from "wouter";
 import { useUnsavedChangesPrompt } from "@/hooks/use-unsaved-changes-prompt";
 import { motion } from "framer-motion";
@@ -151,6 +151,22 @@ export default function LeaseDetail() {
     () => new URLSearchParams(search).get("propertyId") ?? "",
     [search],
   );
+  // `?focus=rent` is set by the leases-table "Fix" quick-action on flagged
+  // leases (task #301). When present we open the rent inline editor on
+  // mount and scroll it into view so the operator lands ready to type the
+  // corrected weekly cost (which the lease stores as a derived monthly
+  // amount). Read once at mount — re-reading on query changes would
+  // re-focus mid-edit if the URL is rewritten elsewhere.
+  const initialFocusFieldRef = useRef<string | null>(
+    new URLSearchParams(search).get("focus"),
+  );
+  const focusRentOnMount = initialFocusFieldRef.current === "rent";
+  const rentRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!focusRentOnMount) return;
+    if (!rentRowRef.current) return;
+    rentRowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusRentOnMount]);
 
   // Pending property re-attachment requires explicit confirm. We hold the
   // candidate id here while the AlertDialog is open and clear it on close.
@@ -580,13 +596,18 @@ export default function LeaseDetail() {
                   testId="inline-lease-end"
                 />
               </div>
-              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+              <div
+                className="flex items-center justify-between py-1 border-b border-dashed border-border/50"
+                ref={rentRowRef}
+                data-testid="lease-rent-row"
+              >
                 <span className="text-sm text-muted-foreground w-40 shrink-0">Rent (monthly)</span>
                 <div className="flex items-center gap-2">
                   <InlineEdit
                     value={lease.monthlyRent}
                     prefix="$"
                     type="number"
+                    startEditing={focusRentOnMount}
                     onSave={(v) =>
                       applyUpdate( { monthlyRent: parseFloat(v) || 0 })
                     }

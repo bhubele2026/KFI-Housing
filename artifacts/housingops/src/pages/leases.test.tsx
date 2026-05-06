@@ -261,6 +261,7 @@ vi.mock("@/components/renew-lease-popover", () => ({
 // but the hook must still resolve cleanly — return an empty array.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useGetLastAutoMasterImport: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
 // ── Mock data store ─────────────────────────────────────────────────────

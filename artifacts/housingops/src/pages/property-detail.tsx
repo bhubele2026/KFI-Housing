@@ -15,14 +15,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, Building2, Edit2, Check, X, Plus, Trash2,
-  BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard,
+  BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard, Hotel,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
   ShieldCheck, Trees, Sparkles, CheckCircle2, Star, Briefcase,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -470,6 +471,11 @@ export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  // Room-night logs back the hotel-rate revenue estimate ("≈ $X this
+  // month (Y nights × $Z/night)") shown for hotel-rate leases. Pulled
+  // here so the Stat strip and the Finance tab share the same numbers.
+  const roomNightLogsQuery = useListRoomNightLogs();
+  const roomNightLogs = roomNightLogsQuery.data ?? [];
   const { toast } = useToast();
 
   // Beds-tab sort selection. Hydrated once from localStorage so the
@@ -647,7 +653,29 @@ export default function PropertyDetail() {
     monthlyElectricCost,
     propBeds.length,
   );
-  const monthlyLeaseCost = activeLeases.reduce((s, l) => s + (l.monthlyRent || 0), 0);
+  // Lease cost combines stored monthly rent with the hotel-rate estimate
+  // (`nightlyRate × latest month's room-nights`) so the Lease Rent stat
+  // and the Finance tab don't silently report $0 for hotel-rate leases
+  // like Ridge Motor Inn / Comfort Suites Madison. Monthly leases are
+  // unaffected because `estimateLeaseMonthlyRent` returns their stored
+  // `monthlyRent` unchanged when `rateType !== "room-night"`.
+  const monthlyLeaseCost = sumActiveRentEstimated(propLeases, roomNightLogs, id);
+  // Per-lease hotel-rate breakdown — used by the Lease Rent stat sub and
+  // by the Finance tab Costs section to surface the
+  // "≈ $X this month (Y nights × $Z/night)" figure operators want next
+  // to the raw $0 stored on these leases.
+  const hotelRateLeaseEstimates = activeLeases
+    .filter((l) => (l.rateType ?? "monthly") === "room-night")
+    .map((l) => {
+      const latest = getLatestRoomNightLog(roomNightLogs, l.id);
+      return {
+        lease: l,
+        nights: latest?.roomNights ?? 0,
+        month: latest?.month ?? null,
+        nightlyRate: l.nightlyRate ?? 0,
+        estimate: estimateLeaseMonthlyRent(l, roomNightLogs),
+      };
+    });
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
   const roomTotals = computeRoomTotals(propRooms);
@@ -752,19 +780,41 @@ export default function PropertyDetail() {
             icon={KeyRound}
             color="text-destructive"
             sub={
-              activeLeases.length >= 2 ? (
-                <span
-                  className="inline-flex items-center gap-1 text-amber-700"
-                  data-testid="badge-multi-active-leases"
-                >
-                  <AlertTriangle className="h-3 w-3" />
-                  {activeLeases.length} active leases — rents combined
+              <span className="flex flex-col gap-0.5">
+                <span>
+                  {activeLeases.length >= 2 ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-amber-700"
+                      data-testid="badge-multi-active-leases"
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      {activeLeases.length} active leases — rents combined
+                    </span>
+                  ) : activeLeases.length === 1 ? (
+                    "active lease"
+                  ) : (
+                    "no active lease"
+                  )}
                 </span>
-              ) : activeLeases.length === 1 ? (
-                "active lease"
-              ) : (
-                "no active lease"
-              )
+                {hotelRateLeaseEstimates.map((h) => (
+                  <span
+                    key={h.lease.id}
+                    className="inline-flex items-center gap-1 text-foreground/80"
+                    data-testid={`hotel-rate-estimate-${h.lease.id}`}
+                  >
+                    <Hotel className="h-3 w-3" />
+                    {h.month && h.nights > 0 ? (
+                      <>
+                        ≈ ${h.estimate.toLocaleString()} this month ({h.nights}{" "}
+                        room-night{h.nights === 1 ? "" : "s"} × $
+                        {h.nightlyRate.toLocaleString()}/night)
+                      </>
+                    ) : (
+                      <>Hotel-rate · log room-nights to estimate revenue</>
+                    )}
+                  </span>
+                ))}
+              </span>
             }
           />
           <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
@@ -2105,6 +2155,25 @@ export default function PropertyDetail() {
                   <span className="text-muted-foreground">Lease (active)</span>
                   <span className="text-destructive">-${monthlyLeaseCost.toLocaleString()}</span>
                 </div>
+                {hotelRateLeaseEstimates.map((h) => (
+                  <div
+                    key={h.lease.id}
+                    className="flex justify-between text-xs py-1 pl-3 border-b border-dashed border-border/40 text-muted-foreground"
+                    data-testid={`finance-hotel-rate-row-${h.lease.id}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <Hotel className="h-3 w-3" />
+                      {h.month && h.nights > 0
+                        ? `Hotel-rate ${h.month} · ${h.nights} room-night${h.nights === 1 ? "" : "s"} × $${h.nightlyRate.toLocaleString()}/night`
+                        : "Hotel-rate · no room-nights logged yet"}
+                    </span>
+                    <span className="tabular-nums">
+                      {h.month && h.nights > 0
+                        ? `≈ -$${h.estimate.toLocaleString()}`
+                        : "—"}
+                    </span>
+                  </div>
+                ))}
                 {propUtils.map(u => (
                   <div key={u.id} className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
                     <span className="text-muted-foreground">{u.type} ({u.company})</span>

@@ -41,6 +41,10 @@ vi.mock("@/components/layout/main-layout", () => ({
 // PropertyLocationMap fetches the Google Maps key from the api-server's
 // `/api/config` endpoint via react-query (Task #154). These tests don't
 // stand up a QueryClientProvider, so render it as a benign placeholder.
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 vi.mock("@/components/property-location-map", () => ({
   PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
 }));

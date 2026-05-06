@@ -5,10 +5,15 @@ import {
   computeRoomTotals,
   daysUntil,
   EMPTY_RATINGS,
+  estimateLeaseMonthlyRent,
+  getLatestRoomNightLog,
   getRenewalInfo,
   LeaseSchema,
+  sumActiveRentEstimated,
   toMonthlyCharge,
+  type Lease,
   type Room,
+  type RoomNightLog,
 } from "./mockData";
 
 describe("computeOverallRating", () => {
@@ -532,5 +537,112 @@ describe("LeaseSchema backward compatibility", () => {
     });
     expect(parsed.buyoutAvailable).toBe(true);
     expect(parsed.buyoutCost).toBeNull();
+  });
+});
+
+// Hotel-rate revenue helpers (task #320). The property page surfaces
+// estimated revenue for room-night leases by multiplying nightlyRate by
+// the most recent month's logged room-nights. These tests pin the math
+// and the rateType branching so finance numbers don't silently drift.
+describe("hotel-rate revenue estimate helpers", () => {
+  function lease(overrides: Partial<Lease>): Lease {
+    return LeaseSchema.parse({
+      id: "l-1",
+      propertyId: "p-1",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      monthlyRent: 0,
+      securityDeposit: 0,
+      status: "Active",
+      notes: "",
+      ...overrides,
+    });
+  }
+  function log(overrides: Partial<RoomNightLog> & { leaseId: string; month: string; roomNights: number }): RoomNightLog {
+    return { id: `log-${overrides.leaseId}-${overrides.month}`, notes: "", ...overrides };
+  }
+
+  describe("getLatestRoomNightLog", () => {
+    it("returns null when there are no logs for the lease", () => {
+      const logs = [log({ leaseId: "other", month: "2026-04", roomNights: 10 })];
+      expect(getLatestRoomNightLog(logs, "l-1")).toBeNull();
+    });
+
+    it("returns null when logs is empty", () => {
+      expect(getLatestRoomNightLog([], "l-1")).toBeNull();
+    });
+
+    it("picks the highest YYYY-MM string regardless of input order", () => {
+      const logs = [
+        log({ leaseId: "l-1", month: "2026-01", roomNights: 5 }),
+        log({ leaseId: "l-1", month: "2026-04", roomNights: 12 }),
+        log({ leaseId: "l-1", month: "2026-02", roomNights: 8 }),
+      ];
+      expect(getLatestRoomNightLog(logs, "l-1")?.month).toBe("2026-04");
+    });
+
+    it("ignores logs belonging to other leases", () => {
+      const logs = [
+        log({ leaseId: "other", month: "2026-12", roomNights: 99 }),
+        log({ leaseId: "l-1", month: "2026-03", roomNights: 7 }),
+      ];
+      expect(getLatestRoomNightLog(logs, "l-1")?.month).toBe("2026-03");
+    });
+  });
+
+  describe("estimateLeaseMonthlyRent", () => {
+    it("returns stored monthlyRent for monthly leases (default rateType)", () => {
+      const l = lease({ monthlyRent: 2400 });
+      expect(estimateLeaseMonthlyRent(l, [])).toBe(2400);
+    });
+
+    it("ignores room-night logs for monthly leases", () => {
+      const l = lease({ monthlyRent: 2400, nightlyRate: 99 });
+      const logs = [log({ leaseId: l.id, month: "2026-04", roomNights: 30 })];
+      expect(estimateLeaseMonthlyRent(l, logs)).toBe(2400);
+    });
+
+    it("returns 0 for room-night leases with no log yet (no fabricated revenue)", () => {
+      const l = lease({ rateType: "room-night", nightlyRate: 89, monthlyRent: 0 });
+      expect(estimateLeaseMonthlyRent(l, [])).toBe(0);
+    });
+
+    it("multiplies nightlyRate by the latest month's roomNights", () => {
+      const l = lease({ rateType: "room-night", nightlyRate: 89, monthlyRent: 0 });
+      const logs = [
+        log({ leaseId: l.id, month: "2026-03", roomNights: 10 }),
+        log({ leaseId: l.id, month: "2026-04", roomNights: 22 }),
+      ];
+      expect(estimateLeaseMonthlyRent(l, logs)).toBe(89 * 22);
+    });
+
+    it("rounds to cents to keep aggregates free of floating-point noise", () => {
+      const l = lease({ rateType: "room-night", nightlyRate: 89.999, monthlyRent: 0 });
+      const logs = [log({ leaseId: l.id, month: "2026-04", roomNights: 7 })];
+      // 89.999 * 7 = 629.993 → rounds to 629.99
+      expect(estimateLeaseMonthlyRent(l, logs)).toBe(629.99);
+    });
+  });
+
+  describe("sumActiveRentEstimated", () => {
+    it("sums monthly + room-night active leases for the property", () => {
+      const monthly = lease({ id: "l-monthly", monthlyRent: 2400 });
+      const hotel = lease({ id: "l-hotel", rateType: "room-night", nightlyRate: 89, monthlyRent: 0 });
+      const expired = lease({ id: "l-old", monthlyRent: 5000, status: "Expired" });
+      const otherProp = lease({ id: "l-other", propertyId: "p-2", monthlyRent: 999 });
+      const logs = [log({ leaseId: "l-hotel", month: "2026-04", roomNights: 22 })];
+      // 2400 + (89 * 22) + 0 (expired skipped) + 0 (other property skipped)
+      expect(sumActiveRentEstimated([monthly, hotel, expired, otherProp], logs, "p-1")).toBe(2400 + 89 * 22);
+    });
+
+    it("returns 0 for a property with no active leases", () => {
+      const expired = lease({ monthlyRent: 5000, status: "Expired" });
+      expect(sumActiveRentEstimated([expired], [], "p-1")).toBe(0);
+    });
+
+    it("contributes 0 from hotel-rate active leases that have no log yet", () => {
+      const hotel = lease({ rateType: "room-night", nightlyRate: 89, monthlyRent: 0 });
+      expect(sumActiveRentEstimated([hotel], [], "p-1")).toBe(0);
+    });
   });
 });

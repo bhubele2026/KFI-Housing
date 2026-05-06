@@ -306,6 +306,63 @@ export function sumActiveRent(
   );
 }
 
+/**
+ * Most recent `RoomNightLog` (highest `month`, YYYY-MM) for a lease, or
+ * `null` when no entries have been logged. Used by the property page to
+ * estimate hotel-rate revenue from the latest billed month.
+ */
+export function getLatestRoomNightLog(
+  logs: readonly RoomNightLog[],
+  leaseId: string,
+): RoomNightLog | null {
+  let latest: RoomNightLog | null = null;
+  for (const log of logs) {
+    if (log.leaseId !== leaseId) continue;
+    if (!latest || log.month > latest.month) latest = log;
+  }
+  return latest;
+}
+
+/**
+ * Estimated monthly rent for a single lease, accounting for `rateType`:
+ *   - "monthly" leases return their stored `monthlyRent`.
+ *   - "room-night" (hotel-rate) leases return `nightlyRate × roomNights`
+ *     from the lease's most recent `RoomNightLog`, or `0` when no log
+ *     has been recorded yet (so finance numbers don't invent revenue
+ *     from thin air).
+ * Rounded to cents to keep aggregates free of floating-point noise.
+ */
+export function estimateLeaseMonthlyRent(
+  lease: Lease,
+  logs: readonly RoomNightLog[],
+): number {
+  if ((lease.rateType ?? "monthly") !== "room-night") {
+    return lease.monthlyRent || 0;
+  }
+  const latest = getLatestRoomNightLog(logs, lease.id);
+  if (!latest) return 0;
+  return (
+    Math.round((lease.nightlyRate || 0) * (latest.roomNights || 0) * 100) / 100
+  );
+}
+
+/**
+ * Sum of estimated monthly rent across every Active lease for a property,
+ * combining monthly leases (their stored rent) with hotel-rate leases
+ * (nightly × the latest logged month's room-nights). Returns the same
+ * value as {@link sumActiveRent} when no hotel-rate leases are present.
+ */
+export function sumActiveRentEstimated(
+  leases: readonly Lease[],
+  logs: readonly RoomNightLog[],
+  propertyId: string,
+): number {
+  return getActiveLeasesForProperty(leases, propertyId).reduce(
+    (s, l) => s + estimateLeaseMonthlyRent(l, logs),
+    0,
+  );
+}
+
 const LEASE_STATUS_ORDER: Record<Lease["status"], number> = {
   Active: 0,
   Upcoming: 1,

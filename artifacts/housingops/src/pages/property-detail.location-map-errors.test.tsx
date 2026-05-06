@@ -78,6 +78,7 @@ vi.mock("@workspace/api-client-react", () => ({
     fetchStatus: "idle",
   }),
   getGetRuntimeConfigQueryKey: () => ["/api/config"] as const,
+  useListRoomNightLogs: () => ({ data: [] }),
 }));
 
 vi.mock("framer-motion", async () => {

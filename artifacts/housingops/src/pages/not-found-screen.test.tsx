@@ -47,6 +47,10 @@ vi.mock("@/hooks/use-unsaved-changes-prompt", () => ({
 
 // Empty data store with isLoading false — every lookup misses, so the
 // property and lease detail pages take their not-found branches.
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 vi.mock("@/context/data-store", () => ({
   useData: () => ({
     customers: [],

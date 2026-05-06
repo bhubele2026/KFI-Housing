@@ -10,8 +10,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListUnplacedPayroll,
   getListUnplacedPayrollQueryKey,
+  useListRoomNightLogs,
   type UnplacedPayrollRow,
 } from "@workspace/api-client-react";
+import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, type RatingCategoryKey } from "@/data/mockData";
@@ -32,6 +34,11 @@ export default function Dashboard() {
   const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
   const queryClient = useQueryClient();
   const { data: unplacedPayroll } = useListUnplacedPayroll();
+  // Room-night logs power the hotel-rate "at risk this month" tile —
+  // mirrors the leases page (task #319). Hook returns undefined while
+  // loading; treat as empty so the tile just shows 0 / no tile.
+  const { data: roomNightLogsData } = useListRoomNightLogs();
+  const roomNightLogs = useMemo(() => roomNightLogsData ?? [], [roomNightLogsData]);
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
@@ -103,6 +110,23 @@ export default function Dashboard() {
     () => scopedProperties.filter((p) => !(p.monthlyRent && p.monthlyRent > 0)).length,
     [scopedProperties],
   );
+  // Hotel-rate "at risk this month" — every Active/Upcoming hotel-rate
+  // lease in scope whose current calendar month either has no log yet
+  // or logged fewer nights than the agreement's minimum. Mirrors the
+  // tile on /leases (task #319) so operators can spot the warning
+  // straight from the dashboard.
+  // Computed per render (cheap) so the tile label flips correctly if
+  // the dashboard stays open across a month boundary, instead of
+  // freezing to the month at mount.
+  const currentMonth = currentMonthKey();
+  const hotelRateAtRiskCount = useMemo(
+    () =>
+      scopedLeases
+        .filter((l) => l.status === "Active" || l.status === "Upcoming")
+        .filter((l) => getHotelRateMonthRisk(l, roomNightLogs, currentMonth) !== null)
+        .length,
+    [scopedLeases, roomNightLogs, currentMonth],
+  );
   // Suffix the deep-link with the active customer scope so the linked
   // page lands on the same scope the operator is already looking at.
   const customerQuerySuffix =
@@ -133,6 +157,20 @@ export default function Dashboard() {
       cta: "Review properties",
       href: `/properties?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-properties",
+    },
+    {
+      key: "hotel-rate-at-risk" as const,
+      count: hotelRateAtRiskCount,
+      label: `Hotel-rate leases at risk this month (${currentMonth})`,
+      cta: "Review hotel-rate leases",
+      // No dedicated filter on /leases for at-risk yet — the tile lives
+      // at the top of that page, so a plain deep-link lands the operator
+      // on it. Customer scope is preserved so the count matches.
+      href:
+        customerFilter === ALL_CUSTOMERS
+          ? "/leases"
+          : `/leases?customer=${encodeURIComponent(customerFilter)}`,
+      testId: "needs-review-hotel-rate-at-risk",
     },
   ].filter((item) => item.count > 0);
 

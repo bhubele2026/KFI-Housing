@@ -68,6 +68,23 @@ function makeSelect(projection: Record<string, { __col: string }>) {
   };
 }
 
+function makeUpdate(table: unknown) {
+  return {
+    set: (patch: Record<string, unknown>) => ({
+      where: async (pred: Predicate) => {
+        const store = stores[tableNameOf(table)];
+        for (const row of store.values()) {
+          if (matches(row, pred)) {
+            for (const [k, v] of Object.entries(patch)) {
+              row[k] = v;
+            }
+          }
+        }
+      },
+    }),
+  };
+}
+
 function makeInsert(table: unknown) {
   return {
     values: (rows: Row | Row[]) => {
@@ -91,11 +108,12 @@ function makeInsert(table: unknown) {
   };
 }
 
-const tx = { select: makeSelect, insert: makeInsert };
+const tx = { select: makeSelect, insert: makeInsert, update: makeUpdate };
 type Tx = typeof tx;
 const fakeDb = {
   select: makeSelect,
   insert: makeInsert,
+  update: makeUpdate,
   transaction: <T,>(cb: (tx: Tx) => Promise<T>): Promise<T> => cb(tx),
 };
 
@@ -126,6 +144,8 @@ vi.mock("@workspace/db", () => ({
     customerId: { __col: "customerId" },
     name: { __col: "name" },
     address: { __col: "address" },
+    city: { __col: "city" },
+    state: { __col: "state" },
     zip: { __col: "zip" },
   },
   leasesTable: {
@@ -230,7 +250,10 @@ describe("seedAttachedLeasesIfMissing", () => {
 
     const ridgeProp = stores.properties.get(ids.properties.ridgeMotorInn)!;
     expect(ridgeProp["name"]).toBe("The Ridge Motor Inn");
-    expect(ridgeProp["address"]).toBe("");
+    expect(ridgeProp["address"]).toBe("2900 New Pinery Road");
+    expect(ridgeProp["city"]).toBe("Portage");
+    expect(ridgeProp["state"]).toBe("WI");
+    expect(ridgeProp["zip"]).toBe("53901");
     expect(ridgeProp["customerId"]).toBe(ids.customers.kfiStaffingLlc);
 
     const ridgeCust = stores.customers.get(ids.customers.kfiStaffingLlc)!;
@@ -250,6 +273,62 @@ describe("seedAttachedLeasesIfMissing", () => {
     expect(
       stores.properties.get(ids.properties.yellowHouse)!["customerId"],
     ).toBe(ids.customers.autozoneJeannette);
+  });
+
+  it("backfills a blank Ridge Motor Inn address on a re-run after the spec was filled in", async () => {
+    const ids = SEED_ATTACHED_LEASES_IDS;
+    // Simulate a DB that was seeded under the previous behavior, where the
+    // Ridge Motor Inn property was inserted with an empty address.
+    stores.customers.set(ids.customers.kfiStaffingLlc, {
+      id: ids.customers.kfiStaffingLlc,
+      name: "KFI Staffing LLC",
+    });
+    stores.properties.set(ids.properties.ridgeMotorInn, {
+      id: ids.properties.ridgeMotorInn,
+      customerId: ids.customers.kfiStaffingLlc,
+      name: "The Ridge Motor Inn",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+    });
+
+    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+
+    const ridge = stores.properties.get(ids.properties.ridgeMotorInn)!;
+    expect(ridge["address"]).toBe("2900 New Pinery Road");
+    expect(ridge["city"]).toBe("Portage");
+    expect(ridge["state"]).toBe("WI");
+    expect(ridge["zip"]).toBe("53901");
+    // No duplicate Ridge property row was created.
+    const ridgeRows = Array.from(stores.properties.values()).filter(
+      (p) => p["name"] === "The Ridge Motor Inn",
+    );
+    expect(ridgeRows).toHaveLength(1);
+  });
+
+  it("does not overwrite an already-populated address on re-run", async () => {
+    const ids = SEED_ATTACHED_LEASES_IDS;
+    stores.customers.set(ids.customers.kfiStaffingLlc, {
+      id: ids.customers.kfiStaffingLlc,
+      name: "KFI Staffing LLC",
+    });
+    stores.properties.set(ids.properties.ridgeMotorInn, {
+      id: ids.properties.ridgeMotorInn,
+      customerId: ids.customers.kfiStaffingLlc,
+      name: "The Ridge Motor Inn",
+      address: "999 Operator Override Rd",
+      city: "Somewhere",
+      state: "WI",
+      zip: "54321",
+    });
+
+    await seedAttachedLeasesIfMissing({ logger: silentLogger });
+
+    const ridge = stores.properties.get(ids.properties.ridgeMotorInn)!;
+    expect(ridge["address"]).toBe("999 Operator Override Rd");
+    expect(ridge["city"]).toBe("Somewhere");
+    expect(ridge["zip"]).toBe("54321");
   });
 
   it("is idempotent on re-run and does not overwrite operator edits", async () => {

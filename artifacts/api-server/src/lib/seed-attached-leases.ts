@@ -14,7 +14,10 @@ import type { Logger } from "pino";
 /**
  * Active leases extracted from the lease PDFs attached to the project but
  * never yet loaded into the DB. Mirrors `seed-adient.ts`: idempotent,
- * natural-key reconciled, never UPDATEs existing rows. Only readable,
+ * natural-key reconciled, generally insert-only — the one exception is a
+ * narrow backfill of address columns when an existing row was previously
+ * seeded with a blank address and the spec now carries a confirmed one
+ * (see Task #298). Only readable,
  * currently-active leases are seeded — image-only / signature-page-only /
  * empty-placeholder PDFs are intentionally skipped (see Task #287).
  */
@@ -154,10 +157,10 @@ const PROPERTIES: readonly PropertySpec[] = [
     id: RIDGE_MOTOR_INN_PROPERTY_ID,
     customerId: KFI_STAFFING_LLC_CUSTOMER_ID,
     name: "The Ridge Motor Inn",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
+    address: "2900 New Pinery Road",
+    city: "Portage",
+    state: "WI",
+    zip: "53901",
     monthlyRent: 0,
     landlordName: "The Ridge Motor Inn (Dilip Patel, owner)",
     landlordEmail: "",
@@ -171,8 +174,9 @@ const PROPERTIES: readonly PropertySpec[] = [
       "are Long Stays and tax exempt.",
     notes:
       "Hotel corporate-rate agreement with KFI Staffing LLC — not a per-unit " +
-      "apartment lease. Street address is not stated in the source PDF and " +
-      "is intentionally left blank (address TBD; do not guess). " +
+      "apartment lease. Street address (2900 New Pinery Road, Portage, WI 53901) " +
+      "was not stated in the source PDF; filled in from the operator-confirmed " +
+      "public hotel address so the property pin can geocode on the portfolio map. " +
       "Source: The_Ridge_Motor_Inn_1778107885976.pdf",
   },
 ];
@@ -292,7 +296,7 @@ const LEASES: readonly LeaseSpec[] = [
       "Stays of 30+ days are Long Stays and tax exempt.",
       "Amenities: free WiFi, weekly room cleaning, community room with kitchen appliances.",
       "Termination: either party may terminate with 30 days' written notice.",
-      "Property street address is not stated in the PDF; left blank (TBD), do not guess.",
+      "Property street address is not stated in the PDF; backfilled from the operator-confirmed public hotel address (2900 New Pinery Road, Portage, WI 53901) so the property pin can geocode (Task #298).",
       "Source document: The_Ridge_Motor_Inn_1778107885976.pdf.",
     ].join(" "),
   },
@@ -372,8 +376,10 @@ export interface SeedAttachedLeasesDeps {
  * Idempotently seed the customers, properties, and active leases extracted
  * from attached PDFs. Reconciles by natural keys: customer by name,
  * property by `(customerId, address, zip)`, lease by `(propertyId,
- * startDate, endDate, source-PDF marker in notes)`. Never UPDATEs
- * existing rows.
+ * startDate, endDate, source-PDF marker in notes)`. Generally insert-only;
+ * the one exception is a narrow backfill of property address columns when
+ * an existing row was previously seeded with a blank address and the spec
+ * now carries a confirmed one (see Task #298).
  */
 export async function seedAttachedLeasesIfMissing(
   deps: Partial<SeedAttachedLeasesDeps> = {},
@@ -436,22 +442,46 @@ export async function seedAttachedLeasesIfMissing(
       // Fallback for hotel-rate / address-TBD properties (e.g. The Ridge
       // Motor Inn): match by (customerId, name) so an operator/import that
       // already created the same property under a different ID — possibly
-      // with a populated address — is still recognized and not duplicated.
-      if (spec.address === "" && spec.zip === "") {
-        const byName = await tx
-          .select({ id: propertiesTable.id })
-          .from(propertiesTable)
-          .where(
-            and(
-              eq(propertiesTable.customerId, customerId),
-              eq(propertiesTable.name, spec.name),
-            ),
-          )
-          .limit(1);
-        if (byName.length > 0) {
-          propertyIdByKey.set(spec.id, byName[0]!.id);
-          continue;
+      // with a populated address, or seeded earlier with a blank address —
+      // is still recognized and not duplicated. If the existing row was
+      // seeded with a blank address and the spec now carries a confirmed
+      // address (e.g. Task #298 backfilled the Ridge Motor Inn address),
+      // backfill the address columns on the existing row so the property
+      // pin can geocode on the portfolio map.
+      const byName = await tx
+        .select({
+          id: propertiesTable.id,
+          address: propertiesTable.address,
+          zip: propertiesTable.zip,
+        })
+        .from(propertiesTable)
+        .where(
+          and(
+            eq(propertiesTable.customerId, customerId),
+            eq(propertiesTable.name, spec.name),
+          ),
+        )
+        .limit(1);
+      if (byName.length > 0) {
+        const row = byName[0]!;
+        if (
+          spec.address !== "" &&
+          spec.zip !== "" &&
+          row.address === "" &&
+          row.zip === ""
+        ) {
+          await tx
+            .update(propertiesTable)
+            .set({
+              address: spec.address,
+              city: spec.city,
+              state: spec.state,
+              zip: spec.zip,
+            })
+            .where(eq(propertiesTable.id, row.id));
         }
+        propertyIdByKey.set(spec.id, row.id);
+        continue;
       }
       const inserted = await tx
         .insert(propertiesTable)

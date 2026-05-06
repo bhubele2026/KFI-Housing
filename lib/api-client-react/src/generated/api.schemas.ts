@@ -44,6 +44,11 @@ export interface Customer {
   email: string;
   phone: string;
   notes: string;
+  /** Two-letter US state code used to group customers on the
+Customers page. Empty string when unknown. Populated by
+the Housing_Lease_MASTER importer (task #288).
+ */
+  state?: string;
 }
 
 export interface CustomerUpdate {
@@ -52,6 +57,7 @@ export interface CustomerUpdate {
   email?: string;
   phone?: string;
   notes?: string;
+  state?: string;
 }
 
 export type PropertyStatus =
@@ -309,6 +315,21 @@ export interface Lease {
    * @nullable
    */
   buyoutCost?: number | null;
+  /** Per-week rent (the natural unit in the master file).
+`monthlyRent` is the derived monthly equivalent. Defaults
+to 0 when unknown. Added by task #288.
+ */
+  weeklyCost?: number;
+  /** "Housing Vendor for Lease" column from the master file
+(often distinct from the property's landlord). Empty when
+unknown. Added by task #288.
+ */
+  vendor?: string;
+  /** True when the source row had ambiguous values (TBD, n/a,
+descriptive cost text) and an operator must triage the
+lease before treating it as Active. Added by task #288.
+ */
+  needsReview?: boolean;
 }
 
 export type LeaseUpdateStatus =
@@ -332,6 +353,9 @@ export interface LeaseUpdate {
   buyoutAvailable?: boolean;
   /** @nullable */
   buyoutCost?: number | null;
+  weeklyCost?: number;
+  vendor?: string;
+  needsReview?: boolean;
 }
 
 export interface Room {
@@ -557,6 +581,68 @@ export interface LeasePdfImportResult {
   candidates: LeasePdfPropertyCandidate[];
 }
 
+export type MasterLeaseImportRowDecisionCustomerAction =
+  (typeof MasterLeaseImportRowDecisionCustomerAction)[keyof typeof MasterLeaseImportRowDecisionCustomerAction];
+
+export const MasterLeaseImportRowDecisionCustomerAction = {
+  created: "created",
+  updated: "updated",
+  matched: "matched",
+} as const;
+
+export type MasterLeaseImportRowDecisionPropertyAction =
+  (typeof MasterLeaseImportRowDecisionPropertyAction)[keyof typeof MasterLeaseImportRowDecisionPropertyAction];
+
+export const MasterLeaseImportRowDecisionPropertyAction = {
+  created: "created",
+  updated: "updated",
+  matched: "matched",
+  skipped: "skipped",
+} as const;
+
+export type MasterLeaseImportRowDecisionLeaseAction =
+  (typeof MasterLeaseImportRowDecisionLeaseAction)[keyof typeof MasterLeaseImportRowDecisionLeaseAction];
+
+export const MasterLeaseImportRowDecisionLeaseAction = {
+  created: "created",
+  updated: "updated",
+  skipped: "skipped",
+} as const;
+
+export interface MasterLeaseImportRowDecision {
+  sourceRow: number;
+  customerName: string;
+  customerAction: MasterLeaseImportRowDecisionCustomerAction;
+  customerId: string;
+  customerMatchReason?: string;
+  propertyAction: MasterLeaseImportRowDecisionPropertyAction;
+  propertyId?: string;
+  propertyMatchReason?: string;
+  leaseAction: MasterLeaseImportRowDecisionLeaseAction;
+  leaseId?: string;
+  needsReview: boolean;
+  reviewReasons: string[];
+}
+
+export type MasterLeaseImportResultFuzzyCustomerMatchesItem = {
+  incoming: string;
+  matchedExisting: string;
+  distance: number;
+};
+
+export interface MasterLeaseImportResult {
+  customersCreated: number;
+  customersUpdated: number;
+  propertiesCreated: number;
+  propertiesUpdated: number;
+  leasesCreated: number;
+  leasesUpdated: number;
+  leasesSkipped: number;
+  rowsNeedingReview: MasterLeaseImportRowDecision[];
+  fuzzyCustomerMatches: MasterLeaseImportResultFuzzyCustomerMatchesItem[];
+  decisions: MasterLeaseImportRowDecision[];
+}
+
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];
@@ -590,6 +676,14 @@ address is corrected can pick them up.
 export type ImportLeasePdfBody = {
   /** A single lease PDF (`application/pdf`, max 10 MB). */
   file: Blob;
+};
+
+export type ImportMasterLeasesBody = {
+  /** Optional `.xlsx` workbook in the master-file shape.
+When omitted, the importer reads the bundled
+`attached_assets/Housing_Lease_MASTER_1778105244042.xlsx`.
+ */
+  file?: Blob;
 };
 
 export type DeleteRoom409 = {

@@ -95,6 +95,12 @@ export const ImportDataBody = zod.object({
       email: zod.string(),
       phone: zod.string(),
       notes: zod.string(),
+      state: zod
+        .string()
+        .optional()
+        .describe(
+          "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
+        ),
     }),
   ),
   properties: zod.array(
@@ -209,6 +215,24 @@ export const ImportDataBody = zod.object({
         .number()
         .nullish()
         .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
+      weeklyCost: zod
+        .number()
+        .optional()
+        .describe(
+          "Per-week rent (the natural unit in the master file).\n`monthlyRent` is the derived monthly equivalent. Defaults\nto 0 when unknown. Added by task #288.\n",
+        ),
+      vendor: zod
+        .string()
+        .optional()
+        .describe(
+          '\"Housing Vendor for Lease\" column from the master file\n(often distinct from the property\'s landlord). Empty when\nunknown. Added by task #288.\n',
+        ),
+      needsReview: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+        ),
     }),
   ),
   rooms: zod.array(
@@ -288,6 +312,12 @@ export const ListCustomersResponseItem = zod.object({
   email: zod.string(),
   phone: zod.string(),
   notes: zod.string(),
+  state: zod
+    .string()
+    .optional()
+    .describe(
+      "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
+    ),
 });
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
 
@@ -301,6 +331,12 @@ export const CreateCustomerBody = zod.object({
   email: zod.string(),
   phone: zod.string(),
   notes: zod.string(),
+  state: zod
+    .string()
+    .optional()
+    .describe(
+      "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
+    ),
 });
 
 /**
@@ -316,6 +352,7 @@ export const UpdateCustomerBody = zod.object({
   email: zod.string().optional(),
   phone: zod.string().optional(),
   notes: zod.string().optional(),
+  state: zod.string().optional(),
 });
 
 export const UpdateCustomerResponse = zod.object({
@@ -325,6 +362,12 @@ export const UpdateCustomerResponse = zod.object({
   email: zod.string(),
   phone: zod.string(),
   notes: zod.string(),
+  state: zod
+    .string()
+    .optional()
+    .describe(
+      "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
+    ),
 });
 
 /**
@@ -824,6 +867,24 @@ export const ListLeasesResponseItem = zod.object({
     .number()
     .nullish()
     .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
+  weeklyCost: zod
+    .number()
+    .optional()
+    .describe(
+      "Per-week rent (the natural unit in the master file).\n`monthlyRent` is the derived monthly equivalent. Defaults\nto 0 when unknown. Added by task #288.\n",
+    ),
+  vendor: zod
+    .string()
+    .optional()
+    .describe(
+      '\"Housing Vendor for Lease\" column from the master file\n(often distinct from the property\'s landlord). Empty when\nunknown. Added by task #288.\n',
+    ),
+  needsReview: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -858,6 +919,24 @@ export const CreateLeaseBody = zod.object({
     .number()
     .nullish()
     .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
+  weeklyCost: zod
+    .number()
+    .optional()
+    .describe(
+      "Per-week rent (the natural unit in the master file).\n`monthlyRent` is the derived monthly equivalent. Defaults\nto 0 when unknown. Added by task #288.\n",
+    ),
+  vendor: zod
+    .string()
+    .optional()
+    .describe(
+      '\"Housing Vendor for Lease\" column from the master file\n(often distinct from the property\'s landlord). Empty when\nunknown. Added by task #288.\n',
+    ),
+  needsReview: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+    ),
 });
 
 /**
@@ -963,6 +1042,80 @@ export const ImportLeasePdfResponse = zod.object({
 });
 
 /**
+ * Idempotent admin import of the master housing lease spreadsheet
+(task #288). Accepts an optional uploaded `.xlsx` file; when no
+file is provided, the bundled `attached_assets/Housing_Lease_MASTER_*.xlsx`
+is used. Customers are matched by normalized name (Levenshtein ≤2 fuzzy
+fallback), properties by normalized address + zip, and leases by
+property + unit-number marker in the lease notes — so re-runs never
+produce duplicates and never overwrite operator edits to landlord /
+payment data.
+
+Rows whose source cells are ambiguous ("TBD", "n/a", "$69.23???",
+descriptive prose) are still imported but flagged with
+`lease.needsReview = true` so an operator can triage them later.
+
+ * @summary Import the Housing_Lease_MASTER spreadsheet (idempotent)
+ */
+export const ImportMasterLeasesBody = zod.object({
+  file: zod
+    .instanceof(File)
+    .optional()
+    .describe(
+      "Optional `.xlsx` workbook in the master-file shape.\nWhen omitted, the importer reads the bundled\n`attached_assets\/Housing_Lease_MASTER_1778105244042.xlsx`.\n",
+    ),
+});
+
+export const ImportMasterLeasesResponse = zod.object({
+  customersCreated: zod.number(),
+  customersUpdated: zod.number(),
+  propertiesCreated: zod.number(),
+  propertiesUpdated: zod.number(),
+  leasesCreated: zod.number(),
+  leasesUpdated: zod.number(),
+  leasesSkipped: zod.number(),
+  rowsNeedingReview: zod.array(
+    zod.object({
+      sourceRow: zod.number(),
+      customerName: zod.string(),
+      customerAction: zod.enum(["created", "updated", "matched"]),
+      customerId: zod.string(),
+      customerMatchReason: zod.string().optional(),
+      propertyAction: zod.enum(["created", "updated", "matched", "skipped"]),
+      propertyId: zod.string().optional(),
+      propertyMatchReason: zod.string().optional(),
+      leaseAction: zod.enum(["created", "updated", "skipped"]),
+      leaseId: zod.string().optional(),
+      needsReview: zod.boolean(),
+      reviewReasons: zod.array(zod.string()),
+    }),
+  ),
+  fuzzyCustomerMatches: zod.array(
+    zod.object({
+      incoming: zod.string(),
+      matchedExisting: zod.string(),
+      distance: zod.number(),
+    }),
+  ),
+  decisions: zod.array(
+    zod.object({
+      sourceRow: zod.number(),
+      customerName: zod.string(),
+      customerAction: zod.enum(["created", "updated", "matched"]),
+      customerId: zod.string(),
+      customerMatchReason: zod.string().optional(),
+      propertyAction: zod.enum(["created", "updated", "matched", "skipped"]),
+      propertyId: zod.string().optional(),
+      propertyMatchReason: zod.string().optional(),
+      leaseAction: zod.enum(["created", "updated", "skipped"]),
+      leaseId: zod.string().optional(),
+      needsReview: zod.boolean(),
+      reviewReasons: zod.array(zod.string()),
+    }),
+  ),
+});
+
+/**
  * @summary Update a lease
  */
 export const UpdateLeaseParams = zod.object({
@@ -987,6 +1140,9 @@ export const UpdateLeaseBody = zod.object({
   clauses: zod.string().optional(),
   buyoutAvailable: zod.boolean().optional(),
   buyoutCost: zod.number().nullish(),
+  weeklyCost: zod.number().optional(),
+  vendor: zod.string().optional(),
+  needsReview: zod.boolean().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1017,6 +1173,24 @@ export const UpdateLeaseResponse = zod.object({
     .number()
     .nullish()
     .describe("Cost of the buyout option, or null when unknown \/ N\/A."),
+  weeklyCost: zod
+    .number()
+    .optional()
+    .describe(
+      "Per-week rent (the natural unit in the master file).\n`monthlyRent` is the derived monthly equivalent. Defaults\nto 0 when unknown. Added by task #288.\n",
+    ),
+  vendor: zod
+    .string()
+    .optional()
+    .describe(
+      '\"Housing Vendor for Lease\" column from the master file\n(often distinct from the property\'s landlord). Empty when\nunknown. Added by task #288.\n',
+    ),
+  needsReview: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the source row had ambiguous values (TBD, n\/a,\ndescriptive cost text) and an operator must triage the\nlease before treating it as Active. Added by task #288.\n",
+    ),
 });
 
 /**

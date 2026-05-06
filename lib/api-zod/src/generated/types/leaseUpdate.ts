@@ -20,4 +20,7 @@ export interface LeaseUpdate {
   buyoutAvailable?: boolean;
   /** @nullable */
   buyoutCost?: number | null;
+  weeklyCost?: number;
+  vendor?: string;
+  needsReview?: boolean;
 }

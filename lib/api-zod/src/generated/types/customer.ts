@@ -13,4 +13,9 @@ export interface Customer {
   email: string;
   phone: string;
   notes: string;
+  /** Two-letter US state code used to group customers on the
+Customers page. Empty string when unknown. Populated by
+the Housing_Lease_MASTER importer (task #288).
+ */
+  state?: string;
 }

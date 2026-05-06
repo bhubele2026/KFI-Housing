@@ -26,10 +26,12 @@ import type {
   DeleteRoom409,
   HealthStatus,
   ImportLeasePdfBody,
+  ImportMasterLeasesBody,
   ImportPayload,
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  MasterLeaseImportResult,
   Occupant,
   OccupantUpdate,
   Property,
@@ -1393,6 +1395,109 @@ export const useImportLeasePdf = <
   TContext
 > => {
   return useMutation(getImportLeasePdfMutationOptions(options));
+};
+
+/**
+ * Idempotent admin import of the master housing lease spreadsheet
+(task #288). Accepts an optional uploaded `.xlsx` file; when no
+file is provided, the bundled `attached_assets/Housing_Lease_MASTER_*.xlsx`
+is used. Customers are matched by normalized name (Levenshtein ≤2 fuzzy
+fallback), properties by normalized address + zip, and leases by
+property + unit-number marker in the lease notes — so re-runs never
+produce duplicates and never overwrite operator edits to landlord /
+payment data.
+
+Rows whose source cells are ambiguous ("TBD", "n/a", "$69.23???",
+descriptive prose) are still imported but flagged with
+`lease.needsReview = true` so an operator can triage them later.
+
+ * @summary Import the Housing_Lease_MASTER spreadsheet (idempotent)
+ */
+export const getImportMasterLeasesUrl = () => {
+  return `/api/leases/import-master`;
+};
+
+export const importMasterLeases = async (
+  importMasterLeasesBody?: ImportMasterLeasesBody,
+  options?: RequestInit,
+): Promise<MasterLeaseImportResult> => {
+  const formData = new FormData();
+  if (importMasterLeasesBody?.file !== undefined) {
+    formData.append(`file`, importMasterLeasesBody.file);
+  }
+
+  return customFetch<MasterLeaseImportResult>(getImportMasterLeasesUrl(), {
+    ...options,
+    method: "POST",
+    body: formData,
+  });
+};
+
+export const getImportMasterLeasesMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importMasterLeases>>,
+    TError,
+    { data: BodyType<ImportMasterLeasesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importMasterLeases>>,
+  TError,
+  { data: BodyType<ImportMasterLeasesBody> },
+  TContext
+> => {
+  const mutationKey = ["importMasterLeases"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importMasterLeases>>,
+    { data: BodyType<ImportMasterLeasesBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importMasterLeases(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportMasterLeasesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importMasterLeases>>
+>;
+export type ImportMasterLeasesMutationBody = BodyType<ImportMasterLeasesBody>;
+export type ImportMasterLeasesMutationError = ErrorType<void>;
+
+/**
+ * @summary Import the Housing_Lease_MASTER spreadsheet (idempotent)
+ */
+export const useImportMasterLeases = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importMasterLeases>>,
+    TError,
+    { data: BodyType<ImportMasterLeasesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importMasterLeases>>,
+  TError,
+  { data: BodyType<ImportMasterLeasesBody> },
+  TContext
+> => {
+  return useMutation(getImportMasterLeasesMutationOptions(options));
 };
 
 /**

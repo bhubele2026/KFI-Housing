@@ -16,6 +16,16 @@ export const leasesTable = pgTable("leases", {
   clauses: text("clauses").notNull().default(""),
   buyoutAvailable: boolean("buyout_available").notNull().default(false),
   buyoutCost: doublePrecision("buyout_cost"),
+  // Master-lease import fields (task #288). The master spreadsheet
+  // tracks rent as a per-week-per-bed amount; `monthlyRent` is the
+  // derived monthly equivalent when both are present. `vendor` is the
+  // "Housing Vendor for Lease" column from the master file (often
+  // distinct from the property's landlord). `needsReview` is set when
+  // the source row had ambiguous / TBD / descriptive values that an
+  // operator must triage before the lease can be considered active.
+  weeklyCost: doublePrecision("weekly_cost").notNull().default(0),
+  vendor: text("vendor").notNull().default(""),
+  needsReview: boolean("needs_review").notNull().default(false),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

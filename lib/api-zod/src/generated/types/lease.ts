@@ -26,4 +26,19 @@ export interface Lease {
    * @nullable
    */
   buyoutCost?: number | null;
+  /** Per-week rent (the natural unit in the master file).
+`monthlyRent` is the derived monthly equivalent. Defaults
+to 0 when unknown. Added by task #288.
+ */
+  weeklyCost?: number;
+  /** "Housing Vendor for Lease" column from the master file
+(often distinct from the property's landlord). Empty when
+unknown. Added by task #288.
+ */
+  vendor?: string;
+  /** True when the source row had ambiguous values (TBD, n/a,
+descriptive cost text) and an operator must triage the
+lease before treating it as Active. Added by task #288.
+ */
+  needsReview?: boolean;
 }

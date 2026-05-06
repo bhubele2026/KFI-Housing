@@ -61,6 +61,7 @@ function makeCustomer(overrides: Partial<CustomerRow> = {}): CustomerRow {
     email: "",
     phone: "",
     notes: "",
+    state: "",
     ...overrides,
   };
 }

@@ -7,6 +7,10 @@ export const customersTable = pgTable("customers", {
   email: text("email").notNull().default(""),
   phone: text("phone").notNull().default(""),
   notes: text("notes").notNull().default(""),
+  // US state code (e.g. "WI", "MN", "MO") used to group customers on the
+  // Customers page and lock the master-lease import to its correct
+  // section header. Empty string when unknown.
+  state: text("state").notNull().default(""),
 });
 
 export type CustomerRow = typeof customersTable.$inferSelect;

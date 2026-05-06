@@ -12,4 +12,5 @@ export interface CustomerUpdate {
   email?: string;
   phone?: string;
   notes?: string;
+  state?: string;
 }

@@ -340,6 +340,51 @@ paths:
         "422":
           description: The PDF could not be parsed (e.g. scanned / image-only) or extraction failed.
 
+  /leases/import-master:
+    post:
+      operationId: importMasterLeases
+      tags: [leases]
+      summary: Import the Housing_Lease_MASTER spreadsheet (idempotent)
+      description: |
+        Idempotent admin import of the master housing lease spreadsheet
+        (task #288). Accepts an optional uploaded `.xlsx` file; when no
+        file is provided, the bundled `attached_assets/Housing_Lease_MASTER_*.xlsx`
+        is used. Customers are matched by normalized name (Levenshtein ≤2 fuzzy
+        fallback), properties by normalized address + zip, and leases by
+        property + unit-number marker in the lease notes — so re-runs never
+        produce duplicates and never overwrite operator edits to landlord /
+        payment data.
+
+        Rows whose source cells are ambiguous ("TBD", "n/a", "$69.23???",
+        descriptive prose) are still imported but flagged with
+        `lease.needsReview = true` so an operator can triage them later.
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: |
+                    Optional `.xlsx` workbook in the master-file shape.
+                    When omitted, the importer reads the bundled
+                    `attached_assets/Housing_Lease_MASTER_1778105244042.xlsx`.
+      responses:
+        "200":
+          description: Import complete; returns a structured per-row summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MasterLeaseImportResult" }
+        "413":
+          description: The uploaded workbook is larger than 5 MB.
+        "415":
+          description: The uploaded file is not an `.xlsx` workbook.
+        "500":
+          description: Importer failed (transaction rolled back).
+
   /leases/{id}:
     patch:
       operationId: updateLease
@@ -666,6 +711,9 @@ components:
 
     Customer:
       type: object
+      # `state` is intentionally NOT required so older import payloads
+      # (and pre-extension API clients) keep parsing. The DB column has
+      # a `""` default, so fresh API responses always include it.
       required: [id, name, contactName, email, phone, notes]
       properties:
         id: { type: string }
@@ -674,6 +722,12 @@ components:
         email: { type: string }
         phone: { type: string }
         notes: { type: string }
+        state:
+          type: string
+          description: |
+            Two-letter US state code used to group customers on the
+            Customers page. Empty string when unknown. Populated by
+            the Housing_Lease_MASTER importer (task #288).
     CustomerUpdate:
       type: object
       properties:
@@ -682,6 +736,7 @@ components:
         email: { type: string }
         phone: { type: string }
         notes: { type: string }
+        state: { type: string }
 
     Property:
       type: object
@@ -894,6 +949,24 @@ components:
         buyoutCost:
           type: ["number", "null"]
           description: "Cost of the buyout option, or null when unknown / N/A."
+        weeklyCost:
+          type: number
+          description: |
+            Per-week rent (the natural unit in the master file).
+            `monthlyRent` is the derived monthly equivalent. Defaults
+            to 0 when unknown. Added by task #288.
+        vendor:
+          type: string
+          description: |
+            "Housing Vendor for Lease" column from the master file
+            (often distinct from the property's landlord). Empty when
+            unknown. Added by task #288.
+        needsReview:
+          type: boolean
+          description: |
+            True when the source row had ambiguous values (TBD, n/a,
+            descriptive cost text) and an operator must triage the
+            lease before treating it as Active. Added by task #288.
     LeaseUpdate:
       type: object
       properties:
@@ -908,6 +981,9 @@ components:
         buyoutAvailable: { type: boolean }
         buyoutCost:
           type: ["number", "null"]
+        weeklyCost: { type: number }
+        vendor: { type: string }
+        needsReview: { type: boolean }
 
     Room:
       type: object
@@ -1113,6 +1189,70 @@ components:
           maxItems: 5
           description: Top candidates sorted by score desc; may be empty.
           items: { $ref: "#/components/schemas/LeasePdfPropertyCandidate" }
+
+    MasterLeaseImportRowDecision:
+      type: object
+      required:
+        - sourceRow
+        - customerName
+        - customerAction
+        - customerId
+        - propertyAction
+        - leaseAction
+        - needsReview
+        - reviewReasons
+      properties:
+        sourceRow: { type: integer }
+        customerName: { type: string }
+        customerAction: { type: string, enum: [created, updated, matched] }
+        customerId: { type: string }
+        customerMatchReason: { type: string }
+        propertyAction: { type: string, enum: [created, updated, matched, skipped] }
+        propertyId: { type: string }
+        propertyMatchReason: { type: string }
+        leaseAction: { type: string, enum: [created, updated, skipped] }
+        leaseId: { type: string }
+        needsReview: { type: boolean }
+        reviewReasons:
+          type: array
+          items: { type: string }
+
+    MasterLeaseImportResult:
+      type: object
+      required:
+        - customersCreated
+        - customersUpdated
+        - propertiesCreated
+        - propertiesUpdated
+        - leasesCreated
+        - leasesUpdated
+        - leasesSkipped
+        - rowsNeedingReview
+        - fuzzyCustomerMatches
+        - decisions
+      properties:
+        customersCreated: { type: integer }
+        customersUpdated: { type: integer }
+        propertiesCreated: { type: integer }
+        propertiesUpdated: { type: integer }
+        leasesCreated: { type: integer }
+        leasesUpdated: { type: integer }
+        leasesSkipped: { type: integer }
+        rowsNeedingReview:
+          type: array
+          items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
+        fuzzyCustomerMatches:
+          type: array
+          items:
+            type: object
+            required: [incoming, matchedExisting, distance]
+            properties:
+              incoming: { type: string }
+              matchedExisting: { type: string }
+              distance: { type: integer }
+        decisions:
+          type: array
+          items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
 
     ImportPayload:
       type: object

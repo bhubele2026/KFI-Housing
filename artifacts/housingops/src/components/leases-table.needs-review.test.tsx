@@ -150,6 +150,49 @@ describe("LeasesTable — needs-review surfaces", () => {
     );
   });
 
+  it("calls onMarkReviewed with the lease id when the per-row 'Mark as reviewed' button is clicked (Task #329)", async () => {
+    const onMarkReviewed = vi.fn();
+    await render(
+      <LeasesTable
+        leases={[flaggedLease, cleanLease]}
+        properties={[flaggedProperty]}
+        onDelete={() => {}}
+        onMarkReviewed={onMarkReviewed}
+        originPath="/leases"
+      />,
+    );
+    const btn = container.querySelector(
+      '[data-testid="button-mark-lease-reviewed-l-flagged"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    // Clean rows have nothing to clear, so the action is hidden there.
+    expect(
+      container.querySelector(
+        '[data-testid="button-mark-lease-reviewed-l-clean"]',
+      ),
+    ).toBeNull();
+    await act(async () => {
+      btn!.click();
+    });
+    expect(onMarkReviewed).toHaveBeenCalledWith("l-flagged");
+  });
+
+  it("hides the per-row 'Mark as reviewed' button when no onMarkReviewed handler is wired", async () => {
+    await render(
+      <LeasesTable
+        leases={[flaggedLease]}
+        properties={[flaggedProperty]}
+        onDelete={() => {}}
+        originPath="/leases"
+      />,
+    );
+    expect(
+      container.querySelector(
+        '[data-testid="button-mark-lease-reviewed-l-flagged"]',
+      ),
+    ).toBeNull();
+  });
+
   it("renders a per-row Fix link pointing at /leases/<id>?focus=rent for flagged leases", async () => {
     await render(
       <LeasesTable

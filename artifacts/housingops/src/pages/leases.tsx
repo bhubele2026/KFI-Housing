@@ -607,6 +607,13 @@ export default function Leases() {
                 showProperty
                 onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
                 onDelete={deleteLease}
+                onMarkReviewed={(leaseId) => {
+                  updateLease(leaseId, { needsReview: false });
+                  toast({
+                    title: "Marked as reviewed",
+                    description: "The 'Needs review' flag has been cleared.",
+                  });
+                }}
                 placeholderProperties={visiblePlaceholderProperties}
                 roomNightLogs={roomNightLogs}
                 emptyAction={
@@ -679,6 +686,13 @@ export default function Leases() {
                           navigate(`/properties/${propertyId}`)
                         }
                         onDelete={deleteLease}
+                        onMarkReviewed={(leaseId) => {
+                          updateLease(leaseId, { needsReview: false });
+                          toast({
+                            title: "Marked as reviewed",
+                            description: "The 'Needs review' flag has been cleared.",
+                          });
+                        }}
                         roomNightLogs={roomNightLogs}
                         originPath="/leases"
                       />

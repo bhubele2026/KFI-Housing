@@ -1317,6 +1317,13 @@ export default function PropertyDetail() {
                   showProperty={false}
                   showCustomer={false}
                   onDelete={deleteLease}
+                  onMarkReviewed={(leaseId) => {
+                    updateLease(leaseId, { needsReview: false });
+                    toast({
+                      title: "Marked as reviewed",
+                      description: "The 'Needs review' flag has been cleared.",
+                    });
+                  }}
                   emptyMessage="No leases yet"
                   // Render the branded EmptyState block (icon + headline +
                   // CTA) when this property has no leases — same treatment

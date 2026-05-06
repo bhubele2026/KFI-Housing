@@ -4,7 +4,7 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
@@ -26,6 +26,16 @@ export interface LeasesTableProps {
   /** Optional click handler when a customer name is clicked. */
   onCustomerClick?: (customerId: string) => void;
   onDelete: (id: string) => void;
+  /**
+   * Optional handler for the per-row "Mark as reviewed" quick-action that
+   * appears next to the Fix shortcut on flagged rows. Wired in pages that
+   * have access to the data store's `updateLease` (Leases page, Property
+   * detail's Leases tab) so operators can clear `needsReview` without
+   * opening each lease (Task #329). When omitted the icon is hidden — the
+   * mockup sandbox / unit tests that don't pass it keep the original two
+   * actions only.
+   */
+  onMarkReviewed?: (id: string) => void;
   /** Custom message for the empty state. */
   emptyMessage?: string;
   /** Optional CTA rendered inside the empty-state block (e.g. "Add Lease"). */
@@ -125,6 +135,7 @@ export function LeasesTable({
   onPropertyClick,
   onCustomerClick,
   onDelete,
+  onMarkReviewed,
   emptyMessage = "No leases found.",
   emptyAction,
   placeholderProperties = [],
@@ -394,6 +405,30 @@ export function LeasesTable({
                           </a>
                         );
                       })()}
+                      {lease.needsReview && onMarkReviewed && (
+                        // Per-row "Mark as reviewed" quick-action (Task #329)
+                        // — clears `needsReview` via the same updateLease
+                        // path the lease detail page's button uses, so
+                        // operators can triage a long list of flagged rows
+                        // without opening each one. Mirrors the styling of
+                        // the lease-detail header button (amber outline +
+                        // CheckCircle2 icon) so the two surfaces feel like
+                        // the same action.
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-amber-700 hover:text-amber-800"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMarkReviewed(lease.id);
+                          }}
+                          data-testid={`button-mark-lease-reviewed-${lease.id}`}
+                          aria-label="Mark lease as reviewed"
+                          title="Mark as reviewed"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                       {lease.needsReview && (
                         // Quick-fix shortcut for flagged leases. Threads the
                         // origin path through (so the back-link returns

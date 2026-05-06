@@ -4,9 +4,15 @@ import {
   customersTable,
   propertiesTable,
   leasesTable,
+  roomsTable,
+  bedsTable,
+  occupantsTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
+  type InsertRoomRow,
+  type InsertBedRow,
+  type InsertOccupantRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
@@ -15,6 +21,12 @@ export const PATRIOT_BARABOO_CUSTOMER_ID = "cust-kfi-baraboo";
 export const PATRIOT_BARABOO_PROPERTY_ID = "prop-patriot-baraboo-1850-pine";
 export const patriotBarabooLeaseId = (unit: string): string =>
   `lease-patriot-baraboo-u${unit}`;
+export const patriotBarabooRoomId = (unit: string): string =>
+  `room-patriot-baraboo-u${unit}`;
+export const patriotBarabooBedId = (unit: string, slot: number): string =>
+  `bed-patriot-baraboo-u${unit}-b${slot}`;
+export const patriotBarabooOccupantId = (unit: string, slot: number): string =>
+  `occ-patriot-baraboo-u${unit}-b${slot}`;
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Baraboo, WI";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
@@ -76,9 +88,10 @@ function buildPropertyRow(
       "each $1,675/mo base rent + $10.50 LLI + $4.50 insurance compliance " +
       "admin = $1,690 billed. Term 2025-09-30 → 2026-08-31, then " +
       "month-to-month. Up to 4 adults per unit. KFI to notify Patriot " +
-      "Properties of any tenant changes. List_of_Tenants PDF was " +
-      "image-only and could not be parsed — re-upload a typed roster to " +
-      "attach individual occupants.",
+      "Properties of any tenant changes. End-client: Milwaukee Valve. " +
+      "Occupant roster sourced from the Housing Master File 2026 " +
+      "(MV.Baraboo,WI sheet); each unit hot-beds 4 adults across two " +
+      "bedrooms (1st shift 5am–2pm, 2nd shift 2pm–midnight).",
     furnishings: [],
   };
 }
@@ -143,10 +156,108 @@ function buildLeaseRow(
   };
 }
 
+/**
+ * Per-unit occupant roster sourced from the Housing Master File 2026
+ * (sheet `MV.Baraboo,WI`). Each unit physically has two bedrooms; the
+ * crew hot-beds across two shifts, so the lease's 4-adult cap shows up
+ * here as 4 occupants per unit. Slot 1/2 share bedroom A (sheet "Bed
+ * 1"), slot 3/4 share bedroom B (sheet "Bed 2"). Move-in dates are the
+ * Excel serials from the master sheet (45931 → 2025-09-30, 45934 →
+ * 2025-10-03).
+ */
+interface PatriotBarabooOccupantSpec {
+  unit: string;
+  slot: 1 | 2 | 3 | 4;
+  name: string;
+  moveInDate: string;
+  shift: "1st" | "2nd";
+}
+
+const PATRIOT_BARABOO_ROSTER: readonly PatriotBarabooOccupantSpec[] = [
+  // Unit 509
+  { unit: "509", slot: 1, name: "Eladio Ramos Jr",         moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "509", slot: 2, name: "Lawrence Cortez",         moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "509", slot: 3, name: "Pedro Garcia",            moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "509", slot: 4, name: "Jonathan Ariola",         moveInDate: "2025-10-03", shift: "2nd" },
+  // Unit 510
+  { unit: "510", slot: 1, name: "Claudio Alvarado",        moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "510", slot: 2, name: "Juan Lozada Lugo",        moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "510", slot: 3, name: "Carlos Galvez Garcia",    moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "510", slot: 4, name: "Jacob Zepeda",            moveInDate: "2025-10-03", shift: "2nd" },
+  // Unit 512
+  { unit: "512", slot: 1, name: "Alexander A Marrero",     moveInDate: "2025-09-30", shift: "1st" },
+  { unit: "512", slot: 2, name: "Alexis Perez",            moveInDate: "2025-09-30", shift: "2nd" },
+  { unit: "512", slot: 3, name: "Xavior R Robinson",       moveInDate: "2025-09-30", shift: "1st" },
+  { unit: "512", slot: 4, name: "Dorian Kyles",            moveInDate: "2025-09-30", shift: "2nd" },
+  // Unit 811
+  { unit: "811", slot: 1, name: "Moices Bernal",           moveInDate: "2025-09-30", shift: "1st" },
+  { unit: "811", slot: 2, name: "Jacob C Ferguson",        moveInDate: "2025-09-30", shift: "2nd" },
+  { unit: "811", slot: 3, name: "Gabriel Romero",          moveInDate: "2025-09-30", shift: "1st" },
+  { unit: "811", slot: 4, name: "Ricco Antonio Lorenzana", moveInDate: "2025-09-30", shift: "2nd" },
+  // Unit 812
+  { unit: "812", slot: 1, name: "Abein Flores",            moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "812", slot: 2, name: "Antonio Hernandez",       moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "812", slot: 3, name: "Jose Castro",             moveInDate: "2025-10-03", shift: "1st" },
+  { unit: "812", slot: 4, name: "Ismael Meza",             moveInDate: "2025-10-03", shift: "2nd" },
+];
+
+export const PATRIOT_BARABOO_END_CLIENT = "Milwaukee Valve";
+const PATRIOT_BARABOO_CHARGE_PER_BED = PATRIOT_RENT / 4; // 418.75
+
+function buildRoomRow(unit: string, propertyId: string): InsertRoomRow {
+  return {
+    id: patriotBarabooRoomId(unit),
+    propertyId,
+    name: `Unit ${unit}`,
+    sqft: 0,
+    bathrooms: 0,
+    monthlyRent: PATRIOT_RENT,
+  };
+}
+
+function buildBedRow(
+  spec: PatriotBarabooOccupantSpec,
+  propertyId: string,
+  occupantId: string | null,
+): InsertBedRow {
+  return {
+    id: patriotBarabooBedId(spec.unit, spec.slot),
+    propertyId,
+    bedNumber: spec.slot,
+    roomId: patriotBarabooRoomId(spec.unit),
+    status: occupantId ? "Occupied" : "Vacant",
+    occupantId,
+  };
+}
+
+function buildOccupantRow(
+  spec: PatriotBarabooOccupantSpec,
+  propertyId: string,
+): InsertOccupantRow {
+  return {
+    id: patriotBarabooOccupantId(spec.unit, spec.slot),
+    name: spec.name,
+    email: "",
+    phone: "",
+    bedId: patriotBarabooBedId(spec.unit, spec.slot),
+    propertyId,
+    moveInDate: spec.moveInDate,
+    moveOutDate: null,
+    status: "Active",
+    chargePerBed: PATRIOT_BARABOO_CHARGE_PER_BED,
+    billingFrequency: "Monthly",
+    employeeId: "",
+    company: PATRIOT_BARABOO_END_CLIENT,
+  };
+}
+
 export interface SeedPatriotBarabooResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  roomsInserted: number;
+  bedsInserted: number;
+  occupantsInserted: number;
 }
 
 export interface SeedPatriotBarabooDeps {
@@ -264,13 +375,178 @@ export async function seedPatriotBarabooIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customerInserted, propertyInserted, leasesInserted };
+    // Rooms: one per unit. Reconcile by (propertyId, name) so an
+    // operator-created "Unit 509" room is reused instead of duplicated.
+    let roomsInserted = 0;
+    const roomIdByUnit = new Map<string, string>();
+    for (const spec of PATRIOT_BARABOO_LEASES) {
+      const roomName = `Unit ${spec.unit}`;
+      const existing = await tx
+        .select({ id: roomsTable.id })
+        .from(roomsTable)
+        .where(
+          and(
+            eq(roomsTable.propertyId, propertyId),
+            eq(roomsTable.name, roomName),
+          ),
+        )
+        .limit(1);
+      if (existing.length > 0) {
+        roomIdByUnit.set(spec.unit, existing[0]!.id);
+        continue;
+      }
+      const row = buildRoomRow(spec.unit, propertyId);
+      const inserted = await tx
+        .insert(roomsTable)
+        .values(row)
+        .onConflictDoNothing()
+        .returning({ id: roomsTable.id });
+      if (inserted.length > 0) {
+        roomsInserted += 1;
+        roomIdByUnit.set(spec.unit, row.id);
+      } else {
+        const reread = await tx
+          .select({ id: roomsTable.id })
+          .from(roomsTable)
+          .where(
+            and(
+              eq(roomsTable.propertyId, propertyId),
+              eq(roomsTable.name, roomName),
+            ),
+          )
+          .limit(1);
+        if (reread.length > 0) roomIdByUnit.set(spec.unit, reread[0]!.id);
+      }
+    }
+
+    // Occupants + beds: walk the roster. Reconcile occupants by
+    // (propertyId, name) so an operator-typed person isn't duplicated;
+    // reconcile beds by (propertyId, roomId, bedNumber) so an
+    // operator-created bed is reused. The only UPDATE we ever issue is
+    // back-filling `beds.occupantId` when the bed exists with no
+    // occupant AND we just inserted the matching occupant — that's the
+    // attachment the task is fundamentally about, and it never
+    // overwrites an existing tenant assignment.
+    let bedsInserted = 0;
+    let occupantsInserted = 0;
+    for (const spec of PATRIOT_BARABOO_ROSTER) {
+      const roomId = roomIdByUnit.get(spec.unit);
+      if (!roomId) continue;
+
+      // Resolve the bed first so a freshly-inserted occupant can be tied
+      // to a pre-existing operator bed (different id) instead of our
+      // deterministic placeholder. If the operator bed is already
+      // assigned to someone else, leave the roster occupant unassigned
+      // (bedId = null) so leasing can resolve the conflict — never
+      // point two occupants at the same bed.
+      const existingBed = await tx
+        .select({ id: bedsTable.id, occupantId: bedsTable.occupantId })
+        .from(bedsTable)
+        .where(
+          and(
+            eq(bedsTable.propertyId, propertyId),
+            eq(bedsTable.roomId, roomId),
+            eq(bedsTable.bedNumber, spec.slot),
+          ),
+        )
+        .limit(1);
+      const bedAlreadyTaken =
+        existingBed.length > 0 &&
+        existingBed[0]!.occupantId !== null &&
+        existingBed[0]!.occupantId !== "";
+      const bedId: string | null = bedAlreadyTaken
+        ? null
+        : existingBed.length > 0
+          ? existingBed[0]!.id
+          : patriotBarabooBedId(spec.unit, spec.slot);
+
+      const existingOcc = await tx
+        .select({ id: occupantsTable.id })
+        .from(occupantsTable)
+        .where(
+          and(
+            eq(occupantsTable.propertyId, propertyId),
+            eq(occupantsTable.name, spec.name),
+          ),
+        )
+        .limit(1);
+
+      let occupantId: string;
+      let occupantWasInserted = false;
+      if (existingOcc.length > 0) {
+        occupantId = existingOcc[0]!.id;
+      } else {
+        const row = { ...buildOccupantRow(spec, propertyId), bedId };
+        const inserted = await tx
+          .insert(occupantsTable)
+          .values(row)
+          .onConflictDoNothing()
+          .returning({ id: occupantsTable.id });
+        if (inserted.length > 0) {
+          occupantId = row.id;
+          occupantsInserted += 1;
+          occupantWasInserted = true;
+        } else {
+          const reread = await tx
+            .select({ id: occupantsTable.id })
+            .from(occupantsTable)
+            .where(
+              and(
+                eq(occupantsTable.propertyId, propertyId),
+                eq(occupantsTable.name, spec.name),
+              ),
+            )
+            .limit(1);
+          occupantId = reread.length > 0 ? reread[0]!.id : row.id;
+        }
+      }
+
+      if (existingBed.length > 0) {
+        // Bed already exists. Only fill in occupantId if it is still
+        // unset and we just inserted this occupant — never overwrite an
+        // operator-assigned tenant.
+        if (
+          occupantWasInserted &&
+          (existingBed[0]!.occupantId === null ||
+            existingBed[0]!.occupantId === "")
+        ) {
+          await tx
+            .update(bedsTable)
+            .set({ occupantId, status: "Occupied" })
+            .where(eq(bedsTable.id, existingBed[0]!.id));
+        }
+        continue;
+      }
+
+      const bedRow = {
+        ...buildBedRow(spec, propertyId, occupantId),
+        roomId,
+      };
+      const insertedBed = await tx
+        .insert(bedsTable)
+        .values(bedRow)
+        .onConflictDoNothing()
+        .returning({ id: bedsTable.id });
+      if (insertedBed.length > 0) bedsInserted += 1;
+    }
+
+    return {
+      customerInserted,
+      propertyInserted,
+      leasesInserted,
+      roomsInserted,
+      bedsInserted,
+      occupantsInserted,
+    };
   });
 
   if (
     result.customerInserted ||
     result.propertyInserted ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.roomsInserted > 0 ||
+    result.bedsInserted > 0 ||
+    result.occupantsInserted > 0
   ) {
     log.info(result, "Patriot Baraboo seed applied.");
   }

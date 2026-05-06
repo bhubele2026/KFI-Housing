@@ -8,7 +8,7 @@
 import type { Bed } from "./bed";
 import type { Customer } from "./customer";
 import type { Lease } from "./lease";
-import type { Occupant } from "./occupant";
+import type { OccupantCreate } from "./occupantCreate";
 import type { Property } from "./property";
 import type { Room } from "./room";
 import type { RoomNightLog } from "./roomNightLog";
@@ -20,7 +20,7 @@ export interface ImportPayload {
   leases: Lease[];
   rooms: Room[];
   beds: Bed[];
-  occupants: Occupant[];
+  occupants: OccupantCreate[];
   utilities: Utility[];
   /** Optional. Room-night log entries against hotel-rate leases.
 Older backups (pre task #299) won't include this — the

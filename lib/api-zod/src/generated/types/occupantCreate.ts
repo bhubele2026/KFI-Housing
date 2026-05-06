@@ -5,12 +5,12 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { OccupantBillingFrequency } from "./occupantBillingFrequency";
-import type { OccupantChargeSource } from "./occupantChargeSource";
-import type { OccupantStatus } from "./occupantStatus";
+import type { OccupantCreateBillingFrequency } from "./occupantCreateBillingFrequency";
+import type { OccupantCreateChargeSource } from "./occupantCreateChargeSource";
+import type { OccupantCreateStatus } from "./occupantCreateStatus";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
-export interface Occupant {
+export interface OccupantCreate {
   id: string;
   name: string;
   email: string;
@@ -21,12 +21,12 @@ export interface Occupant {
   propertyId: string | null;
   moveInDate: OptionalLeaseDate;
   moveOutDate: OptionalLeaseDate | null;
-  status: OccupantStatus;
+  status: OccupantCreateStatus;
   chargePerBed: number;
-  billingFrequency: OccupantBillingFrequency;
+  billingFrequency: OccupantCreateBillingFrequency;
   employeeId: string;
   company: string;
-  chargeSource: OccupantChargeSource;
-  chargeSourceCustomer: string;
-  chargeSourcePersonId: string;
+  chargeSource?: OccupantCreateChargeSource;
+  chargeSourceCustomer?: string;
+  chargeSourcePersonId?: string;
 }

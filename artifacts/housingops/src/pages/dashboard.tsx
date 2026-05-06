@@ -69,6 +69,21 @@ export default function Dashboard() {
     [occupants, scopedPropertyIds],
   );
 
+  // Payroll-reconciliation counters (Task #304). Only consider Active
+  // occupants — Former occupants don't show up in the property page so
+  // counting them in the dashboard total would mislead the operator.
+  // "Auto-reconciled" = `chargeSource === "payroll"`; everything else
+  // (including occupants the seeder couldn't match) is "manually set".
+  const activeOccupants = useMemo(
+    () => scopedOccupants.filter((o) => o.status === "Active"),
+    [scopedOccupants],
+  );
+  const autoReconciledOccupantCount = useMemo(
+    () => activeOccupants.filter((o) => o.chargeSource === "payroll").length,
+    [activeOccupants],
+  );
+  const manualOccupantCount = activeOccupants.length - autoReconciledOccupantCount;
+
   // "Needs review" mirrors the per-page filters that the dashboard tiles
   // deep-link into. Each predicate matches what the corresponding page
   // shows when `?needsReview=1` is set — keeping the counts in sync with
@@ -348,6 +363,52 @@ export default function Dashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeOccupants.length > 0 && (
+          <Card data-testid="card-payroll-reconciliation">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Receipt className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Payroll reconciliation</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <p
+                    className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400"
+                    data-testid="text-payroll-auto-reconciled-count"
+                  >
+                    {autoReconciledOccupantCount}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Occupant{autoReconciledOccupantCount === 1 ? "" : "s"} with charge auto-set from payroll.
+                  </p>
+                </div>
+                <div>
+                  <p
+                    className="text-2xl font-bold tabular-nums"
+                    data-testid="text-payroll-manual-count"
+                  >
+                    {manualOccupantCount}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Occupant{manualOccupantCount === 1 ? "" : "s"} with manually-entered charge.
+                  </p>
+                </div>
+                <div>
+                  <p
+                    className="text-2xl font-bold tabular-nums text-muted-foreground"
+                    data-testid="text-payroll-total-count"
+                  >
+                    {activeOccupants.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Total active occupants in scope.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -642,7 +642,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Occupant" }
+            schema: { $ref: "#/components/schemas/OccupantCreate" }
       responses:
         "201":
           description: Created
@@ -1229,6 +1229,9 @@ components:
         - billingFrequency
         - employeeId
         - company
+        - chargeSource
+        - chargeSourceCustomer
+        - chargeSourcePersonId
       properties:
         id: { type: string }
         name: { type: string }
@@ -1248,6 +1251,54 @@ components:
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
         employeeId: { type: string }
         company: { type: string }
+        # Provenance of chargePerBed + billingFrequency. "" = manual,
+        # "payroll" = set by the housing deduction seeder. The customer
+        # and personId pair come straight from the payroll export row
+        # so the UI can show "from payroll (Acme · 2004810)".
+        chargeSource: { type: string, enum: ["", "payroll"] }
+        chargeSourceCustomer: { type: string }
+        chargeSourcePersonId: { type: string }
+    # Like `Occupant` but with the chargeSource* provenance fields
+    # optional — newly-created occupants are assumed to be manually
+    # entered, and the seeder is the only writer that stamps these.
+    OccupantCreate:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - phone
+        - bedId
+        - propertyId
+        - moveInDate
+        - moveOutDate
+        - status
+        - chargePerBed
+        - billingFrequency
+        - employeeId
+        - company
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        bedId:
+          type: ["string", "null"]
+        propertyId:
+          type: ["string", "null"]
+        moveInDate: { $ref: "#/components/schemas/OptionalLeaseDate" }
+        moveOutDate:
+          oneOf:
+            - $ref: "#/components/schemas/OptionalLeaseDate"
+            - type: "null"
+        status: { type: string, enum: [Active, Former] }
+        chargePerBed: { type: number }
+        billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
+        employeeId: { type: string }
+        company: { type: string }
+        chargeSource: { type: string, enum: ["", "payroll"] }
+        chargeSourceCustomer: { type: string }
+        chargeSourcePersonId: { type: string }
     OccupantUpdate:
       type: object
       properties:
@@ -1268,6 +1319,9 @@ components:
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
         employeeId: { type: string }
         company: { type: string }
+        chargeSource: { type: string, enum: ["", "payroll"] }
+        chargeSourceCustomer: { type: string }
+        chargeSourcePersonId: { type: string }
 
     Utility:
       type: object
@@ -1516,8 +1570,11 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Bed" }
         occupants:
+          # Use OccupantCreate so legacy export bundles (which predate
+          # the chargeSource* provenance fields added in Task #304)
+          # keep round-tripping through POST /import.
           type: array
-          items: { $ref: "#/components/schemas/Occupant" }
+          items: { $ref: "#/components/schemas/OccupantCreate" }
         utilities:
           type: array
           items: { $ref: "#/components/schemas/Utility" }

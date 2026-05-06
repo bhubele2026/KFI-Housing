@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OccupantUpdateBillingFrequency } from "./occupantUpdateBillingFrequency";
+import type { OccupantUpdateChargeSource } from "./occupantUpdateChargeSource";
 import type { OccupantUpdateStatus } from "./occupantUpdateStatus";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
@@ -24,4 +25,7 @@ export interface OccupantUpdate {
   billingFrequency?: OccupantUpdateBillingFrequency;
   employeeId?: string;
   company?: string;
+  chargeSource?: OccupantUpdateChargeSource;
+  chargeSourceCustomer?: string;
+  chargeSourcePersonId?: string;
 }

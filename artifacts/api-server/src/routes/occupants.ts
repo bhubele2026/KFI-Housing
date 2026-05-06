@@ -37,7 +37,19 @@ router.post("/occupants", async (req, res): Promise<void> => {
     });
     return;
   }
-  const [row] = await db.insert(occupantsTable).values(body.data).returning();
+  // Mirror the DB column defaults explicitly so the response always
+  // carries the chargeSource* provenance fields, even before the seeder
+  // has touched the row. New occupants created via this endpoint are
+  // manual entries by definition (the seeder uses `db.update` directly).
+  const [row] = await db
+    .insert(occupantsTable)
+    .values({
+      chargeSource: "",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
+      ...body.data,
+    })
+    .returning();
   res.status(201).json(UpdateOccupantResponse.parse(row));
 });
 
@@ -52,9 +64,26 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  // A manual edit to chargePerBed or billingFrequency invalidates the
+  // payroll provenance — the value no longer "comes from payroll", so
+  // we clear the source stamps unless the caller explicitly set them
+  // (the seeder writes all four fields together when it stamps a row).
+  const updates = { ...body.data };
+  const touchesCharge =
+    Object.prototype.hasOwnProperty.call(updates, "chargePerBed") ||
+    Object.prototype.hasOwnProperty.call(updates, "billingFrequency");
+  const setsSource =
+    Object.prototype.hasOwnProperty.call(updates, "chargeSource") ||
+    Object.prototype.hasOwnProperty.call(updates, "chargeSourceCustomer") ||
+    Object.prototype.hasOwnProperty.call(updates, "chargeSourcePersonId");
+  if (touchesCharge && !setsSource) {
+    updates.chargeSource = "";
+    updates.chargeSourceCustomer = "";
+    updates.chargeSourcePersonId = "";
+  }
   const [row] = await db
     .update(occupantsTable)
-    .set(body.data)
+    .set(updates)
     .where(eq(occupantsTable.id, params.data.id))
     .returning();
   if (!row) {

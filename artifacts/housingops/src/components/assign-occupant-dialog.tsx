@@ -175,6 +175,11 @@ export function AssignOccupantDialog({
       billingFrequency: form.billingFrequency,
       email: form.email,
       phone: form.phone,
+      // Newly-created occupants are entered manually through this dialog;
+      // payroll provenance is reserved for the seeder.
+      chargeSource: "",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
     };
     onAssign(occ, resolvedBed);
     setOpen(false);

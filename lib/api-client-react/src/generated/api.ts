@@ -33,6 +33,7 @@ import type {
   LeaseUpdate,
   MasterLeaseImportResult,
   Occupant,
+  OccupantCreate,
   OccupantUpdate,
   Property,
   PropertyUpdate,
@@ -2739,14 +2740,14 @@ export const getCreateOccupantUrl = () => {
 };
 
 export const createOccupant = async (
-  occupant: Occupant,
+  occupantCreate: OccupantCreate,
   options?: RequestInit,
 ): Promise<Occupant> => {
   return customFetch<Occupant>(getCreateOccupantUrl(), {
     ...options,
     method: "POST",
     headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(occupant),
+    body: JSON.stringify(occupantCreate),
   });
 };
 
@@ -2757,14 +2758,14 @@ export const getCreateOccupantMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createOccupant>>,
     TError,
-    { data: BodyType<Occupant> },
+    { data: BodyType<OccupantCreate> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof createOccupant>>,
   TError,
-  { data: BodyType<Occupant> },
+  { data: BodyType<OccupantCreate> },
   TContext
 > => {
   const mutationKey = ["createOccupant"];
@@ -2778,7 +2779,7 @@ export const getCreateOccupantMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof createOccupant>>,
-    { data: BodyType<Occupant> }
+    { data: BodyType<OccupantCreate> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -2791,7 +2792,7 @@ export const getCreateOccupantMutationOptions = <
 export type CreateOccupantMutationResult = NonNullable<
   Awaited<ReturnType<typeof createOccupant>>
 >;
-export type CreateOccupantMutationBody = BodyType<Occupant>;
+export type CreateOccupantMutationBody = BodyType<OccupantCreate>;
 export type CreateOccupantMutationError = ErrorType<unknown>;
 
 /**
@@ -2804,14 +2805,14 @@ export const useCreateOccupant = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createOccupant>>,
     TError,
-    { data: BodyType<Occupant> },
+    { data: BodyType<OccupantCreate> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof createOccupant>>,
   TError,
-  { data: BodyType<Occupant> },
+  { data: BodyType<OccupantCreate> },
   TContext
 > => {
   return useMutation(getCreateOccupantMutationOptions(options));

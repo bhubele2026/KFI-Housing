@@ -362,6 +362,9 @@ export async function seedHousingDeductions(
       propertyId: occupantsTable.propertyId,
       chargePerBed: occupantsTable.chargePerBed,
       billingFrequency: occupantsTable.billingFrequency,
+      chargeSource: occupantsTable.chargeSource,
+      chargeSourceCustomer: occupantsTable.chargeSourceCustomer,
+      chargeSourcePersonId: occupantsTable.chargeSourcePersonId,
     })
     .from(occupantsTable);
 
@@ -461,7 +464,10 @@ export async function seedHousingDeductions(
     else if (matchPath === "nameOnly") matchedByNameOnly++;
     const isCorrect =
       target.billingFrequency === "Weekly" &&
-      Math.abs((target.chargePerBed ?? 0) - row.weekly) < 1e-6;
+      Math.abs((target.chargePerBed ?? 0) - row.weekly) < 1e-6 &&
+      target.chargeSource === "payroll" &&
+      target.chargeSourceCustomer === row.customer &&
+      target.chargeSourcePersonId === row.personId;
 
     if (isCorrect) {
       alreadyCorrect++;
@@ -470,7 +476,16 @@ export async function seedHousingDeductions(
 
     await database
       .update(occupantsTable)
-      .set({ chargePerBed: row.weekly, billingFrequency: "Weekly" })
+      .set({
+        chargePerBed: row.weekly,
+        billingFrequency: "Weekly",
+        // Stamp provenance so the property page can render a "from
+        // payroll" badge and the dashboard counter can tell auto-
+        // reconciled occupants apart from manually-entered ones.
+        chargeSource: "payroll",
+        chargeSourceCustomer: row.customer,
+        chargeSourcePersonId: row.personId,
+      })
       .where(eq(occupantsTable.id, target.id));
     updated++;
   }

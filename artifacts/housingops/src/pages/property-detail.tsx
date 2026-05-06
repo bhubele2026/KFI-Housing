@@ -1660,7 +1660,30 @@ export default function PropertyDetail() {
                                             <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
-                                            <TableCell className="text-right"><InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} /></TableCell>
+                                            <TableCell className="text-right">
+                                              <div className="flex items-center justify-end gap-1.5">
+                                                <InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} />
+                                                {occ.chargeSource === "payroll" && (
+                                                  <Tooltip delayDuration={100}>
+                                                    <TooltipTrigger asChild>
+                                                      <Badge
+                                                        variant="secondary"
+                                                        className="h-5 px-1.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800 cursor-help"
+                                                        data-testid={`badge-payroll-source-${occ.id}`}
+                                                      >
+                                                        from payroll
+                                                      </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" className="text-xs">
+                                                      <p className="font-semibold">Auto-reconciled from payroll</p>
+                                                      <p className="text-muted-foreground">
+                                                        {occ.chargeSourceCustomer || "—"} · Person {occ.chargeSourcePersonId || "—"}
+                                                      </p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )}
+                                              </div>
+                                            </TableCell>
                                             <TableCell>
                                               <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
                                                 <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>

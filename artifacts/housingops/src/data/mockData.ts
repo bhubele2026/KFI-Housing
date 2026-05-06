@@ -458,6 +458,15 @@ export const OccupantSchema = z.object({
   billingFrequency: z.enum(BILLING_FREQUENCIES).default("Monthly"),
   employeeId: z.string(),
   company: z.string(),
+  // Provenance of `chargePerBed` + `billingFrequency`. "" = manual entry,
+  // "payroll" = last set by the housing-deduction seeder. When set by the
+  // seeder we also stash the (customer, personId) row reference so the
+  // property-page badge can show "from payroll" with a hover tooltip.
+  // Defaulted on the client so older payloads (legacy export imports,
+  // older API responses during a deploy) keep parsing.
+  chargeSource: z.enum(["", "payroll"]).default(""),
+  chargeSourceCustomer: z.string().default(""),
+  chargeSourcePersonId: z.string().default(""),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
 
@@ -878,6 +887,9 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
       billingFrequency: "Monthly" as BillingFrequency,
       employeeId: `EMP-${String(1000 + nameIdx).slice(-4)}`,
       company: companies[nameIdx % companies.length],
+      chargeSource: "",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
     };
   });
 

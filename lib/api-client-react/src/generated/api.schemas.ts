@@ -530,6 +530,14 @@ export const OccupantBillingFrequency = {
   Monthly: "Monthly",
 } as const;
 
+export type OccupantChargeSource =
+  (typeof OccupantChargeSource)[keyof typeof OccupantChargeSource];
+
+export const OccupantChargeSource = {
+  "": "",
+  payroll: "payroll",
+} as const;
+
 export interface Occupant {
   id: string;
   name: string;
@@ -546,6 +554,55 @@ export interface Occupant {
   billingFrequency: OccupantBillingFrequency;
   employeeId: string;
   company: string;
+  chargeSource: OccupantChargeSource;
+  chargeSourceCustomer: string;
+  chargeSourcePersonId: string;
+}
+
+export type OccupantCreateStatus =
+  (typeof OccupantCreateStatus)[keyof typeof OccupantCreateStatus];
+
+export const OccupantCreateStatus = {
+  Active: "Active",
+  Former: "Former",
+} as const;
+
+export type OccupantCreateBillingFrequency =
+  (typeof OccupantCreateBillingFrequency)[keyof typeof OccupantCreateBillingFrequency];
+
+export const OccupantCreateBillingFrequency = {
+  Weekly: "Weekly",
+  Biweekly: "Biweekly",
+  Monthly: "Monthly",
+} as const;
+
+export type OccupantCreateChargeSource =
+  (typeof OccupantCreateChargeSource)[keyof typeof OccupantCreateChargeSource];
+
+export const OccupantCreateChargeSource = {
+  "": "",
+  payroll: "payroll",
+} as const;
+
+export interface OccupantCreate {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  /** @nullable */
+  bedId: string | null;
+  /** @nullable */
+  propertyId: string | null;
+  moveInDate: OptionalLeaseDate;
+  moveOutDate: OptionalLeaseDate | null;
+  status: OccupantCreateStatus;
+  chargePerBed: number;
+  billingFrequency: OccupantCreateBillingFrequency;
+  employeeId: string;
+  company: string;
+  chargeSource?: OccupantCreateChargeSource;
+  chargeSourceCustomer?: string;
+  chargeSourcePersonId?: string;
 }
 
 export type OccupantUpdateStatus =
@@ -565,6 +622,14 @@ export const OccupantUpdateBillingFrequency = {
   Monthly: "Monthly",
 } as const;
 
+export type OccupantUpdateChargeSource =
+  (typeof OccupantUpdateChargeSource)[keyof typeof OccupantUpdateChargeSource];
+
+export const OccupantUpdateChargeSource = {
+  "": "",
+  payroll: "payroll",
+} as const;
+
 export interface OccupantUpdate {
   name?: string;
   email?: string;
@@ -580,6 +645,9 @@ export interface OccupantUpdate {
   billingFrequency?: OccupantUpdateBillingFrequency;
   employeeId?: string;
   company?: string;
+  chargeSource?: OccupantUpdateChargeSource;
+  chargeSourceCustomer?: string;
+  chargeSourcePersonId?: string;
 }
 
 export type UtilityType = (typeof UtilityType)[keyof typeof UtilityType];
@@ -800,7 +868,7 @@ export interface ImportPayload {
   leases: Lease[];
   rooms: Room[];
   beds: Bed[];
-  occupants: Occupant[];
+  occupants: OccupantCreate[];
   utilities: Utility[];
   /** Optional. Room-night log entries against hotel-rate leases.
 Older backups (pre task #299) won't include this — the

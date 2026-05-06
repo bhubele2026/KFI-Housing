@@ -326,6 +326,9 @@ export const ImportDataBody = zod.object({
       billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
       employeeId: zod.string(),
       company: zod.string(),
+      chargeSource: zod.enum(["", "payroll"]).optional(),
+      chargeSourceCustomer: zod.string().optional(),
+      chargeSourcePersonId: zod.string().optional(),
     }),
   ),
   utilities: zod.array(
@@ -1671,6 +1674,9 @@ export const ListOccupantsResponseItem = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
+  chargeSource: zod.enum(["", "payroll"]),
+  chargeSourceCustomer: zod.string(),
+  chargeSourcePersonId: zod.string(),
 });
 export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
 
@@ -1701,6 +1707,9 @@ export const CreateOccupantBody = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
+  chargeSource: zod.enum(["", "payroll"]).optional(),
+  chargeSourceCustomer: zod.string().optional(),
+  chargeSourcePersonId: zod.string().optional(),
 });
 
 /**
@@ -1735,6 +1744,9 @@ export const UpdateOccupantBody = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]).optional(),
   employeeId: zod.string().optional(),
   company: zod.string().optional(),
+  chargeSource: zod.enum(["", "payroll"]).optional(),
+  chargeSourceCustomer: zod.string().optional(),
+  chargeSourcePersonId: zod.string().optional(),
 });
 
 export const updateOccupantResponseMoveInDateRegExp = new RegExp(
@@ -1761,6 +1773,9 @@ export const UpdateOccupantResponse = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
+  chargeSource: zod.enum(["", "payroll"]),
+  chargeSourceCustomer: zod.string(),
+  chargeSourcePersonId: zod.string(),
 });
 
 /**

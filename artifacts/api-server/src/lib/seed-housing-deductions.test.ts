@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   nameSimilarity,
   rankSuggestions,
   type SuggestionCandidate,
+  type HousingDeductionRow,
 } from "./seed-housing-deductions";
 
 describe("nameSimilarity", () => {
@@ -90,5 +91,205 @@ describe("rankSuggestions", () => {
     }));
     const result = rankSuggestions("Jane Smith", "Adient", many, new Map(), { limit: 3 });
     expect(result.length).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// chargeSource provenance tests (Task #304)
+// ---------------------------------------------------------------------------
+//
+// These tests exercise seedHousingDeductions itself with a mocked DB so we
+// can assert the row-level writes (chargeSource = "payroll" + customer +
+// personId stamps). The helpers above are pure and don't need the mock.
+
+interface OccupantRow {
+  id: string;
+  name: string;
+  employeeId: string;
+  company: string;
+  status: string;
+  chargePerBed: number;
+  billingFrequency: string;
+  chargeSource: string;
+  chargeSourceCustomer: string;
+  chargeSourcePersonId: string;
+}
+
+// vi.mock factories are hoisted above top-level `const`s, so the shared
+// state and the fake DB itself must live in a `vi.hoisted` block to be
+// available when the factory runs.
+const { occupants, fakeDb } = vi.hoisted(() => {
+  type Row = {
+    id: string;
+    name: string;
+    employeeId: string;
+    company: string;
+    status: string;
+    chargePerBed: number;
+    billingFrequency: string;
+    chargeSource: string;
+    chargeSourceCustomer: string;
+    chargeSourcePersonId: string;
+  };
+  type Pred = { kind: "eq"; col: string; value: unknown };
+  const occupants = new Map<string, Row>();
+  const tableNameOf = (t: unknown) => (t as { __table: string }).__table;
+  const rowField = (r: Record<string, unknown>, col: string) => r[col];
+  const matches = (r: Row, p: Pred) =>
+    rowField(r as unknown as Record<string, unknown>, p.col) === p.value;
+  const tableRows = (table: unknown): Record<string, unknown>[] => {
+    const t = tableNameOf(table);
+    if (t === "occupants") {
+      return Array.from(occupants.values()) as unknown as Record<string, unknown>[];
+    }
+    if (t === "properties") {
+      return [];
+    }
+    throw new Error(`Unknown table ${t}`);
+  };
+  const fakeDb = {
+    select: (projection: Record<string, { __col: string }>) => ({
+      from: (table: unknown) =>
+        tableRows(table).map((r) => {
+          const out: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(projection)) {
+            out[k] = rowField(r, v.__col);
+          }
+          return out;
+        }),
+    }),
+    update: (table: unknown) => ({
+      set: (vals: Partial<Row>) => ({
+        where: (pred: Pred) => {
+          if (tableNameOf(table) !== "occupants") {
+            throw new Error("update on unknown table");
+          }
+          for (const r of Array.from(occupants.values())) {
+            if (matches(r, pred)) {
+              occupants.set(r.id, { ...r, ...vals });
+            }
+          }
+          return Promise.resolve();
+        },
+      }),
+    }),
+  };
+  return { occupants, fakeDb };
+});
+
+vi.mock("drizzle-orm", () => ({
+  eq: (col: { __col: string }, value: unknown) => ({
+    kind: "eq" as const,
+    col: col.__col,
+    value,
+  }),
+}));
+
+vi.mock("@workspace/db", () => ({
+  db: fakeDb,
+  occupantsTable: {
+    __table: "occupants",
+    id: { __col: "id" },
+    name: { __col: "name" },
+    employeeId: { __col: "employeeId" },
+    company: { __col: "company" },
+    propertyId: { __col: "propertyId" },
+    chargePerBed: { __col: "chargePerBed" },
+    billingFrequency: { __col: "billingFrequency" },
+    chargeSource: { __col: "chargeSource" },
+    chargeSourceCustomer: { __col: "chargeSourceCustomer" },
+    chargeSourcePersonId: { __col: "chargeSourcePersonId" },
+  },
+  propertiesTable: {
+    __table: "properties",
+    id: { __col: "id" },
+    name: { __col: "name" },
+  },
+}));
+
+const { seedHousingDeductions } = await import("./seed-housing-deductions");
+
+const silentLogger = { info: vi.fn(), warn: vi.fn() };
+
+function occ(partial: Partial<OccupantRow> & { id: string }): OccupantRow {
+  return {
+    name: "",
+    employeeId: "",
+    company: "",
+    status: "Active",
+    chargePerBed: 0,
+    billingFrequency: "Monthly",
+    chargeSource: "",
+    chargeSourceCustomer: "",
+    chargeSourcePersonId: "",
+    ...partial,
+  };
+}
+
+function seed(rows: OccupantRow[]): void {
+  occupants.clear();
+  for (const r of rows) occupants.set(r.id, r);
+}
+
+const sampleRows: HousingDeductionRow[] = [
+  { customer: "Adient", name: "MARISA L LOERA", personId: "2005126", weekly: 175 },
+];
+
+describe("seedHousingDeductions — chargeSource provenance (Task #304)", () => {
+  it("stamps chargeSource + customer + personId on a freshly-matched occupant", async () => {
+    seed([occ({ id: "o1", name: "MARISA L LOERA", employeeId: "2005126" })]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+    });
+    expect(result.updated).toBe(1);
+    expect(occupants.get("o1")).toMatchObject({
+      chargePerBed: 175,
+      billingFrequency: "Weekly",
+      chargeSource: "payroll",
+      chargeSourceCustomer: "Adient",
+      chargeSourcePersonId: "2005126",
+    });
+  });
+
+  it("treats a charge-correct row whose source stamps are missing as needing an update (so the badge appears on the next run)", async () => {
+    seed([
+      occ({
+        id: "o1",
+        name: "MARISA L LOERA",
+        employeeId: "2005126",
+        chargePerBed: 175,
+        billingFrequency: "Weekly",
+        // No chargeSource yet — pre-Task-#304 data.
+      }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+    });
+    expect(result.updated).toBe(1);
+    expect(result.alreadyCorrect).toBe(0);
+    expect(occupants.get("o1")?.chargeSource).toBe("payroll");
+  });
+
+  it("is idempotent on a re-run — already-stamped rows count as alreadyCorrect with no writes", async () => {
+    seed([
+      occ({
+        id: "o1",
+        name: "MARISA L LOERA",
+        employeeId: "2005126",
+        chargePerBed: 175,
+        billingFrequency: "Weekly",
+        chargeSource: "payroll",
+        chargeSourceCustomer: "Adient",
+        chargeSourcePersonId: "2005126",
+      }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+    });
+    expect(result.alreadyCorrect).toBe(1);
+    expect(result.updated).toBe(0);
   });
 });

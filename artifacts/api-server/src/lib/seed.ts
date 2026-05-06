@@ -16,6 +16,7 @@ import {
   type InsertUtilityRow,
 } from "@workspace/db";
 import { logger } from "./logger";
+import { HOUSING_DEDUCTION_ROWS } from "./seed-housing-deductions";
 
 const SEED_CUSTOMERS: InsertCustomerRow[] = [
   {
@@ -253,16 +254,12 @@ const SEED_PROPERTIES: InsertPropertyRow[] = [
   },
 ];
 
-const NAMES = [
-  "Marcus Johnson", "Priya Sharma", "Tyler Brooks", "Ana Reyes", "Devon Carter",
-  "Lena Okafor", "James Wu", "Sofia Diaz", "Elijah Grant", "Mei Lin",
-  "Noah Barnes", "Aisha Patel", "Carlos Mendes", "Zoe Fischer", "Dante Mills",
-  "Ingrid Sorensen", "Kwame Asante", "Ruby Chen", "Micah Torres", "Nadia Kovacs",
-  "Felix Martin", "Camille Dubois", "Jerome Hayes", "Leila Hassan", "Bryce Coleman",
-  "Yuki Tanaka", "Amara Ndiaye", "Owen Russell", "Paloma Vega", "Isaac King",
-  "Rania Ahmed", "Connor Walsh", "Fatima Ouedraogo", "Patrick Adeyemi", "Eva Novak",
-];
-const COMPANIES = ["Staffco Inc", "BuildRight LLC", "TalentBridge", "ForceWorks", "NexaStaff"];
+// Source the synthetic occupant pool from the real payroll roster so a
+// fresh seed mirrors production data: every seeded occupant gets a real
+// name, the real customer in `company`, and the real `personId` in
+// `employeeId`. This keeps Task #285's backfill / matcher invariants
+// (no occupants with empty employeeId+company) holding from boot.
+const PAYROLL_ROSTER = HOUSING_DEDUCTION_ROWS;
 
 interface RoomLayout {
   /** Position-based room id within the property (1..n). */
@@ -379,12 +376,14 @@ function buildRoomsBedsAndOccupants(): {
         });
 
         if (isOccupied && occupantId) {
-          const name = NAMES[nameIdx % NAMES.length];
+          const payroll = PAYROLL_ROSTER[nameIdx % PAYROLL_ROSTER.length];
           nameIdx++;
+          const name = payroll.name;
+          const firstName = name.split(" ")[0].toLowerCase();
           occupants.push({
             id: occupantId,
             name,
-            email: `${name.split(" ")[0].toLowerCase()}@${propertyId}.worker.com`,
+            email: `${firstName}@${propertyId}.worker.com`,
             phone: `512-555-${String(1000 + nameIdx).slice(-4)}`,
             bedId,
             propertyId,
@@ -393,8 +392,8 @@ function buildRoomsBedsAndOccupants(): {
             status: "Active",
             chargePerBed: prop.chargePerBed ?? 0,
             billingFrequency: "Monthly",
-            employeeId: `EMP-${String(1000 + nameIdx).slice(-4)}`,
-            company: COMPANIES[nameIdx % COMPANIES.length],
+            employeeId: payroll.personId,
+            company: payroll.customer,
           });
         }
       }

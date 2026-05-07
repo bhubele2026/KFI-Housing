@@ -251,6 +251,7 @@ type State = {
   beds: Array<Record<string, unknown>>;
   occupants: Array<Record<string, unknown>>;
   utilities: Array<Record<string, unknown>>;
+  insuranceCertificates: Array<Record<string, unknown>>;
 };
 
 // A spy bag for every mutation the Beds tab can fire. Tests reset these in
@@ -276,6 +277,9 @@ const mocks = {
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),
+  addInsuranceCertificate: vi.fn(),
+  updateInsuranceCertificate: vi.fn(),
+  deleteInsuranceCertificate: vi.fn(),
 };
 
 function makeFreshState(): State {
@@ -324,6 +328,7 @@ function makeFreshState(): State {
     ],
     occupants: [],
     utilities: [],
+    insuranceCertificates: [],
   };
 }
 
@@ -834,6 +839,7 @@ describe("Property detail — Beds tab room sort", () => {
       beds: [],
       occupants: [],
       utilities: [],
+      insuranceCertificates: [],
     };
   }
 

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -61,7 +61,7 @@ function formatRelativeTime(timestamp: number, now: number = Date.now()): string
 }
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
+  const { properties, beds, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
   const { toast } = useToast();
   const [pendingEmployerMove, setPendingEmployerMove] = useState<{
     occupantId: string;
@@ -356,6 +356,50 @@ export default function Dashboard() {
     for (const e of expiringLeases) counts[e.bucket] += 1;
     return counts;
   }, [expiringLeases]);
+
+  // ── Expiring insurance certificates (Task #333) ───────────────────
+  // Surface every certificate whose `coverageEnd` is within the next 30
+  // days (or expired in the last 30) so operators can chase a renewed
+  // PDF before coverage actually lapses. Threshold matches the property
+  // page badge so the dashboard and detail view always agree on
+  // "expiring soon". Certs without a coverage end date are skipped — a
+  // blank window has no calendar to alert on.
+  interface ExpiringCert {
+    id: string;
+    propertyId: string;
+    propertyName: string;
+    carrier: string;
+    policyNumber: string;
+    coverageEnd: string;
+    days: number;
+    expired: boolean;
+  }
+  const scopedCerts = useMemo(
+    () => insuranceCertificates.filter((c) => scopedPropertyIds.has(c.propertyId)),
+    [insuranceCertificates, scopedPropertyIds],
+  );
+  const expiringCerts = useMemo<ExpiringCert[]>(() => {
+    const out: ExpiringCert[] = [];
+    for (const c of scopedCerts) {
+      if (!c.coverageEnd) continue;
+      const days = daysUntil(c.coverageEnd);
+      if (days < -30 || days > 30) continue;
+      const propertyName =
+        scopedProperties.find((p) => p.id === c.propertyId)?.name ?? "—";
+      out.push({
+        id: c.id,
+        propertyId: c.propertyId,
+        propertyName,
+        carrier: c.carrier,
+        policyNumber: c.policyNumber,
+        coverageEnd: c.coverageEnd,
+        days,
+        expired: days < 0,
+      });
+    }
+    out.sort((a, b) => a.days - b.days);
+    return out;
+  }, [scopedCerts, scopedProperties]);
 
   const expiryBucketStyle: Record<
     ExpiryBucket,
@@ -889,6 +933,92 @@ export default function Dashboard() {
                       </TableRow>
                     );
                   })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {expiringCerts.length > 0 && (
+          <Card data-testid="card-expiring-insurance">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Insurance expiry alerts</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-expiring-insurance-total-count"
+                >
+                  {expiringCerts.length} certificate
+                  {expiringCerts.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Insurance certificates whose coverage ends in the next 30
+                days, plus any that quietly lapsed in the last 30 days.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Carrier</TableHead>
+                    <TableHead>Policy #</TableHead>
+                    <TableHead>Coverage Ends</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expiringCerts.map((c) => (
+                    <TableRow
+                      key={c.id}
+                      className={
+                        c.expired
+                          ? "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-950/20"
+                          : "border-l-4 border-l-amber-500"
+                      }
+                      data-testid={`row-expiring-insurance-${c.id}`}
+                    >
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/properties/${c.propertyId}`}
+                          className="hover:underline text-primary"
+                          data-testid={`link-expiring-insurance-${c.id}`}
+                        >
+                          <PropertyNameCell
+                            name={c.propertyName}
+                            primaryClassName="text-primary"
+                          />
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-sm">{c.carrier || "—"}</TableCell>
+                      <TableCell className="font-mono text-sm">{c.policyNumber || "—"}</TableCell>
+                      <TableCell className="text-sm tabular-nums text-muted-foreground">
+                        {formatYMDPretty(c.coverageEnd)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={
+                            c.expired
+                              ? "bg-red-100 text-red-800 border-red-200"
+                              : "bg-amber-100 text-amber-800 border-amber-200"
+                          }
+                          data-testid={`badge-expiring-insurance-${c.id}`}
+                        >
+                          {c.expired ? "Expired" : "≤ 30 days"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className="text-right text-sm tabular-nums"
+                        data-testid={`text-expiring-insurance-${c.id}-when`}
+                      >
+                        {expiryRowLabel(c.days)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>

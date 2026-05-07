@@ -252,6 +252,7 @@ type State = {
   beds: Array<Record<string, unknown>>;
   occupants: Array<Record<string, unknown>>;
   utilities: Array<Record<string, unknown>>;
+  insuranceCertificates: Array<Record<string, unknown>>;
 };
 
 // No-op spies for every store mutation PropertyDetail destructures from
@@ -274,6 +275,9 @@ const mocks = {
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),
+  addInsuranceCertificate: vi.fn(),
+  updateInsuranceCertificate: vi.fn(),
+  deleteInsuranceCertificate: vi.fn(),
 };
 
 // State shape is recreated per test so individual tests can mutate
@@ -316,6 +320,7 @@ function makeFreshState(): State {
     beds: [],
     occupants: [],
     utilities: [],
+    insuranceCertificates: [],
   };
 }
 

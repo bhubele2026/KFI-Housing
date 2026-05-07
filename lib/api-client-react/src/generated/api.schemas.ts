@@ -1087,6 +1087,12 @@ Older backups (pre task #299) won't include this — the
 importer treats a missing array as empty.
  */
   roomNightLogs?: RoomNightLog[];
+  /** Optional. Renter's / liability insurance certificates on
+file for properties. Older backups (pre task #333) won't
+include this — the importer treats a missing array as
+empty.
+ */
+  insuranceCertificates?: InsuranceCertificate[];
 }
 
 export type DeleteCustomer409 = {

@@ -125,6 +125,7 @@ const emptyState = {
   rooms: [],
   occupants: [],
   utilities: [],
+  insuranceCertificates: [],
   isLoading: false,
   updateProperty: vi.fn(),
   updateLease: vi.fn(),
@@ -141,6 +142,9 @@ const emptyState = {
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),
+  addInsuranceCertificate: vi.fn(),
+  updateInsuranceCertificate: vi.fn(),
+  deleteInsuranceCertificate: vi.fn(),
 };
 
 vi.mock("@/context/data-store", () => ({

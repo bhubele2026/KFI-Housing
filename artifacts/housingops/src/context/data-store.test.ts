@@ -153,6 +153,7 @@ describe("inspectImportPayload", () => {
       occupants: 0,
       utilities: 0,
       roomNightLogs: 0,
+      insuranceCertificates: 0,
     });
     expect(preview.data.customers[0].id).toBe("c1");
     expect(preview.data.properties[0].customerId).toBe("c1");
@@ -317,6 +318,7 @@ const emptyBundle = (): ExportData => ({
   occupants: [],
   utilities: [],
   roomNightLogs: [],
+  insuranceCertificates: [],
 });
 
 describe("mergeImportBundles", () => {
@@ -343,6 +345,7 @@ describe("mergeImportBundles", () => {
       occupants: 0,
       utilities: 0,
       roomNightLogs: 0,
+      insuranceCertificates: 0,
     });
     expect(merged.updated.customers).toBe(0);
     expect(merged.updated.properties).toBe(0);
@@ -410,6 +413,7 @@ describe("mergeImportBundles", () => {
       occupants: [],
       utilities: [],
       roomNightLogs: [],
+      insuranceCertificates: [],
     };
     const incoming: ExportData = {
       customers: [baseCustomer("c1", { name: "Renamed" })], // updated
@@ -420,6 +424,7 @@ describe("mergeImportBundles", () => {
       occupants: [],
       utilities: [{ id: "u1", propertyId: "p1", type: "Electric" as const, company: "X", monthlyCost: 100, accountNumber: "", notes: "" }], // added
       roomNightLogs: [],
+      insuranceCertificates: [],
     };
 
     const merged = mergeImportBundles(current, incoming);
@@ -433,6 +438,7 @@ describe("mergeImportBundles", () => {
       occupants: 0,
       utilities: 1,
       roomNightLogs: 0,
+      insuranceCertificates: 0,
     });
     expect(merged.updated).toEqual({
       customers: 1,
@@ -443,6 +449,7 @@ describe("mergeImportBundles", () => {
       occupants: 0,
       utilities: 0,
       roomNightLogs: 0,
+      insuranceCertificates: 0,
     });
     expect(totalImportSummary(merged.added)).toBe(2);
     expect(totalImportSummary(merged.updated)).toBe(1);

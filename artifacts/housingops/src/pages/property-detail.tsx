@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { formatYMDPretty } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
@@ -535,7 +536,7 @@ export function InlineEdit({
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, rooms, beds, occupants, utilities, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
   // Room-night logs back the hotel-rate revenue estimate ("≈ $X this
   // month (Y nights × $Z/night)") shown for hotel-rate leases. Pulled
   // here so the Stat strip and the Finance tab share the same numbers.
@@ -729,6 +730,9 @@ export default function PropertyDetail() {
       });
   }, [propLeases, propRooms, propBeds, propOccupants]);
   const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
+  const propCerts = insuranceCertificates
+    .filter(c => c.propertyId === id)
+    .sort((a, b) => (a.coverageEnd || "").localeCompare(b.coverageEnd || ""));
   // A property can have more than one Active lease at a time (overlapping
   // renewals, multi-room agreements). Picking just the first match silently
   // under-reports rent and profit, so the header and Finance tab sum across
@@ -987,6 +991,7 @@ export default function PropertyDetail() {
             <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />Beds</TabsTrigger>
             <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />Furnishings</TabsTrigger>
             <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
+            <TabsTrigger value="insurance" data-testid="tab-trigger-insurance"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />Insurance</TabsTrigger>
             <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />Finance</TabsTrigger>
           </TabsList>
 
@@ -2330,6 +2335,162 @@ export default function PropertyDetail() {
             </Card>
           </TabsContent>
 
+          {/* ── INSURANCE TAB (Task #333) ── */}
+          {/* Lists every certificate of insurance on file for this property
+              (renter's, liability, etc.) along with a coverage window and
+              the source PDF, plus an "Expiring soon" badge when the
+              coverage end date is within 30 days. Operators can add new
+              certificates inline so a paper-trail is always one click
+              away from the property page. */}
+          <TabsContent value="insurance" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground" data-testid="text-insurance-count">
+                {propCerts.length} certificate{propCerts.length !== 1 ? "s" : ""} on file
+              </p>
+              <AddInsuranceCertificateDialog
+                propertyId={id}
+                leases={propLeases}
+                onAdd={addInsuranceCertificate}
+              />
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Carrier</TableHead>
+                      <TableHead>Policy #</TableHead>
+                      <TableHead>Insured</TableHead>
+                      <TableHead>Coverage</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead className="w-10" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {propCerts.length === 0 ? (
+                      <EmptyStateRow
+                        colSpan={8}
+                        icon={ShieldCheck}
+                        title="No insurance certificates on file"
+                        description="Track renter's or liability policies here so the coverage window and source PDF are one click away."
+                        testId="empty-property-insurance"
+                        action={
+                          <AddInsuranceCertificateDialog
+                            propertyId={id}
+                            leases={propLeases}
+                            onAdd={addInsuranceCertificate}
+                            trigger={
+                              <Button size="sm" data-testid="button-add-insurance-empty">
+                                <Plus className="h-4 w-4 mr-1.5" />Add Certificate
+                              </Button>
+                            }
+                          />
+                        }
+                      />
+                    ) : propCerts.map(c => {
+                      // Skip the daysUntil() throw on a blank coverage end —
+                      // some PDFs only confirm the cert exists. A blank
+                      // window simply gets no expiry badge.
+                      const days = c.coverageEnd ? daysUntil(c.coverageEnd) : null;
+                      const expiringSoon = days !== null && days >= 0 && days <= 30;
+                      const expired = days !== null && days < 0;
+                      return (
+                        <TableRow
+                          key={c.id}
+                          data-testid={`row-insurance-${c.id}`}
+                          className={
+                            expired
+                              ? "border-l-4 border-l-red-500"
+                              : expiringSoon
+                                ? "border-l-4 border-l-amber-500"
+                                : ""
+                          }
+                        >
+                          <TableCell>
+                            <InlineEdit value={c.carrier} onSave={v => updateInsuranceCertificate(c.id, { carrier: v })} />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">
+                            <InlineEdit value={c.policyNumber} onSave={v => updateInsuranceCertificate(c.id, { policyNumber: v })} />
+                          </TableCell>
+                          <TableCell>
+                            <InlineEdit value={c.insuredName} onSave={v => updateInsuranceCertificate(c.id, { insuredName: v })} />
+                          </TableCell>
+                          <TableCell className="text-sm tabular-nums text-muted-foreground">
+                            {c.coverageStart || c.coverageEnd ? (
+                              <span data-testid={`text-insurance-${c.id}-coverage`}>
+                                {c.coverageStart ? formatYMDPretty(c.coverageStart) : "—"}
+                                {" → "}
+                                {c.coverageEnd ? formatYMDPretty(c.coverageEnd) : "—"}
+                              </span>
+                            ) : (
+                              <span className="italic">no dates</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {expired ? (
+                              <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200" data-testid={`badge-insurance-${c.id}-expired`}>
+                                Expired {Math.abs(days!)}d ago
+                              </Badge>
+                            ) : expiringSoon ? (
+                              <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200" data-testid={`badge-insurance-${c.id}-expiring`}>
+                                Expiring soon · {days}d
+                              </Badge>
+                            ) : days !== null ? (
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200" data-testid={`badge-insurance-${c.id}-active`}>
+                                Active · {days}d left
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-[12rem] truncate">
+                            {c.documentUrl ? (
+                              <a
+                                href={c.documentUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-primary hover:underline text-sm"
+                                data-testid={`link-insurance-${c.id}-doc`}
+                              >
+                                View PDF
+                              </a>
+                            ) : (
+                              <InlineEdit value={c.documentUrl} onSave={v => updateInsuranceCertificate(c.id, { documentUrl: v })} />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <InlineEdit value={c.notes || ""} onSave={v => updateInsuranceCertificate(c.id, { notes: v })} />
+                          </TableCell>
+                          <TableCell>
+                            <ConfirmDeleteButton
+                              title="Delete this certificate?"
+                              description={
+                                <>
+                                  Remove the{" "}
+                                  <span className="font-medium text-foreground">{c.carrier || "insurance"}</span>{" "}
+                                  certificate from this property. You can't undo this.
+                                </>
+                              }
+                              onConfirm={() => deleteInsuranceCertificate(c.id)}
+                              testId={`dialog-confirm-delete-insurance-${c.id}`}
+                              trigger={
+                                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive" data-testid={`button-delete-insurance-${c.id}`}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* ── FINANCE TAB ── */}
           <TabsContent value="finance" className="space-y-4">
             <Card>
@@ -2473,6 +2634,160 @@ function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; 
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button onClick={submit}>Add Service</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddInsuranceCertificateDialog({
+  propertyId,
+  leases,
+  onAdd,
+  trigger,
+}: {
+  propertyId: string;
+  leases: Lease[];
+  onAdd: (c: InsuranceCertificate) => void;
+  trigger?: React.ReactNode;
+}) {
+  // Sentinel because <SelectItem value=""> is disallowed by Radix — we
+  // translate it back to an empty string when building the payload.
+  const NO_LEASE = "__none__";
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    carrier: "",
+    policyNumber: "",
+    insuredName: "",
+    coverageStart: "",
+    coverageEnd: "",
+    documentUrl: "",
+    notes: "",
+    leaseId: NO_LEASE,
+  });
+
+  const submit = () => {
+    if (!form.carrier) return;
+    onAdd({
+      id: `ins-${Date.now()}`,
+      propertyId,
+      leaseId: form.leaseId === NO_LEASE ? "" : form.leaseId,
+      carrier: form.carrier,
+      policyNumber: form.policyNumber,
+      insuredName: form.insuredName,
+      coverageStart: form.coverageStart,
+      coverageEnd: form.coverageEnd,
+      documentUrl: form.documentUrl,
+      notes: form.notes,
+    });
+    setOpen(false);
+    setForm({
+      carrier: "", policyNumber: "", insuredName: "",
+      coverageStart: "", coverageEnd: "", documentUrl: "", notes: "",
+      leaseId: NO_LEASE,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" data-testid="button-add-insurance">
+            <Plus className="h-4 w-4 mr-1.5" />Add Certificate
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Add Insurance Certificate</DialogTitle></DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Carrier</Label>
+              <Input
+                value={form.carrier}
+                onChange={e => setForm(f => ({ ...f, carrier: e.target.value }))}
+                placeholder="e.g. Philadelphia Indemnity"
+                data-testid="input-insurance-carrier"
+              />
+            </div>
+            <div>
+              <Label>Policy #</Label>
+              <Input
+                value={form.policyNumber}
+                onChange={e => setForm(f => ({ ...f, policyNumber: e.target.value }))}
+                placeholder="Optional"
+                data-testid="input-insurance-policy"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Insured Name</Label>
+              <Input
+                value={form.insuredName}
+                onChange={e => setForm(f => ({ ...f, insuredName: e.target.value }))}
+                placeholder="Named insured on the certificate"
+                data-testid="input-insurance-insured"
+              />
+            </div>
+            <div>
+              <Label>Coverage Start</Label>
+              <Input
+                type="date"
+                value={form.coverageStart}
+                onChange={e => setForm(f => ({ ...f, coverageStart: e.target.value }))}
+                data-testid="input-insurance-start"
+              />
+            </div>
+            <div>
+              <Label>Coverage End</Label>
+              <Input
+                type="date"
+                value={form.coverageEnd}
+                onChange={e => setForm(f => ({ ...f, coverageEnd: e.target.value }))}
+                data-testid="input-insurance-end"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label>Document URL</Label>
+              <Input
+                value={form.documentUrl}
+                onChange={e => setForm(f => ({ ...f, documentUrl: e.target.value }))}
+                placeholder="Link to the source PDF (optional)"
+                data-testid="input-insurance-doc"
+              />
+            </div>
+            {leases.length > 0 && (
+              <div className="col-span-2">
+                <Label>Linked Lease (optional)</Label>
+                <Select
+                  value={form.leaseId}
+                  onValueChange={v => setForm(f => ({ ...f, leaseId: v }))}
+                >
+                  <SelectTrigger data-testid="select-insurance-lease"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_LEASE}>(not lease-specific)</SelectItem>
+                    {leases.map(l => (
+                      <SelectItem key={l.id} value={l.id}>
+                        Lease {l.startDate || l.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <div>
+            <Label>Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Optional notes"
+              data-testid="input-insurance-notes"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={submit} data-testid="button-insurance-submit">Add Certificate</Button>
           </div>
         </div>
       </DialogContent>

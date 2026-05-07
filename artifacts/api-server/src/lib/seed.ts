@@ -16,6 +16,7 @@ import {
   type InsertBedRow,
   type InsertOccupantRow,
   type InsertUtilityRow,
+  type InsertInsuranceCertificateRow,
   type InsertRoomNightLogRow,
 } from "@workspace/db";
 import { logger } from "./logger";
@@ -517,6 +518,9 @@ interface DataBundle {
   // routed through `replaceAllData`) keep compiling. Treated as `[]`
   // when missing.
   roomNightLogs?: InsertRoomNightLogRow[];
+  // Optional so callers built before task #333 (insurance-certificates
+  // resource) keep compiling. Treated as `[]` when missing.
+  insuranceCertificates?: InsertInsuranceCertificateRow[];
 }
 
 async function wipeAll(): Promise<void> {
@@ -559,6 +563,10 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
     // see its parent rows (today the column is a plain `text` ref).
     const logs = bundle.roomNightLogs ?? [];
     if (logs.length > 0) await tx.insert(roomNightLogsTable).values(logs);
+    // Inserted after properties + leases for the same FK-friendliness
+    // reason. Optional on legacy bundles.
+    const certs = bundle.insuranceCertificates ?? [];
+    if (certs.length > 0) await tx.insert(insuranceCertificatesTable).values(certs);
   });
 }
 
@@ -619,6 +627,7 @@ export async function replaceAllData(bundle: DataBundle): Promise<void> {
       occupants: bundle.occupants.length,
       utilities: bundle.utilities.length,
       roomNightLogs: bundle.roomNightLogs?.length ?? 0,
+      insuranceCertificates: bundle.insuranceCertificates?.length ?? 0,
     },
     "Replacing all data with imported bundle…",
   );

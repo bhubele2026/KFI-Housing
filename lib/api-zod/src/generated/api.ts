@@ -386,6 +386,56 @@ export const ImportDataBody = zod.object({
     .describe(
       "Optional. Room-night log entries against hotel-rate leases.\nOlder backups (pre task #299) won't include this — the\nimporter treats a missing array as empty.\n",
     ),
+  insuranceCertificates: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        propertyId: zod.string(),
+        leaseId: zod
+          .string()
+          .optional()
+          .describe(
+            "Optional: scope the certificate to a specific lease. Empty\nstring when the cert covers the property as a whole.\n",
+          ),
+        carrier: zod
+          .string()
+          .optional()
+          .describe(
+            'Underwriting carrier as printed on the certificate\n(e.g. \"Philadelphia Indemnity\").\n',
+          ),
+        policyNumber: zod
+          .string()
+          .optional()
+          .describe("Policy number from the certificate (ACORD 25 box)."),
+        insuredName: zod
+          .string()
+          .optional()
+          .describe(
+            "Named insured on the certificate (often the staffing\ncompany, not the property landlord).\n",
+          ),
+        coverageStart: zod
+          .string()
+          .optional()
+          .describe(
+            "Coverage start date as YYYY-MM-DD (or empty string when\nunknown \/ partially captured).\n",
+          ),
+        coverageEnd: zod
+          .string()
+          .optional()
+          .describe("Coverage end date as YYYY-MM-DD (or empty string)."),
+        documentUrl: zod
+          .string()
+          .optional()
+          .describe(
+            'Source PDF \/ file marker. Free-form so it can hold an\nattached-asset filename today (e.g.\n\"Renter_s_Insurance_1778107759430.pdf\") and a real\nobject-storage URL later.\n',
+          ),
+        notes: zod.string().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional. Renter's \/ liability insurance certificates on\nfile for properties. Older backups (pre task #333) won't\ninclude this — the importer treats a missing array as\nempty.\n",
+    ),
 });
 
 export const ImportDataResponse = zod.object({

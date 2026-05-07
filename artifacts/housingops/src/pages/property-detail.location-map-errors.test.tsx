@@ -253,6 +253,7 @@ const storeState = {
   beds: [] as Array<Record<string, unknown>>,
   occupants: [] as Array<Record<string, unknown>>,
   utilities: [] as Array<Record<string, unknown>>,
+  insuranceCertificates: [] as Array<Record<string, unknown>>,
   isLoading: false,
   addRoom: vi.fn(),
   updateRoom: vi.fn(),
@@ -269,6 +270,9 @@ const storeState = {
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),
+  addInsuranceCertificate: vi.fn(),
+  updateInsuranceCertificate: vi.fn(),
+  deleteInsuranceCertificate: vi.fn(),
 };
 
 vi.mock("@/context/data-store", () => ({

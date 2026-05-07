@@ -28,6 +28,9 @@ import {
  *      adding it to the matching seeder (e.g. `seed-attached-leases.ts`,
  *      `seed-patriot-baraboo.ts`, `seed-park-place.ts`) so the row
  *      replays idempotently across resets.
+ *
+ * Task #333 added the read/write UI (property-detail Insurance tab +
+ * dashboard expiry alerts) on top of this same REST surface.
  */
 
 const router: IRouter = Router();

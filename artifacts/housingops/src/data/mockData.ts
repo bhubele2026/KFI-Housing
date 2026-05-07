@@ -717,6 +717,27 @@ export const UtilitySchema = z.object({
 });
 export type Utility = z.infer<typeof UtilitySchema>;
 
+/**
+ * Renter's / liability insurance certificate on file for a property
+ * (and optionally a specific lease). Mirrors `InsuranceCertificate` in
+ * `lib/api-spec/openapi.yaml`. Most fields default to empty strings on
+ * the server so older PDFs that only confirm a certificate exists can
+ * still be captured.
+ */
+export const InsuranceCertificateSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  leaseId: z.string(),
+  carrier: z.string(),
+  policyNumber: z.string(),
+  insuredName: z.string(),
+  coverageStart: z.string(),
+  coverageEnd: z.string(),
+  documentUrl: z.string(),
+  notes: z.string(),
+});
+export type InsuranceCertificate = z.infer<typeof InsuranceCertificateSchema>;
+
 export const MOCK_CUSTOMERS: Customer[] = [
   { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX" },
   { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX" },

@@ -30,11 +30,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 
 export default function Dashboard() {
   const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
+  const { toast } = useToast();
+  const [pendingEmployerMove, setPendingEmployerMove] = useState<{
+    occupantId: string;
+    occupantName: string;
+    fromCompany: string;
+    toCompany: string;
+    propertyName: string | null;
+    chargePerBed: number;
+    employeeId: string;
+  } | null>(null);
   const queryClient = useQueryClient();
   const { data: unplacedPayrollResult } = useListUnplacedPayroll();
   const unplacedPayroll = unplacedPayrollResult?.unmatched;
@@ -940,28 +955,38 @@ export default function Dashboard() {
                                         : "")
                                     }
                                     onClick={() => {
-                                      // Apply payroll's recurring rate to the
-                                      // existing occupant. The seeder will then
-                                      // match this row by name+company on the
-                                      // next refetch and drop it from the list.
-                                      // For a cross-employer suggestion, also
-                                      // overwrite the occupant's company so the
-                                      // record now sits under the correct
-                                      // customer (the operator implicitly
-                                      // confirmed the employer change by
-                                      // clicking the warning-labeled button).
+                                      // Same-employer (typo) suggestions are
+                                      // safe to apply in one click: they only
+                                      // attach a rate, not change ownership.
+                                      // Cross-employer suggestions move the
+                                      // occupant to a new company, so prompt
+                                      // the operator to confirm the move
+                                      // first (task #350).
+                                      if (s.crossEmployer) {
+                                        setPendingEmployerMove({
+                                          occupantId: s.occupantId,
+                                          occupantName: s.name,
+                                          fromCompany: s.company,
+                                          toCompany: row.customer,
+                                          propertyName: s.propertyName,
+                                          chargePerBed: row.weekly,
+                                          employeeId: row.personId,
+                                        });
+                                        return;
+                                      }
                                       updateOccupant(s.occupantId, {
                                         chargePerBed: row.weekly,
                                         billingFrequency: "Weekly",
                                         ...(row.personId
                                           ? { employeeId: row.personId }
                                           : {}),
-                                        ...(s.crossEmployer
-                                          ? { company: row.customer }
-                                          : {}),
                                       });
                                       queryClient.invalidateQueries({
                                         queryKey: getListUnplacedPayrollQueryKey(),
+                                      });
+                                      toast({
+                                        title: "Suggestion applied",
+                                        description: `${s.name} now matches this payroll row.`,
                                       });
                                     }}
                                     data-testid={`button-apply-suggestion-${row.personId}-${s.occupantId}`}
@@ -1377,6 +1402,62 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Confirm cross-employer move from a "Did you mean (different
+          employer)" suggestion. The same-employer (typo) path applies in
+          one click — only the ownership-changing path goes through this
+          dialog (task #350). */}
+      <AlertDialog
+        open={pendingEmployerMove !== null}
+        onOpenChange={(open) => { if (!open) setPendingEmployerMove(null); }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-employer-move">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move occupant to a new employer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingEmployerMove && (
+                <>
+                  Move <span className="font-medium">{pendingEmployerMove.occupantName}</span>
+                  {" "}from <span className="font-medium">{pendingEmployerMove.fromCompany}</span>
+                  {" "}to <span className="font-medium">{pendingEmployerMove.toCompany}</span>
+                  {pendingEmployerMove.propertyName ? (
+                    <> at <span className="font-medium">{pendingEmployerMove.propertyName}</span></>
+                  ) : null}
+                  ? This changes which customer the occupant belongs to.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-confirm-employer-move-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-confirm-employer-move-confirm"
+              onClick={() => {
+                const move = pendingEmployerMove;
+                if (!move) return;
+                updateOccupant(move.occupantId, {
+                  chargePerBed: move.chargePerBed,
+                  billingFrequency: "Weekly",
+                  ...(move.employeeId ? { employeeId: move.employeeId } : {}),
+                  company: move.toCompany,
+                });
+                queryClient.invalidateQueries({
+                  queryKey: getListUnplacedPayrollQueryKey(),
+                });
+                toast({
+                  title: "Occupant moved",
+                  description: `${move.occupantName} is now under ${move.toCompany}.`,
+                });
+                setPendingEmployerMove(null);
+              }}
+            >
+              Move occupant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </MainLayout>
   );
 }

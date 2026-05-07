@@ -69,6 +69,48 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// Radix's AlertDialog uses portals + focus traps that don't behave in
+// jsdom; swap it for a transparent passthrough that respects `open` so
+// the confirm/cancel buttons inside are clickable in tests.
+vi.mock("@/components/ui/alert-dialog", () => {
+  const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  function AlertDialog({
+    open,
+    children,
+  }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    children?: ReactNode;
+  }) {
+    if (!open) return null;
+    return <div>{children}</div>;
+  }
+  return {
+    AlertDialog,
+    AlertDialogTrigger: Pass,
+    AlertDialogContent: ({ children, ...rest }: { children?: ReactNode } & Record<string, unknown>) => (
+      <div {...rest}>{children}</div>
+    ),
+    AlertDialogHeader: Pass,
+    AlertDialogTitle: Pass,
+    AlertDialogDescription: Pass,
+    AlertDialogFooter: Pass,
+    AlertDialogAction: ({ children, ...rest }: { children?: ReactNode } & Record<string, unknown>) => (
+      <button {...rest}>{children}</button>
+    ),
+    AlertDialogCancel: ({ children, ...rest }: { children?: ReactNode } & Record<string, unknown>) => (
+      <button {...rest}>{children}</button>
+    ),
+    AlertDialogPortal: Pass,
+    AlertDialogOverlay: () => null,
+  };
+});
+
+const toastMock = vi.fn();
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({ toast: toastMock, dismiss: vi.fn(), toasts: [] }),
+}));
+
 vi.mock("framer-motion", () => {
   const Motion = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   const motion = new Proxy(
@@ -779,6 +821,7 @@ describe("Dashboard Unplaced payroll tile", () => {
     addOccupantMock.mockReset();
     updateBedMock.mockReset();
     updateOccupantMock.mockReset();
+    toastMock.mockReset();
     unplacedPayrollState.rows = [];
     unplacedPayrollState.lowConfidenceMatches = [];
     mockData.isLoading = false;
@@ -867,7 +910,7 @@ describe("Dashboard Unplaced payroll tile", () => {
     expect(container.querySelector('[data-testid="group-unplaced-Globex"]')).toBeNull();
   });
 
-  it("renders a distinct 'different employer' label and overwrites company on confirm for cross-employer suggestions", async () => {
+  it("renders a distinct 'different employer' label and prompts for confirmation before overwriting company on cross-employer suggestions", async () => {
     unplacedPayrollState.rows = [
       {
         customer: "Penda Corp",
@@ -902,8 +945,32 @@ describe("Dashboard Unplaced payroll tile", () => {
     // sees what they're switching away from.
     expect(btn?.textContent ?? "").toContain("Trienda Holdings");
 
+    // First click: opens the confirm dialog. Nothing is written yet
+    // because the operator hasn't confirmed the employer change.
     await act(async () => {
       btn!.click();
+    });
+
+    expect(updateOccupantMock).not.toHaveBeenCalled();
+    expect(invalidateQueriesMock).not.toHaveBeenCalled();
+
+    const dialog = container.querySelector(
+      '[data-testid="dialog-confirm-employer-move"]',
+    );
+    expect(dialog).not.toBeNull();
+    const dialogText = dialog?.textContent ?? "";
+    expect(dialogText).toContain("Jane Smith");
+    expect(dialogText).toContain("Trienda Holdings");
+    expect(dialogText).toContain("Penda Corp");
+    expect(dialogText).toContain("Maple Court");
+
+    const confirm = container.querySelector(
+      '[data-testid="button-confirm-employer-move-confirm"]',
+    ) as HTMLButtonElement | null;
+    expect(confirm).not.toBeNull();
+
+    await act(async () => {
+      confirm!.click();
     });
 
     expect(updateOccupantMock).toHaveBeenCalledWith("occ-cross", {
@@ -915,6 +982,56 @@ describe("Dashboard Unplaced payroll tile", () => {
     expect(invalidateQueriesMock).toHaveBeenCalledWith({
       queryKey: ["/payroll/unplaced"],
     });
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Occupant moved" }),
+    );
+
+    // Dialog closes once the move has been applied.
+    expect(
+      container.querySelector('[data-testid="dialog-confirm-employer-move"]'),
+    ).toBeNull();
+  });
+
+  it("cancelling the cross-employer confirm dialog leaves the occupant unchanged", async () => {
+    unplacedPayrollState.rows = [
+      {
+        customer: "Penda Corp",
+        name: "JANE A SMITH",
+        personId: "EMP9",
+        weekly: 175,
+        suggestions: [
+          {
+            occupantId: "occ-cross",
+            name: "Jane Smith",
+            company: "Trienda Holdings",
+            propertyName: "Maple Court",
+            score: 0.95,
+            crossEmployer: true,
+          },
+        ],
+      },
+    ];
+
+    await render();
+
+    const btn = container.querySelector(
+      '[data-testid="button-apply-suggestion-EMP9-occ-cross"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      btn!.click();
+    });
+
+    const cancel = container.querySelector(
+      '[data-testid="button-confirm-employer-move-cancel"]',
+    ) as HTMLButtonElement | null;
+    expect(cancel).not.toBeNull();
+    await act(async () => {
+      cancel!.click();
+    });
+
+    expect(updateOccupantMock).not.toHaveBeenCalled();
+    expect(invalidateQueriesMock).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
   });
 
   it("renders the plain 'Did you mean:' label and does NOT touch company for same-employer suggestions", async () => {
@@ -957,6 +1074,13 @@ describe("Dashboard Unplaced payroll tile", () => {
       billingFrequency: "Weekly",
       employeeId: "EMP10",
     });
+    // Same-employer suggestions skip the confirm dialog entirely.
+    expect(
+      container.querySelector('[data-testid="dialog-confirm-employer-move"]'),
+    ).toBeNull();
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Suggestion applied" }),
+    );
   });
 
   it("on assign: writes occupant + bed and invalidates the unplaced list so the row drops off", async () => {

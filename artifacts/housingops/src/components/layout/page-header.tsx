@@ -33,7 +33,12 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-4 pb-6 border-b border-border/60 sm:flex-row sm:items-start sm:justify-between",
+        // `flex-wrap` at sm+ lets the actions row drop to its own line
+        // when the title + actions don't fit side-by-side, instead of
+        // overflowing on top of the title (the previous `sm:flex-nowrap`
+        // on the actions row forced a single line of buttons that
+        // collided with long titles like Leases).
+        "flex flex-col gap-4 pb-6 border-b border-border/60 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between",
         className,
       )}
       data-testid="page-header"
@@ -55,7 +60,14 @@ export function PageHeader({
         ) : null}
         {meta ? <div className="mt-2">{meta}</div> : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+      {/*
+        `sm:ml-auto` keeps the actions cluster pinned to the right edge
+        whether it sits next to the title (wide viewports) or wraps
+        below it (narrow viewports). Internal `flex-wrap` lets the
+        buttons themselves reflow if even the actions row alone is
+        wider than the available width.
+      */}
+      <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
         {actions}
         <LanguageToggle />
       </div>

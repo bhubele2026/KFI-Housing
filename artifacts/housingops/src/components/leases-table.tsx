@@ -6,10 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useState } from "react";
 import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
-import { extractSourcePdfFilename, sourcePdfHref } from "@/lib/lease-source-pdf";
+import {
+  extractSourcePdfFilename,
+  sourcePdfHref,
+  sourcePdfThumbnailHref,
+} from "@/lib/lease-source-pdf";
 
 export interface LeasesTableProps {
   leases: readonly Lease[];
@@ -178,10 +183,10 @@ export function LeasesTable({
       navigate(href);
     };
 
-  // Property + Customer + 7 always-on columns (Start, End, Rent, Deposit,
-  // Status, Terms, Notes) + 1 trash column.
+  // 1 PDF thumbnail column + Property + Customer + 7 always-on columns
+  // (Start, End, Rent, Deposit, Status, Terms, Notes) + 1 trash column.
   const columnCount =
-    (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 7 + 1;
+    1 + (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 7 + 1;
 
   const hasAnyRows = leases.length > 0 || placeholderProperties.length > 0;
 
@@ -189,6 +194,9 @@ export function LeasesTable({
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-12">
+            <span className="sr-only">Source PDF</span>
+          </TableHead>
           {showProperty && <TableHead>Property</TableHead>}
           {showCustomer && <TableHead>Customer</TableHead>}
           <TableHead>Start Date</TableHead>
@@ -228,6 +236,12 @@ export function LeasesTable({
                   aria-label={`Open lease for ${property?.name ?? "unknown property"}`}
                   className="cursor-pointer hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  <TableCell className="w-12 py-1">
+                    <LeaseSourceThumbnail
+                      lease={lease}
+                      originPath={originPath}
+                    />
+                  </TableCell>
                   {showProperty && (
                     <TableCell className="font-medium">
                       {property ? (
@@ -559,6 +573,10 @@ export function LeasesTable({
                   tabIndex={0}
                   aria-label={`Create lease for ${property.name}`}
                 >
+                  {/* Placeholder rows have no lease record (and therefore
+                      no source PDF), so the thumbnail column renders an
+                      empty cell to keep grid alignment with real rows. */}
+                  <TableCell className="w-12" />
                   {showProperty && (
                     <TableCell className="font-medium">
                       {onPropertyClick ? (
@@ -617,6 +635,70 @@ export function LeasesTable({
         )}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * Page-1 PDF thumbnail (or a clear PDF icon fallback) rendered inside the
+ * leases-table's leftmost column (Task #344). The thumbnail is fetched
+ * from the api-server's `/api/attached-assets/:filename/thumbnail` route
+ * (rendered server-side via pdfjs-dist + @napi-rs/canvas) so an operator
+ * can scan a long leases list and recognise the right document at a
+ * glance without opening each row.
+ *
+ *   • No source PDF on the lease → renders nothing (the cell stays empty
+ *     so rows without an attached document don't pretend to have one).
+ *   • Source PDF present → fetches a 120px-wide PNG and renders it inside
+ *     a clickable button. Clicking jumps to the lease detail page with
+ *     `?focus=preview` so the inline iframe preview is pre-expanded and
+ *     scrolled into view.
+ *   • Server-side render fails (PDF removed, pdfjs error, …) → the
+ *     `<img>` `onError` handler swaps in a neutral PDF icon so operators
+ *     still get a clear visual marker that the row carries a document.
+ */
+function LeaseSourceThumbnail({
+  lease,
+  originPath,
+}: {
+  lease: Lease;
+  originPath?: string;
+}) {
+  const [imageBroken, setImageBroken] = useState(false);
+  const sourcePdf = extractSourcePdfFilename(lease.notes, lease.clauses);
+  if (!sourcePdf) return null;
+
+  const previewHref =
+    `/leases/${lease.id}?focus=preview` +
+    (originPath ? `&from=${encodeURIComponent(originPath)}` : "");
+  const thumbnailSrc = sourcePdfThumbnailHref(sourcePdf, 120);
+
+  return (
+    <Link
+      href={previewHref}
+      onClick={(e) => e.stopPropagation()}
+      data-testid={`link-lease-source-thumbnail-${lease.id}`}
+      title={`Open inline preview: ${sourcePdf}`}
+      aria-label={`Open inline preview of source PDF for lease ${lease.id}`}
+      className="inline-flex h-12 w-9 items-center justify-center overflow-hidden rounded border border-border bg-muted/40 hover:border-primary/40 hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {imageBroken ? (
+        <FileText
+          className="h-5 w-5 text-muted-foreground"
+          data-testid={`icon-lease-source-thumbnail-fallback-${lease.id}`}
+          aria-hidden="true"
+        />
+      ) : (
+        <img
+          src={thumbnailSrc}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setImageBroken(true)}
+          data-testid={`img-lease-source-thumbnail-${lease.id}`}
+          className="h-full w-full object-cover object-top"
+        />
+      )}
+    </Link>
   );
 }
 

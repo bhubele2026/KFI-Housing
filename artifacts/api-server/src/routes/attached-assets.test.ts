@@ -104,4 +104,68 @@ describe("GET /api/attached-assets/:filename", () => {
     );
     expect(res.status).toBe(400);
   });
+
+  // Page-1 thumbnail endpoint added in Task #344. Renders server-side via
+  // pdfjs-dist + @napi-rs/canvas so the leases-table can show a visual
+  // marker next to each row with a recorded source PDF.
+  describe("GET /api/attached-assets/:filename/thumbnail", () => {
+    it("renders a PNG thumbnail of page 1 for a real lease PDF", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("image/png");
+      const buf = Buffer.from(await res.arrayBuffer());
+      // PNG magic bytes (89 50 4E 47 0D 0A 1A 0A) — the only contract the
+      // client's <img> needs is "this is decodable as PNG".
+      expect(buf[0]).toBe(0x89);
+      expect(buf.slice(1, 4).toString("ascii")).toBe("PNG");
+      // A page-1 thumbnail at the default ~160px width should comfortably
+      // exceed a few KB (a blank page would still be hundreds of bytes,
+      // but a real lease's first page contains text and layout).
+      expect(buf.length).toBeGreaterThan(2000);
+    });
+
+    it("serves the cached buffer on a second request and reports it via X-Thumbnail-Cache", async () => {
+      // First call may MISS or HIT depending on suite ordering; the second
+      // call must HIT because the cache key is filename + mtime + width.
+      await fetch(`${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`);
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-thumbnail-cache")).toBe("HIT");
+    });
+
+    it("returns 404 when the underlying PDF does not exist", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/Definitely_Not_A_Real_File_xyz.pdf/thumbnail`,
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it("rejects path traversal attempts (..) with 400", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/${encodeURIComponent("../package.json")}/thumbnail`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects non-PDF extensions with 400", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/Housing_Lease_MASTER_1778105244042.xlsx/thumbnail`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it("clamps the requested width to the supported range", async () => {
+      // 5000 is well above the 400px ceiling — the route should clamp and
+      // still render successfully rather than rejecting the request.
+      const res = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail?w=5000`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe("image/png");
+    });
+  });
 });

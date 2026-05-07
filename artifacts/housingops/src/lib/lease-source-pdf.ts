@@ -39,3 +39,18 @@ export function extractSourcePdfFilename(
 export function sourcePdfHref(filename: string): string {
   return `/api/attached-assets/${encodeURIComponent(filename)}`;
 }
+
+/**
+ * URL of the page-1 PNG thumbnail rendered server-side by the api-server
+ * (Task #344). The leases-table uses this to show a small preview next to
+ * each row so operators can spot the right document at a glance. Width
+ * defaults to ~120px — the leases-table column renders at 48px wide so
+ * this gives a comfortable 2x retina margin without ballooning the PNG.
+ */
+export function sourcePdfThumbnailHref(
+  filename: string,
+  width: number = 120,
+): string {
+  const w = Math.max(40, Math.min(400, Math.round(width)));
+  return `/api/attached-assets/${encodeURIComponent(filename)}/thumbnail?w=${w}`;
+}

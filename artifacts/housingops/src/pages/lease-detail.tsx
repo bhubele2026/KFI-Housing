@@ -326,9 +326,34 @@ function RoomNightLogSection({
  * instead. The "View source PDF" link in the page header is unchanged
  * either way so operators always have an out.
  */
-function LeaseSourcePdfPreview({ filename }: { filename: string }) {
-  const [open, setOpen] = useState(false);
-  const [hasOpened, setHasOpened] = useState(false);
+function LeaseSourcePdfPreview({
+  filename,
+  defaultOpen = false,
+  scrollIntoViewOnMount = false,
+}: {
+  filename: string;
+  /**
+   * Pre-expand the preview on mount. Wired by the parent when the URL
+   * carries `?focus=preview`, set by the leases-table thumbnail click
+   * (Task #344) so an operator who clicks a row's PDF thumbnail lands on
+   * the lease detail page with the iframe already loading.
+   */
+  defaultOpen?: boolean;
+  /**
+   * Scroll the card into view on mount. Paired with `defaultOpen` so the
+   * thumbnail-jump lands the operator looking at the preview, not at the
+   * top of the lease page.
+   */
+  scrollIntoViewOnMount?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [hasOpened, setHasOpened] = useState(defaultOpen);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!scrollIntoViewOnMount) return;
+    if (!cardRef.current) return;
+    cardRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [scrollIntoViewOnMount]);
   const [missing, setMissing] = useState<boolean | null>(null);
   const href = sourcePdfHref(filename);
 
@@ -350,7 +375,7 @@ function LeaseSourcePdfPreview({ filename }: { filename: string }) {
   }, [hasOpened, href, missing]);
 
   return (
-    <Card data-testid="card-lease-source-pdf-preview">
+    <Card data-testid="card-lease-source-pdf-preview" ref={cardRef}>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center justify-between gap-2">
           <span className="flex items-center gap-2">
@@ -466,6 +491,11 @@ export default function LeaseDetail() {
   // Date inline editor on mount and scroll the Lease Terms card into view
   // so the operator lands ready to fill in the missing term dates.
   const focusDatesOnMount = initialFocusFieldRef.current === "dates";
+  // `?focus=preview` is set by the leases-table thumbnail jump (Task #344)
+  // — when present we pre-expand the Source PDF preview card and scroll
+  // it into view so the operator's click on a row's PDF thumbnail lands
+  // them looking at the embedded document.
+  const focusPreviewOnMount = initialFocusFieldRef.current === "preview";
   const startDateRowRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!focusDatesOnMount) return;
@@ -962,7 +992,11 @@ export default function LeaseDetail() {
             if (!sourcePdf) return null;
             return (
               <div className="lg:col-span-2">
-                <LeaseSourcePdfPreview filename={sourcePdf} />
+                <LeaseSourcePdfPreview
+                  filename={sourcePdf}
+                  defaultOpen={focusPreviewOnMount}
+                  scrollIntoViewOnMount={focusPreviewOnMount}
+                />
               </div>
             );
           })()}

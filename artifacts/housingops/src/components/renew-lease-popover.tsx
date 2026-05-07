@@ -7,12 +7,16 @@ import { Separator } from "@/components/ui/separator";
 import { CalendarPlus, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { addMonthsToYMD, formatYMDPretty } from "@/lib/lease-dates";
+import {
+  addMonthsToYMDOrNull,
+  formatYMDPrettyOrBlank,
+  isBlankYMD,
+} from "@/lib/lease-dates";
 import type { Lease } from "@/data/mockData";
 
 type LeaseStatus = Lease["status"];
 
-const formatPretty = formatYMDPretty;
+const formatPretty = (s: string) => formatYMDPrettyOrBlank(s, "");
 
 interface RenewLeasePopoverProps {
   currentEndDate: string;
@@ -25,14 +29,29 @@ interface RenewLeasePopoverProps {
 
 export function RenewLeasePopover({ currentEndDate, currentStatus, propertyName, onRenew, trigger, align = "end" }: RenewLeasePopoverProps) {
   const [open, setOpen] = useState(false);
-  const [customDate, setCustomDate] = useState(addMonthsToYMD(currentEndDate, 12));
+  // Leases awaiting triage can have a blank end date (task #359). In
+  // that case `addMonthsToYMD` would throw on mount, so we fall back to
+  // an empty preset and require the operator to type a custom date
+  // before they can submit. The +6 / +1y quick buttons are hidden in
+  // this branch since "+6 months from nothing" isn't meaningful.
+  const hasCurrentEndDate = !isBlankYMD(currentEndDate);
+  const initialCustomDate = addMonthsToYMDOrNull(currentEndDate, 12) ?? "";
+  const [customDate, setCustomDate] = useState(initialCustomDate);
   const { toast } = useToast();
 
-  const sixMo = addMonthsToYMD(currentEndDate, 6);
-  const oneYr = addMonthsToYMD(currentEndDate, 12);
+  const sixMo = addMonthsToYMDOrNull(currentEndDate, 6);
+  const oneYr = addMonthsToYMDOrNull(currentEndDate, 12);
 
-  const apply = (newEndDate: string) => {
-    if (!newEndDate || newEndDate <= currentEndDate) {
+  const apply = (newEndDate: string | null) => {
+    if (!newEndDate) {
+      toast({
+        title: "Invalid date",
+        description: "Pick a new end date before applying.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (hasCurrentEndDate && newEndDate <= currentEndDate) {
       toast({
         title: "Invalid date",
         description: "New end date must be after the current end date.",
@@ -84,38 +103,44 @@ export function RenewLeasePopover({ currentEndDate, currentStatus, propertyName,
               Renew lease
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Currently ends {formatPretty(currentEndDate)}
+              {hasCurrentEndDate
+                ? `Currently ends ${formatPretty(currentEndDate)}`
+                : "This lease has no end date yet — pick one below."}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-1.5">
-            <button
-              type="button"
-              onClick={() => apply(sixMo)}
-              className="flex items-center justify-between rounded-md border border-border bg-background hover:bg-muted px-2.5 py-1.5 text-left text-sm transition-colors"
-            >
-              <span className="font-medium">+6 months</span>
-              <span className="text-xs text-muted-foreground">{formatPretty(sixMo)}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => apply(oneYr)}
-              className="flex items-center justify-between rounded-md border border-border bg-background hover:bg-muted px-2.5 py-1.5 text-left text-sm transition-colors"
-            >
-              <span className="font-medium">+1 year</span>
-              <span className="text-xs text-muted-foreground">{formatPretty(oneYr)}</span>
-            </button>
-          </div>
+          {hasCurrentEndDate && sixMo && oneYr && (
+            <div className="grid grid-cols-1 gap-1.5">
+              <button
+                type="button"
+                onClick={() => apply(sixMo)}
+                className="flex items-center justify-between rounded-md border border-border bg-background hover:bg-muted px-2.5 py-1.5 text-left text-sm transition-colors"
+              >
+                <span className="font-medium">+6 months</span>
+                <span className="text-xs text-muted-foreground">{formatPretty(sixMo)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => apply(oneYr)}
+                className="flex items-center justify-between rounded-md border border-border bg-background hover:bg-muted px-2.5 py-1.5 text-left text-sm transition-colors"
+              >
+                <span className="font-medium">+1 year</span>
+                <span className="text-xs text-muted-foreground">{formatPretty(oneYr)}</span>
+              </button>
+            </div>
+          )}
 
-          <Separator />
+          {hasCurrentEndDate && <Separator />}
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Custom new end date</Label>
+            <Label className="text-xs text-muted-foreground">
+              {hasCurrentEndDate ? "Custom new end date" : "New end date"}
+            </Label>
             <div className="flex items-center gap-1.5">
               <Input
                 type="date"
                 value={customDate}
-                min={currentEndDate}
+                min={hasCurrentEndDate ? currentEndDate : undefined}
                 onChange={(e) => setCustomDate(e.target.value)}
                 className="h-8 text-sm"
               />

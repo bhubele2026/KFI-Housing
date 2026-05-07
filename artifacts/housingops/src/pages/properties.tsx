@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { isBlankYMD } from "@/lib/lease-dates";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -2069,6 +2070,12 @@ export default function Properties() {
                     const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
                     const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
                     const showRenewal = renewal && renewal.level !== "ok";
+                    // A lease whose endDate is blank yields a null
+                    // `renewal` (see `getRenewalInfo`). Surface a neutral
+                    // "No end date" pill so operators can tell that
+                    // apart from "no active lease" and "ok renewal".
+                    const showNoEndDate =
+                      !!activeLease && !renewal && isBlankYMD(activeLease.endDate);
                     const overallRating = computeOverallRating(property.ratings);
                     const customer = customerById.get(property.customerId);
 
@@ -2251,6 +2258,14 @@ export default function Properties() {
                             <Badge variant="outline" className={`text-[11px] font-medium ${renewal.badgeClass}`}>
                               <AlertTriangle className="h-3 w-3 mr-1" />
                               {renewal.label}
+                            </Badge>
+                          ) : showNoEndDate ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[11px] font-medium border-dashed text-muted-foreground"
+                              data-testid={`badge-no-end-date-${property.id}`}
+                            >
+                              No end date
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>

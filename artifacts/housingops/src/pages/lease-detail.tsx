@@ -24,6 +24,7 @@ import {
   type Lease,
   type RentFrequency,
 } from "@/data/mockData";
+import { isBlankYMD } from "@/lib/lease-dates";
 
 // Same conversion factors used by the property-detail Payment Details card
 // so the lease page and property page can never disagree about how many
@@ -833,6 +834,19 @@ export default function LeaseDetail() {
                   >
                     <AlertTriangle className="h-3 w-3 mr-1" />
                     {renewal.label}
+                  </Badge>
+                )}
+                {!renewal && lease && isBlankYMD(lease.endDate) && (
+                  // Neutral indicator when the lease has no end date set
+                  // yet (e.g. a master-import row awaiting triage). Replaces
+                  // the renewal badge so operators can spot the gap without
+                  // the page-level "Something went wrong" boundary firing.
+                  <Badge
+                    variant="outline"
+                    className="text-xs font-medium border-dashed text-muted-foreground"
+                    data-testid="badge-lease-no-end-date"
+                  >
+                    No end date
                   </Badge>
                 )}
                 {customer && (

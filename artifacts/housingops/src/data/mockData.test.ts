@@ -214,6 +214,15 @@ describe("getRenewalInfo (loud failure on malformed dates)", () => {
     expect(info.days).toBe(30);
     expect(info.label).toBe("30 days left");
   });
+
+  it("returns null (no throw) for a blank end date so awaiting-triage leases don't crash the page", () => {
+    // Master-import rows and certain seed leases (Ridge Motor Inn,
+    // task #359) legitimately ship with a blank endDate. The Renewal
+    // Alerts panel and per-row badges need to silently skip those
+    // instead of bringing down the whole page (task #374).
+    expect(getRenewalInfo("")).toBeNull();
+    expect(getRenewalInfo("   ")).toBeNull();
+  });
 });
 
 describe("getRenewalInfo", () => {

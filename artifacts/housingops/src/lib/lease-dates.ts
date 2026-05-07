@@ -107,3 +107,54 @@ export function formatYMDPretty(dateStr: string): string {
     year: "numeric",
   });
 }
+
+// ── Blank-aware helpers ───────────────────────────────────────────────
+//
+// Lease term dates can legitimately be blank in our data (master-import
+// rows awaiting triage, some seed leases like the Ridge Motor Inn —
+// see task #359). The strict `parseYMD` above throws on a blank string
+// because that's the right behaviour for the renewal pipeline (a stray
+// time suffix should never silently emit `NaN days left`). But UI
+// consumers that just need to render an end-date column shouldn't crash
+// the whole page just because one lease is awaiting triage — they
+// should fall back to a neutral "No end date" indicator instead.
+//
+// These helpers give the UI an opt-in escape hatch without weakening
+// `parseYMD`'s loud failure on genuinely malformed non-blank input.
+
+/**
+ * True when `value` is an empty string, a whitespace-only string, or
+ * not a string at all (null/undefined). Anything else — including
+ * malformed date strings — returns false, so callers still get the
+ * loud `parseYMD` throw on those.
+ */
+export function isBlankYMD(value: unknown): boolean {
+  if (typeof value !== "string") return true;
+  return value.trim().length === 0;
+}
+
+/**
+ * Blank-aware variant of `formatYMDPretty`. Returns `fallback` when the
+ * input is blank (default `""`). Still throws loudly on a non-blank
+ * malformed value via `parseYMD`.
+ */
+export function formatYMDPrettyOrBlank(
+  dateStr: string,
+  fallback: string = "",
+): string {
+  if (isBlankYMD(dateStr)) return fallback;
+  return formatYMDPretty(dateStr);
+}
+
+/**
+ * Blank-aware variant of `addMonthsToYMD`. Returns `null` when the input
+ * is blank. Still throws loudly on a non-blank malformed value via
+ * `parseYMD`.
+ */
+export function addMonthsToYMDOrNull(
+  dateStr: string,
+  months: number,
+): string | null {
+  if (isBlankYMD(dateStr)) return null;
+  return addMonthsToYMD(dateStr, months);
+}

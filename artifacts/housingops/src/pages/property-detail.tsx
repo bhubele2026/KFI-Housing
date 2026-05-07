@@ -23,7 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
-import { formatYMDPretty } from "@/lib/lease-dates";
+import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
@@ -856,13 +856,26 @@ export default function PropertyDetail() {
             })()}
             {primaryActiveLease && (() => {
               const renewal = getRenewalInfo(primaryActiveLease.endDate);
-              if (!renewal || renewal.level === "ok") return null;
+              const noEndDate =
+                !renewal && isBlankYMD(primaryActiveLease.endDate);
+              if (!renewal && !noEndDate) return null;
+              if (renewal && renewal.level === "ok") return null;
               return (
                 <div className="flex items-center gap-1.5 ml-1">
-                  <Badge variant="outline" className={`text-xs font-medium ${renewal.badgeClass}`}>
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    Renewal: {renewal.label}
-                  </Badge>
+                  {renewal ? (
+                    <Badge variant="outline" className={`text-xs font-medium ${renewal.badgeClass}`}>
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Renewal: {renewal.label}
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-xs font-medium border-dashed text-muted-foreground"
+                      data-testid="badge-property-no-end-date"
+                    >
+                      No end date
+                    </Badge>
+                  )}
                   <RenewLeasePopover
                     currentEndDate={primaryActiveLease.endDate}
                     currentStatus={primaryActiveLease.status}

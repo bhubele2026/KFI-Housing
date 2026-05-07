@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseYMD } from "@/lib/lease-dates";
+import { isBlankYMD, parseYMD } from "@/lib/lease-dates";
 
 // ── Property ratings ───────────────────────────────────────────────────
 // Each category is a whole-star value 0–5. A value of 0 means "not yet rated"
@@ -638,7 +638,14 @@ export interface RenewalInfo {
 }
 
 export function getRenewalInfo(endDate: string): RenewalInfo | null {
-  if (!endDate) return null;
+  // Blank end dates are a legitimate state for leases that are still
+  // awaiting triage (master-import rows, the Ridge Motor Inn seed, etc.
+  // — see task #359). They have no calendar to compare against, so we
+  // return null and let the UI fall back to a neutral "No end date"
+  // indicator. `parseYMD` (called transitively via `daysUntil`) still
+  // throws loudly on a *non-blank* malformed value so the renewal
+  // pipeline can never silently emit `NaN days left` (task #364).
+  if (isBlankYMD(endDate)) return null;
   const days = daysUntil(endDate);
   const abs = Math.abs(days);
   const dayWord = (n: number) => `${n} day${n === 1 ? "" : "s"}`;

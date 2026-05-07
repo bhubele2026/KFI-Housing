@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { addMonthsToYMD, formatYMDPretty, parseYMD } from "./lease-dates";
+import {
+  addMonthsToYMD,
+  addMonthsToYMDOrNull,
+  formatYMDPretty,
+  formatYMDPrettyOrBlank,
+  isBlankYMD,
+  parseYMD,
+} from "./lease-dates";
 
 describe("parseYMD", () => {
   describe("happy path", () => {
@@ -185,6 +192,67 @@ describe("formatYMDPretty", () => {
 
   it("throws on a stray time suffix instead of silently producing 'Invalid Date'", () => {
     expect(() => formatYMDPretty("2026-05-31 00:00:00")).toThrow(
+      /2026-05-31 00:00:00/,
+    );
+  });
+});
+
+describe("isBlankYMD", () => {
+  it("treats empty and whitespace-only strings as blank", () => {
+    expect(isBlankYMD("")).toBe(true);
+    expect(isBlankYMD("   ")).toBe(true);
+    expect(isBlankYMD("\t")).toBe(true);
+  });
+
+  it("treats non-string inputs as blank", () => {
+    expect(isBlankYMD(null)).toBe(true);
+    expect(isBlankYMD(undefined)).toBe(true);
+    expect(isBlankYMD(0)).toBe(true);
+  });
+
+  it("returns false for any non-empty string, including malformed ones", () => {
+    // Malformed values still need to flow into `parseYMD` so the loud
+    // throw fires — `isBlankYMD` is only the "empty" gate.
+    expect(isBlankYMD("2026-05-31")).toBe(false);
+    expect(isBlankYMD("2026-05-31 00:00:00")).toBe(false);
+    expect(isBlankYMD("not a date")).toBe(false);
+  });
+});
+
+describe("formatYMDPrettyOrBlank", () => {
+  it("returns the fallback (default empty string) for a blank input", () => {
+    expect(formatYMDPrettyOrBlank("")).toBe("");
+    expect(formatYMDPrettyOrBlank("   ")).toBe("");
+    expect(formatYMDPrettyOrBlank("", "—")).toBe("—");
+  });
+
+  it("formats a clean date the same as formatYMDPretty", () => {
+    expect(formatYMDPrettyOrBlank("2026-05-31")).toBe(
+      formatYMDPretty("2026-05-31"),
+    );
+  });
+
+  it("still throws on a non-blank malformed input", () => {
+    expect(() => formatYMDPrettyOrBlank("2026-05-31 00:00:00")).toThrow(
+      /2026-05-31 00:00:00/,
+    );
+  });
+});
+
+describe("addMonthsToYMDOrNull", () => {
+  it("returns null for a blank input instead of throwing", () => {
+    expect(addMonthsToYMDOrNull("", 12)).toBeNull();
+    expect(addMonthsToYMDOrNull("   ", 6)).toBeNull();
+  });
+
+  it("adds months the same as addMonthsToYMD for a clean date", () => {
+    expect(addMonthsToYMDOrNull("2026-01-15", 6)).toBe(
+      addMonthsToYMD("2026-01-15", 6),
+    );
+  });
+
+  it("still throws on a non-blank malformed input", () => {
+    expect(() => addMonthsToYMDOrNull("2026-05-31 00:00:00", 12)).toThrow(
       /2026-05-31 00:00:00/,
     );
   });

@@ -22,6 +22,7 @@ import Beds from "@/pages/beds";
 import Occupants from "@/pages/occupants";
 import Utilities from "@/pages/utilities";
 import Finance from "@/pages/finance";
+import InsuranceCertificates from "@/pages/insurance-certificates";
 
 // Demo-grade defaults: never auto-retry mutations (a stale optimistic patch
 // will get re-applied on top of fresh data, which is more confusing than a
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/occupants" component={Occupants} />
       <Route path="/utilities" component={Utilities} />
       <Route path="/finance" component={Finance} />
+      <Route path="/insurance" component={InsuranceCertificates} />
       <Route component={NotFound} />
     </Switch>
   );

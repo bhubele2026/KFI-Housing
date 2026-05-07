@@ -22,15 +22,20 @@ import { toWeeklyCharge, toMonthlyCharge, formatUsd } from "@/data/mockData";
 export default function Occupants() {
   const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
   const { toast } = useToast();
-  const [search, setSearch] = useState("");
-  const [propertyFilter, setPropertyFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">("All");
   // Move-in filter is URL-driven so the dashboard "Needs review" card can deep
   // link straight into the missing-move-in subset (`?needsReview=1`). We seed
   // state from the search string and write back on change so refresh/back work.
+  // The dashboard "Recently reconciled from payroll" card (Task #351) also
+  // deep-links here with `?q=<name>` so the operator lands with the search
+  // box pre-filled on the just-touched occupant.
   const searchString = useSearch();
   const [, navigate] = useLocation();
+  const [search, setSearch] = useState(
+    () => new URLSearchParams(searchString).get("q") ?? "",
+  );
+  const [propertyFilter, setPropertyFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">("All");
   const [moveInFilter, setMoveInFilter] = useState<"All" | "NeedsReview">(() =>
     new URLSearchParams(searchString).get("needsReview") === "1"
       ? "NeedsReview"
@@ -38,11 +43,12 @@ export default function Occupants() {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(searchString);
     const next =
-      new URLSearchParams(searchString).get("needsReview") === "1"
-        ? "NeedsReview"
-        : "All";
+      params.get("needsReview") === "1" ? "NeedsReview" : "All";
     setMoveInFilter((prev) => (prev === next ? prev : next));
+    const q = params.get("q") ?? "";
+    setSearch((prev) => (prev === q || prev !== "" && q === "" ? prev : q));
   }, [searchString]);
 
   const updateMoveInFilter = (value: "All" | "NeedsReview") => {

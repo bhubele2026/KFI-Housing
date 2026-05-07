@@ -1844,3 +1844,166 @@ describe("Dashboard Property Performance correctness", () => {
     expect(row?.textContent).toContain("50%");
   });
 });
+
+// Task #351: when an operator clicks a "Did you mean" / "Confirm"
+// button, the dashboard should keep an audit trail of the applied
+// suggestions so a wrong guess is easy to spot afterwards.
+import {
+  __resetRecentPayrollReconciliationsForTests,
+  __getRecentPayrollReconciliationsForTests,
+} from "@/lib/recent-payroll-reconciliations";
+
+describe("Dashboard recently-reconciled-from-payroll audit trail", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    invalidateQueriesMock.mockReset();
+    updateOccupantMock.mockReset();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    __resetRecentPayrollReconciliationsForTests();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    __resetRecentPayrollReconciliationsForTests();
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  it("hides the card when there is no audit trail yet", async () => {
+    await render();
+    expect(
+      container.querySelector('[data-testid="card-recent-payroll-reconciliations"]'),
+    ).toBeNull();
+  });
+
+  it("logs a cross-employer apply with the warning badge and a link to the occupant", async () => {
+    unplacedPayrollState.rows = [
+      {
+        customer: "Penda",
+        name: "JOSE GARCIA",
+        personId: "EMP9",
+        weekly: 175,
+        suggestions: [
+          {
+            occupantId: "occ-x",
+            name: "Jose Garcia",
+            company: "Trienda",
+            propertyName: "Park Place",
+            score: 0.95,
+            crossEmployer: true,
+          },
+        ],
+      },
+    ];
+
+    await render();
+
+    const btn = container.querySelector(
+      '[data-testid="button-apply-suggestion-EMP9-occ-x"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(updateOccupantMock).toHaveBeenCalledWith("occ-x", {
+      chargePerBed: 175,
+      billingFrequency: "Weekly",
+      employeeId: "EMP9",
+      company: "Penda",
+    });
+
+    const snap = __getRecentPayrollReconciliationsForTests();
+    expect(snap).toHaveLength(1);
+    expect(snap[0]).toMatchObject({
+      occupantId: "occ-x",
+      occupantName: "Jose Garcia",
+      propertyName: "Park Place",
+      employer: "Penda",
+      weekly: 175,
+      kind: "cross-employer",
+    });
+
+    const card = container.querySelector(
+      '[data-testid="card-recent-payroll-reconciliations"]',
+    );
+    expect(card).not.toBeNull();
+    const badge = container.querySelector(
+      '[data-testid="badge-recent-reconciliation-kind-occ-x"]',
+    );
+    expect(badge?.textContent).toContain("Cross-employer");
+    const link = container.querySelector(
+      '[data-testid="link-recent-reconciliation-occ-x"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toContain("/occupants?q=Jose%20Garcia");
+  });
+
+  it("logs a low-confidence Confirm with the 'Confirmed' badge", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "JOSE GARCIA",
+        personId: "EMP9",
+        weekly: 125,
+        matched: {
+          occupantId: "occ-a",
+          name: "Jose Garcia",
+          company: "Acme Co",
+          propertyName: "Hilltop",
+          score: 1,
+          crossEmployer: false,
+        },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    const btn = container.querySelector(
+      '[data-testid="button-confirm-low-confidence-EMP9"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      btn!.click();
+    });
+
+    const snap = __getRecentPayrollReconciliationsForTests();
+    expect(snap).toHaveLength(1);
+    expect(snap[0]).toMatchObject({
+      occupantId: "occ-a",
+      occupantName: "Jose Garcia",
+      propertyName: "Hilltop",
+      employer: "Acme Co",
+      weekly: 125,
+      kind: "confirm",
+    });
+
+    const badge = container.querySelector(
+      '[data-testid="badge-recent-reconciliation-kind-occ-a"]',
+    );
+    expect(badge?.textContent).toContain("Confirmed");
+  });
+});
+

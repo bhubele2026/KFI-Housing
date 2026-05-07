@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -35,8 +35,30 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import {
+  recordPayrollReconciliation,
+  useRecentPayrollReconciliations,
+  type PayrollReconciliationKind,
+} from "@/lib/recent-payroll-reconciliations";
 
 type TopPropertiesSortKey = "overall" | RatingCategoryKey;
+
+// Lightweight "N <unit> ago" formatter for the recent-reconciliations
+// audit trail. The card never lives long enough on screen to need a
+// self-refreshing tick (entries are session-scoped and the operator
+// usually clicks through immediately), so a one-shot string is fine.
+function formatRelativeTime(timestamp: number, now: number = Date.now()): string {
+  const diffMs = Math.max(0, now - timestamp);
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 5) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min${min === 1 ? "" : "s"} ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr${hr === 1 ? "" : "s"} ago`;
+  const day = Math.floor(hr / 24);
+  return `${day} day${day === 1 ? "" : "s"} ago`;
+}
 
 export default function Dashboard() {
   const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
@@ -54,6 +76,11 @@ export default function Dashboard() {
   const { data: unplacedPayrollResult } = useListUnplacedPayroll();
   const unplacedPayroll = unplacedPayrollResult?.unmatched;
   const lowConfidencePayroll = unplacedPayrollResult?.lowConfidenceMatches;
+  // Audit trail of suggestion-applied payroll rows (Task #351). The
+  // unplaced/low-confidence rows silently disappear after a successful
+  // refetch — keep the last few here so the operator can sanity-check
+  // (or undo via the linked occupant page) if a guess was wrong.
+  const recentReconciliations = useRecentPayrollReconciliations();
   // Room-night logs power the hotel-rate "at risk this month" tile —
   // mirrors the leases page (task #319). Hook returns undefined while
   // loading; treat as empty so the tile just shows 0 / no tile.
@@ -1069,6 +1096,21 @@ export default function Dashboard() {
                                           ? { employeeId: row.personId }
                                           : {}),
                                       });
+                                      // Audit trail: the row is about to
+                                      // disappear from this card on the
+                                      // next refetch, so log it before
+                                      // refetching so the operator can
+                                      // spot a wrong guess afterwards.
+                                      recordPayrollReconciliation({
+                                        id: `${row.customer}::${row.personId}::${s.occupantId}::${Date.now()}`,
+                                        occupantId: s.occupantId,
+                                        occupantName: s.name,
+                                        propertyName: s.propertyName,
+                                        employer: row.customer,
+                                        weekly: row.weekly,
+                                        kind: s.crossEmployer ? "cross-employer" : "typo",
+                                        timestamp: Date.now(),
+                                      });
                                       queryClient.invalidateQueries({
                                         queryKey: getListUnplacedPayrollQueryKey(),
                                       });
@@ -1288,6 +1330,23 @@ export default function Dashboard() {
                                         billingFrequency: "Weekly",
                                         employeeId: row.personId,
                                       });
+                                      // Redirecting from the matched
+                                      // namesake to a same-employer
+                                      // alternative is the typo class
+                                      // of fix. Cross-employer
+                                      // alternatives don't appear in
+                                      // this list (suggestions are
+                                      // ranked same-employer only).
+                                      recordPayrollReconciliation({
+                                        id: `lc::${row.customer}::${row.personId}::${s.occupantId}::${Date.now()}`,
+                                        occupantId: s.occupantId,
+                                        occupantName: s.name,
+                                        propertyName: s.propertyName,
+                                        employer: row.customer,
+                                        weekly: row.weekly,
+                                        kind: s.crossEmployer ? "cross-employer" : "typo",
+                                        timestamp: Date.now(),
+                                      });
                                       queryClient.invalidateQueries({
                                         queryKey: getListUnplacedPayrollQueryKey(),
                                       });
@@ -1317,6 +1376,16 @@ export default function Dashboard() {
                                 updateOccupant(row.matched.occupantId, {
                                   employeeId: row.personId,
                                 });
+                                recordPayrollReconciliation({
+                                  id: `lc-confirm::${row.customer}::${row.personId}::${Date.now()}`,
+                                  occupantId: row.matched.occupantId,
+                                  occupantName: row.matched.name,
+                                  propertyName: row.matched.propertyName,
+                                  employer: row.customer,
+                                  weekly: row.weekly,
+                                  kind: "confirm",
+                                  timestamp: Date.now(),
+                                });
                                 queryClient.invalidateQueries({
                                   queryKey: getListUnplacedPayrollQueryKey(),
                                 });
@@ -1332,6 +1401,112 @@ export default function Dashboard() {
                   </Table>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {recentReconciliations.length > 0 && (
+          <Card data-testid="card-recent-payroll-reconciliations">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Recently reconciled from payroll</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-recent-payroll-reconciliations-count"
+                >
+                  {recentReconciliations.length} entr
+                  {recentReconciliations.length === 1 ? "y" : "ies"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Suggestion clicks from this session. Open an occupant to
+                sanity-check the new employer / weekly rate, or undo the
+                change if the seeder guessed wrong.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Occupant</TableHead>
+                    <TableHead>New employer</TableHead>
+                    <TableHead className="text-right">Weekly</TableHead>
+                    <TableHead>When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentReconciliations.map((entry) => {
+                    const kindStyle: Record<
+                      PayrollReconciliationKind,
+                      { label: string; className: string }
+                    > = {
+                      "cross-employer": {
+                        label: "Cross-employer",
+                        className:
+                          "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200",
+                      },
+                      typo: {
+                        label: "Typo fix",
+                        className:
+                          "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200",
+                      },
+                      confirm: {
+                        label: "Confirmed",
+                        className:
+                          "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200",
+                      },
+                    };
+                    const style = kindStyle[entry.kind];
+                    return (
+                      <TableRow
+                        key={entry.id}
+                        data-testid={`row-recent-reconciliation-${entry.occupantId}`}
+                      >
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/occupants?q=${encodeURIComponent(entry.occupantName)}`}
+                            className="text-primary hover:underline"
+                            data-testid={`link-recent-reconciliation-${entry.occupantId}`}
+                          >
+                            {entry.occupantName}
+                          </Link>
+                          {entry.propertyName ? (
+                            <div className="text-xs text-muted-foreground">
+                              {entry.propertyName}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground italic">
+                              unassigned
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{entry.employer}</span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] uppercase tracking-wide ${style.className}`}
+                              data-testid={`badge-recent-reconciliation-kind-${entry.occupantId}`}
+                            >
+                              {style.label}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          ${entry.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell
+                          className="text-xs text-muted-foreground"
+                          data-testid={`text-recent-reconciliation-when-${entry.occupantId}`}
+                        >
+                          {formatRelativeTime(entry.timestamp)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}

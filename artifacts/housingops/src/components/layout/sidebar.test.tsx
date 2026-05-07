@@ -68,9 +68,10 @@ vi.mock("@/context/data-store", () => ({
     beds: { added: number; updated: number; unchanged: number };
     occupants: { added: number; updated: number; unchanged: number };
     utilities: { added: number; updated: number; unchanged: number };
+    roomNightLogs: { added: number; updated: number; unchanged: number };
   }) => {
     let added = 0, updated = 0, unchanged = 0;
-    for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities"] as const) {
+    for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs"] as const) {
       added += dry[k].added; updated += dry[k].updated; unchanged += dry[k].unchanged;
     }
     return { added, updated, unchanged };
@@ -737,7 +738,7 @@ describe("Sidebar import dialog — merge preview", () => {
   // bundle's contents don't matter for these tests.
   const emptyData = {
     customers: [], properties: [], leases: [], rooms: [],
-    beds: [], occupants: [], utilities: [],
+    beds: [], occupants: [], utilities: [], roomNightLogs: [],
   };
 
   function dryRun(over: Partial<Record<keyof typeof emptyData, {
@@ -754,7 +755,7 @@ describe("Sidebar import dialog — merge preview", () => {
     });
     const out: Record<string, ReturnType<typeof empty>> = {
       customers: empty(), properties: empty(), leases: empty(), rooms: empty(),
-      beds: empty(), occupants: empty(), utilities: empty(),
+      beds: empty(), occupants: empty(), utilities: empty(), roomNightLogs: empty(),
     };
     for (const [k, v] of Object.entries(over)) {
       out[k] = { ...out[k], ...v };
@@ -786,12 +787,18 @@ describe("Sidebar import dialog — merge preview", () => {
     document.querySelectorAll('[role="alertdialog"]').forEach((el) => el.remove());
   });
 
-  async function openImportDialog() {
+  async function openImportDialog(
+    overrides?: { summary?: Partial<{
+      customers: number; properties: number; leases: number; rooms: number;
+      beds: number; occupants: number; utilities: number; roomNightLogs: number;
+    }> },
+  ) {
     inspectImportPayloadMock.mockReturnValue({
       data: emptyData,
       summary: {
         customers: 0, properties: 0, leases: 0, rooms: 0,
-        beds: 0, occupants: 0, utilities: 0,
+        beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0,
+        ...(overrides?.summary ?? {}),
       },
       migratedFromV1: false,
       migratedRooms: false,
@@ -833,6 +840,64 @@ describe("Sidebar import dialog — merge preview", () => {
     expect(mergeRadio).not.toBeNull();
     await act(async () => { mergeRadio!.click(); });
   }
+
+  it("renders per-type record counts (including room-night logs) in the import preview", async () => {
+    await openImportDialog({
+      summary: {
+        customers: 2, properties: 3, leases: 4, rooms: 5,
+        beds: 6, occupants: 7, utilities: 8, roomNightLogs: 9,
+      },
+    });
+
+    const summary = document.querySelector('[data-testid="import-preview-summary"]');
+    expect(summary).not.toBeNull();
+    // Each of the eight ImportSummary categories renders, including the new
+    // room-night logs row — operators need to see how many logged room-nights
+    // a backup will bring in alongside the older categories.
+    const expectations: Array<[string, string, string]> = [
+      ["customers", "Customers", "2"],
+      ["properties", "Properties", "3"],
+      ["leases", "Leases", "4"],
+      ["rooms", "Rooms", "5"],
+      ["beds", "Beds", "6"],
+      ["occupants", "Occupants", "7"],
+      ["utilities", "Utilities", "8"],
+      ["roomNightLogs", "Room-night logs", "9"],
+    ];
+    for (const [key, label, count] of expectations) {
+      const row = document.querySelector(`[data-testid="import-preview-summary-row-${key}"]`);
+      expect(row, `row ${key} should render`).not.toBeNull();
+      expect(row!.textContent).toContain(label);
+      expect(row!.textContent).toContain(count);
+    }
+  });
+
+  it("includes a Room-night logs row in the merge preview with added/updated/unchanged counts", async () => {
+    previewMergeImportMock.mockReturnValue(dryRun({
+      roomNightLogs: { added: 2, updated: 1, unchanged: 4,
+        updatedItems: [{ id: "log-1", label: "Log 2026-04" }] },
+    }));
+    await openImportDialog();
+    await selectMergeMode();
+
+    const row = document.querySelector('[data-testid="merge-preview-row-roomNightLogs"]');
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain("2 added");
+    expect(row!.textContent).toContain("1 updated");
+    expect(row!.textContent).toContain("4 unchanged");
+
+    // The overwrite list also surfaces the per-row labels (the existing
+    // per-row label list called out in the task), so operators can spot
+    // which months would be replaced.
+    const toggle = document.querySelector(
+      '[data-testid="merge-preview-overwrites-toggle"]',
+    ) as HTMLElement | null;
+    expect(toggle).not.toBeNull();
+    await act(async () => { toggle!.click(); });
+    const overwrites = document.querySelector('[data-testid="merge-preview-overwrites-roomNightLogs"]');
+    expect(overwrites).not.toBeNull();
+    expect(overwrites!.textContent).toContain("Log 2026-04");
+  });
 
   it("hides the merge preview while replace mode is selected (the default)", async () => {
     previewMergeImportMock.mockReturnValue(dryRun({
@@ -941,7 +1006,7 @@ describe("Sidebar import dialog — merge preview", () => {
   it("attaches an Undo action to the replace-mode success toast", async () => {
     importDataMock.mockReturnValue({
       mode: "replace",
-      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
     });
     await openImportDialog();
     await confirmImport();
@@ -963,9 +1028,9 @@ describe("Sidebar import dialog — merge preview", () => {
   it("attaches an Undo action to the merge-mode success toast", async () => {
     importDataMock.mockReturnValue({
       mode: "merge",
-      summary: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
-      added: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
-      updated: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      summary: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
+      added: { customers: 1, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
+      updated: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
     });
     await openImportDialog();
     // Switch to merge mode so the merge-summary branch runs.
@@ -982,7 +1047,7 @@ describe("Sidebar import dialog — merge preview", () => {
   it("clicking Undo while the snapshot is still alive restores data and shows a confirming toast", async () => {
     importDataMock.mockReturnValue({
       mode: "replace",
-      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
     });
     undoLastImportMock.mockReset();
     undoLastImportMock.mockReturnValue(true);
@@ -1020,7 +1085,7 @@ describe("Sidebar import dialog — merge preview", () => {
   it("clicking Undo after the window expires shows a destructive 'can't undo' toast", async () => {
     importDataMock.mockReturnValue({
       mode: "replace",
-      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0 },
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 0 },
     });
     undoLastImportMock.mockReset();
     // Simulate the 30-second window having already lapsed by the time

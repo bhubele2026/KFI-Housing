@@ -15,6 +15,7 @@ import {
   type ImportMode,
   type ImportResult,
   type ImportPreview,
+  type ImportSummary,
   type MergeDryRun,
   type MergeImpactCategory,
   UNDO_IMPORT_WINDOW_MS,
@@ -306,7 +307,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     setImportOpen(false);
     setPendingImport(null);
     const summary = result.summary;
-    const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities`;
+    const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities, ${summary.roomNightLogs} room-night logs`;
     // Same Undo action attached to both the merge and replace success toasts
     // — both modes are destructive (rows are overwritten by-id) so an
     // operator who confirmed by mistake gets the same one-click recovery.
@@ -788,6 +789,9 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                   Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span>.
                   Choose how it should be applied to your current data.
                 </p>
+                {pendingImport ? (
+                  <ImportSummaryList summary={pendingImport.preview.summary} />
+                ) : null}
                 <RadioGroup
                   value={importMode}
                   onValueChange={(v) => setImportMode(v as ImportMode)}
@@ -886,6 +890,46 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
   );
 }
 
+const IMPORT_SUMMARY_TYPES: Array<{ key: keyof ImportSummary; label: string }> = [
+  { key: "customers", label: "Customers" },
+  { key: "properties", label: "Properties" },
+  { key: "leases", label: "Leases" },
+  { key: "rooms", label: "Rooms" },
+  { key: "beds", label: "Beds" },
+  { key: "occupants", label: "Occupants" },
+  { key: "utilities", label: "Utilities" },
+  { key: "roomNightLogs", label: "Room-night logs" },
+];
+
+/**
+ * Renders the per-type record counts in the file the operator picked,
+ * so they can sanity-check the bundle before choosing replace vs merge.
+ * Shown for both modes — the merge dry-run below it adds the
+ * added/updated/unchanged breakdown on top.
+ */
+function ImportSummaryList({ summary }: { summary: ImportSummary }) {
+  return (
+    <div
+      className="rounded-md border border-border bg-muted/40 p-3 space-y-1"
+      data-testid="import-preview-summary"
+    >
+      <p className="text-sm font-medium">What&apos;s in this file</p>
+      <ul className="text-sm text-muted-foreground space-y-0.5">
+        {IMPORT_SUMMARY_TYPES.map(({ key, label }) => (
+          <li
+            key={key}
+            className="flex justify-between gap-2 tabular-nums"
+            data-testid={`import-preview-summary-row-${key}`}
+          >
+            <span>{label}</span>
+            <span>{summary[key]}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; label: string }> = [
   { key: "customers", label: "Customers" },
   { key: "properties", label: "Properties" },
@@ -894,6 +938,7 @@ const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; label: string }> = [
   { key: "beds", label: "Beds" },
   { key: "occupants", label: "Occupants" },
   { key: "utilities", label: "Utilities" },
+  { key: "roomNightLogs", label: "Room-night logs" },
 ];
 
 /**

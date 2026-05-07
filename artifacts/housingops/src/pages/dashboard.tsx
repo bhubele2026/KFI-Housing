@@ -189,6 +189,14 @@ export default function Dashboard() {
     () => scopedLeases.filter((l) => l.needsReview).length,
     [scopedLeases],
   );
+  // Mirrors the `?needsDates=1` predicate on /leases (task #363):
+  // any lease with a blank start OR end date is part of the triage
+  // queue. Surfaced here (task #367) so operators can find the queue
+  // from the dashboard without remembering the URL filter.
+  const needsDatesLeaseCount = useMemo(
+    () => scopedLeases.filter((l) => !l.startDate || !l.endDate).length,
+    [scopedLeases],
+  );
   const needsReviewPropertyCount = useMemo(
     () => scopedProperties.filter((p) => !(p.monthlyRent && p.monthlyRent > 0)).length,
     [scopedProperties],
@@ -232,6 +240,14 @@ export default function Dashboard() {
       cta: "Review leases",
       href: `/leases?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-leases",
+    },
+    {
+      key: "leases-needs-dates" as const,
+      count: needsDatesLeaseCount,
+      label: "Leases missing term dates",
+      cta: "Review missing dates",
+      href: `/leases?needsDates=1${customerQuerySuffix}`,
+      testId: "needs-review-leases-needs-dates",
     },
     {
       key: "properties" as const,

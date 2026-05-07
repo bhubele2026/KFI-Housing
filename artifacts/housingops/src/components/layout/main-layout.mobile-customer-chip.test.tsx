@@ -21,9 +21,11 @@ vi.mock("./sidebar", () => ({
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;
+  dataIssues: { kind: string; label: string; dropped: number }[];
 } = {
   customers: [],
   isLoading: false,
+  dataIssues: [],
 };
 vi.mock("@/context/data-store", () => ({
   useData: () => mockData,

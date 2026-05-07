@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { z } from "zod";
 import {
@@ -138,6 +138,51 @@ const LEGACY_CUSTOMER: Customer = {
     "Auto-created during import of an older backup that did not include customers. " +
     "Re-assign these properties to your real customers when you're ready.",
 };
+
+/**
+ * One bad row dropped from a list response. Surfaced via {@link DataStore.dataIssues}
+ * so the UI can render a small inline notice instead of letting a single
+ * malformed row blank the whole page.
+ */
+export interface DataIssue {
+  /** Cache key, e.g. "leases" or "properties". */
+  kind: string;
+  /** Human-readable label, e.g. "leases" / "properties". */
+  label: string;
+  /** Number of rows that failed schema validation and were dropped. */
+  dropped: number;
+}
+
+/**
+ * Validate an unknown list payload row-by-row against `schema`. Drops (and
+ * `console.warn`s) any row that fails to parse so a single malformed row
+ * only loses that row, not the whole list. A non-array input is treated as
+ * an empty list.
+ */
+export function safeParseList<S extends z.ZodTypeAny>(
+  schema: S,
+  raw: unknown,
+  label: string,
+): { rows: z.infer<S>[]; dropped: number } {
+  if (!Array.isArray(raw)) return { rows: [], dropped: 0 };
+  const rows: z.infer<S>[] = [];
+  let dropped = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const result = schema.safeParse(raw[i]);
+    if (result.success) {
+      rows.push(result.data);
+    } else {
+      dropped++;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[data-store] Dropped malformed ${label} row at index ${i}:`,
+        result.error.issues,
+        raw[i],
+      );
+    }
+  }
+  return { rows, dropped };
+}
 
 export class UnsupportedImportError extends Error {
   constructor(message: string) {
@@ -556,6 +601,13 @@ interface DataStore {
   utilities: Utility[];
   roomNightLogs: RoomNightLog[];
   isLoading: boolean;
+  /**
+   * Per-list counts of rows the client dropped because they failed schema
+   * validation. Empty when every row parsed cleanly. Surfaced in the layout
+   * as a small inline notice ("N rows hidden — see console") so a single
+   * malformed row never blanks the whole page.
+   */
+  dataIssues: DataIssue[];
   addCustomer: (customer: Customer) => Promise<Customer>;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   deleteCustomer: (id: string) => Promise<void>;
@@ -605,8 +657,6 @@ interface DataStore {
 export const UNDO_IMPORT_WINDOW_MS = 30_000;
 
 const DataContext = createContext<DataStore | undefined>(undefined);
-
-const EMPTY: never[] = [];
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -662,15 +712,62 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const resetMut = useResetToSampleData();
   const importMut = useImportData();
 
-  const customers = (customersQuery.data as Customer[] | undefined) ?? EMPTY;
-  const properties = (propertiesQuery.data as Property[] | undefined) ?? EMPTY;
-  const leases = (leasesQuery.data as Lease[] | undefined) ?? EMPTY;
-  const rooms = (roomsQuery.data as Room[] | undefined) ?? EMPTY;
-  const beds = (bedsQuery.data as Bed[] | undefined) ?? EMPTY;
-  const occupants = (occupantsQuery.data as Occupant[] | undefined) ?? EMPTY;
-  const utilities = (utilitiesQuery.data as Utility[] | undefined) ?? EMPTY;
-  const roomNightLogs = (roomNightLogsQuery.data as RoomNightLog[] | undefined) ?? EMPTY;
+  // Parse each list response row-by-row so a single malformed row from the
+  // server only loses that row, not the whole page. The dropped count is
+  // surfaced via `dataIssues` so the layout can render an inline notice
+  // ("N rows hidden — see console") instead of going blank. Memoized on
+  // the raw query data so we don't re-walk the array every render.
+  const { rows: customers, dropped: customersDropped } = useMemo(
+    () => safeParseList(CustomerSchema, customersQuery.data, "customers"),
+    [customersQuery.data],
+  );
+  const { rows: properties, dropped: propertiesDropped } = useMemo(
+    () => safeParseList(PropertySchema, propertiesQuery.data, "properties"),
+    [propertiesQuery.data],
+  );
+  const { rows: leases, dropped: leasesDropped } = useMemo(
+    () => safeParseList(LeaseSchema, leasesQuery.data, "leases"),
+    [leasesQuery.data],
+  );
+  const { rows: rooms, dropped: roomsDropped } = useMemo(
+    () => safeParseList(RoomSchema, roomsQuery.data, "rooms"),
+    [roomsQuery.data],
+  );
+  const { rows: beds, dropped: bedsDropped } = useMemo(
+    () => safeParseList(BedSchema, bedsQuery.data, "beds"),
+    [bedsQuery.data],
+  );
+  const { rows: occupants, dropped: occupantsDropped } = useMemo(
+    () => safeParseList(OccupantSchema, occupantsQuery.data, "occupants"),
+    [occupantsQuery.data],
+  );
+  const { rows: utilities, dropped: utilitiesDropped } = useMemo(
+    () => safeParseList(UtilitySchema, utilitiesQuery.data, "utilities"),
+    [utilitiesQuery.data],
+  );
+  const { rows: roomNightLogs, dropped: roomNightLogsDropped } = useMemo(
+    () => safeParseList(RoomNightLogSchema, roomNightLogsQuery.data, "room-night logs"),
+    [roomNightLogsQuery.data],
+  );
 
+  const dataIssues = useMemo<DataIssue[]>(() => {
+    const counts: Array<[string, string, number]> = [
+      ["customers", "customers", customersDropped],
+      ["properties", "properties", propertiesDropped],
+      ["leases", "leases", leasesDropped],
+      ["rooms", "rooms", roomsDropped],
+      ["beds", "beds", bedsDropped],
+      ["occupants", "occupants", occupantsDropped],
+      ["utilities", "utilities", utilitiesDropped],
+      ["roomNightLogs", "room-night logs", roomNightLogsDropped],
+    ];
+    return counts
+      .filter(([, , n]) => n > 0)
+      .map(([kind, label, dropped]) => ({ kind, label, dropped }));
+  }, [
+    customersDropped, propertiesDropped, leasesDropped, roomsDropped,
+    bedsDropped, occupantsDropped, utilitiesDropped, roomNightLogsDropped,
+  ]);
   const isLoading =
     customersQuery.isLoading ||
     propertiesQuery.isLoading ||
@@ -1103,6 +1200,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider value={{
       customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs, isLoading,
+      dataIssues,
       addCustomer, updateCustomer, deleteCustomer,
       addProperty, updateProperty, deleteProperty,
       updateLease, addLease, deleteLease,

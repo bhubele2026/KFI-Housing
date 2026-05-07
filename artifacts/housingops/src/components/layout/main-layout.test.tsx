@@ -32,7 +32,7 @@ vi.mock("@/context/customer-scope", async () => {
 });
 
 vi.mock("@/context/data-store", () => ({
-  useData: () => ({ customers: [] }),
+  useData: () => ({ customers: [], dataIssues: [] }),
 }));
 
 import { MainLayout } from "./main-layout";

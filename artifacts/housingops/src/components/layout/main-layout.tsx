@@ -32,7 +32,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(readPersistedCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { customerId, setCustomerId } = useCustomerScope();
-  const { customers } = useData();
+  const { customers, dataIssues } = useData();
   const activeScopedCustomer =
     customerId !== ALL_CUSTOMERS
       ? customers.find((c) => c.id === customerId)
@@ -136,6 +136,22 @@ export function MainLayout({ children }: { children: ReactNode }) {
           ) : null}
         </div>
         <main className="flex-1 overflow-y-auto">
+          {/* Inline notice when the data store dropped one or more
+              malformed rows from a list response. Keeps the page from
+              going blank because of a single bad row — operators see
+              what's hidden and can dig into the console for details. */}
+          {dataIssues.length > 0 ? (
+            <div
+              role="status"
+              data-testid="banner-data-issues"
+              className="mx-4 mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+              {dataIssues
+                .map((i) => `${i.dropped} ${i.label}`)
+                .join(", ")}{" "}
+              hidden — see console for details.
+            </div>
+          ) : null}
           {/* Inner boundary so a crash inside the page body keeps the
               Sidebar (rendered above this line) mounted and clickable.
               The outer App-level boundary still wraps everything as a

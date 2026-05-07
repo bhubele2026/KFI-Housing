@@ -633,6 +633,20 @@ export function formatUsd(amount: number): string {
   return USD.format(amount);
 }
 
+// Whole-dollar currency formatter — used by the property detail header
+// stat-card row where the cards are too narrow to fit a `$X,XXX.XX`
+// value alongside the icon (task #481). Rounds to the nearest dollar so
+// every money card in the row reads consistently (e.g. `$4,875`, `$0`).
+const USD_WHOLE = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+});
+export function formatUsdWhole(amount: number): string {
+  return USD_WHOLE.format(amount);
+}
+
 // ── Lease renewal helpers ──────────────────────────────────────────────
 export type RenewalUrgency = "expired" | "critical" | "warning" | "soon" | "ok";
 

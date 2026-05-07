@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
@@ -929,11 +929,11 @@ export default function PropertyDetail() {
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
-          <StatCard label="Monthly Revenue" value={`$${monthlyRevenue.toLocaleString()}`} icon={TrendingUp} color="text-green-600" />
+          <StatCard label="Monthly Revenue" value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
           <StatCard
             testId="stat-lease-rent"
             label="Lease Rent"
-            value={monthlyLeaseCost > 0 ? `$${monthlyLeaseCost.toLocaleString()}` : "—"}
+            value={monthlyLeaseCost > 0 ? formatUsdWhole(monthlyLeaseCost) : "—"}
             icon={KeyRound}
             color="text-destructive"
             sub={
@@ -962,9 +962,8 @@ export default function PropertyDetail() {
                     <Hotel className="h-3 w-3" />
                     {h.month && h.nights > 0 ? (
                       <>
-                        ≈ ${h.estimate.toLocaleString()} this month ({h.nights}{" "}
-                        room-night{h.nights === 1 ? "" : "s"} × $
-                        {h.nightlyRate.toLocaleString()}/night)
+                        ≈ {formatUsdWhole(h.estimate)} this month ({h.nights}{" "}
+                        room-night{h.nights === 1 ? "" : "s"} × {formatUsdWhole(h.nightlyRate)}/night)
                       </>
                     ) : (
                       <>Hotel-rate · log room-nights to estimate revenue</>
@@ -974,41 +973,29 @@ export default function PropertyDetail() {
               </span>
             }
           />
-          <StatCard label="Utility Cost" value={`$${monthlyUtilCost.toLocaleString()}`} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
+          <StatCard label="Utility Cost" value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
           <StatCard
             testId="stat-rent-per-bed"
             label="Rent / Bed"
-            value={
-              rentPerBed === null
-                ? "—"
-                : `$${rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-            }
+            value={rentPerBed === null ? "—" : formatUsdWhole(rentPerBed)}
             icon={DollarSign}
             sub={`Monthly rent ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard
             testId="stat-electric-per-bed"
             label="Electric / Bed"
-            value={
-              electricPerBed === null
-                ? "—"
-                : `$${electricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-            }
+            value={electricPerBed === null ? "—" : formatUsdWhole(electricPerBed)}
             icon={Zap}
-            sub={`$${monthlyElectricCost.toLocaleString()} electric ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+            sub={`${formatUsdWhole(monthlyElectricCost)} electric ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard
             testId="stat-rent-plus-electric-per-bed"
             label="Rent + Electric / Bed"
-            value={
-              rentPlusElectricPerBed === null
-                ? "—"
-                : `$${rentPlusElectricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-            }
+            value={rentPlusElectricPerBed === null ? "—" : formatUsdWhole(rentPlusElectricPerBed)}
             icon={DollarSign}
-            sub={`(Rent + $${monthlyElectricCost.toLocaleString()} electric) ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+            sub={`(Rent + ${formatUsdWhole(monthlyElectricCost)} electric) ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
-          <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}$${profit.toLocaleString()}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
+          <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
 
         {/* Bed Map */}

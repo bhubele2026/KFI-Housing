@@ -48,7 +48,11 @@ const CUSTOMERS: readonly CustomerSpec[] = [
     id: KFI_WEBSTER_CUSTOMER_ID,
     name: "KFI Staffing – Webster, WI",
     notes:
-      "KFI Staffing crew housing in Webster, WI (no third-party employer named in the lease — attribute directly to KFI). " +
+      "OPERATOR-MANAGED (Task #361 audit): the 7112 Zielsdorf Drive lease " +
+      "names KFI Staffing as the tenant directly with no third-party " +
+      "downstream end-client. This row is intentionally a real KFI customer " +
+      "rather than a per-property fallback — do NOT repoint it via " +
+      "`repointFallbackToEndClient` in future audits. " +
       "Seeded from attached lease PDF; see property record for landlord and term details.",
   },
   {

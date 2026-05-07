@@ -4,22 +4,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { Switch, Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
-// These tests pin down the "from payroll" badge that appears next to the
-// per-bed weekly charge on Property Detail (added in task #304). The badge
-// only renders when the occupant's chargeSource === "payroll", and its
-// tooltip surfaces the originating customer + payroll Person Id so the
-// operator can trace where the auto-set rate came from. Backend tests
-// already cover the chargeSource projection itself; these tests prevent a
-// silent UI regression where a refactor of the bed table either drops the
-// badge entirely or shows it on every occupant.
+// NOTE on `skippedOverridden` dashboard counter (task #382 scope check):
+// The seeder's `skippedOverridden` count lives exclusively in the API
+// server response (api-server/src/lib/seed-housing-deductions.ts) and is
+// NOT surfaced anywhere in the HousingOps UI dashboard. The seeder path
+// is already covered by unit tests in seed-housing-deductions.test.ts.
+// If a future task adds a dashboard widget for this counter, a UI test
+// should be added at that point.
 
-// MainLayout pulls in the sidebar/header which aren't relevant here.
 vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
-// PropertyLocationMap loads react-query for the Google Maps key. The
-// other property-detail test files stub it the same way; mirror that.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
 }));
@@ -28,9 +24,6 @@ vi.mock("@/components/property-location-map", () => ({
   PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
 }));
 
-// Cached motion.<tag> mock — see property-detail.beds.test.tsx for why
-// caching is required (Tabs internal useState would otherwise be wiped on
-// every parent re-render).
 vi.mock("framer-motion", async () => {
   const { createMotionMock } = await import("@/test-utils/framer-motion-mock");
   return createMotionMock();
@@ -40,9 +33,6 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: vi.fn(), dismiss: vi.fn(), toasts: [] }),
 }));
 
-// Tabs mock — render only the active tab's TabsContent and let
-// TabsTrigger flip the active value. Mirrors the pattern in the other
-// property-detail tests.
 vi.mock("@/components/ui/tabs", () => {
   const TabsCtx = React.createContext<{ value: string; setValue: (v: string) => void }>({
     value: "",
@@ -106,10 +96,6 @@ vi.mock("@/components/ui/tabs", () => {
   return { Tabs, TabsList, TabsTrigger, TabsContent };
 });
 
-// Tooltip — render the content inline (instead of through a portal) so we
-// can read the customer + person id from the tooltip body. The badge's
-// TooltipContent is what surfaces the source attribution; if a refactor
-// dropped that subtree the test below would fail.
 vi.mock("@/components/ui/tooltip", () => {
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
   const TooltipContent = ({ children }: { children?: ReactNode }) => (
@@ -139,9 +125,6 @@ vi.mock("@/components/ui/dialog", () => {
   };
 });
 
-// Select mock — same passthrough pattern as the other property-detail
-// tests; renders SelectItems as buttons and exposes the active value via
-// data-current.
 vi.mock("@/components/ui/select", () => {
   function findTestId(node: unknown): string | null {
     if (node == null || typeof node === "string" || typeof node === "number") return null;
@@ -193,7 +176,6 @@ vi.mock("@/components/ui/select", () => {
   };
 });
 
-// ── Mock data store ─────────────────────────────────────────────────────
 type State = {
   customers: Array<Record<string, unknown>>;
   properties: Array<Record<string, unknown>>;
@@ -228,10 +210,6 @@ const mocks = {
 };
 
 function makeFreshState(): State {
-  // Three Active occupants on three beds in one room. One has
-  // chargeSource="payroll" (badge expected), one has chargeSource="manual"
-  // (no badge), and one has no chargeSource at all (no badge — tests the
-  // strict-equality check rather than a truthy check).
   return {
     customers: [
       { id: "c1", name: "Acme Co", contactName: "", email: "", phone: "", notes: "" },
@@ -269,13 +247,14 @@ function makeFreshState(): State {
       { id: "r1", propertyId: "p1", name: "Master", sqft: 200, bathrooms: 1, monthlyRent: 1000 },
     ],
     beds: [
-      { id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Occupied", occupantId: "occ-payroll" },
-      { id: "b2", propertyId: "p1", bedNumber: 2, roomId: "r1", status: "Occupied", occupantId: "occ-manual" },
-      { id: "b3", propertyId: "p1", bedNumber: 3, roomId: "r1", status: "Occupied", occupantId: "occ-no-source" },
+      { id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Occupied", occupantId: "occ-override" },
+      { id: "b2", propertyId: "p1", bedNumber: 2, roomId: "r1", status: "Occupied", occupantId: "occ-payroll" },
+      { id: "b3", propertyId: "p1", bedNumber: 3, roomId: "r1", status: "Occupied", occupantId: "occ-plain" },
+      { id: "b4", propertyId: "p1", bedNumber: 4, roomId: "r1", status: "Occupied", occupantId: "occ-manual" },
     ],
     occupants: [
       {
-        id: "occ-payroll",
+        id: "occ-override",
         propertyId: "p1",
         bedId: "b1",
         name: "Jane Smith",
@@ -288,12 +267,12 @@ function makeFreshState(): State {
         email: "",
         phone: "",
         status: "Active",
-        chargeSource: "payroll",
+        chargeSource: "manual_override",
         chargeSourceCustomer: "Acme Co",
-        chargeSourcePersonId: "EMP1",
+        chargeSourcePersonId: "P-42",
       },
       {
-        id: "occ-manual",
+        id: "occ-payroll",
         propertyId: "p1",
         bedId: "b2",
         name: "John Doe",
@@ -306,12 +285,12 @@ function makeFreshState(): State {
         email: "",
         phone: "",
         status: "Active",
-        chargeSource: "manual",
-        chargeSourceCustomer: null,
-        chargeSourcePersonId: null,
+        chargeSource: "payroll",
+        chargeSourceCustomer: "Acme Co",
+        chargeSourcePersonId: "P-99",
       },
       {
-        id: "occ-no-source",
+        id: "occ-plain",
         propertyId: "p1",
         bedId: "b3",
         name: "Sarah Lee",
@@ -324,6 +303,27 @@ function makeFreshState(): State {
         email: "",
         phone: "",
         status: "Active",
+        chargeSource: "",
+        chargeSourceCustomer: "",
+        chargeSourcePersonId: "",
+      },
+      {
+        id: "occ-manual",
+        propertyId: "p1",
+        bedId: "b4",
+        name: "Bob Jones",
+        employeeId: "EMP4",
+        company: "Acme Co",
+        shift: null,
+        moveInDate: "2024-01-01",
+        chargePerBed: 60,
+        billingFrequency: "Weekly",
+        email: "",
+        phone: "",
+        status: "Active",
+        chargeSource: "manual",
+        chargeSourceCustomer: "",
+        chargeSourcePersonId: "",
       },
     ],
     utilities: [],
@@ -359,7 +359,7 @@ function makeHarness(initialPath: string) {
   return { memory, Harness };
 }
 
-describe("Property detail — 'from payroll' badge on the bed table", () => {
+describe("Property detail — 'manually overridden' badge on the bed table", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;
 
@@ -396,56 +396,72 @@ describe("Property detail — 'from payroll' badge on the bed table", () => {
     });
   }
 
-  function getBadge(occId: string): HTMLElement | null {
+  function getOverrideBadge(occId: string): HTMLElement | null {
+    return container.querySelector(
+      `[data-testid="badge-manual-override-${occId}"]`,
+    ) as HTMLElement | null;
+  }
+
+  function getPayrollBadge(occId: string): HTMLElement | null {
     return container.querySelector(
       `[data-testid="badge-payroll-source-${occId}"]`,
     ) as HTMLElement | null;
   }
 
-  it("renders the badge for occupants with chargeSource='payroll'", async () => {
+  it("renders the 'manually overridden' badge with amber styling for occupants with chargeSource='manual_override'", async () => {
     await renderBedsTab();
 
-    const badge = getBadge("occ-payroll");
+    const badge = getOverrideBadge("occ-override");
     expect(badge).not.toBeNull();
-    expect((badge!.textContent ?? "").toLowerCase()).toContain("from payroll");
+    expect((badge!.textContent ?? "").toLowerCase()).toContain("manually overridden");
+    expect(badge!.className).toContain("bg-amber-50");
+    expect(badge!.className).toContain("text-amber-700");
+    expect(badge!.className).toContain("border-amber-200");
   });
 
-  it("does NOT render the badge for occupants with chargeSource='manual' or no chargeSource", async () => {
+  it("does NOT render the override badge for occupants with chargeSource='payroll'", async () => {
     await renderBedsTab();
 
-    expect(getBadge("occ-manual")).toBeNull();
-    expect(getBadge("occ-no-source")).toBeNull();
+    expect(getOverrideBadge("occ-payroll")).toBeNull();
+    expect(getPayrollBadge("occ-payroll")).not.toBeNull();
   });
 
-  it("the badge's tooltip surfaces the source customer and Person Id", async () => {
+  it("does NOT render the override badge for occupants with chargeSource='manual' (plain manual entry)", async () => {
     await renderBedsTab();
 
-    const badge = getBadge("occ-payroll");
+    expect(getOverrideBadge("occ-manual")).toBeNull();
+    expect(getPayrollBadge("occ-manual")).toBeNull();
+  });
+
+  it("does NOT render the override badge for occupants with no chargeSource", async () => {
+    await renderBedsTab();
+
+    expect(getOverrideBadge("occ-plain")).toBeNull();
+    expect(getPayrollBadge("occ-plain")).toBeNull();
+  });
+
+  it("the badge tooltip surfaces the prior customer and Person Id", async () => {
+    await renderBedsTab();
+
+    const badge = getOverrideBadge("occ-override");
     expect(badge).not.toBeNull();
 
-    // The badge is wrapped in a <Tooltip> with a <TooltipContent> sibling
-    // that renders the attribution. Walking up to the nearest tooltip
-    // wrapper isn't easy through the passthrough mock, so scan all
-    // tooltip-content nodes for one that mentions BOTH the customer name
-    // and the person id (uniquely identifying this badge's tooltip).
     const tooltips = Array.from(
       container.querySelectorAll('[data-testid="tooltip-content"]'),
     );
     const matching = tooltips.find((el) => {
       const text = el.textContent ?? "";
-      return text.includes("Acme Co") && text.includes("EMP1");
+      return text.includes("Acme Co") && text.includes("P-42");
     });
-    expect(matching, "expected a tooltip with the source customer + person id").not.toBeUndefined();
-    expect(matching!.textContent ?? "").toContain("Auto-reconciled from payroll");
+    expect(matching, "expected a tooltip with the prior customer + person id").not.toBeUndefined();
+    expect(matching!.textContent ?? "").toContain("Manually overridden");
+    expect(matching!.textContent ?? "").toContain("was payroll for");
   });
 
-  it("the tooltip falls back to em-dashes when the source customer / person id are missing", async () => {
-    // chargeSource='payroll' but the source attribution fields are blank.
-    // The component renders "—" placeholders so the tooltip never shows
-    // empty space or the literal string "null".
+  it("the tooltip falls back to em-dashes when the prior customer / person id are missing", async () => {
     state.occupants = [
       {
-        id: "occ-payroll-no-attrib",
+        id: "occ-override-blank",
         propertyId: "p1",
         bedId: "b1",
         name: "Jane Smith",
@@ -458,25 +474,25 @@ describe("Property detail — 'from payroll' badge on the bed table", () => {
         email: "",
         phone: "",
         status: "Active",
-        chargeSource: "payroll",
+        chargeSource: "manual_override",
         chargeSourceCustomer: "",
         chargeSourcePersonId: "",
       },
     ];
     state.beds = [
-      { id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Occupied", occupantId: "occ-payroll-no-attrib" },
+      { id: "b1", propertyId: "p1", bedNumber: 1, roomId: "r1", status: "Occupied", occupantId: "occ-override-blank" },
     ];
 
     await renderBedsTab();
 
-    const badge = getBadge("occ-payroll-no-attrib");
+    const badge = getOverrideBadge("occ-override-blank");
     expect(badge).not.toBeNull();
 
     const tooltips = Array.from(
       container.querySelectorAll('[data-testid="tooltip-content"]'),
     );
     const matching = tooltips.find((el) =>
-      (el.textContent ?? "").includes("Auto-reconciled from payroll"),
+      (el.textContent ?? "").includes("Manually overridden"),
     );
     expect(matching).not.toBeUndefined();
     const text = matching!.textContent ?? "";

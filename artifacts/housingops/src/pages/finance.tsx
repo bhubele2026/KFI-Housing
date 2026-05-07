@@ -5,7 +5,7 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { sumActiveRentEstimated, toMonthlyCharge } from "@/data/mockData";
+import { sumActiveRentBreakdown, toMonthlyCharge } from "@/data/mockData";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,10 +45,8 @@ export default function Finance() {
   const financialData = visibleProperties.map(p => {
     const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
     const revenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
-    // Sum across every Active lease for the property — a property can hold
-    // more than one (e.g. overlapping renewals or multi-room agreements).
-    // Picking just the first match silently under-reports rent and profit.
-    const leaseCost = sumActiveRentEstimated(leases, roomNightLogs, p.id);
+    const { contractCost, hotelRateCost, hasHotelRateLease } = sumActiveRentBreakdown(leases, roomNightLogs, p.id);
+    const leaseCost = contractCost + hotelRateCost;
     const propUtils = utilities.filter(u => u.propertyId === p.id);
     const utilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
     // Per-bed "electric" specifically excludes water/internet/etc, matching
@@ -80,6 +78,9 @@ export default function Finance() {
       customerName,
       revenue,
       leaseCost,
+      contractCost,
+      hotelRateCost,
+      hasHotelRateLease,
       utilCost,
       electricCost,
       totalCost,
@@ -96,13 +97,16 @@ export default function Finance() {
     (acc, d) => ({
       revenue: acc.revenue + d.revenue,
       leaseCost: acc.leaseCost + d.leaseCost,
+      contractCost: acc.contractCost + d.contractCost,
+      hotelRateCost: acc.hotelRateCost + d.hotelRateCost,
+      hasAnyHotelRateLease: acc.hasAnyHotelRateLease || d.hasHotelRateLease,
       utilCost: acc.utilCost + d.utilCost,
       electricCost: acc.electricCost + d.electricCost,
       totalCost: acc.totalCost + d.totalCost,
       profit: acc.profit + d.profit,
       totalBeds: acc.totalBeds + d.totalBeds,
     }),
-    { revenue: 0, leaseCost: 0, utilCost: 0, electricCost: 0, totalCost: 0, profit: 0, totalBeds: 0 }
+    { revenue: 0, leaseCost: 0, contractCost: 0, hotelRateCost: 0, hasAnyHotelRateLease: false, utilCost: 0, electricCost: 0, totalCost: 0, profit: 0, totalBeds: 0 }
   );
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const totalsRentPerBed = totals.totalBeds ? round2(totals.leaseCost / totals.totalBeds) : null;
@@ -133,6 +137,8 @@ export default function Finance() {
       { header: "Total Beds", value: (d: typeof financialData[number]) => d.totalBeds },
       { header: "Revenue", value: (d: typeof financialData[number]) => d.revenue },
       { header: "Lease Cost", value: (d: typeof financialData[number]) => d.leaseCost },
+      { header: "Contract Rent", value: (d: typeof financialData[number]) => d.contractCost },
+      { header: "Hotel-Rate (est.)", value: (d: typeof financialData[number]) => d.hotelRateCost },
       { header: "Utility Cost", value: (d: typeof financialData[number]) => d.utilCost },
       { header: "Total Cost", value: (d: typeof financialData[number]) => d.totalCost },
       { header: "Net Profit", value: (d: typeof financialData[number]) => d.profit },
@@ -148,6 +154,9 @@ export default function Finance() {
       customerName: "",
       revenue: totals.revenue,
       leaseCost: totals.leaseCost,
+      contractCost: totals.contractCost,
+      hotelRateCost: totals.hotelRateCost,
+      hasHotelRateLease: totals.hasAnyHotelRateLease,
       utilCost: totals.utilCost,
       electricCost: totals.electricCost,
       totalCost: totals.totalCost,
@@ -161,7 +170,7 @@ export default function Finance() {
     // Blank out the non-numeric columns (Customer, Occupied/Total Beds) so the
     // totals row only carries summed values alongside its label.
     const numericHeaders = new Set([
-      "Revenue", "Lease Cost", "Utility Cost", "Total Cost", "Net Profit",
+      "Revenue", "Lease Cost", "Contract Rent", "Hotel-Rate (est.)", "Utility Cost", "Total Cost", "Net Profit",
       "Rent / Bed", "Electric / Bed", "Rent + Electric / Bed",
     ]);
     const totalsColumns = columns.map((col) =>
@@ -380,7 +389,19 @@ export default function Finance() {
                           {d.occupiedBeds}/{d.totalBeds}
                         </td>
                         <td className="p-4 text-right font-medium text-green-600">${d.revenue.toLocaleString()}</td>
-                        <td className="p-4 text-right text-sm text-muted-foreground">${d.leaseCost.toLocaleString()}</td>
+                        <td className="p-4 text-right text-sm text-muted-foreground">
+                          <span>${d.leaseCost.toLocaleString()}</span>
+                          {d.hasHotelRateLease && (
+                            <>
+                              <span className="block text-xs text-muted-foreground/70" data-testid={`text-finance-contract-rent-${d.id}`}>
+                                Contract: ${d.contractCost.toLocaleString()}
+                              </span>
+                              <span className="block text-xs text-muted-foreground/70" data-testid={`text-finance-hotel-rate-${d.id}`}>
+                                Hotel-rate: ${d.hotelRateCost.toLocaleString()} (est.)
+                              </span>
+                            </>
+                          )}
+                        </td>
                         <td className="p-4 text-right text-sm text-muted-foreground">${d.utilCost.toLocaleString()}</td>
                         <td className="p-4 text-right text-sm font-medium">${d.totalCost.toLocaleString()}</td>
                         <td className="p-4 text-right">
@@ -416,7 +437,19 @@ export default function Finance() {
                       {showCustomerColumn && <td />}
                       <td />
                       <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
-                      <td className="p-4 text-right font-bold">${totals.leaseCost.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold">
+                        <span>${totals.leaseCost.toLocaleString()}</span>
+                        {totals.hasAnyHotelRateLease && (
+                          <>
+                            <span className="block text-xs font-normal text-muted-foreground" data-testid="text-finance-contract-rent-total">
+                              Contract: ${totals.contractCost.toLocaleString()}
+                            </span>
+                            <span className="block text-xs font-normal text-muted-foreground" data-testid="text-finance-hotel-rate-total">
+                              Hotel-rate: ${totals.hotelRateCost.toLocaleString()} (est.)
+                            </span>
+                          </>
+                        )}
+                      </td>
                       <td className="p-4 text-right font-bold">${totals.utilCost.toLocaleString()}</td>
                       <td className="p-4 text-right font-bold">${totals.totalCost.toLocaleString()}</td>
                       <td className="p-4 text-right">

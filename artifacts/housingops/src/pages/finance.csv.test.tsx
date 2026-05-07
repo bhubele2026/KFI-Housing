@@ -258,7 +258,7 @@ describe("Finance CSV download", () => {
 
     const lines = readCsvLines();
     expect(lines[0]).toBe(
-      "Property,Customer,Occupied Beds,Total Beds,Revenue,Lease Cost,Utility Cost,Total Cost,Net Profit,Rent / Bed,Electric / Bed,Rent + Electric / Bed",
+      "Property,Customer,Occupied Beds,Total Beds,Revenue,Lease Cost,Contract Rent,Hotel-Rate (est.),Utility Cost,Total Cost,Net Profit,Rent / Bed,Electric / Bed,Rent + Electric / Bed",
     );
 
     // 1 header + 3 property rows + 1 totals row
@@ -268,15 +268,17 @@ describe("Finance CSV download", () => {
     // Trailing per-bed fields: rent/bed = 300/2 = 150, electric/bed = 0
     // (mock utilities have no `type`, so the Electric-only filter sums to 0),
     // rent+electric/bed = 150.
-    expect(lines[1]).toBe('"Maple, Apt 1",Acme Co,1,2,600,300,100,400,200,150,0,150');
-    expect(lines[2]).toBe("Oak,Acme Co,1,1,500,200,50,250,250,200,0,200");
-    expect(lines[3]).toBe("Pine,Globex,1,2,700,500,200,700,0,250,0,250");
+    // All leases are monthly so Contract Rent = Lease Cost and Hotel-Rate = 0.
+    expect(lines[1]).toBe('"Maple, Apt 1",Acme Co,1,2,600,300,300,0,100,400,200,150,0,150');
+    expect(lines[2]).toBe("Oak,Acme Co,1,1,500,200,200,0,50,250,250,200,0,200");
+    expect(lines[3]).toBe("Pine,Globex,1,2,700,500,500,0,200,700,0,250,0,250");
 
     // Totals row: revenue 600+500+700=1800, lease 300+200+500=1000,
+    // contract 1000, hotel-rate 0,
     // util 100+50+200=350, total cost 1350, profit 450, beds 5 → portfolio
     // rent/bed 1000/5=200, electric/bed 0, rent+electric/bed 200. The
     // Customer and bed-count columns are intentionally blank.
-    expect(lines[4]).toBe("Portfolio Total,,,,1800,1000,350,1350,450,200,0,200");
+    expect(lines[4]).toBe("Portfolio Total,,,,1800,1000,1000,0,350,1350,450,200,0,200");
 
     // Sanity: cells must NOT contain "$" formatting anywhere in the file.
     expect(capturedBlobText!).not.toContain("$");
@@ -294,19 +296,19 @@ describe("Finance CSV download", () => {
     const lines = readCsvLines();
 
     expect(lines[0]).toBe(
-      "Property,Occupied Beds,Total Beds,Revenue,Lease Cost,Utility Cost,Total Cost,Net Profit,Rent / Bed,Electric / Bed,Rent + Electric / Bed",
+      "Property,Occupied Beds,Total Beds,Revenue,Lease Cost,Contract Rent,Hotel-Rate (est.),Utility Cost,Total Cost,Net Profit,Rent / Bed,Electric / Bed,Rent + Electric / Bed",
     );
     expect(lines[0]).not.toContain("Customer");
 
     // Only c1's two properties should appear, plus the customer-scoped totals row.
     expect(lines).toHaveLength(4);
-    expect(lines[1]).toBe('"Maple, Apt 1",1,2,600,300,100,400,200,150,0,150');
-    expect(lines[2]).toBe("Oak,1,1,500,200,50,250,250,200,0,200");
+    expect(lines[1]).toBe('"Maple, Apt 1",1,2,600,300,300,0,100,400,200,150,0,150');
+    expect(lines[2]).toBe("Oak,1,1,500,200,200,0,50,250,250,200,0,200");
     // Totals row labelled with the active customer name; bed-count cols are blank.
-    // Revenue 600+500=1100, lease 300+200=500, util 100+50=150, total 650,
-    // profit 450, beds 3 → rent/bed 500/3 ≈ 166.67, electric/bed 0,
-    // rent+electric/bed 166.67.
-    expect(lines[3]).toBe("Acme Co Total,,,1100,500,150,650,450,166.67,0,166.67");
+    // Revenue 600+500=1100, lease 300+200=500, contract 500, hotel-rate 0,
+    // util 100+50=150, total 650, profit 450, beds 3 → rent/bed 500/3 ≈ 166.67,
+    // electric/bed 0, rent+electric/bed 166.67.
+    expect(lines[3]).toBe("Acme Co Total,,,1100,500,500,0,150,650,450,166.67,0,166.67");
   });
 
   it("disables the Download button when there are no visible properties", async () => {

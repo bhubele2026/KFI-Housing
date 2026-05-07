@@ -412,6 +412,25 @@ export function sumActiveRentEstimated(
   );
 }
 
+export function sumActiveRentBreakdown(
+  leases: readonly Lease[],
+  logs: readonly RoomNightLog[],
+  propertyId: string,
+): { contractCost: number; hotelRateCost: number; hasHotelRateLease: boolean } {
+  let contractCost = 0;
+  let hotelRateCost = 0;
+  let hasHotelRateLease = false;
+  for (const l of getActiveLeasesForProperty(leases, propertyId)) {
+    if ((l.rateType ?? "monthly") === "room-night") {
+      hasHotelRateLease = true;
+      hotelRateCost += estimateLeaseMonthlyRent(l, logs);
+    } else {
+      contractCost += l.monthlyRent || 0;
+    }
+  }
+  return { contractCost, hotelRateCost, hasHotelRateLease };
+}
+
 const LEASE_STATUS_ORDER: Record<Lease["status"], number> = {
   Active: 0,
   Upcoming: 1,

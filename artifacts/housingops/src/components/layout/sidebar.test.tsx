@@ -28,6 +28,12 @@ const previewMergeImportMock = vi.fn();
 const inspectImportPayloadMock = vi.fn();
 const importDataMock = vi.fn();
 const undoLastImportMock = vi.fn<() => boolean>();
+// Hoisted so individual tests can swap it out — e.g. the merge-toast
+// tests need it to actually sum the ImportSummary fields so the
+// rolled-up "N added, N updated" totals are exercised end-to-end.
+const totalImportSummaryMock = vi.fn<(s: Record<string, number>) => number>(
+  () => 0,
+);
 const mockData: {
   customers: { id: string; name: string }[];
   properties: Array<{
@@ -59,7 +65,7 @@ vi.mock("@/context/data-store", () => ({
   // The sidebar imports these for its import-data flow. Most tests don't
   // trigger that flow; the merge-preview tests below override the mocks.
   inspectImportPayload: (...args: unknown[]) => inspectImportPayloadMock(...args),
-  totalImportSummary: vi.fn(() => 0),
+  totalImportSummary: (s: Record<string, number>) => totalImportSummaryMock(s),
   totalMergeDryRun: (dry: {
     customers: { added: number; updated: number; unchanged: number };
     properties: { added: number; updated: number; unchanged: number };
@@ -771,6 +777,11 @@ describe("Sidebar import dialog — merge preview", () => {
     previewMergeImportMock.mockReset();
     importDataMock.mockReset();
     toastMock.mockReset();
+    // Restore the default 0-returning behavior between tests so a
+    // per-test override (used by the merge-toast totals test) doesn't
+    // leak into unrelated cases.
+    totalImportSummaryMock.mockReset();
+    totalImportSummaryMock.mockImplementation(() => 0);
     container = document.createElement("div");
     document.body.appendChild(container);
   });
@@ -1144,6 +1155,42 @@ describe("Sidebar import dialog — merge preview", () => {
     expect(toastMock).toHaveBeenCalledTimes(1);
     const arg = toastMock.mock.calls[0][0];
     expect(arg.description).toContain("4 room-night logs");
+  });
+
+  it("merge-mode success toast rolls up room-night logs into the added/updated totals", async () => {
+    // The merge branch (result.added && result.updated) renders
+    // "{{added}} added, {{updated}} updated" using totalImportSummary
+    // to roll up every category. Without the room-night log fields
+    // contributing, an operator who imported only room-night logs
+    // would see a misleading "0 added, 0 updated" toast. Wire
+    // totalImportSummary to actually sum the ImportSummary so the
+    // rollup is exercised end-to-end.
+    totalImportSummaryMock.mockImplementation((s) =>
+      (s.customers ?? 0) + (s.properties ?? 0) + (s.leases ?? 0) +
+      (s.rooms ?? 0) + (s.beds ?? 0) + (s.occupants ?? 0) +
+      (s.utilities ?? 0) + (s.roomNightLogs ?? 0),
+    );
+    importDataMock.mockReturnValue({
+      mode: "merge",
+      // summary equals added+updated+unchanged across all categories.
+      // Setting unchanged to 0 keeps the assertion focused on the
+      // added/updated rollup; a separate branch covers the
+      // "N were already up to date" suffix.
+      summary: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 5 },
+      added:   { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 3 },
+      updated: { customers: 0, properties: 0, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 2 },
+    });
+    await openImportDialog();
+    await selectMergeMode();
+    await confirmImport();
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const arg = toastMock.mock.calls[0][0];
+    expect(arg.title).toBe("Data merged");
+    // Both totals must include the room-night log counts — 3 added
+    // and 2 updated come purely from the roomNightLogs fields.
+    expect(arg.description).toContain("3 added");
+    expect(arg.description).toContain("2 updated");
   });
 
   it("recomputes the preview when toggling back from merge to replace and forward again", async () => {

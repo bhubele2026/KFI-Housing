@@ -37,8 +37,9 @@ vi.mock("@/components/layout/main-layout", () => ({
 // PropertyLocationMap fetches the Google Maps key from the api-server's
 // `/api/config` endpoint via react-query (Task #154). These tests don't
 // stand up a QueryClientProvider, so render it as a benign placeholder.
+let mockRoomNightLogs: Array<Record<string, unknown>> = [];
 vi.mock("@workspace/api-client-react", () => ({
-  useListRoomNightLogs: () => ({ data: [] }),
+  useListRoomNightLogs: () => ({ data: mockRoomNightLogs }),
 }));
 
 vi.mock("@/components/property-location-map", () => ({
@@ -367,6 +368,7 @@ describe("Property detail — Lease Rent header sums every active lease", () => 
 
   beforeEach(() => {
     state = makeFreshState();
+    mockRoomNightLogs = [];
     Object.values(mocks).forEach((m) => m.mockReset());
     toastMock.mockReset();
     container = document.createElement("div");
@@ -586,6 +588,160 @@ describe("Property detail — Lease Rent header sums every active lease", () => 
       // Combined active rent is $0 because neither lease is Active.
       const total = container.querySelector('[data-testid="row-active-lease-rent-total"]');
       expect(total?.textContent).toContain("$0");
+    });
+  });
+
+  // Hotel-rate revenue estimates (task #320). The property header's Lease
+  // Rent stat sub-line and the Finance tab Costs section both surface
+  // "≈ $X this month (Y room-nights × $Z/night)" for room-night leases,
+  // or a "log room-nights to estimate revenue" placeholder when no log
+  // exists. These tests pin both surfaces against `data-testid` hooks so
+  // the helpers' math AND the conditional rendering stay wired up
+  // together — a regression in either the helper or the JSX would
+  // silently put the wrong number (or nothing at all) on screen.
+  describe("Hotel-rate revenue estimate on property page", () => {
+    it("renders the per-lease estimate line under Lease Rent with nightly × room-nights and rolls the figure into the stat total", async () => {
+      // One monthly lease ($1,500) + one hotel-rate lease ($89/night ×
+      // 22 latest-month room-nights = $1,958). The combined Lease Rent
+      // stat must read $3,458, NOT $1,500 — that would mean the helper
+      // dropped the hotel-rate revenue on the floor.
+      state.leases = [
+        makeLease({ id: "l-monthly", monthlyRent: 1500, status: "Active", endDate: "2026-12-01" }),
+        makeLease({
+          id: "l-hotel",
+          monthlyRent: 0,
+          status: "Active",
+          endDate: "2026-12-01",
+          rateType: "room-night",
+          nightlyRate: 89,
+        }),
+      ];
+      mockRoomNightLogs = [
+        { id: "rnl-old", leaseId: "l-hotel", month: "2026-03", roomNights: 5, notes: "" },
+        { id: "rnl-latest", leaseId: "l-hotel", month: "2026-04", roomNights: 22, notes: "" },
+      ];
+      await renderPage();
+
+      const card = getStatCard();
+      expect(card.textContent).toContain("$3,458");
+
+      const estimate = container.querySelector(
+        '[data-testid="hotel-rate-estimate-l-hotel"]',
+      );
+      expect(estimate).not.toBeNull();
+      // Latest month's nights only — earlier-month log must NOT win.
+      expect(estimate!.textContent).toContain("≈ $1,958 this month");
+      expect(estimate!.textContent).toContain("22 room-nights");
+      expect(estimate!.textContent).toContain("$89");
+
+      // Monthly leases never get an estimate sub-line — the row is
+      // gated on rateType === "room-night".
+      expect(
+        container.querySelector('[data-testid="hotel-rate-estimate-l-monthly"]'),
+      ).toBeNull();
+    });
+
+    it("shows the 'log room-nights to estimate revenue' placeholder when the hotel-rate lease has no log yet", async () => {
+      // No room-night log → the helper returns 0, so the Lease Rent
+      // stat collapses to the em-dash empty state and the sub-line
+      // surfaces a clear call to action instead of a misleading $0.
+      state.leases = [
+        makeLease({
+          id: "l-hotel",
+          monthlyRent: 0,
+          status: "Active",
+          endDate: "2026-12-01",
+          rateType: "room-night",
+          nightlyRate: 89,
+        }),
+      ];
+      mockRoomNightLogs = [];
+      await renderPage();
+
+      const card = getStatCard();
+      expect(card.textContent).toContain("—");
+
+      const estimate = container.querySelector(
+        '[data-testid="hotel-rate-estimate-l-hotel"]',
+      );
+      expect(estimate).not.toBeNull();
+      expect(estimate!.textContent?.toLowerCase()).toContain(
+        "log room-nights to estimate",
+      );
+      // Placeholder must NOT print a fabricated dollar amount.
+      expect(estimate!.textContent).not.toContain("$0");
+      expect(estimate!.textContent).not.toContain("≈");
+    });
+
+    it("renders a Finance tab Costs row for each hotel-rate lease with the estimated negative cost", async () => {
+      state.leases = [
+        makeLease({
+          id: "l-hotel",
+          monthlyRent: 0,
+          status: "Active",
+          endDate: "2026-12-01",
+          rateType: "room-night",
+          nightlyRate: 89,
+        }),
+      ];
+      mockRoomNightLogs = [
+        { id: "rnl-1", leaseId: "l-hotel", month: "2026-04", roomNights: 22, notes: "" },
+      ];
+      await renderPage();
+
+      // Finance tab is not the default — click into it so its
+      // TabsContent mounts.
+      const financeTrigger = container.querySelector(
+        '[data-testid="tab-trigger-finance"]',
+      ) as HTMLButtonElement | null;
+      expect(financeTrigger).not.toBeNull();
+      await act(async () => {
+        financeTrigger!.click();
+      });
+
+      const row = container.querySelector(
+        '[data-testid="finance-hotel-rate-row-l-hotel"]',
+      );
+      expect(row).not.toBeNull();
+      expect(row!.textContent).toContain("Hotel-rate 2026-04");
+      expect(row!.textContent).toContain("22 room-nights");
+      expect(row!.textContent).toContain("$89");
+      // Costs are displayed as negatives (matches "Lease (active)" row above).
+      expect(row!.textContent).toContain("≈ -$1,958");
+    });
+
+    it("renders the Finance tab Costs row with a no-log placeholder when the hotel-rate lease has no room-nights logged yet", async () => {
+      state.leases = [
+        makeLease({
+          id: "l-hotel",
+          monthlyRent: 0,
+          status: "Active",
+          endDate: "2026-12-01",
+          rateType: "room-night",
+          nightlyRate: 89,
+        }),
+      ];
+      mockRoomNightLogs = [];
+      await renderPage();
+
+      const financeTrigger = container.querySelector(
+        '[data-testid="tab-trigger-finance"]',
+      ) as HTMLButtonElement | null;
+      expect(financeTrigger).not.toBeNull();
+      await act(async () => {
+        financeTrigger!.click();
+      });
+
+      const row = container.querySelector(
+        '[data-testid="finance-hotel-rate-row-l-hotel"]',
+      );
+      expect(row).not.toBeNull();
+      expect(row!.textContent?.toLowerCase()).toContain(
+        "no room-nights logged yet",
+      );
+      // Right-hand cost cell collapses to an em-dash — no fake "≈ -$0".
+      expect(row!.textContent).toContain("—");
+      expect(row!.textContent).not.toContain("≈");
     });
   });
 });

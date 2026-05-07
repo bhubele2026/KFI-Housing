@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,9 +22,15 @@ import {
 import { useData } from "@/context/data-store";
 import {
   BILLING_FREQUENCIES,
+  OCCUPANT_GENDERS,
+  OCCUPANT_LANGUAGES,
+  OCCUPANT_TITLES,
   type BillingFrequency,
   type Bed,
   type Occupant,
+  type OccupantGender,
+  type OccupantLanguage,
+  type OccupantTitle,
 } from "@/data/mockData";
 import { shortPropertyName } from "@/lib/property-name";
 
@@ -35,6 +42,10 @@ export interface AssignOccupantInitialValues {
   billingFrequency?: BillingFrequency;
   email?: string;
   phone?: string;
+  language?: OccupantLanguage | null;
+  gender?: OccupantGender | null;
+  title?: OccupantTitle | null;
+  kfisAuthorizedToDrive?: boolean | null;
 }
 
 export interface AssignOccupantDialogProps {
@@ -63,6 +74,12 @@ export interface AssignOccupantDialogProps {
   testIdSuffix?: string;
 }
 
+// Sentinel option value used by the optional Language/Gender/Title
+// <Select>s to represent "not on file yet". Radix's <SelectItem> can't
+// take an empty-string value, so we map this sentinel to `null` when
+// building the Occupant payload on submit.
+const UNSET = "__unset";
+
 const EMPTY_FORM = {
   name: "",
   employeeId: "",
@@ -72,6 +89,15 @@ const EMPTY_FORM = {
   billingFrequency: "Monthly" as BillingFrequency,
   email: "",
   phone: "",
+  language: UNSET as OccupantLanguage | typeof UNSET,
+  gender: UNSET as OccupantGender | typeof UNSET,
+  title: UNSET as OccupantTitle | typeof UNSET,
+  // Nullable tri-state: `null` = "not on file yet" (renders as the
+  // checkbox's indeterminate state), `true`/`false` = explicit
+  // operator answer. Defaulting to `null` preserves the schema's
+  // nullability so an untouched form never collapses an unknown
+  // driver-license status to a hard `false`.
+  kfisAuthorizedToDrive: null as boolean | null,
 };
 
 function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
@@ -88,6 +114,10 @@ function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
     billingFrequency: initial.billingFrequency ?? "Monthly",
     email: initial.email ?? "",
     phone: initial.phone ?? "",
+    language: (initial.language ?? UNSET) as OccupantLanguage | typeof UNSET,
+    gender: (initial.gender ?? UNSET) as OccupantGender | typeof UNSET,
+    title: (initial.title ?? UNSET) as OccupantTitle | typeof UNSET,
+    kfisAuthorizedToDrive: initial.kfisAuthorizedToDrive ?? null,
   };
 }
 
@@ -183,6 +213,10 @@ export function AssignOccupantDialog({
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
       shift: null,
+      language: form.language === UNSET ? null : form.language,
+      gender: form.gender === UNSET ? null : form.gender,
+      title: form.title === UNSET ? null : form.title,
+      kfisAuthorizedToDrive: form.kfisAuthorizedToDrive,
       createdAt: new Date().toISOString(),
     };
     onAssign(occ, resolvedBed);
@@ -358,6 +392,122 @@ export function AssignOccupantDialog({
                 onChange={f("phone")}
                 placeholder={t("dialogs.assignOccupant.phonePlaceholder")}
               />
+            </div>
+            <div>
+              <Label>Language</Label>
+              <Select
+                value={form.language}
+                onValueChange={(v) =>
+                  setForm((p) => ({
+                    ...p,
+                    language: v as OccupantLanguage | typeof UNSET,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  data-testid={`select-assign-language${tidSuffix}`}
+                >
+                  <SelectValue placeholder="Not on file" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNSET}>Not on file</SelectItem>
+                  {OCCUPANT_LANGUAGES.map((lang) => (
+                    <SelectItem key={lang} value={lang}>
+                      {lang}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Gender</Label>
+              <Select
+                value={form.gender}
+                onValueChange={(v) =>
+                  setForm((p) => ({
+                    ...p,
+                    gender: v as OccupantGender | typeof UNSET,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  data-testid={`select-assign-gender${tidSuffix}`}
+                >
+                  <SelectValue placeholder="Not on file" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNSET}>Not on file</SelectItem>
+                  {OCCUPANT_GENDERS.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label>Title</Label>
+              <Select
+                value={form.title}
+                onValueChange={(v) =>
+                  setForm((p) => ({
+                    ...p,
+                    title: v as OccupantTitle | typeof UNSET,
+                  }))
+                }
+              >
+                <SelectTrigger
+                  data-testid={`select-assign-title${tidSuffix}`}
+                >
+                  <SelectValue placeholder="Not on file" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={UNSET}>Not on file</SelectItem>
+                  {OCCUPANT_TITLES.map((title) => (
+                    <SelectItem key={title} value={title}>
+                      {title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2 flex items-center gap-2">
+              <Checkbox
+                id={`assign-kfis-drive${tidSuffix}`}
+                // `null` (not on file) renders as Radix's indeterminate
+                // state so the operator can see the field hasn't been
+                // answered yet — clicking cycles null -> true -> false
+                // -> null and never silently writes a hard `false` to
+                // the DB.
+                checked={
+                  form.kfisAuthorizedToDrive === null
+                    ? "indeterminate"
+                    : form.kfisAuthorizedToDrive
+                }
+                onCheckedChange={() =>
+                  setForm((p) => ({
+                    ...p,
+                    kfisAuthorizedToDrive:
+                      p.kfisAuthorizedToDrive === null
+                        ? true
+                        : p.kfisAuthorizedToDrive === true
+                          ? false
+                          : null,
+                  }))
+                }
+                data-testid={`checkbox-assign-kfis-drive${tidSuffix}`}
+              />
+              <Label
+                htmlFor={`assign-kfis-drive${tidSuffix}`}
+                className="font-normal cursor-pointer"
+              >
+                KFIS authorized to drive
+                {form.kfisAuthorizedToDrive === null ? (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    (not on file)
+                  </span>
+                ) : null}
+              </Label>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-1">

@@ -676,6 +676,30 @@ export type Bed = z.infer<typeof BedSchema>;
 export const BILLING_FREQUENCIES = ["Weekly", "Biweekly", "Monthly"] as const;
 export type BillingFrequency = typeof BILLING_FREQUENCIES[number];
 
+// Workforce profile enums (Task #502). Exported so the Assign-Occupant
+// dialog's <Select>s and any future importer share the canonical list.
+export const OCCUPANT_LANGUAGES = [
+  "Bilingual",
+  "English only",
+  "Spanish only",
+  "French only",
+  "Other only",
+] as const;
+export type OccupantLanguage = typeof OCCUPANT_LANGUAGES[number];
+
+export const OCCUPANT_GENDERS = ["Female", "Male"] as const;
+export type OccupantGender = typeof OCCUPANT_GENDERS[number];
+
+export const OCCUPANT_TITLES = [
+  "Onsite Supervisor",
+  "Onsite Lead",
+  "Driver + Associate",
+  "Driver ONLY",
+  "Associate",
+  "Mentor",
+] as const;
+export type OccupantTitle = typeof OCCUPANT_TITLES[number];
+
 export const OccupantSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -705,6 +729,15 @@ export const OccupantSchema = z.object({
   // where shift assignments don't apply. Surfaced for hot-bedded units like
   // 1850 W. Pine St. Baraboo (task #315).
   shift: z.enum(["1st", "2nd"]).nullable().default(null),
+  // Workforce profile (Task #502). All four are nullable + defaulted
+  // so older API payloads (and existing test fixtures) continue to
+  // parse without each one having to be updated. The XLSX importer
+  // and PATCH route normalise unrecognised values to `null` rather
+  // than throwing, matching the rest of the boundary normaliser.
+  language: z.enum(OCCUPANT_LANGUAGES).nullable().optional().default(null),
+  gender: z.enum(OCCUPANT_GENDERS).nullable().optional().default(null),
+  title: z.enum(OCCUPANT_TITLES).nullable().optional().default(null),
+  kfisAuthorizedToDrive: z.boolean().nullable().optional().default(null),
   createdAt: z.string().nullable().optional().default(null),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
@@ -1278,6 +1311,10 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
       shift: null,
+      title: null,
+      language: null,
+      gender: null,
+      kfisAuthorizedToDrive: null,
       createdAt: null,
     };
   });

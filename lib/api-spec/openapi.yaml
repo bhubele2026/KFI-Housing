@@ -1999,6 +1999,30 @@ components:
             don't apply (most of the portfolio). Surfaced for hot-bedded
             units like 1850 W. Pine St. Baraboo where two shifts share
             the same bedroom (task #315).
+        language:
+          type: ["string", "null"]
+          enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
+          description: |
+            Workforce language profile (Task #502). Null when not on
+            file yet. Unrecognised legacy values are normalised to
+            null at the boundary so the list endpoint never 500s.
+        gender:
+          type: ["string", "null"]
+          enum: ["Female", "Male", null]
+          description: |
+            Workforce gender (Task #502). Null when not on file.
+        title:
+          type: ["string", "null"]
+          enum: ["Onsite Supervisor", "Onsite Lead", "Driver + Associate", "Driver ONLY", "Associate", "Mentor", null]
+          description: |
+            Workforce job title used for staffing/routing decisions
+            (Task #502). Null when not on file.
+        kfisAuthorizedToDrive:
+          type: ["boolean", "null"]
+          description: |
+            True when the associate holds a valid driver's license AND
+            is KFIS-cleared to drive a company vehicle (Task #502).
+            Null when their driver status hasn't been recorded.
         createdAt:
           type: ["string", "null"]
           format: date-time
@@ -2051,6 +2075,17 @@ components:
         shift:
           type: ["string", "null"]
           enum: ["1st", "2nd", null]
+        language:
+          type: ["string", "null"]
+          enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
+        gender:
+          type: ["string", "null"]
+          enum: ["Female", "Male", null]
+        title:
+          type: ["string", "null"]
+          enum: ["Onsite Supervisor", "Onsite Lead", "Driver + Associate", "Driver ONLY", "Associate", "Mentor", null]
+        kfisAuthorizedToDrive:
+          type: ["boolean", "null"]
     OccupantUpdate:
       type: object
       properties:
@@ -2077,6 +2112,17 @@ components:
         shift:
           type: ["string", "null"]
           enum: ["1st", "2nd", null]
+        language:
+          type: ["string", "null"]
+          enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
+        gender:
+          type: ["string", "null"]
+          enum: ["Female", "Male", null]
+        title:
+          type: ["string", "null"]
+          enum: ["Onsite Supervisor", "Onsite Lead", "Driver + Associate", "Driver ONLY", "Associate", "Mentor", null]
+        kfisAuthorizedToDrive:
+          type: ["boolean", "null"]
 
     Utility:
       type: object

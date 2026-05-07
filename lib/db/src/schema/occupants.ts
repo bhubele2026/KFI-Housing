@@ -1,4 +1,4 @@
-import { pgTable, text, doublePrecision, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, doublePrecision, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const occupantsTable = pgTable("occupants", {
   id: text("id").primaryKey(),
@@ -35,6 +35,21 @@ export const occupantsTable = pgTable("occupants", {
   // for hot-bedded units like 1850 W. Pine St. Baraboo where bedrooms are
   // shared across two shifts (task #315).
   shift: text("shift"),
+  // Workforce profile fields (Task #502). All four are nullable so
+  // historical occupant rows that pre-date the columns continue to
+  // parse, and the Assign-Occupant dialog can leave them blank for
+  // associates whose details aren't on file yet.
+  //   - language: one of "Bilingual", "English only", "Spanish only",
+  //     "French only", "Other only"
+  //   - gender:   one of "Female", "Male"
+  //   - title:    one of "Onsite Supervisor", "Onsite Lead",
+  //     "Driver + Associate", "Driver ONLY", "Associate", "Mentor"
+  //   - kfisAuthorizedToDrive: holds a valid driver's license AND is
+  //     KFIS-cleared to drive a company vehicle.
+  language: text("language"),
+  gender: text("gender"),
+  title: text("title"),
+  kfisAuthorizedToDrive: boolean("kfis_authorized_to_drive"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

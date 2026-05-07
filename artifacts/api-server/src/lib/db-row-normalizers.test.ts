@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeLeaseDate,
   normalizeLeaseRow,
+  normalizeOccupantRow,
   normalizePropertyRow,
   normalizeCustomerRow,
   type NormalizerFixup,
@@ -255,5 +256,68 @@ describe("normalizer fixup collector", () => {
       normalizePropertyRow({ paymentMethod: "Cash" }),
     ).not.toThrow();
     expect(() => normalizeLeaseRow({ status: "pending" as never })).not.toThrow();
+  });
+});
+
+describe("normalizeOccupantRow — Task #502 profile fields", () => {
+  it("accepts the canonical camelCase kfisAuthorizedToDrive header", () => {
+    const out = normalizeOccupantRow({ kfisAuthorizedToDrive: true } as never);
+    expect(out).toEqual({ kfisAuthorizedToDrive: true });
+  });
+
+  it("promotes the snake_case kfis_authorized_to_drive XLSX header to the canonical key", () => {
+    const out = normalizeOccupantRow({
+      kfis_authorized_to_drive: "yes",
+    } as never);
+    expect(out).toEqual({ kfisAuthorizedToDrive: true });
+  });
+
+  it.each([
+    ["true bool", true, true],
+    ["false bool", false, false],
+    ["yes string", "yes", true],
+    ["y string", "y", true],
+    ["1 string", "1", true],
+    ["no string", "no", false],
+    ["n string", "n", false],
+    ["0 string", "0", false],
+    ["unknown garbage", "maybe", null],
+    ["null", null, null],
+  ])("normalizes kfis driver-license %s -> %s", (_label, input, expected) => {
+    const out = normalizeOccupantRow({
+      kfisAuthorizedToDrive: input as never,
+    });
+    expect(out.kfisAuthorizedToDrive).toBe(expected);
+  });
+
+  it.each([
+    ["Bilingual", "Bilingual"],
+    ["English only", "English only"],
+    ["off-list", null],
+    ["", null],
+  ])("coerces language %s -> %s", (input, expected) => {
+    const out = normalizeOccupantRow({ language: input } as never) as {
+      language: string | null;
+    };
+    expect(out.language).toBe(expected);
+  });
+
+  it("coerces unknown gender / title to null and preserves known members", () => {
+    const fem = normalizeOccupantRow({ gender: "Female" } as never) as {
+      gender: string | null;
+    };
+    expect(fem.gender).toBe("Female");
+    const other = normalizeOccupantRow({ gender: "Other" } as never) as {
+      gender: string | null;
+    };
+    expect(other.gender).toBe(null);
+    const driver = normalizeOccupantRow({ title: "Driver ONLY" } as never) as {
+      title: string | null;
+    };
+    expect(driver.title).toBe("Driver ONLY");
+    const ceo = normalizeOccupantRow({ title: "CEO" } as never) as {
+      title: string | null;
+    };
+    expect(ceo.title).toBe(null);
   });
 });

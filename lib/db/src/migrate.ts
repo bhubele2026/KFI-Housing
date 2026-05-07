@@ -5,6 +5,7 @@ import { backfillRoomsIfNeeded } from "./migrations/backfill-rooms";
 import { dropLeaseIncludedItemsIfNeeded } from "./migrations/drop-lease-included-items";
 import { migrateLeasesCustomerIdNullableIfNeeded } from "./migrations/leases-customer-id-nullable";
 import { backfillUtilitiesIncludedInRent } from "./migrations/backfill-utilities-included-in-rent";
+import { addOccupantProfileFieldsIfNeeded } from "./migrations/add-occupant-profile-fields";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -47,6 +48,13 @@ export async function pushSchemaIfNeeded(
   // so the empty-string sentinel that used to defeat `??` fallbacks is
   // gone end-to-end and the diff afterwards is empty.
   await migrateLeasesCustomerIdNullableIfNeeded(pool, log);
+
+  // Add the four nullable occupant profile columns (Task #502:
+  // language / gender / title / kfis_authorized_to_drive) BEFORE
+  // drizzle diffs the schema, so a deployed DB that's still on the
+  // old shape catches up at boot rather than waiting for a separate
+  // pushSchema run. Idempotent — no-op once all four columns exist.
+  await addOccupantProfileFieldsIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

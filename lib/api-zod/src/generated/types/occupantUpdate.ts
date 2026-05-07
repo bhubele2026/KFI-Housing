@@ -7,8 +7,11 @@
  */
 import type { OccupantUpdateBillingFrequency } from "./occupantUpdateBillingFrequency";
 import type { OccupantUpdateChargeSource } from "./occupantUpdateChargeSource";
+import type { OccupantUpdateGender } from "./occupantUpdateGender";
+import type { OccupantUpdateLanguage } from "./occupantUpdateLanguage";
 import type { OccupantUpdateShift } from "./occupantUpdateShift";
 import type { OccupantUpdateStatus } from "./occupantUpdateStatus";
+import type { OccupantUpdateTitle } from "./occupantUpdateTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 export interface OccupantUpdate {
@@ -31,4 +34,12 @@ export interface OccupantUpdate {
   chargeSourcePersonId?: string;
   /** @nullable */
   shift?: OccupantUpdateShift;
+  /** @nullable */
+  language?: OccupantUpdateLanguage;
+  /** @nullable */
+  gender?: OccupantUpdateGender;
+  /** @nullable */
+  title?: OccupantUpdateTitle;
+  /** @nullable */
+  kfisAuthorizedToDrive?: boolean | null;
 }

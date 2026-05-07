@@ -379,6 +379,54 @@ const OCCUPANT_CHARGE_SOURCES = new Set<string>([
   "manual_override",
 ]);
 const OCCUPANT_SHIFTS = new Set<string>(["1st", "2nd"]);
+const OCCUPANT_LANGUAGES = new Set<string>([
+  "Bilingual",
+  "English only",
+  "Spanish only",
+  "French only",
+  "Other only",
+]);
+const OCCUPANT_GENDERS = new Set<string>(["Female", "Male"]);
+const OCCUPANT_TITLES = new Set<string>([
+  "Onsite Supervisor",
+  "Onsite Lead",
+  "Driver + Associate",
+  "Driver ONLY",
+  "Associate",
+  "Mentor",
+]);
+
+function normalizeOccupantLanguage(value: unknown): string | null {
+  if (typeof value === "string" && OCCUPANT_LANGUAGES.has(value)) return value;
+  return null;
+}
+
+function normalizeOccupantGender(value: unknown): string | null {
+  if (typeof value === "string" && OCCUPANT_GENDERS.has(value)) return value;
+  return null;
+}
+
+function normalizeOccupantTitle(value: unknown): string | null {
+  if (typeof value === "string" && OCCUPANT_TITLES.has(value)) return value;
+  return null;
+}
+
+/**
+ * Coerce loose driver-license inputs (booleans straight through, plus
+ * the common "true"/"false"/"yes"/"no"/"y"/"n" string variants an XLSX
+ * import might surface) down to a real boolean. Anything we can't
+ * recognise — including missing values — collapses to `null` ("not on
+ * file yet") so the importer never throws on a malformed cell.
+ */
+function normalizeKfisAuthorizedToDrive(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true" || v === "yes" || v === "y" || v === "1") return true;
+    if (v === "false" || v === "no" || v === "n" || v === "0") return false;
+  }
+  return null;
+}
 
 function normalizeOccupantStatus(value: unknown): "Active" | "Former" {
   if (typeof value === "string" && OCCUPANT_STATUSES.has(value)) {
@@ -419,6 +467,20 @@ export function normalizeOccupantRow<
   T extends Partial<OccupantRow> | Partial<InsertOccupantRow>,
 >(row: T, fixups?: NormalizerFixup[]): T {
   const out: Record<string, unknown> = { ...row };
+  // XLSX importers may surface the boolean driver-license column as
+  // either the canonical camelCase key (`kfisAuthorizedToDrive`) or
+  // the snake_case header (`kfis_authorized_to_drive`). Promote the
+  // snake_case alias to the canonical key here so the rest of the
+  // normalizer (and the DB insert) only ever sees one shape. We
+  // deliberately do not overwrite an existing camelCase value.
+  if (
+    "kfis_authorized_to_drive" in out &&
+    !("kfisAuthorizedToDrive" in out)
+  ) {
+    const aliased = out["kfis_authorized_to_drive"];
+    out.kfisAuthorizedToDrive = normalizeKfisAuthorizedToDrive(aliased);
+    delete out["kfis_authorized_to_drive"];
+  }
   if ("status" in row) {
     const after = normalizeOccupantStatus(row.status);
     recordFixup(fixups, "status", row.status, after);
@@ -448,6 +510,31 @@ export function normalizeOccupantRow<
     const after = normalizeLeaseDate(row.moveOutDate as string | null);
     recordFixup(fixups, "moveOutDate", row.moveOutDate, after);
     out.moveOutDate = after;
+  }
+  if ("language" in row) {
+    const after = normalizeOccupantLanguage(row.language);
+    recordFixup(fixups, "language", row.language, after);
+    out.language = after;
+  }
+  if ("gender" in row) {
+    const after = normalizeOccupantGender(row.gender);
+    recordFixup(fixups, "gender", row.gender, after);
+    out.gender = after;
+  }
+  if ("title" in row) {
+    const after = normalizeOccupantTitle(row.title);
+    recordFixup(fixups, "title", row.title, after);
+    out.title = after;
+  }
+  if ("kfisAuthorizedToDrive" in row) {
+    const after = normalizeKfisAuthorizedToDrive(row.kfisAuthorizedToDrive);
+    recordFixup(
+      fixups,
+      "kfisAuthorizedToDrive",
+      row.kfisAuthorizedToDrive,
+      after,
+    );
+    out.kfisAuthorizedToDrive = after;
   }
   return out as T;
 }

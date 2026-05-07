@@ -432,6 +432,31 @@ export const ImportDataBody = zod.object({
       shift: zod
         .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
         .nullish(),
+      language: zod
+        .union([
+          zod.literal("Bilingual"),
+          zod.literal("English only"),
+          zod.literal("Spanish only"),
+          zod.literal("French only"),
+          zod.literal("Other only"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      gender: zod
+        .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+        .nullish(),
+      title: zod
+        .union([
+          zod.literal("Onsite Supervisor"),
+          zod.literal("Onsite Lead"),
+          zod.literal("Driver + Associate"),
+          zod.literal("Driver ONLY"),
+          zod.literal("Associate"),
+          zod.literal("Mentor"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      kfisAuthorizedToDrive: zod.boolean().nullish(),
     }),
   ),
   utilities: zod.array(
@@ -2591,6 +2616,43 @@ export const ListOccupantsResponseItem = zod.object({
     .describe(
       'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
     ),
+  language: zod
+    .union([
+      zod.literal("Bilingual"),
+      zod.literal("English only"),
+      zod.literal("Spanish only"),
+      zod.literal("French only"),
+      zod.literal("Other only"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Workforce language profile (Task #502). Null when not on\nfile yet. Unrecognised legacy values are normalised to\nnull at the boundary so the list endpoint never 500s.\n",
+    ),
+  gender: zod
+    .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+    .nullish()
+    .describe("Workforce gender (Task #502). Null when not on file.\n"),
+  title: zod
+    .union([
+      zod.literal("Onsite Supervisor"),
+      zod.literal("Onsite Lead"),
+      zod.literal("Driver + Associate"),
+      zod.literal("Driver ONLY"),
+      zod.literal("Associate"),
+      zod.literal("Mentor"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Workforce job title used for staffing\/routing decisions\n(Task #502). Null when not on file.\n",
+    ),
+  kfisAuthorizedToDrive: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when the associate holds a valid driver's license AND\nis KFIS-cleared to drive a company vehicle (Task #502).\nNull when their driver status hasn't been recorded.\n",
+    ),
   createdAt: zod.coerce
     .date()
     .nullish()
@@ -2633,6 +2695,31 @@ export const CreateOccupantBody = zod.object({
   shift: zod
     .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
     .nullish(),
+  language: zod
+    .union([
+      zod.literal("Bilingual"),
+      zod.literal("English only"),
+      zod.literal("Spanish only"),
+      zod.literal("French only"),
+      zod.literal("Other only"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  gender: zod
+    .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+    .nullish(),
+  title: zod
+    .union([
+      zod.literal("Onsite Supervisor"),
+      zod.literal("Onsite Lead"),
+      zod.literal("Driver + Associate"),
+      zod.literal("Driver ONLY"),
+      zod.literal("Associate"),
+      zod.literal("Mentor"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  kfisAuthorizedToDrive: zod.boolean().nullish(),
 });
 
 /**
@@ -2673,6 +2760,31 @@ export const UpdateOccupantBody = zod.object({
   shift: zod
     .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
     .nullish(),
+  language: zod
+    .union([
+      zod.literal("Bilingual"),
+      zod.literal("English only"),
+      zod.literal("Spanish only"),
+      zod.literal("French only"),
+      zod.literal("Other only"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  gender: zod
+    .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+    .nullish(),
+  title: zod
+    .union([
+      zod.literal("Onsite Supervisor"),
+      zod.literal("Onsite Lead"),
+      zod.literal("Driver + Associate"),
+      zod.literal("Driver ONLY"),
+      zod.literal("Associate"),
+      zod.literal("Mentor"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  kfisAuthorizedToDrive: zod.boolean().nullish(),
 });
 
 export const updateOccupantResponseMoveInDateRegExp = new RegExp(
@@ -2707,6 +2819,43 @@ export const UpdateOccupantResponse = zod.object({
     .nullable()
     .describe(
       'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+    ),
+  language: zod
+    .union([
+      zod.literal("Bilingual"),
+      zod.literal("English only"),
+      zod.literal("Spanish only"),
+      zod.literal("French only"),
+      zod.literal("Other only"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Workforce language profile (Task #502). Null when not on\nfile yet. Unrecognised legacy values are normalised to\nnull at the boundary so the list endpoint never 500s.\n",
+    ),
+  gender: zod
+    .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+    .nullish()
+    .describe("Workforce gender (Task #502). Null when not on file.\n"),
+  title: zod
+    .union([
+      zod.literal("Onsite Supervisor"),
+      zod.literal("Onsite Lead"),
+      zod.literal("Driver + Associate"),
+      zod.literal("Driver ONLY"),
+      zod.literal("Associate"),
+      zod.literal("Mentor"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Workforce job title used for staffing\/routing decisions\n(Task #502). Null when not on file.\n",
+    ),
+  kfisAuthorizedToDrive: zod
+    .boolean()
+    .nullish()
+    .describe(
+      "True when the associate holds a valid driver's license AND\nis KFIS-cleared to drive a company vehicle (Task #502).\nNull when their driver status hasn't been recorded.\n",
     ),
   createdAt: zod.coerce
     .date()

@@ -883,6 +883,58 @@ export const OccupantShift = {
   "2nd": "2nd",
 } as const;
 
+/**
+ * Workforce language profile (Task #502). Null when not on
+file yet. Unrecognised legacy values are normalised to
+null at the boundary so the list endpoint never 500s.
+
+ * @nullable
+ */
+export type OccupantLanguage =
+  | (typeof OccupantLanguage)[keyof typeof OccupantLanguage]
+  | null;
+
+export const OccupantLanguage = {
+  Bilingual: "Bilingual",
+  English_only: "English only",
+  Spanish_only: "Spanish only",
+  French_only: "French only",
+  Other_only: "Other only",
+} as const;
+
+/**
+ * Workforce gender (Task #502). Null when not on file.
+
+ * @nullable
+ */
+export type OccupantGender =
+  | (typeof OccupantGender)[keyof typeof OccupantGender]
+  | null;
+
+export const OccupantGender = {
+  Female: "Female",
+  Male: "Male",
+} as const;
+
+/**
+ * Workforce job title used for staffing/routing decisions
+(Task #502). Null when not on file.
+
+ * @nullable
+ */
+export type OccupantTitle =
+  | (typeof OccupantTitle)[keyof typeof OccupantTitle]
+  | null;
+
+export const OccupantTitle = {
+  Onsite_Supervisor: "Onsite Supervisor",
+  Onsite_Lead: "Onsite Lead",
+  "Driver_+_Associate": "Driver + Associate",
+  Driver_ONLY: "Driver ONLY",
+  Associate: "Associate",
+  Mentor: "Mentor",
+} as const;
+
 export interface Occupant {
   id: string;
   name: string;
@@ -912,6 +964,35 @@ the same bedroom (task #315).
    * @nullable
    */
   shift: OccupantShift;
+  /**
+   * Workforce language profile (Task #502). Null when not on
+file yet. Unrecognised legacy values are normalised to
+null at the boundary so the list endpoint never 500s.
+
+   * @nullable
+   */
+  language?: OccupantLanguage;
+  /**
+   * Workforce gender (Task #502). Null when not on file.
+
+   * @nullable
+   */
+  gender?: OccupantGender;
+  /**
+   * Workforce job title used for staffing/routing decisions
+(Task #502). Null when not on file.
+
+   * @nullable
+   */
+  title?: OccupantTitle;
+  /**
+   * True when the associate holds a valid driver's license AND
+is KFIS-cleared to drive a company vehicle (Task #502).
+Null when their driver status hasn't been recorded.
+
+   * @nullable
+   */
+  kfisAuthorizedToDrive?: boolean | null;
   /**
    * ISO-8601 timestamp of when this occupant record was created.
 Null for legacy rows inserted before the column existed.
@@ -961,6 +1042,49 @@ export const OccupantCreateShift = {
   "2nd": "2nd",
 } as const;
 
+/**
+ * @nullable
+ */
+export type OccupantCreateLanguage =
+  | (typeof OccupantCreateLanguage)[keyof typeof OccupantCreateLanguage]
+  | null;
+
+export const OccupantCreateLanguage = {
+  Bilingual: "Bilingual",
+  English_only: "English only",
+  Spanish_only: "Spanish only",
+  French_only: "French only",
+  Other_only: "Other only",
+} as const;
+
+/**
+ * @nullable
+ */
+export type OccupantCreateGender =
+  | (typeof OccupantCreateGender)[keyof typeof OccupantCreateGender]
+  | null;
+
+export const OccupantCreateGender = {
+  Female: "Female",
+  Male: "Male",
+} as const;
+
+/**
+ * @nullable
+ */
+export type OccupantCreateTitle =
+  | (typeof OccupantCreateTitle)[keyof typeof OccupantCreateTitle]
+  | null;
+
+export const OccupantCreateTitle = {
+  Onsite_Supervisor: "Onsite Supervisor",
+  Onsite_Lead: "Onsite Lead",
+  "Driver_+_Associate": "Driver + Associate",
+  Driver_ONLY: "Driver ONLY",
+  Associate: "Associate",
+  Mentor: "Mentor",
+} as const;
+
 export interface OccupantCreate {
   id: string;
   name: string;
@@ -982,6 +1106,14 @@ export interface OccupantCreate {
   chargeSourcePersonId?: string;
   /** @nullable */
   shift?: OccupantCreateShift;
+  /** @nullable */
+  language?: OccupantCreateLanguage;
+  /** @nullable */
+  gender?: OccupantCreateGender;
+  /** @nullable */
+  title?: OccupantCreateTitle;
+  /** @nullable */
+  kfisAuthorizedToDrive?: boolean | null;
 }
 
 export type OccupantUpdateStatus =
@@ -1022,6 +1154,49 @@ export const OccupantUpdateShift = {
   "2nd": "2nd",
 } as const;
 
+/**
+ * @nullable
+ */
+export type OccupantUpdateLanguage =
+  | (typeof OccupantUpdateLanguage)[keyof typeof OccupantUpdateLanguage]
+  | null;
+
+export const OccupantUpdateLanguage = {
+  Bilingual: "Bilingual",
+  English_only: "English only",
+  Spanish_only: "Spanish only",
+  French_only: "French only",
+  Other_only: "Other only",
+} as const;
+
+/**
+ * @nullable
+ */
+export type OccupantUpdateGender =
+  | (typeof OccupantUpdateGender)[keyof typeof OccupantUpdateGender]
+  | null;
+
+export const OccupantUpdateGender = {
+  Female: "Female",
+  Male: "Male",
+} as const;
+
+/**
+ * @nullable
+ */
+export type OccupantUpdateTitle =
+  | (typeof OccupantUpdateTitle)[keyof typeof OccupantUpdateTitle]
+  | null;
+
+export const OccupantUpdateTitle = {
+  Onsite_Supervisor: "Onsite Supervisor",
+  Onsite_Lead: "Onsite Lead",
+  "Driver_+_Associate": "Driver + Associate",
+  Driver_ONLY: "Driver ONLY",
+  Associate: "Associate",
+  Mentor: "Mentor",
+} as const;
+
 export interface OccupantUpdate {
   name?: string;
   email?: string;
@@ -1042,6 +1217,14 @@ export interface OccupantUpdate {
   chargeSourcePersonId?: string;
   /** @nullable */
   shift?: OccupantUpdateShift;
+  /** @nullable */
+  language?: OccupantUpdateLanguage;
+  /** @nullable */
+  gender?: OccupantUpdateGender;
+  /** @nullable */
+  title?: OccupantUpdateTitle;
+  /** @nullable */
+  kfisAuthorizedToDrive?: boolean | null;
 }
 
 export type UtilityType = (typeof UtilityType)[keyof typeof UtilityType];

@@ -7,8 +7,11 @@
  */
 import type { OccupantBillingFrequency } from "./occupantBillingFrequency";
 import type { OccupantChargeSource } from "./occupantChargeSource";
+import type { OccupantGender } from "./occupantGender";
+import type { OccupantLanguage } from "./occupantLanguage";
 import type { OccupantShift } from "./occupantShift";
 import type { OccupantStatus } from "./occupantStatus";
+import type { OccupantTitle } from "./occupantTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 export interface Occupant {
@@ -40,6 +43,35 @@ the same bedroom (task #315).
    * @nullable
    */
   shift: OccupantShift;
+  /**
+   * Workforce language profile (Task #502). Null when not on
+file yet. Unrecognised legacy values are normalised to
+null at the boundary so the list endpoint never 500s.
+
+   * @nullable
+   */
+  language?: OccupantLanguage;
+  /**
+   * Workforce gender (Task #502). Null when not on file.
+
+   * @nullable
+   */
+  gender?: OccupantGender;
+  /**
+   * Workforce job title used for staffing/routing decisions
+(Task #502). Null when not on file.
+
+   * @nullable
+   */
+  title?: OccupantTitle;
+  /**
+   * True when the associate holds a valid driver's license AND
+is KFIS-cleared to drive a company vehicle (Task #502).
+Null when their driver status hasn't been recorded.
+
+   * @nullable
+   */
+  kfisAuthorizedToDrive?: boolean | null;
   /**
    * ISO-8601 timestamp of when this occupant record was created.
 Null for legacy rows inserted before the column existed.

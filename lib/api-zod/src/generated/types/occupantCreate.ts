@@ -7,8 +7,11 @@
  */
 import type { OccupantCreateBillingFrequency } from "./occupantCreateBillingFrequency";
 import type { OccupantCreateChargeSource } from "./occupantCreateChargeSource";
+import type { OccupantCreateGender } from "./occupantCreateGender";
+import type { OccupantCreateLanguage } from "./occupantCreateLanguage";
 import type { OccupantCreateShift } from "./occupantCreateShift";
 import type { OccupantCreateStatus } from "./occupantCreateStatus";
+import type { OccupantCreateTitle } from "./occupantCreateTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 export interface OccupantCreate {
@@ -32,4 +35,12 @@ export interface OccupantCreate {
   chargeSourcePersonId?: string;
   /** @nullable */
   shift?: OccupantCreateShift;
+  /** @nullable */
+  language?: OccupantCreateLanguage;
+  /** @nullable */
+  gender?: OccupantCreateGender;
+  /** @nullable */
+  title?: OccupantCreateTitle;
+  /** @nullable */
+  kfisAuthorizedToDrive?: boolean | null;
 }

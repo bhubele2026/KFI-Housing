@@ -295,6 +295,7 @@ export default function Occupants() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Title</TableHead>
                   <TableHead>Property</TableHead>
                   <TableHead>Bed</TableHead>
                   <TableHead>Move In</TableHead>
@@ -307,10 +308,10 @@ export default function Occupants() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={9} />
+                  <SkeletonRows rows={6} columns={10} />
                 ) : filteredOccupants.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={9}
+                    colSpan={10}
                     icon={Users}
                     title="No occupants found"
                     description={
@@ -336,7 +337,28 @@ export default function Occupants() {
                     
                     return (
                       <TableRow key={occupant.id}>
-                        <TableCell className="font-medium">{occupant.name}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span>{occupant.name}</span>
+                            {occupant.language ? (
+                              <Badge
+                                variant="secondary"
+                                className="font-normal text-xs"
+                                data-testid={`badge-occupant-language-${occupant.id}`}
+                                title={`Language: ${occupant.language}`}
+                              >
+                                {occupant.language}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell data-testid={`cell-occupant-title-${occupant.id}`}>
+                          {occupant.title ? (
+                            occupant.title
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{property ? <PropertyNameCell name={property.name} /> : <span className="italic text-muted-foreground">—</span>}</TableCell>
                         <TableCell>{bed ? `Bed ${bed.bedNumber}` : "-"}</TableCell>
                         <TableCell>

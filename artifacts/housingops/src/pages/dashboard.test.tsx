@@ -713,6 +713,123 @@ describe("Dashboard Needs review tile", () => {
   });
 });
 
+describe("Dashboard Missing dates tile (task #367 / #412)", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  function getCount(): string | null {
+    const el = container.querySelector(
+      '[data-testid="text-needs-review-leases-needs-dates-count"]',
+    );
+    return el ? el.textContent : null;
+  }
+
+  function getCtaHref(): string | null {
+    const el = container.querySelector(
+      'a[data-testid="button-needs-review-leases-needs-dates-cta"]',
+    );
+    return el ? el.getAttribute("href") : null;
+  }
+
+  it("hides the tile when every lease has both start and end dates", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "l1", propertyId: "p1", startDate: "2025-01-01", endDate: "2025-12-31", monthlyRent: 1000, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l2", propertyId: "p1", startDate: "2025-03-01", endDate: "2025-09-30", monthlyRent: 800, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+    ];
+
+    await render();
+
+    expect(container.querySelector('[data-testid="tile-needs-review-leases-needs-dates"]')).toBeNull();
+    expect(getCount()).toBeNull();
+    expect(getCtaHref()).toBeNull();
+  });
+
+  it("shows the tile with the correct count when some leases are missing dates", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "l1", propertyId: "p1", startDate: "2025-01-01", endDate: "2025-12-31", monthlyRent: 1000, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l2", propertyId: "p1", startDate: "", endDate: "2025-12-31", monthlyRent: 800, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l3", propertyId: "p1", startDate: "2025-01-01", endDate: "", monthlyRent: 600, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l4", propertyId: "p1", startDate: null, endDate: null, monthlyRent: 500, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+    ];
+
+    await render();
+
+    expect(container.querySelector('[data-testid="card-needs-review"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="tile-needs-review-leases-needs-dates"]')).not.toBeNull();
+    expect(getCount()).toBe("3");
+    expect(getCtaHref()).toBe("/leases?needsDates=1");
+  });
+
+  it("scopes the count and CTA to the active customer filter", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Hillside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "l1", propertyId: "p1", startDate: "", endDate: "2025-12-31", monthlyRent: 800, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l2", propertyId: "p2", startDate: "", endDate: "", monthlyRent: 600, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+      { id: "l3", propertyId: "p2", startDate: "2025-01-01", endDate: "", monthlyRent: 500, securityDeposit: 0, status: "Active", notes: "", clauses: "" },
+    ];
+
+    await render();
+
+    expect(getCount()).toBe("3");
+
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1");
+    });
+
+    expect(getCount()).toBe("1");
+    expect(getCtaHref()).toBe("/leases?needsDates=1&customer=c1");
+
+    await act(async () => {
+      handler.onValueChange("c2");
+    });
+    expect(getCount()).toBe("2");
+    expect(getCtaHref()).toBe("/leases?needsDates=1&customer=c2");
+  });
+});
+
 describe("Dashboard Hotel-rate at-risk tile (task #358 deep-link)", () => {
   // The Needs review card surfaces a "hotel-rate leases at risk this
   // month" item whose CTA must deep-link to /leases?atRisk=1, where the

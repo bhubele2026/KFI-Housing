@@ -817,27 +817,6 @@ export default function Dashboard() {
     return Array.from(map.values()).sort((a, b) => a.customer.localeCompare(b.customer));
   }, [scopedLowConfidencePayroll]);
 
-  // Combined KPI (Task #355). Sums the two payroll-review tiles so an
-  // operator can tell at a glance — without scrolling — whether the
-  // dashboard has any payroll rows waiting on them. Scope mirrors the
-  // tiles themselves (already customer-filtered above).
-  const payrollReviewCount =
-    scopedUnplacedPayroll.length + scopedLowConfidencePayroll.length;
-  // Click target: prefer the Unplaced tile when it has rows, otherwise
-  // the Confirm-match tile. The two cards expose stable DOM ids below
-  // so this scroll keeps working even if their order changes.
-  const payrollReviewScrollTargetId =
-    scopedUnplacedPayroll.length > 0
-      ? "card-unplaced-payroll"
-      : scopedLowConfidencePayroll.length > 0
-        ? "card-low-confidence-payroll"
-        : null;
-  const scrollToPayrollReview = () => {
-    if (!payrollReviewScrollTargetId) return;
-    const el = document.getElementById(payrollReviewScrollTargetId);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS
       ? null
@@ -874,31 +853,6 @@ export default function Dashboard() {
             </Select>
           }
         />
-
-        {payrollReviewCount > 0 && (
-          <button
-            type="button"
-            onClick={scrollToPayrollReview}
-            className="w-full text-left rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20 px-4 py-3 flex items-center gap-3 hover:bg-amber-100/60 dark:hover:bg-amber-950/40 transition-colors"
-            data-testid="kpi-payroll-needs-review"
-          >
-            <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span
-              className="text-lg font-bold tabular-nums"
-              data-testid="text-kpi-payroll-needs-review-count"
-            >
-              {payrollReviewCount}
-            </span>
-            <span className="text-sm font-medium">
-              payroll row{payrollReviewCount === 1 ? "" : "s"} need review
-            </span>
-            <span className="text-xs text-muted-foreground ml-2 tabular-nums">
-              {scopedUnplacedPayroll.length} unplaced ·{" "}
-              {scopedLowConfidencePayroll.length} to confirm
-            </span>
-            <ArrowRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
-          </button>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {cards.map((card, i) => (

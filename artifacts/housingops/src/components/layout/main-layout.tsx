@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData, type DroppedRow } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
-import { useListUnplacedPayroll } from "@workspace/api-client-react";
 import { useTranslation } from "react-i18next";
 
 const COLLAPSED_STORAGE_KEY = "housingops:sidebar-collapsed";
@@ -139,7 +138,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
             </div>
           ) : null}
         </div>
-        <PayrollReviewBar />
         <main className="flex-1 overflow-y-auto">
           {/* Inline notice when the data store dropped one or more
               malformed rows from a list response. Keeps the page from
@@ -159,75 +157,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
-  );
-}
-
-function PayrollReviewBar() {
-  const [location, navigate] = useLocation();
-  const { customerId } = useCustomerScope();
-  const { customers } = useData();
-  const { data: unplacedPayrollResult } = useListUnplacedPayroll();
-
-  const unplacedPayroll = unplacedPayrollResult?.unmatched;
-  const lowConfidencePayroll = unplacedPayrollResult?.lowConfidenceMatches;
-
-  const scopedUnplacedCount = useMemo(() => {
-    const rows = unplacedPayroll ?? [];
-    if (customerId === ALL_CUSTOMERS) return rows.length;
-    const customerName = customers.find((c) => c.id === customerId)?.name;
-    if (!customerName) return 0;
-    return rows.filter((r) => r.customer === customerName).length;
-  }, [unplacedPayroll, customerId, customers]);
-
-  const scopedLowConfidenceCount = useMemo(() => {
-    const rows = lowConfidencePayroll ?? [];
-    if (customerId === ALL_CUSTOMERS) return rows.length;
-    const customerName = customers.find((c) => c.id === customerId)?.name;
-    if (!customerName) return 0;
-    return rows.filter((r) => r.customer === customerName).length;
-  }, [lowConfidencePayroll, customerId, customers]);
-
-  const totalCount = scopedUnplacedCount + scopedLowConfidenceCount;
-
-  if (totalCount === 0) return null;
-
-  const scrollTarget =
-    scopedUnplacedCount > 0
-      ? "card-unplaced-payroll"
-      : "card-low-confidence-payroll";
-
-  const handleClick = () => {
-    const alreadyOnDashboard = location === "/dashboard" || location === "/";
-    if (!alreadyOnDashboard) {
-      navigate("/dashboard");
-    }
-    const tryScroll = (attempts = 0) => {
-      const el = document.getElementById(scrollTarget);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      } else if (attempts < 10) {
-        setTimeout(() => tryScroll(attempts + 1), 100);
-      }
-    };
-    requestAnimationFrame(() => tryScroll());
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="flex w-full items-center gap-2 border-b border-amber-300 bg-amber-50 px-4 py-1.5 text-left text-sm hover:bg-amber-100 transition-colors dark:border-amber-700 dark:bg-amber-950/40 dark:hover:bg-amber-950/60"
-      data-testid="sticky-payroll-review-bar"
-    >
-      <Receipt className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-      <span className="font-semibold tabular-nums">{totalCount}</span>
-      <span>
-        payroll row{totalCount === 1 ? "" : "s"} need{totalCount === 1 ? "s" : ""} review
-      </span>
-      <span className="text-xs text-muted-foreground ml-1 tabular-nums">
-        ({scopedUnplacedCount} unplaced · {scopedLowConfidenceCount} to confirm)
-      </span>
-    </button>
   );
 }
 

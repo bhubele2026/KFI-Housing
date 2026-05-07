@@ -1,8 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   currentMonthKey,
   getHotelRateRiskStatus,
   getHotelRateMonthRisk,
+  getHotelRateLeasesMissingMonthLog,
+  readAcknowledgedReminderMonth,
+  writeAcknowledgedReminderMonth,
+  HOTEL_RATE_REMINDER_STORAGE_KEY,
 } from "./hotel-rate-status";
 import type { Lease, RoomNightLog } from "@/data/mockData";
 
@@ -89,6 +93,78 @@ describe("getHotelRateMonthRisk", () => {
     expect(
       getHotelRateMonthRisk(lease({ id: "l1" }), [], "2026-05"),
     ).toBeNull();
+  });
+});
+
+describe("getHotelRateLeasesMissingMonthLog", () => {
+  function leaseRow(
+    id: string,
+    monthlyRoomNightMin: number,
+    status: Lease["status"] = "Active",
+  ): Pick<Lease, "id" | "monthlyRoomNightMin" | "status"> {
+    return { id, monthlyRoomNightMin, status };
+  }
+
+  it("returns hotel-rate Active/Upcoming leases that have no log for the month", () => {
+    const leases = [
+      leaseRow("l1", 30, "Active"),
+      leaseRow("l2", 30, "Upcoming"),
+      leaseRow("l3", 30, "Active"),
+    ];
+    const logs = [log("l3", "2026-05", 5)];
+    const result = getHotelRateLeasesMissingMonthLog(leases, logs, "2026-05");
+    expect(result.map((l) => l.id).sort()).toEqual(["l1", "l2"]);
+  });
+
+  it("ignores non-hotel-rate leases (no monthly minimum)", () => {
+    const leases = [leaseRow("l1", 0, "Active"), leaseRow("l2", 30, "Active")];
+    const result = getHotelRateLeasesMissingMonthLog(leases, [], "2026-05");
+    expect(result.map((l) => l.id)).toEqual(["l2"]);
+  });
+
+  it("skips Expired hotel-rate leases — there's no rate left to void", () => {
+    const leases = [
+      leaseRow("l1", 30, "Expired"),
+      leaseRow("l2", 30, "Active"),
+    ];
+    const result = getHotelRateLeasesMissingMonthLog(leases, [], "2026-05");
+    expect(result.map((l) => l.id)).toEqual(["l2"]);
+  });
+
+  it("treats logs from other months as not satisfying the requested month", () => {
+    const leases = [leaseRow("l1", 30, "Active")];
+    const logs = [log("l1", "2026-04", 60)];
+    const result = getHotelRateLeasesMissingMonthLog(leases, logs, "2026-05");
+    expect(result.map((l) => l.id)).toEqual(["l1"]);
+  });
+
+  it("returns an empty list when every hotel-rate lease already has a log this month", () => {
+    const leases = [leaseRow("l1", 30, "Active"), leaseRow("l2", 30, "Active")];
+    const logs = [log("l1", "2026-05", 5), log("l2", "2026-05", 0)];
+    expect(getHotelRateLeasesMissingMonthLog(leases, logs, "2026-05")).toEqual([]);
+  });
+});
+
+describe("reminder month persistence", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem(HOTEL_RATE_REMINDER_STORAGE_KEY);
+  });
+
+  it("returns null when nothing has been persisted", () => {
+    expect(readAcknowledgedReminderMonth()).toBeNull();
+  });
+
+  it("round-trips a YYYY-MM value through localStorage", () => {
+    writeAcknowledgedReminderMonth("2026-05");
+    expect(readAcknowledgedReminderMonth()).toBe("2026-05");
+  });
+
+  it("rejects malformed persisted values rather than handing them back as a month", () => {
+    // A poisoned localStorage entry (manual edit, leftover from a
+    // future schema, etc.) must not satisfy the "already acknowledged"
+    // check — otherwise the operator would silently miss the toast.
+    window.localStorage.setItem(HOTEL_RATE_REMINDER_STORAGE_KEY, "not-a-month");
+    expect(readAcknowledgedReminderMonth()).toBeNull();
   });
 });
 

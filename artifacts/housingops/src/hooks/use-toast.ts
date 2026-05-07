@@ -149,6 +149,12 @@ function toast({ ...props }: Toast) {
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
+  // Preserve any caller-supplied `onOpenChange` by composing it with the
+  // internal dismiss handler. Without this, callers who pass an
+  // `onOpenChange` to `toast(...)` (e.g. to persist that the operator
+  // acknowledged a one-shot reminder) would silently never see the
+  // close event because Radix only fires whatever we hand it here.
+  const callerOnOpenChange = props.onOpenChange
   dispatch({
     type: "ADD_TOAST",
     toast: {
@@ -156,6 +162,7 @@ function toast({ ...props }: Toast) {
       id,
       open: true,
       onOpenChange: (open) => {
+        callerOnOpenChange?.(open)
         if (!open) dismiss()
       },
     },

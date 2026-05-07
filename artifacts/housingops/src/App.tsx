@@ -7,6 +7,7 @@ import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useGoogleMapsKeyErrorToastListener } from "@/hooks/use-google-maps-key-error";
+import { useNewMonthHotelRateReminder } from "@/hooks/use-new-month-hotel-rate-reminder";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
@@ -70,6 +71,16 @@ function MapsKeyErrorToastListener() {
   return null;
 }
 
+// Render-less child of DataProvider + WouterRouter that fires the
+// once-per-month "no log yet" reminder when the calendar month rolls
+// over and at least one hotel-rate lease still lacks a current-month
+// room-night log. Lives inside the router so its toast action can use
+// wouter's <Link> for the deep-link to /leases?atRisk=1 (Task #343).
+function NewMonthHotelRateReminder() {
+  useNewMonthHotelRateReminder();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -86,6 +97,7 @@ function App() {
                 <ErrorBoundary>
                   <Router />
                 </ErrorBoundary>
+                <NewMonthHotelRateReminder />
               </CustomerScopeProvider>
             </WouterRouter>
           </DataProvider>

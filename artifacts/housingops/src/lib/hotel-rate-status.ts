@@ -79,6 +79,78 @@ export function getHotelRateRiskStatus(
  *
  * Non-hotel-rate leases always return `null`.
  */
+/**
+ * Returns the subset of `leases` that are hotel-rate (have a positive
+ * `monthlyRoomNightMin`), still in scope (Active or Upcoming), and
+ * have **no** room-night log recorded for `month`. Used by the
+ * month-rollover reminder so the toast description can name a count
+ * the operator can act on without paging through /leases. Expired
+ * hotel-rate leases are skipped — there's no rate left to void.
+ */
+export function getHotelRateLeasesMissingMonthLog<
+  L extends Pick<Lease, "id" | "monthlyRoomNightMin"> & { status?: Lease["status"] },
+>(
+  leases: readonly L[],
+  logs: readonly RoomNightLog[],
+  month: string = currentMonthKey(),
+): L[] {
+  const loggedLeaseIds = new Set(
+    logs.filter((l) => l.month === month).map((l) => l.leaseId),
+  );
+  return leases.filter((lease) => {
+    const monthlyMin = lease.monthlyRoomNightMin ?? 0;
+    if (monthlyMin <= 0) return false;
+    if (lease.status && lease.status !== "Active" && lease.status !== "Upcoming") {
+      return false;
+    }
+    return !loggedLeaseIds.has(lease.id);
+  });
+}
+
+/**
+ * localStorage key holding the most recent `YYYY-MM` for which the
+ * operator has dismissed (or implicitly acknowledged by viewing) the
+ * "no room-night log yet" reminder. Persisting the *month* — not a
+ * boolean — is what makes the reminder auto-roll forward: the next
+ * calendar month will not match the stored value, so the toast fires
+ * once, gets dismissed, the new month is written, and the cycle
+ * repeats. Centralized here so the hook and tests share one constant.
+ */
+export const HOTEL_RATE_REMINDER_STORAGE_KEY =
+  "housingops:hotel-rate-month-reminder-ack";
+
+/**
+ * Read the month the operator last acknowledged the reminder for.
+ * Returns `null` when nothing is persisted (fresh session) or when
+ * localStorage is unavailable (Safari Private Mode, SSR). A `null`
+ * return is treated as "never acknowledged" — the reminder will fire
+ * the first time conditions warrant it.
+ */
+export function readAcknowledgedReminderMonth(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = window.localStorage.getItem(HOTEL_RATE_REMINDER_STORAGE_KEY);
+    return v && /^\d{4}-\d{2}$/.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the month the operator just acknowledged. Best-effort:
+ * losing the value (Safari Private Mode, quota exceeded) means the
+ * reminder may re-fire on the next reload, which is the safe failure
+ * mode — better to nag twice than silently swallow a missed log.
+ */
+export function writeAcknowledgedReminderMonth(month: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(HOTEL_RATE_REMINDER_STORAGE_KEY, month);
+  } catch {
+    // Best-effort persistence — see the read counterpart.
+  }
+}
+
 export function getHotelRateMonthRisk(
   lease: Pick<Lease, "id" | "monthlyRoomNightMin">,
   logs: readonly RoomNightLog[],

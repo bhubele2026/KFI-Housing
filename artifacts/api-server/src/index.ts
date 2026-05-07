@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
-import { seedIfEmpty } from "./lib/seed";
+import { isAutoSeedDisabled, seedIfEmpty } from "./lib/seed";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedChateauKnollIfMissing } from "./lib/seed-chateau-knoll";
@@ -26,6 +26,7 @@ import { start } from "./start";
 void start({
   pushSchemaIfNeeded,
   seedIfEmpty,
+  isAutoSeedDisabled: () => isAutoSeedDisabled(),
   backfillOccupantMoveInDates: async () => {
     await backfillOccupantMoveInDates();
   },

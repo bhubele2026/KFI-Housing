@@ -34,6 +34,13 @@ export interface StartDeps {
     options: PushSchemaOptions,
   ) => Promise<PushSchemaResult>;
   seedIfEmpty: () => Promise<void>;
+  // Task #486: returns true when the operator has deliberately wiped
+  // the database via `POST /reset/wipe` (or the `wipeAllOnly` lib
+  // function). When true, every boot-time seeder/auto-importer below
+  // is skipped so an intentionally empty DB stays empty across
+  // restarts. Defaults to a no-op `() => false` for tests that don't
+  // care.
+  isAutoSeedDisabled: () => Promise<boolean>;
   backfillOccupantMoveInDates: () => Promise<void>;
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
@@ -245,12 +252,35 @@ export async function start(deps: StartDeps): Promise<void> {
     }
   }
 
+  // Task #486: read the wipe marker once, after the schema has been
+  // applied (so the table exists) and before we run any data-seeder.
+  // When set, every auto-seeder / auto-importer below is skipped so
+  // an intentionally wiped DB stays empty across restarts. We
+  // deliberately keep schema push + backfills + listen + schedulers
+  // running — only the data-seeding side of boot is gated.
+  let autoSeedDisabled = false;
   try {
-    await deps.seedIfEmpty();
+    autoSeedDisabled = await deps.isAutoSeedDisabled();
   } catch (err) {
-    deps.logger.error({ err }, "Failed to seed database");
-    deps.exit(1);
-    return;
+    deps.logger.warn(
+      { err },
+      "Failed to read auto-seed-disabled marker — defaulting to enabled",
+    );
+  }
+  if (autoSeedDisabled) {
+    deps.logger.info(
+      "Auto-seed marker present — skipping seedIfEmpty and all boot-time seeders/auto-importers (database was deliberately wiped). Run `POST /reset` to restore sample data and re-enable auto-seeding.",
+    );
+  }
+
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedIfEmpty();
+    } catch (err) {
+      deps.logger.error({ err }, "Failed to seed database");
+      deps.exit(1);
+      return;
+    }
   }
 
   // One-shot backfill for legacy occupants whose move-in date was never
@@ -268,13 +298,15 @@ export async function start(deps: StartDeps): Promise<void> {
 
   // Idempotent Adient seed; non-fatal so a transient DB blip can't
   // keep the server from serving traffic.
-  try {
-    await deps.seedAdientIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Adient seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedAdientIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Adient seed — continuing to serve",
+      );
+    }
   }
 
   // Auto-import the bundled master housing-lease workbook on every
@@ -282,24 +314,28 @@ export async function start(deps: StartDeps): Promise<void> {
   // non-fatal, so a brand-new environment lands with the production
   // customer/property/lease set without an operator having to click
   // the "Import master file" button on the Leases page.
-  try {
-    await deps.importDefaultMasterLeasesIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to auto-import master housing-lease workbook — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.importDefaultMasterLeasesIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to auto-import master housing-lease workbook — continuing to serve",
+      );
+    }
   }
 
   // Idempotent KFI Staffing / Patriot Properties Baraboo seed (Task #292);
   // non-fatal for the same reason.
-  try {
-    await deps.seedPatriotBarabooIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Patriot Baraboo seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedPatriotBarabooIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Patriot Baraboo seed — continuing to serve",
+      );
+    }
   }
 
   // Backfill `employeeId` and `company` on occupants from the payroll
@@ -317,59 +353,69 @@ export async function start(deps: StartDeps): Promise<void> {
   }
 
   // Idempotent Hickory Haven (Gilman, WI) seed (Task #294); non-fatal.
-  try {
-    await deps.seedHickoryHavenIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Hickory Haven seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedHickoryHavenIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Hickory Haven seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent KFI Staffing / Greenock Manor (Mick's Properties LLC,
   // McKeesport PA) seed (Task #293); non-fatal for the same reason.
-  try {
-    await deps.seedGreenockManorIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Greenock Manor seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedGreenockManorIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Greenock Manor seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent KFI Staffing / Park Place Plymouth seed (Task #289);
   // non-fatal for the same reason.
-  try {
-    await deps.seedParkPlaceIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Park Place seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedParkPlaceIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Park Place seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent KFI Staffing / Kolbe Apartments Wausau seed (Task #291);
   // non-fatal for the same reason.
-  try {
-    await deps.seedKolbeWausauIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Kolbe Wausau seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedKolbeWausauIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Kolbe Wausau seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent seed for payroll-roster people who don't yet exist as
   // occupants (Task #305). Must run before `seedHousingDeductions` so
   // the deduction matcher resolves them via `employeeId == personId`
   // and they drop off the unmatched / unplaced-payroll list.
-  try {
-    await deps.seedPayrollOccupantsIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply payroll-occupants seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedPayrollOccupantsIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply payroll-occupants seed — continuing to serve",
+      );
+    }
   }
 
   // One-shot seeder for weekly housing deductions sourced from the
@@ -377,46 +423,54 @@ export async function start(deps: StartDeps): Promise<void> {
   // occupant's chargePerBed/billingFrequency would change. Failures are
   // logged but non-fatal — the rest of the app keeps the previous
   // values, and unmatched rows are surfaced for manual reconciliation.
-  try {
-    await deps.seedHousingDeductions();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply payroll-derived weekly housing deductions — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedHousingDeductions();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply payroll-derived weekly housing deductions — continuing to serve",
+      );
+    }
   }
 
   // Idempotent seed for active leases extracted from attached PDFs
   // (Task #287). Non-fatal for the same reason as the Adient seed.
-  try {
-    await deps.seedAttachedLeasesIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply attached-lease PDF seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedAttachedLeasesIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply attached-lease PDF seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent seed for the 6 active Chateau Knoll leases (Task #290).
   // Non-fatal for the same reason as the other PDF-derived seeds.
-  try {
-    await deps.seedChateauKnollIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Chateau Knoll seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedChateauKnollIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Chateau Knoll seed — continuing to serve",
+      );
+    }
   }
 
   // Idempotent Ridge Motor Inn (Portage, WI) shared-housing seed
   // (Task #295). Non-fatal — the rest of the app keeps serving.
-  try {
-    await deps.seedRidgeMotorInnIfMissing();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to apply Ridge Motor Inn seed — continuing to serve",
-    );
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedRidgeMotorInnIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Ridge Motor Inn seed — continuing to serve",
+      );
+    }
   }
 
   try {

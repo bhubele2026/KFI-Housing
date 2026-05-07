@@ -1,4 +1,5 @@
 import { db } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import {
   customersTable,
   propertiesTable,
@@ -9,6 +10,7 @@ import {
   occupantsTable,
   utilitiesTable,
   insuranceCertificatesTable,
+  schedulerStateTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
@@ -523,23 +525,83 @@ interface DataBundle {
   insuranceCertificates?: InsertInsuranceCertificateRow[];
 }
 
+/**
+ * Marker row id stored in `scheduler_state` to record that an operator
+ * has deliberately wiped the database (Task #486). When this row is
+ * present with a non-empty `lastSentKey`, the boot-time auto-seeders
+ * skip so an intentionally empty DB stays empty across restarts.
+ *
+ * The `scheduler_state` table is reused (rather than introducing a
+ * new bookkeeping table) because it already exists for similar
+ * "remember a small fact across boots" use cases (room-night reminder,
+ * insurance-expiry reminder).
+ */
+export const AUTO_SEED_DISABLED_MARKER_ID = "auto-seed-disabled";
+
+/**
+ * Returns true when the auto-seed-disabled marker is present, meaning
+ * an operator ran the wipe-only entry point and the boot sequence
+ * should not refill the database with sample / Adient / Chateau Knoll
+ * / payroll-occupant / master-file data on the next restart.
+ */
+export async function isAutoSeedDisabled(
+  database: typeof db = db,
+): Promise<boolean> {
+  const rows = await database
+    .select({ lastSentKey: schedulerStateTable.lastSentKey })
+    .from(schedulerStateTable)
+    .where(eq(schedulerStateTable.id, AUTO_SEED_DISABLED_MARKER_ID))
+    .limit(1);
+  if (rows.length === 0) return false;
+  return (rows[0]?.lastSentKey ?? "") !== "";
+}
+
+async function setAutoSeedDisabledMarker(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+): Promise<void> {
+  const wipedAt = new Date().toISOString();
+  await tx
+    .insert(schedulerStateTable)
+    .values({ id: AUTO_SEED_DISABLED_MARKER_ID, lastSentKey: wipedAt })
+    .onConflictDoUpdate({
+      target: schedulerStateTable.id,
+      set: { lastSentKey: wipedAt },
+    });
+}
+
+async function clearAutoSeedDisabledMarker(): Promise<void> {
+  await db
+    .delete(schedulerStateTable)
+    .where(eq(schedulerStateTable.id, AUTO_SEED_DISABLED_MARKER_ID));
+}
+
+// Single source of truth for the business-table wipe order. Both
+// `wipeAll()` (legacy wipe+reseed) and `wipeAllOnly()` (Task #486
+// wipe-only entry point) compose this so the wipe set never drifts
+// between the two paths.
+async function wipeAllInTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+): Promise<void> {
+  await tx.delete(bedsTable);
+  await tx.delete(occupantsTable);
+  // Room-night logs reference leases by id — wipe before leases so a
+  // future FK doesn't trip on cascade order. Today the column is a
+  // plain `text` reference, but ordering future-proofs the wipe.
+  await tx.delete(roomNightLogsTable);
+  await tx.delete(leasesTable);
+  await tx.delete(utilitiesTable);
+  // Insurance certificates reference properties (and optionally
+  // leases) by id — wipe before properties so a future FK doesn't
+  // trip on cascade order.
+  await tx.delete(insuranceCertificatesTable);
+  await tx.delete(roomsTable);
+  await tx.delete(propertiesTable);
+  await tx.delete(customersTable);
+}
+
 async function wipeAll(): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.delete(bedsTable);
-    await tx.delete(occupantsTable);
-    // Room-night logs reference leases by id — wipe before leases so a
-    // future FK doesn't trip on cascade order. Today the column is a
-    // plain `text` reference, but ordering future-proofs the wipe.
-    await tx.delete(roomNightLogsTable);
-    await tx.delete(leasesTable);
-    await tx.delete(utilitiesTable);
-    // Insurance certificates reference properties (and optionally
-    // leases) by id — wipe before properties so a future FK doesn't
-    // trip on cascade order.
-    await tx.delete(insuranceCertificatesTable);
-    await tx.delete(roomsTable);
-    await tx.delete(propertiesTable);
-    await tx.delete(customersTable);
+    await wipeAllInTx(tx);
   });
 }
 
@@ -613,7 +675,35 @@ export async function resetToSampleData(): Promise<void> {
   await wipeAll();
   const bundle = buildSeedBundle();
   await insertBundle(bundle);
+  // Clear the wipe marker so the next boot's auto-seeders run again.
+  // Keeping the existing `POST /reset` semantics — wipe AND reseed —
+  // means tests that already rely on it must come back to a populated,
+  // self-healing state, not a permanently disabled one.
+  await clearAutoSeedDisabledMarker();
   logger.info("Reset complete.");
+}
+
+/**
+ * Wipe-only entry point (Task #486). Clears every business table the
+ * app maintains (customers, properties, leases, utilities, beds,
+ * occupants, rooms, room-night logs, insurance certificates) WITHOUT
+ * reseeding sample data afterwards, and persists a marker in
+ * `scheduler_state` so the boot-time auto-seeders skip on subsequent
+ * restarts. Use this when an operator wants to start over and re-import
+ * data customer by customer.
+ *
+ * Schema, migrations, scheduler state (other than the marker), digest
+ * recipients, and the last-boot master-import bookkeeping row are
+ * deliberately left alone — only row data on the business tables is
+ * removed.
+ */
+export async function wipeAllOnly(): Promise<void> {
+  logger.info("Wiping all business data (no reseed)…");
+  await db.transaction(async (tx) => {
+    await wipeAllInTx(tx);
+    await setAutoSeedDisabledMarker(tx);
+  });
+  logger.info("Wipe complete; auto-seed disabled until the next reset.");
 }
 
 export async function replaceAllData(bundle: DataBundle): Promise<void> {

@@ -23,6 +23,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
       hasDataLoss: false,
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
+    isAutoSeedDisabled: vi.fn().mockResolvedValue(false),
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
     seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
     importDefaultMasterLeasesIfMissing: vi.fn().mockResolvedValue(undefined),
@@ -456,6 +457,127 @@ describe("start", () => {
 
     expect(exit).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips seedIfEmpty + every boot-time seeder when the auto-seed-disabled marker is set, but still listens (Task #486)", async () => {
+    // Operator deliberately wiped the DB via `POST /reset/wipe`. The
+    // marker is read once after schema push; when present, every
+    // seeder/auto-importer below it must be a no-op so the empty DB
+    // stays empty across restarts. Backfills (which only mutate
+    // existing rows) and `listen` itself must still run so the app
+    // boots normally.
+    const seedIfEmpty = vi.fn().mockResolvedValue(undefined);
+    const seedAdientIfMissing = vi.fn().mockResolvedValue(undefined);
+    const importDefaultMasterLeasesIfMissing = vi
+      .fn()
+      .mockResolvedValue(undefined);
+    const seedPatriotBarabooIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedHickoryHavenIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedGreenockManorIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedParkPlaceIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedKolbeWausauIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedPayrollOccupantsIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedHousingDeductions = vi.fn().mockResolvedValue(undefined);
+    const seedAttachedLeasesIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedChateauKnollIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedRidgeMotorInnIfMissing = vi.fn().mockResolvedValue(undefined);
+    const backfillOccupantMoveInDates = vi.fn().mockResolvedValue(undefined);
+    const backfillOccupantPayrollIds = vi.fn().mockResolvedValue(undefined);
+    const isAutoSeedDisabled = vi.fn().mockResolvedValue(true);
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn() as unknown as (code: number) => never;
+    const logger = fakeLogger();
+
+    await start(
+      makeDeps({
+        isAutoSeedDisabled,
+        seedIfEmpty,
+        seedAdientIfMissing,
+        importDefaultMasterLeasesIfMissing,
+        seedPatriotBarabooIfMissing,
+        seedHickoryHavenIfMissing,
+        seedGreenockManorIfMissing,
+        seedParkPlaceIfMissing,
+        seedKolbeWausauIfMissing,
+        seedPayrollOccupantsIfMissing,
+        seedHousingDeductions,
+        seedAttachedLeasesIfMissing,
+        seedChateauKnollIfMissing,
+        seedRidgeMotorInnIfMissing,
+        backfillOccupantMoveInDates,
+        backfillOccupantPayrollIds,
+        listen,
+        logger,
+        exit,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(isAutoSeedDisabled).toHaveBeenCalledTimes(1);
+    expect(seedIfEmpty).not.toHaveBeenCalled();
+    expect(seedAdientIfMissing).not.toHaveBeenCalled();
+    expect(importDefaultMasterLeasesIfMissing).not.toHaveBeenCalled();
+    expect(seedPatriotBarabooIfMissing).not.toHaveBeenCalled();
+    expect(seedHickoryHavenIfMissing).not.toHaveBeenCalled();
+    expect(seedGreenockManorIfMissing).not.toHaveBeenCalled();
+    expect(seedParkPlaceIfMissing).not.toHaveBeenCalled();
+    expect(seedKolbeWausauIfMissing).not.toHaveBeenCalled();
+    expect(seedPayrollOccupantsIfMissing).not.toHaveBeenCalled();
+    expect(seedHousingDeductions).not.toHaveBeenCalled();
+    expect(seedAttachedLeasesIfMissing).not.toHaveBeenCalled();
+    expect(seedChateauKnollIfMissing).not.toHaveBeenCalled();
+    expect(seedRidgeMotorInnIfMissing).not.toHaveBeenCalled();
+
+    // Backfills only mutate existing rows, so they're harmless on an
+    // empty DB and we deliberately keep them running so any data the
+    // operator later imports is normalized.
+    expect(backfillOccupantMoveInDates).toHaveBeenCalledTimes(1);
+    expect(backfillOccupantPayrollIds).toHaveBeenCalledTimes(1);
+
+    // App must still boot normally — listen runs, exit doesn't.
+    expect(listen).toHaveBeenCalledWith(3000);
+    expect(exit).not.toHaveBeenCalled();
+
+    // Surface the skip in logs so an operator looking at the workflow
+    // output knows why no seeders ran.
+    const infoCalls = logger.info.mock.calls.map((c) => String(c[0]));
+    expect(
+      infoCalls.some((m) => /Auto-seed marker present/i.test(m)),
+    ).toBe(true);
+  });
+
+  it("runs every boot-time seeder when the auto-seed-disabled marker is NOT set (default, Task #486)", async () => {
+    // Sanity check that the gate doesn't accidentally skip seeders on
+    // a normal boot — i.e. fresh installs and dev databases keep
+    // their existing self-seeding behavior.
+    const seedIfEmpty = vi.fn().mockResolvedValue(undefined);
+    const seedAdientIfMissing = vi.fn().mockResolvedValue(undefined);
+    const importDefaultMasterLeasesIfMissing = vi
+      .fn()
+      .mockResolvedValue(undefined);
+    const seedChateauKnollIfMissing = vi.fn().mockResolvedValue(undefined);
+    const seedPayrollOccupantsIfMissing = vi.fn().mockResolvedValue(undefined);
+    const isAutoSeedDisabled = vi.fn().mockResolvedValue(false);
+    const listen = vi.fn().mockResolvedValue(undefined);
+
+    await start(
+      makeDeps({
+        isAutoSeedDisabled,
+        seedIfEmpty,
+        seedAdientIfMissing,
+        importDefaultMasterLeasesIfMissing,
+        seedChateauKnollIfMissing,
+        seedPayrollOccupantsIfMissing,
+        listen,
+        env: { NODE_ENV: "development", PORT: "3000" },
+      }),
+    );
+
+    expect(seedIfEmpty).toHaveBeenCalledTimes(1);
+    expect(seedAdientIfMissing).toHaveBeenCalledTimes(1);
+    expect(importDefaultMasterLeasesIfMissing).toHaveBeenCalledTimes(1);
+    expect(seedChateauKnollIfMissing).toHaveBeenCalledTimes(1);
+    expect(seedPayrollOccupantsIfMissing).toHaveBeenCalledTimes(1);
   });
 
   it("invokes seedAdientIfMissing after seedIfEmpty + backfill, and is non-fatal when it throws", async () => {

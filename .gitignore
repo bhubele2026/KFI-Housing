@@ -44,6 +44,9 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
+# Rendered PDF thumbnails (Task #383)
+attached_assets/.thumbnails/
+
 # Replit
 .cache/
 .local/

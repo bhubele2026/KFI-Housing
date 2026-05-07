@@ -37,6 +37,8 @@ import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
+import { PendingPlacementBoard } from "@/components/pending-placement-board";
+import { isPendingPlacementProperty } from "@/lib/pending-placement";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -576,6 +578,48 @@ export default function PropertyDetail() {
           }}
           testId="property-detail-not-found"
         />
+      </MainLayout>
+    );
+  }
+
+  // Synthetic "Roster — Pending Placement (<Customer>)" buckets created by
+  // `seedPayrollOccupantsIfMissing` (Task #305) hold payroll-only people
+  // with bedId=null and no real beds/rooms/leases of their own. Render the
+  // focused PendingPlacementBoard instead of the normal property page so
+  // the operator can move each pending person into a real property + bed.
+  if (isPendingPlacementProperty(property.name)) {
+    return (
+      <MainLayout>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+          className="p-8 max-w-5xl mx-auto space-y-6"
+          data-testid="property-detail-pending-placement"
+        >
+          <div className="flex items-center gap-3">
+            <Link href="/properties">
+              <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground">
+                <ChevronLeft className="h-4 w-4" />
+                Properties
+              </Button>
+            </Link>
+            <span className="text-muted-foreground">/</span>
+            <span className="text-sm font-medium">{property.name}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10">
+              <Users className="h-6 w-6 text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{property.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                Synthetic bucket — payroll roster people waiting to be placed in a real bed.
+              </p>
+            </div>
+          </div>
+          <PendingPlacementBoard property={property} />
+        </motion.div>
       </MainLayout>
     );
   }

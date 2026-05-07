@@ -7,3 +7,4 @@ export * from "./beds";
 export * from "./occupants";
 export * from "./utilities";
 export * from "./insurance-certificates";
+export * from "./last-boot-master-import";

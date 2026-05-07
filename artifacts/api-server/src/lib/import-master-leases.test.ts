@@ -6,12 +6,17 @@ interface Row {
   id: string;
   [k: string]: unknown;
 }
-type TableName = "customers" | "properties" | "leases";
+type TableName =
+  | "customers"
+  | "properties"
+  | "leases"
+  | "lastBootMasterImport";
 
 const stores: Record<TableName, Map<string, Row>> = {
   customers: new Map(),
   properties: new Map(),
   leases: new Map(),
+  lastBootMasterImport: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -115,6 +120,10 @@ vi.mock("@workspace/db", () => ({
     address: { __col: "address" },
   },
   leasesTable: { __table: "leases" as const, id: { __col: "id" } },
+  lastBootMasterImportTable: {
+    __table: "lastBootMasterImport" as const,
+    id: { __col: "id" },
+  },
 }));
 vi.mock("./logger", () => ({
   logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
@@ -140,11 +149,11 @@ const {
 
 const silentLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
-beforeEach(() => {
+beforeEach(async () => {
   for (const s of Object.values(stores)) s.clear();
   silentLogger.info.mockClear();
   silentLogger.warn.mockClear();
-  resetLastBootMasterImportForTests();
+  await resetLastBootMasterImportForTests();
 });
 
 async function loadRealRows(): Promise<string[][]> {
@@ -299,7 +308,7 @@ describe("importDefaultMasterLeasesIfMissing", () => {
   // button. Re-runs (which produce zero new inserts) still bump the
   // timestamp so a healthy boot is always visible.
   it("records the timestamp + summary counts of the last successful boot import", async () => {
-    expect(getLastBootMasterImport()).toBeNull();
+    expect(await getLastBootMasterImport()).toBeNull();
 
     const before = Date.now();
     const summary = await importDefaultMasterLeasesIfMissing({
@@ -307,7 +316,7 @@ describe("importDefaultMasterLeasesIfMissing", () => {
     });
     const after = Date.now();
 
-    const recorded = getLastBootMasterImport();
+    const recorded = await getLastBootMasterImport();
     expect(recorded).not.toBeNull();
     expect(recorded?.customersCreated).toBe(summary.customersCreated);
     expect(recorded?.leasesCreated).toBe(summary.leasesCreated);
@@ -322,9 +331,28 @@ describe("importDefaultMasterLeasesIfMissing", () => {
     // not that some earlier boot did.
     await new Promise((r) => setTimeout(r, 5));
     await importDefaultMasterLeasesIfMissing({ logger: silentLogger });
-    const second = getLastBootMasterImport();
+    const second = await getLastBootMasterImport();
     expect(second).not.toBeNull();
     expect(new Date(second!.ranAt).getTime()).toBeGreaterThanOrEqual(ranAtMs);
+  });
+
+  // Task #341: the recorded run must survive an api-server restart.
+  // We simulate the restart by reaching past the in-memory state
+  // entirely and reading directly via `getLastBootMasterImport`,
+  // which queries the persisted DB row. Before this task the value
+  // lived in a module-level variable and would have been lost.
+  it("persists the last boot import across simulated server restarts", async () => {
+    await importDefaultMasterLeasesIfMissing({ logger: silentLogger });
+    const first = await getLastBootMasterImport();
+    expect(first).not.toBeNull();
+
+    // The persisted row should be visible to a fresh caller — i.e.
+    // any new process that imports this module would see the same
+    // value because it lives in the DB, not in module state.
+    const persisted = stores.lastBootMasterImport.get("singleton");
+    expect(persisted).toBeDefined();
+    expect(persisted?.ranAt).toBe(first?.ranAt);
+    expect(persisted?.customersCreated).toBe(first?.customersCreated);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   customersTable,
   propertiesTable,
   leasesTable,
+  lastBootMasterImportTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
@@ -811,20 +812,84 @@ export interface LastBootImportRecord {
   leasesSkipped: number;
 }
 
-let lastBootImport: LastBootImportRecord | null = null;
+/**
+ * The DB row holding the most recent successful boot import is a
+ * singleton keyed by this id so the upsert path in
+ * `recordLastBootMasterImport` always targets the same row.
+ */
+const LAST_BOOT_MASTER_IMPORT_ID = "singleton";
 
 /**
  * Returns the timestamp + summary counts of the most recent successful
  * boot-time master import (Task #318), or `null` when the boot import
- * has never succeeded in this process.
+ * has never succeeded.
+ *
+ * Backed by `last_boot_master_import` so the indicator survives
+ * api-server restarts (Task #341) — without this, every server
+ * restart would reset the value to "never succeeded" until the next
+ * boot import finishes, which can briefly look alarming on the
+ * Leases page even when the previous boot ran cleanly.
  */
-export function getLastBootMasterImport(): LastBootImportRecord | null {
-  return lastBootImport;
+export async function getLastBootMasterImport(
+  database: typeof db = db,
+): Promise<LastBootImportRecord | null> {
+  const rows = await database
+    .select()
+    .from(lastBootMasterImportTable)
+    .where(eq(lastBootMasterImportTable.id, LAST_BOOT_MASTER_IMPORT_ID))
+    .limit(1);
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  if (!r.ranAt) return null;
+  return {
+    ranAt: r.ranAt,
+    customersCreated: r.customersCreated,
+    customersUpdated: r.customersUpdated,
+    propertiesCreated: r.propertiesCreated,
+    propertiesUpdated: r.propertiesUpdated,
+    leasesCreated: r.leasesCreated,
+    leasesUpdated: r.leasesUpdated,
+    leasesSkipped: r.leasesSkipped,
+  };
 }
 
-/** Test-only: clears the cached boot-import record. */
-export function resetLastBootMasterImportForTests(): void {
-  lastBootImport = null;
+/** Test-only: clears the persisted boot-import record. */
+export async function resetLastBootMasterImportForTests(
+  database: typeof db = db,
+): Promise<void> {
+  await database
+    .update(lastBootMasterImportTable)
+    .set({
+      ranAt: "",
+      customersCreated: 0,
+      customersUpdated: 0,
+      propertiesCreated: 0,
+      propertiesUpdated: 0,
+      leasesCreated: 0,
+      leasesUpdated: 0,
+      leasesSkipped: 0,
+    })
+    .where(eq(lastBootMasterImportTable.id, LAST_BOOT_MASTER_IMPORT_ID));
+}
+
+async function recordLastBootMasterImport(
+  database: typeof db,
+  record: LastBootImportRecord,
+): Promise<void> {
+  // Upsert the singleton row. We try insert-with-do-nothing first;
+  // when it conflicts (the row already existed from a previous boot),
+  // fall back to an UPDATE so the timestamp + counts always reflect
+  // the most recent successful run.
+  const inserted = await database
+    .insert(lastBootMasterImportTable)
+    .values({ id: LAST_BOOT_MASTER_IMPORT_ID, ...record })
+    .onConflictDoNothing()
+    .returning({ id: lastBootMasterImportTable.id });
+  if (inserted.length > 0) return;
+  await database
+    .update(lastBootMasterImportTable)
+    .set(record)
+    .where(eq(lastBootMasterImportTable.id, LAST_BOOT_MASTER_IMPORT_ID));
 }
 
 /**
@@ -836,14 +901,16 @@ export function resetLastBootMasterImportForTests(): void {
  * and only updates importer-owned fields, so it's safe to call on
  * every boot.
  *
- * On success, records the run timestamp + summary counts so the
- * Leases page can surface "Last auto-imported on …" (Task #318).
+ * On success, persists the run timestamp + summary counts so the
+ * Leases page can surface "Last auto-imported on …" (Task #318) and
+ * the indicator survives api-server restarts (Task #341).
  */
 export async function importDefaultMasterLeasesIfMissing(
   deps: Partial<ImportDeps> = {},
 ): Promise<ImportSummary> {
+  const database = deps.db ?? db;
   const summary = await importDefaultMasterLeases(deps);
-  lastBootImport = {
+  await recordLastBootMasterImport(database, {
     ranAt: new Date().toISOString(),
     customersCreated: summary.customersCreated,
     customersUpdated: summary.customersUpdated,
@@ -852,6 +919,6 @@ export async function importDefaultMasterLeasesIfMissing(
     leasesCreated: summary.leasesCreated,
     leasesUpdated: summary.leasesUpdated,
     leasesSkipped: summary.leasesSkipped,
-  };
+  });
   return summary;
 }

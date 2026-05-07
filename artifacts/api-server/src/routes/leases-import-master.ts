@@ -49,14 +49,20 @@ function uploadOptionalXlsx(req: Request, res: Response, next: NextFunction): vo
 router.get(
   "/leases/import-master/last-auto-import",
   async (_req, res): Promise<void> => {
-    const record = getLastBootMasterImport();
-    const mtime = await getBundledMasterMtime();
-    const bundledMtime = mtime ? mtime.toISOString() : null;
-    if (!record) {
-      res.json({ ranAt: null, bundledMtime });
-      return;
+    try {
+      const record = await getLastBootMasterImport();
+      const mtime = await getBundledMasterMtime();
+      const bundledMtime = mtime ? mtime.toISOString() : null;
+      if (!record) {
+        res.json({ ranAt: null, bundledMtime });
+        return;
+      }
+      res.json({ ...record, bundledMtime });
+    } catch (err) {
+      logger.error({ err }, "Failed to read last boot master import record");
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
     }
-    res.json({ ...record, bundledMtime });
   },
 );
 

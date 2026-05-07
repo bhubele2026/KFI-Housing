@@ -40,17 +40,25 @@ router.get("/leases", async (_req, res): Promise<void> => {
 
 // Note on date validation: the lease `startDate` / `endDate` fields are
 // constrained to a strict `^\d{4}-\d{2}-\d{2}$` regex by the shared zod
-// schemas (see `lib/api-spec/openapi.yaml` -> `LeaseDate`). Anything like
-// `"2026-05-31 00:00:00"` or `"2026-05-31T00:00:00.000Z"` is rejected here
-// with a 400 before it can reach the database, so the route does not need
-// its own normalization step.
+// schemas (see `lib/api-spec/openapi.yaml` -> `LeaseDate`), so a
+// datetime-style value normally 400s here before it can reach the DB.
+// We still pipe the body through `normalizeLeaseRow` below as a
+// defence-in-depth boundary (Task #373) so a hand-crafted request
+// can't ever bypass that into a stale-shape DB write — same
+// normalizer the GET routes and importers already use.
 router.post("/leases", async (req, res): Promise<void> => {
   const body = CreateLeaseBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(leasesTable).values(body.data).returning();
+  // Defence-in-depth (Task #373): the zod request schema is the
+  // primary gate, but we also run the same boundary normalizer used
+  // by GET / importers so a payload that ever slips an off-list enum
+  // or datetime-style date through (loosened LeaseDate regex,
+  // hand-crafted curl) is coerced rather than persisted as-is.
+  const normalized = normalizeLeaseRow(body.data);
+  const [row] = await db.insert(leasesTable).values(normalized).returning();
   res.status(201).json(UpdateLeaseResponse.parse(withDerivedStatus(row)));
 });
 
@@ -65,9 +73,12 @@ router.patch("/leases/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  // Defence-in-depth (Task #373): coerce any off-list enum / datetime-
+  // style date in the body before it lands in the DB.
+  const normalized = normalizeLeaseRow(body.data);
   const [row] = await db
     .update(leasesTable)
-    .set(body.data)
+    .set(normalized)
     .where(eq(leasesTable.id, params.data.id))
     .returning();
   if (!row) {

@@ -176,14 +176,20 @@ router.post("/properties", async (req, res): Promise<void> => {
     explicitOverride && typeof body.data.coordsVerified === "boolean"
       ? body.data.coordsVerified
       : false;
+  // Defence-in-depth (Task #373): the zod request schema is the
+  // primary gate, but we also run the same boundary normalizer used by
+  // GET / importers so a payload that ever slips an off-list enum
+  // through (loosened schema, hand-crafted curl) is coerced instead of
+  // landing in the DB as-is.
+  const normalized = normalizePropertyRow({
+    ...body.data,
+    lat: coords.lat,
+    lng: coords.lng,
+    coordsVerified,
+  });
   const [row] = await db
     .insert(propertiesTable)
-    .values({
-      ...body.data,
-      lat: coords.lat,
-      lng: coords.lng,
-      coordsVerified,
-    })
+    .values(normalized)
     .returning();
   // Surface the geocode outcome alongside the persisted row (Task #228)
   // so the front-end can pop a non-blocking warning toast on `no_result`.
@@ -261,9 +267,14 @@ router.patch("/properties/:id", async (req, res): Promise<void> => {
     geocodeStatus = coords.status;
   }
 
+  // Defence-in-depth (Task #373): coerce any off-list enum value
+  // (paymentMethod / status / rentFrequency) before it lands in the
+  // DB, mirroring the boundary treatment GET routes and importers
+  // already get from the same normalizer.
+  const normalized = normalizePropertyRow(updateValues);
   const [row] = await db
     .update(propertiesTable)
-    .set(updateValues)
+    .set(normalized)
     .where(eq(propertiesTable.id, params.data.id))
     .returning();
 

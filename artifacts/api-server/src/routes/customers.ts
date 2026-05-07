@@ -29,7 +29,11 @@ router.post("/customers", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(customersTable).values(body.data).returning();
+  // Defence-in-depth (Task #373): pass through the same boundary
+  // normalizer used by GET / importers so any future field with a
+  // stricter contract automatically gets coerced before write.
+  const normalized = normalizeCustomerRow(body.data);
+  const [row] = await db.insert(customersTable).values(normalized).returning();
   res.status(201).json(UpdateCustomerResponse.parse(row));
 });
 
@@ -44,9 +48,13 @@ router.patch("/customers/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  // Defence-in-depth (Task #373): apply the boundary normalizer
+  // before writing so any future stricter field gets the same
+  // coercion treatment as the GET / importer paths.
+  const normalized = normalizeCustomerRow(body.data);
   const [row] = await db
     .update(customersTable)
-    .set(body.data)
+    .set(normalized)
     .where(eq(customersTable.id, params.data.id))
     .returning();
   if (!row) {

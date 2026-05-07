@@ -24,6 +24,8 @@ tags:
     description: Utility records
   - name: payroll
     description: Payroll-derived housing deductions
+  - name: insurance
+    description: Renter's / liability insurance certificates on file
 paths:
   /healthz:
     get:
@@ -508,6 +510,82 @@ paths:
       operationId: deleteLease
       tags: [leases]
       summary: Delete a lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /insurance-certificates:
+    get:
+      operationId: listInsuranceCertificates
+      tags: [insurance]
+      summary: List all insurance certificates on file
+      description: |
+        Returns every renter's / liability insurance certificate currently
+        on file across all properties. Certificates are the manual-entry
+        intake path described in `lib/db/src/schema/insurance-certificates.ts`:
+        operators receive ACORD 25 certs by email and POST one row per cert
+        here (or rely on a PDF seeder when the source PDF is attached to
+        the project — see Task #334).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InsuranceCertificate" }
+    post:
+      operationId: createInsuranceCertificate
+      tags: [insurance]
+      summary: Capture a new insurance certificate from a PDF / email
+      description: |
+        Manual intake form for an insurance certificate (ACORD 25 or
+        equivalent). At minimum supply `id` + `propertyId`; every other
+        field defaults to an empty string in the schema so partial
+        certs (e.g. "we know it exists, carrier TBD") can still be
+        captured. The optional `documentUrl` field accepts the source
+        PDF filename today (and a real object-storage URL later).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InsuranceCertificate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InsuranceCertificate" }
+  /insurance-certificates/{id}:
+    patch:
+      operationId: updateInsuranceCertificate
+      tags: [insurance]
+      summary: Update an insurance certificate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InsuranceCertificateUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InsuranceCertificate" }
+    delete:
+      operationId: deleteInsuranceCertificate
+      tags: [insurance]
+      summary: Delete an insurance certificate
       parameters:
         - in: path
           name: id
@@ -1257,6 +1335,64 @@ components:
           type: string
           pattern: '^\d{4}-\d{2}$'
         roomNights: { type: integer }
+        notes: { type: string }
+
+    InsuranceCertificate:
+      type: object
+      # Only `id` and `propertyId` are required so the manual entry path
+      # described in the POST endpoint can capture partial certs (e.g.
+      # operator knows a cert exists but is still tracking down the
+      # ACORD details). Every other field defaults to "" in the DB.
+      required: [id, propertyId]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        leaseId:
+          type: string
+          description: |
+            Optional: scope the certificate to a specific lease. Empty
+            string when the cert covers the property as a whole.
+        carrier:
+          type: string
+          description: |
+            Underwriting carrier as printed on the certificate
+            (e.g. "Philadelphia Indemnity").
+        policyNumber:
+          type: string
+          description: Policy number from the certificate (ACORD 25 box).
+        insuredName:
+          type: string
+          description: |
+            Named insured on the certificate (often the staffing
+            company, not the property landlord).
+        coverageStart:
+          type: string
+          description: |
+            Coverage start date as YYYY-MM-DD (or empty string when
+            unknown / partially captured).
+        coverageEnd:
+          type: string
+          description: Coverage end date as YYYY-MM-DD (or empty string).
+        documentUrl:
+          type: string
+          description: |
+            Source PDF / file marker. Free-form so it can hold an
+            attached-asset filename today (e.g.
+            "Renter_s_Insurance_1778107759430.pdf") and a real
+            object-storage URL later.
+        notes:
+          type: string
+    InsuranceCertificateUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        leaseId: { type: string }
+        carrier: { type: string }
+        policyNumber: { type: string }
+        insuredName: { type: string }
+        coverageStart: { type: string }
+        coverageEnd: { type: string }
+        documentUrl: { type: string }
         notes: { type: string }
 
     Room:

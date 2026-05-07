@@ -17,7 +17,35 @@ import {
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
 import { repointFallbackToEndClient } from "./seed-fallback-repoint";
+import {
+  applyInsuranceCertificates,
+  type InsuranceCertificateSpec,
+} from "./seed-insurance-certificates";
 import type { Logger } from "pino";
+
+/**
+ * Insurance certificates on file for 1850 W. Pine St., Baraboo (Task #334).
+ * Currently empty: the source ACORD 25 cert PDF is not attached to the
+ * project. The wiring is in place — operators receiving the cert by
+ * email should either POST it to `/api/insurance-certificates`
+ * directly, or, when the PDF is later attached, drop a single
+ * `{ id, carrier, policyNumber, … }` entry below and it will replay
+ * idempotently across resets. Each lease for these units already
+ * captures the `insurance compliance admin` line item in its clauses
+ * (see `buildClauses` above) so the link to the cert is documented.
+ */
+interface PatriotBarabooCertificateSpec {
+  id: string;
+  carrier: string;
+  policyNumber: string;
+  insuredName: string;
+  coverageStart: string;
+  coverageEnd: string;
+  documentUrl: string;
+  notes: string;
+}
+const PATRIOT_BARABOO_CERTIFICATES: readonly PatriotBarabooCertificateSpec[] =
+  [];
 
 export const PATRIOT_BARABOO_CUSTOMER_ID = "cust-kfi-baraboo";
 export const PATRIOT_BARABOO_PROPERTY_ID = "prop-patriot-baraboo-1850-pine";
@@ -271,6 +299,10 @@ export interface SeedPatriotBarabooResult {
   roomsInserted: number;
   bedsInserted: number;
   occupantsInserted: number;
+  /** Number of insurance certificate rows newly inserted on this run.
+   *  Always 0 today (PATRIOT_BARABOO_CERTIFICATES is empty); see
+   *  comment on that array for the documented intake path. */
+  certificatesInserted: number;
   /** Customer the property is attached to after this run. Either the
    *  Milwaukee Valve end-client (when found) or a KFI Staffing fallback. */
   customerId: string;
@@ -567,6 +599,25 @@ export async function seedPatriotBarabooIfMissing(
       if (insertedBed.length > 0) bedsInserted += 1;
     }
 
+    // Insurance certificates: empty by design today; see
+    // PATRIOT_BARABOO_CERTIFICATES comment.
+    const certSpecs: InsuranceCertificateSpec[] =
+      PATRIOT_BARABOO_CERTIFICATES.map((spec) => ({
+        id: spec.id,
+        propertyId,
+        carrier: spec.carrier,
+        policyNumber: spec.policyNumber,
+        insuredName: spec.insuredName,
+        coverageStart: spec.coverageStart,
+        coverageEnd: spec.coverageEnd,
+        documentUrl: spec.documentUrl,
+        notes: spec.notes,
+      }));
+    const certificatesInserted = await applyInsuranceCertificates(
+      tx,
+      certSpecs,
+    );
+
     // Task #328: repoint AWAY from any KFI Staffing fallback customer
     // to the real Milwaukee Valve end-client when the master-file
     // import has created it; clean up the orphaned fallback customer.
@@ -586,6 +637,7 @@ export async function seedPatriotBarabooIfMissing(
       roomsInserted,
       bedsInserted,
       occupantsInserted,
+      certificatesInserted,
       customerId: repoint.customerId,
       repointedToEndClient: repoint.repointedToEndClient,
       fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
@@ -599,6 +651,7 @@ export async function seedPatriotBarabooIfMissing(
     result.roomsInserted > 0 ||
     result.bedsInserted > 0 ||
     result.occupantsInserted > 0 ||
+    result.certificatesInserted > 0 ||
     result.repointedToEndClient ||
     result.fallbackCustomerDeleted
   ) {

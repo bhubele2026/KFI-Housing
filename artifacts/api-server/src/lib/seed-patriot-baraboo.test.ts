@@ -10,7 +10,8 @@ type TableName =
   | "leases"
   | "rooms"
   | "beds"
-  | "occupants";
+  | "occupants"
+  | "insurance_certificates";
 
 const stores: Record<TableName, Map<string, Row>> = {
   customers: new Map(),
@@ -19,6 +20,7 @@ const stores: Record<TableName, Map<string, Row>> = {
   rooms: new Map(),
   beds: new Map(),
   occupants: new Map(),
+  insurance_certificates: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -228,6 +230,12 @@ vi.mock("@workspace/db", () => ({
     name: { __col: "name" },
     shift: { __col: "shift" },
   },
+  insuranceCertificatesTable: {
+    __table: "insurance_certificates",
+    id: { __col: "id" },
+    propertyId: { __col: "propertyId" },
+    policyNumber: { __col: "policyNumber" },
+  },
 }));
 
 vi.mock("./logger", () => ({
@@ -264,6 +272,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       roomsInserted: 5,
       bedsInserted: 20,
       occupantsInserted: 20,
+      certificatesInserted: 0,
       customerId: PATRIOT_BARABOO_CUSTOMER_ID,
       repointedToEndClient: false,
       fallbackCustomerDeleted: false,
@@ -351,6 +360,7 @@ describe("seedPatriotBarabooIfMissing", () => {
       roomsInserted: 0,
       bedsInserted: 0,
       occupantsInserted: 0,
+      certificatesInserted: 0,
       customerId: PATRIOT_BARABOO_CUSTOMER_ID,
       repointedToEndClient: false,
       fallbackCustomerDeleted: false,

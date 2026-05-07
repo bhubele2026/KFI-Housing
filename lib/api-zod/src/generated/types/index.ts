@@ -19,6 +19,8 @@ export * from "./healthStatus";
 export * from "./importLeasePdfBody";
 export * from "./importMasterLeasesBody";
 export * from "./importPayload";
+export * from "./insuranceCertificate";
+export * from "./insuranceCertificateUpdate";
 export * from "./lastAutoMasterImport";
 export * from "./lease";
 export * from "./leaseDate";

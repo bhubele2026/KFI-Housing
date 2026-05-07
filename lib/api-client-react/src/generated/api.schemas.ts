@@ -474,6 +474,50 @@ export interface RoomNightLogUpdate {
   notes?: string;
 }
 
+export interface InsuranceCertificate {
+  id: string;
+  propertyId: string;
+  /** Optional: scope the certificate to a specific lease. Empty
+string when the cert covers the property as a whole.
+ */
+  leaseId?: string;
+  /** Underwriting carrier as printed on the certificate
+(e.g. "Philadelphia Indemnity").
+ */
+  carrier?: string;
+  /** Policy number from the certificate (ACORD 25 box). */
+  policyNumber?: string;
+  /** Named insured on the certificate (often the staffing
+company, not the property landlord).
+ */
+  insuredName?: string;
+  /** Coverage start date as YYYY-MM-DD (or empty string when
+unknown / partially captured).
+ */
+  coverageStart?: string;
+  /** Coverage end date as YYYY-MM-DD (or empty string). */
+  coverageEnd?: string;
+  /** Source PDF / file marker. Free-form so it can hold an
+attached-asset filename today (e.g.
+"Renter_s_Insurance_1778107759430.pdf") and a real
+object-storage URL later.
+ */
+  documentUrl?: string;
+  notes?: string;
+}
+
+export interface InsuranceCertificateUpdate {
+  propertyId?: string;
+  leaseId?: string;
+  carrier?: string;
+  policyNumber?: string;
+  insuredName?: string;
+  coverageStart?: string;
+  coverageEnd?: string;
+  documentUrl?: string;
+  notes?: string;
+}
+
 export interface Room {
   id: string;
   propertyId: string;

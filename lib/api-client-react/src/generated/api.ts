@@ -28,6 +28,8 @@ import type {
   ImportLeasePdfBody,
   ImportMasterLeasesBody,
   ImportPayload,
+  InsuranceCertificate,
+  InsuranceCertificateUpdate,
   LastAutoMasterImport,
   Lease,
   LeasePdfImportResult,
@@ -2106,6 +2108,361 @@ export const useDeleteLease = <
   TContext
 > => {
   return useMutation(getDeleteLeaseMutationOptions(options));
+};
+
+/**
+ * Returns every renter's / liability insurance certificate currently
+on file across all properties. Certificates are the manual-entry
+intake path described in `lib/db/src/schema/insurance-certificates.ts`:
+operators receive ACORD 25 certs by email and POST one row per cert
+here (or rely on a PDF seeder when the source PDF is attached to
+the project — see Task #334).
+
+ * @summary List all insurance certificates on file
+ */
+export const getListInsuranceCertificatesUrl = () => {
+  return `/api/insurance-certificates`;
+};
+
+export const listInsuranceCertificates = async (
+  options?: RequestInit,
+): Promise<InsuranceCertificate[]> => {
+  return customFetch<InsuranceCertificate[]>(
+    getListInsuranceCertificatesUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListInsuranceCertificatesQueryKey = () => {
+  return [`/api/insurance-certificates`] as const;
+};
+
+export const getListInsuranceCertificatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listInsuranceCertificates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsuranceCertificates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListInsuranceCertificatesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listInsuranceCertificates>>
+  > = ({ signal }) => listInsuranceCertificates({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listInsuranceCertificates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListInsuranceCertificatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listInsuranceCertificates>>
+>;
+export type ListInsuranceCertificatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all insurance certificates on file
+ */
+
+export function useListInsuranceCertificates<
+  TData = Awaited<ReturnType<typeof listInsuranceCertificates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listInsuranceCertificates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListInsuranceCertificatesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Manual intake form for an insurance certificate (ACORD 25 or
+equivalent). At minimum supply `id` + `propertyId`; every other
+field defaults to an empty string in the schema so partial
+certs (e.g. "we know it exists, carrier TBD") can still be
+captured. The optional `documentUrl` field accepts the source
+PDF filename today (and a real object-storage URL later).
+
+ * @summary Capture a new insurance certificate from a PDF / email
+ */
+export const getCreateInsuranceCertificateUrl = () => {
+  return `/api/insurance-certificates`;
+};
+
+export const createInsuranceCertificate = async (
+  insuranceCertificate: InsuranceCertificate,
+  options?: RequestInit,
+): Promise<InsuranceCertificate> => {
+  return customFetch<InsuranceCertificate>(getCreateInsuranceCertificateUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(insuranceCertificate),
+  });
+};
+
+export const getCreateInsuranceCertificateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createInsuranceCertificate>>,
+    TError,
+    { data: BodyType<InsuranceCertificate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createInsuranceCertificate>>,
+  TError,
+  { data: BodyType<InsuranceCertificate> },
+  TContext
+> => {
+  const mutationKey = ["createInsuranceCertificate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createInsuranceCertificate>>,
+    { data: BodyType<InsuranceCertificate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createInsuranceCertificate(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateInsuranceCertificateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createInsuranceCertificate>>
+>;
+export type CreateInsuranceCertificateMutationBody =
+  BodyType<InsuranceCertificate>;
+export type CreateInsuranceCertificateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Capture a new insurance certificate from a PDF / email
+ */
+export const useCreateInsuranceCertificate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createInsuranceCertificate>>,
+    TError,
+    { data: BodyType<InsuranceCertificate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createInsuranceCertificate>>,
+  TError,
+  { data: BodyType<InsuranceCertificate> },
+  TContext
+> => {
+  return useMutation(getCreateInsuranceCertificateMutationOptions(options));
+};
+
+/**
+ * @summary Update an insurance certificate
+ */
+export const getUpdateInsuranceCertificateUrl = (id: string) => {
+  return `/api/insurance-certificates/${id}`;
+};
+
+export const updateInsuranceCertificate = async (
+  id: string,
+  insuranceCertificateUpdate: InsuranceCertificateUpdate,
+  options?: RequestInit,
+): Promise<InsuranceCertificate> => {
+  return customFetch<InsuranceCertificate>(
+    getUpdateInsuranceCertificateUrl(id),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(insuranceCertificateUpdate),
+    },
+  );
+};
+
+export const getUpdateInsuranceCertificateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateInsuranceCertificate>>,
+    TError,
+    { id: string; data: BodyType<InsuranceCertificateUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateInsuranceCertificate>>,
+  TError,
+  { id: string; data: BodyType<InsuranceCertificateUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateInsuranceCertificate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateInsuranceCertificate>>,
+    { id: string; data: BodyType<InsuranceCertificateUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateInsuranceCertificate(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateInsuranceCertificateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateInsuranceCertificate>>
+>;
+export type UpdateInsuranceCertificateMutationBody =
+  BodyType<InsuranceCertificateUpdate>;
+export type UpdateInsuranceCertificateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an insurance certificate
+ */
+export const useUpdateInsuranceCertificate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateInsuranceCertificate>>,
+    TError,
+    { id: string; data: BodyType<InsuranceCertificateUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateInsuranceCertificate>>,
+  TError,
+  { id: string; data: BodyType<InsuranceCertificateUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateInsuranceCertificateMutationOptions(options));
+};
+
+/**
+ * @summary Delete an insurance certificate
+ */
+export const getDeleteInsuranceCertificateUrl = (id: string) => {
+  return `/api/insurance-certificates/${id}`;
+};
+
+export const deleteInsuranceCertificate = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteInsuranceCertificateUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteInsuranceCertificateMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInsuranceCertificate>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteInsuranceCertificate>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteInsuranceCertificate"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteInsuranceCertificate>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteInsuranceCertificate(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteInsuranceCertificateMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteInsuranceCertificate>>
+>;
+
+export type DeleteInsuranceCertificateMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an insurance certificate
+ */
+export const useDeleteInsuranceCertificate = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteInsuranceCertificate>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteInsuranceCertificate>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteInsuranceCertificateMutationOptions(options));
 };
 
 /**

@@ -1626,6 +1626,187 @@ export const DeleteLeaseParams = zod.object({
 });
 
 /**
+ * Returns every renter's / liability insurance certificate currently
+on file across all properties. Certificates are the manual-entry
+intake path described in `lib/db/src/schema/insurance-certificates.ts`:
+operators receive ACORD 25 certs by email and POST one row per cert
+here (or rely on a PDF seeder when the source PDF is attached to
+the project — see Task #334).
+
+ * @summary List all insurance certificates on file
+ */
+export const ListInsuranceCertificatesResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  leaseId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional: scope the certificate to a specific lease. Empty\nstring when the cert covers the property as a whole.\n",
+    ),
+  carrier: zod
+    .string()
+    .optional()
+    .describe(
+      'Underwriting carrier as printed on the certificate\n(e.g. \"Philadelphia Indemnity\").\n',
+    ),
+  policyNumber: zod
+    .string()
+    .optional()
+    .describe("Policy number from the certificate (ACORD 25 box)."),
+  insuredName: zod
+    .string()
+    .optional()
+    .describe(
+      "Named insured on the certificate (often the staffing\ncompany, not the property landlord).\n",
+    ),
+  coverageStart: zod
+    .string()
+    .optional()
+    .describe(
+      "Coverage start date as YYYY-MM-DD (or empty string when\nunknown \/ partially captured).\n",
+    ),
+  coverageEnd: zod
+    .string()
+    .optional()
+    .describe("Coverage end date as YYYY-MM-DD (or empty string)."),
+  documentUrl: zod
+    .string()
+    .optional()
+    .describe(
+      'Source PDF \/ file marker. Free-form so it can hold an\nattached-asset filename today (e.g.\n\"Renter_s_Insurance_1778107759430.pdf\") and a real\nobject-storage URL later.\n',
+    ),
+  notes: zod.string().optional(),
+});
+export const ListInsuranceCertificatesResponse = zod.array(
+  ListInsuranceCertificatesResponseItem,
+);
+
+/**
+ * Manual intake form for an insurance certificate (ACORD 25 or
+equivalent). At minimum supply `id` + `propertyId`; every other
+field defaults to an empty string in the schema so partial
+certs (e.g. "we know it exists, carrier TBD") can still be
+captured. The optional `documentUrl` field accepts the source
+PDF filename today (and a real object-storage URL later).
+
+ * @summary Capture a new insurance certificate from a PDF / email
+ */
+export const CreateInsuranceCertificateBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  leaseId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional: scope the certificate to a specific lease. Empty\nstring when the cert covers the property as a whole.\n",
+    ),
+  carrier: zod
+    .string()
+    .optional()
+    .describe(
+      'Underwriting carrier as printed on the certificate\n(e.g. \"Philadelphia Indemnity\").\n',
+    ),
+  policyNumber: zod
+    .string()
+    .optional()
+    .describe("Policy number from the certificate (ACORD 25 box)."),
+  insuredName: zod
+    .string()
+    .optional()
+    .describe(
+      "Named insured on the certificate (often the staffing\ncompany, not the property landlord).\n",
+    ),
+  coverageStart: zod
+    .string()
+    .optional()
+    .describe(
+      "Coverage start date as YYYY-MM-DD (or empty string when\nunknown \/ partially captured).\n",
+    ),
+  coverageEnd: zod
+    .string()
+    .optional()
+    .describe("Coverage end date as YYYY-MM-DD (or empty string)."),
+  documentUrl: zod
+    .string()
+    .optional()
+    .describe(
+      'Source PDF \/ file marker. Free-form so it can hold an\nattached-asset filename today (e.g.\n\"Renter_s_Insurance_1778107759430.pdf\") and a real\nobject-storage URL later.\n',
+    ),
+  notes: zod.string().optional(),
+});
+
+/**
+ * @summary Update an insurance certificate
+ */
+export const UpdateInsuranceCertificateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateInsuranceCertificateBody = zod.object({
+  propertyId: zod.string().optional(),
+  leaseId: zod.string().optional(),
+  carrier: zod.string().optional(),
+  policyNumber: zod.string().optional(),
+  insuredName: zod.string().optional(),
+  coverageStart: zod.string().optional(),
+  coverageEnd: zod.string().optional(),
+  documentUrl: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateInsuranceCertificateResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  leaseId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional: scope the certificate to a specific lease. Empty\nstring when the cert covers the property as a whole.\n",
+    ),
+  carrier: zod
+    .string()
+    .optional()
+    .describe(
+      'Underwriting carrier as printed on the certificate\n(e.g. \"Philadelphia Indemnity\").\n',
+    ),
+  policyNumber: zod
+    .string()
+    .optional()
+    .describe("Policy number from the certificate (ACORD 25 box)."),
+  insuredName: zod
+    .string()
+    .optional()
+    .describe(
+      "Named insured on the certificate (often the staffing\ncompany, not the property landlord).\n",
+    ),
+  coverageStart: zod
+    .string()
+    .optional()
+    .describe(
+      "Coverage start date as YYYY-MM-DD (or empty string when\nunknown \/ partially captured).\n",
+    ),
+  coverageEnd: zod
+    .string()
+    .optional()
+    .describe("Coverage end date as YYYY-MM-DD (or empty string)."),
+  documentUrl: zod
+    .string()
+    .optional()
+    .describe(
+      'Source PDF \/ file marker. Free-form so it can hold an\nattached-asset filename today (e.g.\n\"Renter_s_Insurance_1778107759430.pdf\") and a real\nobject-storage URL later.\n',
+    ),
+  notes: zod.string().optional(),
+});
+
+/**
+ * @summary Delete an insurance certificate
+ */
+export const DeleteInsuranceCertificateParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List all rooms
  */
 export const ListRoomsResponseItem = zod.object({

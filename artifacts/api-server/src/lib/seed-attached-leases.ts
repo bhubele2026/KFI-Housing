@@ -15,6 +15,13 @@ import {
   normalizePropertyRow,
   normalizeLeaseRow,
 } from "./db-row-normalizers";
+import {
+  applyInsuranceCertificates,
+  type InsuranceCertificateSpec,
+} from "./seed-insurance-certificates";
+// Re-export so other modules can build cert specs against this seeder
+// without re-importing from the helper directly.
+export type { InsuranceCertificateSpec };
 import type { Logger } from "pino";
 
 /**
@@ -392,10 +399,41 @@ function buildLeaseRow(
   };
 }
 
+/**
+ * Insurance certificates extracted from PDFs attached to the project for
+ * THESE properties (Task #334). Currently empty: no insurance PDFs are
+ * attached for the AutoZone Jeannette houses (6481 / 6454 US-30) or the
+ * Ridge Motor Inn — only the Chateau Knoll cert PDF is attached, and
+ * that one is loaded by `seed-chateau-knoll.ts`. The wiring is in place
+ * so an operator who later attaches a cert PDF can add a single
+ * `{ propertyKey, carrier, policyNumber, … }` entry here and have it
+ * replay idempotently across resets. Until then, certs received by
+ * email for these properties should be POSTed to
+ * `/api/insurance-certificates` directly (the documented intake path).
+ *
+ * Each spec's `propertyKey` matches one of `SEED_ATTACHED_LEASES_IDS.properties`
+ * so the helper can resolve it to the row's runtime id (which may
+ * differ from the seed id when a property was already created by a
+ * prior import).
+ */
+interface CertificateSpec {
+  id: string;
+  propertyKey: keyof typeof SEED_ATTACHED_LEASES_IDS.properties;
+  carrier: string;
+  policyNumber: string;
+  insuredName: string;
+  coverageStart: string;
+  coverageEnd: string;
+  documentUrl: string;
+  notes: string;
+}
+const CERTIFICATES: readonly CertificateSpec[] = [];
+
 export interface SeedAttachedLeasesResult {
   customersInserted: number;
   propertiesInserted: number;
   leasesInserted: number;
+  certificatesInserted: number;
 }
 
 export interface SeedAttachedLeasesDeps {
@@ -585,13 +623,45 @@ export async function seedAttachedLeasesIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customersInserted, propertiesInserted, leasesInserted };
+    // Insurance certificates: empty by design today (no cert PDFs are
+    // attached for these properties — see comment on `CERTIFICATES`).
+    // Wiring stays in place so a future attached cert just needs a row.
+    const certSpecs: InsuranceCertificateSpec[] = [];
+    for (const spec of CERTIFICATES) {
+      const propertyId = propertyIdByKey.get(
+        SEED_ATTACHED_LEASES_IDS.properties[spec.propertyKey],
+      );
+      if (!propertyId) continue;
+      certSpecs.push({
+        id: spec.id,
+        propertyId,
+        carrier: spec.carrier,
+        policyNumber: spec.policyNumber,
+        insuredName: spec.insuredName,
+        coverageStart: spec.coverageStart,
+        coverageEnd: spec.coverageEnd,
+        documentUrl: spec.documentUrl,
+        notes: spec.notes,
+      });
+    }
+    const certificatesInserted = await applyInsuranceCertificates(
+      tx,
+      certSpecs,
+    );
+
+    return {
+      customersInserted,
+      propertiesInserted,
+      leasesInserted,
+      certificatesInserted,
+    };
   });
 
   if (
     result.customersInserted > 0 ||
     result.propertiesInserted > 0 ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.certificatesInserted > 0
   ) {
     log.info(result, "Attached-lease PDF seed applied.");
   }

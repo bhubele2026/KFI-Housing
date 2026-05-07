@@ -4,12 +4,17 @@ interface Row {
   id: string;
   [k: string]: unknown;
 }
-type TableName = "customers" | "properties" | "leases";
+type TableName =
+  | "customers"
+  | "properties"
+  | "leases"
+  | "insurance_certificates";
 
 const stores: Record<TableName, Map<string, Row>> = {
   customers: new Map(),
   properties: new Map(),
   leases: new Map(),
+  insurance_certificates: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -156,6 +161,12 @@ vi.mock("@workspace/db", () => ({
     endDate: { __col: "endDate" },
     notes: { __col: "notes" },
   },
+  insuranceCertificatesTable: {
+    __table: "insurance_certificates",
+    id: { __col: "id" },
+    propertyId: { __col: "propertyId" },
+    policyNumber: { __col: "policyNumber" },
+  },
 }));
 
 vi.mock("./logger", () => ({
@@ -180,6 +191,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       customersInserted: 3,
       propertiesInserted: 4,
       leasesInserted: 4,
+      certificatesInserted: 0,
     });
     expect(stores.customers.size).toBe(3);
     expect(stores.properties.size).toBe(4);
@@ -347,6 +359,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       customersInserted: 0,
       propertiesInserted: 0,
       leasesInserted: 0,
+      certificatesInserted: 0,
     });
 
     const after = stores.properties.get(ids.properties.zielsdorf)!;
@@ -450,6 +463,7 @@ describe("seedAttachedLeasesIfMissing", () => {
       customersInserted: 2, // kfiWebster + autozoneJeannette (Ridge skipped)
       propertiesInserted: 3, // zielsdorf + autozoneHouse + yellowHouse (Ridge skipped)
       leasesInserted: 3, // zielsdorf + autozoneHouse + yellowHouse (Ridge skipped)
+      certificatesInserted: 0,
     });
   });
 });

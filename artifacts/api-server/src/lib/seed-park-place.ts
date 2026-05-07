@@ -14,7 +14,35 @@ import {
   todayIso as sharedTodayIso,
 } from "./lease-status";
 import { repointFallbackToEndClient } from "./seed-fallback-repoint";
+import {
+  applyInsuranceCertificates,
+  type InsuranceCertificateSpec,
+} from "./seed-insurance-certificates";
 import type { Logger } from "pino";
+
+/**
+ * Insurance certificates on file for Park Place Apartments – Plymouth, MN
+ * (Task #334). Currently empty: the source ACORD 25 cert PDF is not
+ * attached to the project. Each Park Place lease already requires
+ * "$100,000 personal liability minimum, Centerspace LP listed as
+ * Additional Interest" (see `buildClauses` above), so the cert this
+ * row would represent is well-defined; operators receiving the cert
+ * by email should either POST it to `/api/insurance-certificates`
+ * directly, or, when the PDF is later attached, drop a single
+ * `{ id, carrier, policyNumber, … }` entry below and it will replay
+ * idempotently across resets.
+ */
+interface ParkPlaceCertificateSpec {
+  id: string;
+  carrier: string;
+  policyNumber: string;
+  insuredName: string;
+  coverageStart: string;
+  coverageEnd: string;
+  documentUrl: string;
+  notes: string;
+}
+const PARK_PLACE_CERTIFICATES: readonly ParkPlaceCertificateSpec[] = [];
 
 // Re-export from the shared helper so callers (and the existing test that
 // imports `computeLeaseStatus` from this module) keep working unchanged.
@@ -271,6 +299,10 @@ export interface SeedParkPlaceResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  /** Number of insurance certificate rows newly inserted on this run.
+   *  Always 0 today (PARK_PLACE_CERTIFICATES is empty); see comment
+   *  on that array for the documented intake path. */
+  certificatesInserted: number;
   /** Customer the property is attached to after this run. */
   customerId: string;
   /** True when the property was repointed from a KFI Staffing fallback to
@@ -402,6 +434,25 @@ export async function seedParkPlaceIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
+    // Insurance certificates: empty by design today; see
+    // PARK_PLACE_CERTIFICATES comment.
+    const certSpecs: InsuranceCertificateSpec[] =
+      PARK_PLACE_CERTIFICATES.map((spec) => ({
+        id: spec.id,
+        propertyId,
+        carrier: spec.carrier,
+        policyNumber: spec.policyNumber,
+        insuredName: spec.insuredName,
+        coverageStart: spec.coverageStart,
+        coverageEnd: spec.coverageEnd,
+        documentUrl: spec.documentUrl,
+        notes: spec.notes,
+      }));
+    const certificatesInserted = await applyInsuranceCertificates(
+      tx,
+      certSpecs,
+    );
+
     // Task #328: repoint AWAY from any KFI Staffing fallback customer to
     // the real Cardinal CG (Spring Green) end-client when present, and
     // clean up the orphaned fallback customer.
@@ -418,6 +469,7 @@ export async function seedParkPlaceIfMissing(
       customerInserted,
       propertyInserted,
       leasesInserted,
+      certificatesInserted,
       customerId: repoint.customerId,
       repointedToEndClient: repoint.repointedToEndClient,
       fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
@@ -428,6 +480,7 @@ export async function seedParkPlaceIfMissing(
     result.customerInserted ||
     result.propertyInserted ||
     result.leasesInserted > 0 ||
+    result.certificatesInserted > 0 ||
     result.repointedToEndClient ||
     result.fallbackCustomerDeleted
   ) {

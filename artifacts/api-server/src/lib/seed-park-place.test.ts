@@ -4,12 +4,17 @@ interface Row {
   id: string;
   [k: string]: unknown;
 }
-type TableName = "customers" | "properties" | "leases";
+type TableName =
+  | "customers"
+  | "properties"
+  | "leases"
+  | "insurance_certificates";
 
 const stores: Record<TableName, Map<string, Row>> = {
   customers: new Map(),
   properties: new Map(),
   leases: new Map(),
+  insurance_certificates: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -188,6 +193,12 @@ vi.mock("@workspace/db", () => ({
     notes: { __col: "notes" },
     unit: { __col: "unit" },
   },
+  insuranceCertificatesTable: {
+    __table: "insurance_certificates",
+    id: { __col: "id" },
+    propertyId: { __col: "propertyId" },
+    policyNumber: { __col: "policyNumber" },
+  },
 }));
 
 vi.mock("./logger", () => ({
@@ -235,6 +246,7 @@ describe("seedParkPlaceIfMissing", () => {
       customerInserted: true,
       propertyInserted: true,
       leasesInserted: 9,
+      certificatesInserted: 0,
       customerId: PARK_PLACE_CUSTOMER_ID,
       repointedToEndClient: false,
       fallbackCustomerDeleted: false,
@@ -336,6 +348,7 @@ describe("seedParkPlaceIfMissing", () => {
       customerInserted: false,
       propertyInserted: false,
       leasesInserted: 0,
+      certificatesInserted: 0,
       customerId: PARK_PLACE_CUSTOMER_ID,
       repointedToEndClient: false,
       fallbackCustomerDeleted: false,

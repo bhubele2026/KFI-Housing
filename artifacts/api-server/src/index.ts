@@ -1,4 +1,4 @@
-import { pushSchemaIfNeeded } from "@workspace/db";
+import { pushSchemaIfNeeded, db, leasesTable, propertiesTable } from "@workspace/db";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
@@ -79,6 +79,22 @@ void start({
     }),
   notifySchemaDrift: ({ webhookUrl, message }) =>
     postSchemaDriftNotification({ webhookUrl, message }),
+  loadLeasesForDigest: async () => {
+    const rows = await db.select().from(leasesTable);
+    return rows.map((r) => ({
+      id: r.id,
+      propertyId: r.propertyId,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      status: r.status,
+      vendor: r.vendor,
+    }));
+  },
+  loadPropertiesForDigest: async () => {
+    const rows = await db.select().from(propertiesTable);
+    return rows.map((r) => ({ id: r.id, name: r.name }));
+  },
+  digestFetch: globalThis.fetch,
   logger,
   env: process.env,
   exit: (code) => process.exit(code),

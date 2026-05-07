@@ -1,6 +1,14 @@
 import type { PushSchemaOptions, PushSchemaResult } from "@workspace/db";
 import type { Logger } from "pino";
 import { isSchemaDriftError } from "./lib/notify-schema-drift";
+import {
+  readDigestConfig,
+  startWeeklyLeaseDigestScheduler,
+} from "./lib/lease-digest-scheduler";
+import type {
+  DigestLease,
+  DigestProperty,
+} from "./lib/weekly-lease-digest";
 
 export interface StartDeps {
   pushSchemaIfNeeded: (
@@ -43,6 +51,13 @@ export interface StartDeps {
     webhookUrl: string;
     message: string;
   }) => Promise<void>;
+  // Live data loaders for the weekly lease-expiry digest (Task #356).
+  // Injected so tests can use fakes without touching the DB module.
+  loadLeasesForDigest: () => Promise<DigestLease[]>;
+  loadPropertiesForDigest: () => Promise<DigestProperty[]>;
+  // `fetch` impl used by the digest webhook POST. Defaults to
+  // `globalThis.fetch` in `index.ts`; tests inject a vi.fn().
+  digestFetch: typeof fetch;
   logger: Pick<Logger, "info" | "error" | "warn">;
   env: NodeJS.ProcessEnv;
   exit: (code: number) => never;
@@ -371,6 +386,17 @@ export async function start(deps: StartDeps): Promise<void> {
     await deps.listen(port);
     deps.logger.info({ port }, "Server listening");
     warnIfGoogleMapsKeyMissing(deps);
+    // Kick off the weekly lease-expiry digest scheduler (Task #356).
+    // No-ops when LEASE_DIGEST_WEBHOOK_URL / LEASE_DIGEST_RECIPIENTS
+    // are unset, so dev workflows are unaffected.
+    startWeeklyLeaseDigestScheduler({
+      config: readDigestConfig(deps.env),
+      fetch: deps.digestFetch,
+      loadLeases: deps.loadLeasesForDigest,
+      loadProperties: deps.loadPropertiesForDigest,
+      now: () => new Date(),
+      logger: deps.logger,
+    });
   } catch (err) {
     deps.logger.error({ err }, "Error listening on port");
     deps.exit(1);

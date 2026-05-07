@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users, Hotel } from "lucide-react";
+import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users, Hotel, CalendarClock } from "lucide-react";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import {
@@ -38,6 +38,8 @@ type BuyoutFilter = "All" | "Yes" | "No";
 type NeedsReviewFilter = "All" | "NeedsReview";
 
 type AtRiskFilter = "All" | "AtRisk";
+
+type NeedsDatesFilter = "All" | "NeedsDates";
 
 type ViewMode = "flat" | "by-customer";
 
@@ -96,6 +98,30 @@ export default function Leases() {
     const qs = params.toString();
     navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
   };
+  // URL-driven so any future dashboard tile can deep-link straight to
+  // blank-date triage rows (`?needsDates=1`), mirroring the needsReview
+  // pattern above. Task #363.
+  const [needsDatesFilter, setNeedsDatesFilter] = useState<NeedsDatesFilter>(
+    () =>
+      new URLSearchParams(searchString).get("needsDates") === "1"
+        ? "NeedsDates"
+        : "All",
+  );
+  useEffect(() => {
+    const next: NeedsDatesFilter =
+      new URLSearchParams(searchString).get("needsDates") === "1"
+        ? "NeedsDates"
+        : "All";
+    setNeedsDatesFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+  const updateNeedsDatesFilter = (value: NeedsDatesFilter) => {
+    setNeedsDatesFilter(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "NeedsDates") params.set("needsDates", "1");
+    else params.delete("needsDates");
+    const qs = params.toString();
+    navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
+  };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
@@ -130,8 +156,16 @@ export default function Leases() {
 
   const filteredLeases = useMemo(
     () =>
-      sortLeases(
-        leases.filter((l) => {
+      // Blank-date rows come first regardless of status so operators see
+      // the triage queue (task #363) at the top of the list. Within each
+      // bucket the existing sortLeases ordering (Active > Upcoming >
+      // Expired, then newest end date) still applies.
+      ((rows) => {
+        const missing = rows.filter((l) => !l.startDate || !l.endDate);
+        const dated = rows.filter((l) => l.startDate && l.endDate);
+        return [...sortLeases(missing), ...sortLeases(dated)];
+      })(
+      leases.filter((l) => {
           const matchesStatus = statusFilter === "All" || l.status === statusFilter;
           if (!matchesStatus) return false;
           // Buyout filter is independent of status — operators triaging
@@ -148,6 +182,10 @@ export default function Leases() {
           // import quality use this to find the exact rows that need a
           // weekly cost / vendor cleanup pass.
           if (needsReviewFilter === "NeedsReview" && !l.needsReview) return false;
+          // Blank-date triage filter (task #363) — surfaces just the rows
+          // whose `startDate` or `endDate` is empty, so operators can work
+          // through them without hunting for missing cells.
+          if (needsDatesFilter === "NeedsDates" && l.startDate && l.endDate) return false;
           // At-risk = hotel-rate lease whose current month is missing a
           // log or below the negotiated minimum. Mirrors the same check
           // powering the tile above and the dashboard counter.
@@ -169,7 +207,7 @@ export default function Leases() {
           return tenantId === customerFilter;
         }),
       ),
-    [leases, statusFilter, buyoutFilter, needsReviewFilter, atRiskFilter, customerFilter, propertyById, roomNightLogs, currentMonth],
+    [leases, statusFilter, buyoutFilter, needsReviewFilter, needsDatesFilter, atRiskFilter, customerFilter, propertyById, roomNightLogs, currentMonth],
   );
 
   // Placeholder rows: every property in the active customer scope that has no
@@ -195,6 +233,7 @@ export default function Leases() {
     statusFilter === "All" &&
     buyoutFilter === "All" &&
     needsReviewFilter === "All" &&
+    needsDatesFilter === "All" &&
     atRiskFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
@@ -368,7 +407,7 @@ export default function Leases() {
           }}
         />
 
-        {(activeCustomerName || atRiskFilter === "AtRisk") && (
+        {(activeCustomerName || atRiskFilter === "AtRisk" || needsDatesFilter === "NeedsDates") && (
           <div className="flex flex-wrap items-center gap-2">
             {activeCustomerName && (
               <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
@@ -380,6 +419,25 @@ export default function Leases() {
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
                   aria-label="Clear customer filter"
                   data-testid="button-clear-customer-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {needsDatesFilter === "NeedsDates" && (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 px-2 py-1 bg-amber-100 text-amber-900 hover:bg-amber-100"
+                data-testid="badge-needs-dates-filter"
+              >
+                <CalendarClock className="h-3 w-3" />
+                Missing dates
+                <button
+                  type="button"
+                  onClick={() => updateNeedsDatesFilter("All")}
+                  className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                  aria-label="Clear missing-dates filter"
+                  data-testid="button-clear-needs-dates-filter"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -604,6 +662,23 @@ export default function Leases() {
                   <SelectContent>
                     <SelectItem value="All">All Leases</SelectItem>
                     <SelectItem value="NeedsReview">Needs review</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={needsDatesFilter}
+                  onValueChange={(v) =>
+                    updateNeedsDatesFilter(v as NeedsDatesFilter)
+                  }
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-44"
+                    data-testid="select-needs-dates-filter"
+                  >
+                    <SelectValue placeholder="Missing dates" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Leases</SelectItem>
+                    <SelectItem value="NeedsDates">Missing dates</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select

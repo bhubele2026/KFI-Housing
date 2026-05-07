@@ -4,7 +4,7 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2 } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
@@ -301,6 +301,31 @@ export function LeasesTable({
                       >
                         {lease.status}
                       </Badge>
+                      {(!lease.startDate || !lease.endDate) && (
+                        // Blank-date triage flag (task #363) — master-import
+                        // and Ridge Motor Inn seed rows can land with empty
+                        // start/end dates, so we surface a dedicated amber
+                        // pill so operators can spot them without scanning
+                        // every row's term cells. The badge is itself a
+                        // link to the lease detail page with the Start
+                        // Date editor pre-focused (mirrors the per-row
+                        // "Fix dates" icon below) so a single click on
+                        // the badge takes the operator straight into the
+                        // edit flow.
+                        <Link
+                          href={
+                            `/leases/${lease.id}?focus=dates` +
+                            (originPath ? `&from=${encodeURIComponent(originPath)}` : "")
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid={`badge-lease-needs-dates-${lease.id}`}
+                          title="This lease is missing a start or end date — click to fill them in."
+                          className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+                        >
+                          <CalendarClock className="h-3 w-3" />
+                          Needs dates
+                        </Link>
+                      )}
                       {lease.needsReview && (
                         // Title attribute pulls the importer's reason out of
                         // notes so a hover preview answers "why is this
@@ -428,6 +453,32 @@ export function LeasesTable({
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         </Button>
+                      )}
+                      {(!lease.startDate || !lease.endDate) && (
+                        // "Fix dates" shortcut for blank-date triage rows
+                        // (task #363). Threads the origin path through (so
+                        // the back-link returns here) and adds
+                        // `?focus=dates` so lease-detail opens with the
+                        // Start Date inline editor pre-focused and
+                        // scrolled into view.
+                        <Link
+                          href={
+                            `/leases/${lease.id}?focus=dates` +
+                            (originPath ? `&from=${encodeURIComponent(originPath)}` : "")
+                          }
+                        >
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-amber-700 hover:text-amber-800"
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`button-fix-lease-dates-${lease.id}`}
+                            aria-label="Fix missing lease dates"
+                            title="Fix missing dates"
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
                       )}
                       {lease.needsReview && (
                         // Quick-fix shortcut for flagged leases. Threads the

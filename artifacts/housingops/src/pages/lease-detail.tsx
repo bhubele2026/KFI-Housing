@@ -461,6 +461,17 @@ export default function LeaseDetail() {
     if (!rentRowRef.current) return;
     rentRowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [focusRentOnMount]);
+  // `?focus=dates` is set by the leases-table "Fix dates" quick-action on
+  // blank-date triage rows (task #363). When present we open the Start
+  // Date inline editor on mount and scroll the Lease Terms card into view
+  // so the operator lands ready to fill in the missing term dates.
+  const focusDatesOnMount = initialFocusFieldRef.current === "dates";
+  const startDateRowRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!focusDatesOnMount) return;
+    if (!startDateRowRef.current) return;
+    startDateRowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusDatesOnMount]);
 
   // Pending property re-attachment requires explicit confirm. We hold the
   // candidate id here while the AlertDialog is open and clear it on close.
@@ -965,11 +976,16 @@ export default function LeaseDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+              <div
+                className="flex items-center justify-between py-1 border-b border-dashed border-border/50"
+                ref={startDateRowRef}
+                data-testid="lease-start-row"
+              >
                 <span className="text-sm text-muted-foreground w-40 shrink-0">Start Date</span>
                 <InlineEdit
                   value={lease.startDate}
                   type="date"
+                  startEditing={focusDatesOnMount}
                   onSave={(v) => applyUpdate( { startDate: v })}
                   testId="inline-lease-start"
                 />

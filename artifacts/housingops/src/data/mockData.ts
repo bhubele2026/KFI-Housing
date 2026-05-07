@@ -360,22 +360,34 @@ export function sumActiveRent(
 }
 
 /**
- * Every Active lease that the customer is on the hook for (the LOI-style
- * "customer pays the landlord" arrangement, task #313). A lease counts when
+ * Status filter accepted by `getCustomerResponsibleLeases` /
+ * `sumCustomerResponsibleRent` (task #438). "Active" preserves the original
+ * default; "Upcoming" surfaces leases that haven't started yet so operators
+ * can forecast future liability; "All" includes Active + Upcoming + Expired
+ * to also catch missed renewals on customer-responsible leases.
+ */
+export type CustomerResponsibleStatusFilter = "Active" | "Upcoming" | "All";
+
+/**
+ * Every lease the customer is on the hook for (the LOI-style "customer pays
+ * the landlord" arrangement, task #313). A lease counts when
  * `customerResponsibleForRent` is true AND its effective customer id matches
  * — `lease.customerId` when present, else the parent property's `customerId`
  * as a fallback so legacy rows imported before the lease-level field existed
- * still attribute correctly.
+ * still attribute correctly. `statusFilter` defaults to "Active" to preserve
+ * the original behavior; pass "Upcoming" or "All" to widen the set.
  */
 export function getCustomerResponsibleLeases(
   leases: readonly Lease[],
   properties: readonly Property[],
   customerId: string,
+  statusFilter: CustomerResponsibleStatusFilter = "Active",
 ): Lease[] {
   const propertyCustomerById = new Map<string, string>();
   for (const p of properties) propertyCustomerById.set(p.id, p.customerId);
   return leases.filter((l) => {
-    if (l.status !== "Active") return false;
+    if (statusFilter === "Active" && l.status !== "Active") return false;
+    if (statusFilter === "Upcoming" && l.status !== "Upcoming") return false;
     if (!l.customerResponsibleForRent) return false;
     const effective = l.customerId || propertyCustomerById.get(l.propertyId);
     return effective === customerId;
@@ -383,17 +395,19 @@ export function getCustomerResponsibleLeases(
 }
 
 /**
- * Sum of `monthlyRent` across every Active lease the customer is responsible
+ * Sum of `monthlyRent` across every matching lease the customer is responsible
  * for. Hotel-rate leases are intentionally excluded — their rent isn't a
  * fixed monthly obligation, so adding them would inflate the customer's
  * "owes the landlord" liability with revenue that depends on usage.
+ * `statusFilter` mirrors `getCustomerResponsibleLeases`.
  */
 export function sumCustomerResponsibleRent(
   leases: readonly Lease[],
   properties: readonly Property[],
   customerId: string,
+  statusFilter: CustomerResponsibleStatusFilter = "Active",
 ): number {
-  return getCustomerResponsibleLeases(leases, properties, customerId).reduce(
+  return getCustomerResponsibleLeases(leases, properties, customerId, statusFilter).reduce(
     (s, l) => s + ((l.rateType ?? "monthly") === "monthly" ? l.monthlyRent || 0 : 0),
     0,
   );

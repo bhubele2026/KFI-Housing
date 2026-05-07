@@ -22,7 +22,7 @@ import {
 } from "@workspace/api-client-react";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -32,6 +32,7 @@ import { motion } from "framer-motion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import {
@@ -148,18 +149,36 @@ export default function Dashboard() {
     [scopedOccupants],
   );
 
+  // Default "Active" preserves the original card behavior; operators can
+  // widen to "Upcoming" to forecast future liability or "All" to also catch
+  // recently expired customer-responsible leases (task #438).
+  const [customerPaidRentStatus, setCustomerPaidRentStatus] =
+    useState<CustomerResponsibleStatusFilter>("Active");
+
   const customerPaidRentByCustomer = useMemo(() => {
     const rows: { customerId: string; customerName: string; rent: number; leaseCount: number }[] = [];
     let portfolioTotal = 0;
     for (const c of customers) {
-      const rent = sumCustomerResponsibleRent(scopedLeases, scopedProperties, c.id);
-      if (rent <= 0) continue;
-      const leaseCount = getCustomerResponsibleLeases(scopedLeases, scopedProperties, c.id).length;
-      rows.push({ customerId: c.id, customerName: c.name, rent, leaseCount });
+      const leases = getCustomerResponsibleLeases(scopedLeases, scopedProperties, c.id, customerPaidRentStatus);
+      if (leases.length === 0) continue;
+      const rent = sumCustomerResponsibleRent(scopedLeases, scopedProperties, c.id, customerPaidRentStatus);
+      rows.push({ customerId: c.id, customerName: c.name, rent, leaseCount: leases.length });
       portfolioTotal += rent;
     }
     rows.sort((a, b) => b.rent - a.rent || a.customerName.localeCompare(b.customerName));
     return { rows, total: portfolioTotal };
+  }, [customers, scopedLeases, scopedProperties, customerPaidRentStatus]);
+
+  // Visibility is decided across "All" so the card doesn't disappear when an
+  // operator picks a status with zero matches — the toggle stays available so
+  // they can switch back without scrolling away.
+  const hasAnyCustomerPaidRent = useMemo(() => {
+    for (const c of customers) {
+      if (getCustomerResponsibleLeases(scopedLeases, scopedProperties, c.id, "All").length > 0) {
+        return true;
+      }
+    }
+    return false;
   }, [customers, scopedLeases, scopedProperties]);
 
   interface OverriddenOccupant {
@@ -1309,12 +1328,34 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {customerPaidRentByCustomer.total > 0 && (
+        {hasAnyCustomerPaidRent && (
           <Card data-testid="card-customer-paid-rent">
             <CardContent className="p-6">
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-semibold">Customer-paid monthly rent</p>
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  value={customerPaidRentStatus}
+                  onValueChange={(v) => {
+                    if (v === "Active" || v === "Upcoming" || v === "All") {
+                      setCustomerPaidRentStatus(v);
+                    }
+                  }}
+                  className="ml-auto"
+                  data-testid="toggle-customer-paid-rent-status"
+                >
+                  <ToggleGroupItem value="Active" data-testid="toggle-customer-paid-rent-status-active">
+                    Active
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="Upcoming" data-testid="toggle-customer-paid-rent-status-upcoming">
+                    Upcoming
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="All" data-testid="toggle-customer-paid-rent-status-all">
+                    All
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
               <p
                 className="text-2xl font-bold tabular-nums"
@@ -1323,9 +1364,20 @@ export default function Dashboard() {
                 {formatUsd(customerPaidRentByCustomer.total)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Total monthly rent across all Active leases where the customer is responsible for paying the landlord.
+                {customerPaidRentStatus === "Active"
+                  ? "Total monthly rent across all Active leases where the customer is responsible for paying the landlord."
+                  : customerPaidRentStatus === "Upcoming"
+                    ? "Forecast monthly rent across Upcoming customer-responsible leases that haven't started yet."
+                    : "Total monthly rent across all customer-responsible leases (Active, Upcoming, and Expired)."}
               </p>
-              {customerPaidRentByCustomer.rows.length > 0 && (
+              {customerPaidRentByCustomer.rows.length === 0 ? (
+                <p
+                  className="text-sm text-muted-foreground mt-6"
+                  data-testid="text-customer-paid-rent-empty"
+                >
+                  No {customerPaidRentStatus === "All" ? "" : `${customerPaidRentStatus.toLowerCase()} `}customer-responsible leases.
+                </p>
+              ) : (
                 <div className="mt-6">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                     By customer · ranked by rent

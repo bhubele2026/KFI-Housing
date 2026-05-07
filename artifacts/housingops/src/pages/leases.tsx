@@ -824,6 +824,7 @@ export default function Leases() {
                     description: t("toasts.markedAsReviewedDescription"),
                   });
                 }}
+                onUpdateLease={updateLease}
                 onBulkMarkReviewed={(ids) => {
                   for (const id of ids) {
                     updateLease(id, { needsReview: false });
@@ -912,6 +913,7 @@ export default function Leases() {
                             description: t("toasts.markedAsReviewedDescription"),
                           });
                         }}
+                        onUpdateLease={updateLease}
                         onBulkMarkReviewed={(ids) => {
                           for (const id of ids) {
                             updateLease(id, { needsReview: false });

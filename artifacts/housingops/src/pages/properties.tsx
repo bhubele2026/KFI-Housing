@@ -7,6 +7,7 @@ import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
+import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
 import { isBlankYMD, formatYMDPretty } from "@/lib/lease-dates";
@@ -251,7 +252,7 @@ export default function Properties() {
   // Defensive fallback to `[]` for `utilities` keeps existing tests
   // with partial `useData` mocks from crashing on the per-bed-electric
   // pre-compute below — production always returns an array.
-  const { properties, beds, leases, customers, utilities = [], insuranceCertificates, addProperty, addCustomer, updateProperty, isLoading } = useData();
+  const { properties, beds, leases, customers, utilities = [], insuranceCertificates, addProperty, addCustomer, updateProperty, updateLease, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -2274,14 +2275,34 @@ export default function Properties() {
                               <AlertTriangle className="h-3 w-3 mr-1" />
                               {renewal.label}
                             </Badge>
-                          ) : showNoEndDate ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[11px] font-medium border-dashed text-muted-foreground"
-                              data-testid={`badge-no-end-date-${property.id}`}
-                            >
-                              No end date
-                            </Badge>
+                          ) : showNoEndDate && activeLease ? (
+                            // Inline end-date editor (task #430). Clicking
+                            // the badge opens the same RenewLeasePopover
+                            // used elsewhere so operators can fill in the
+                            // missing date right from the row.
+                            <RenewLeasePopover
+                              currentEndDate={activeLease.endDate}
+                              currentStatus={activeLease.status}
+                              propertyName={property.name}
+                              onRenew={(newEndDate, newStatus) =>
+                                updateLease(activeLease.id, {
+                                  endDate: newEndDate,
+                                  status: newStatus,
+                                })
+                              }
+                              align="start"
+                              trigger={
+                                <button
+                                  type="button"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`badge-no-end-date-${property.id}`}
+                                  title="Click to set the lease end date"
+                                  className="inline-flex items-center rounded-md border border-dashed border-input bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                  No end date
+                                </button>
+                              }
+                            />
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>
                           )}

@@ -20,6 +20,8 @@ import {
   sourcePdfHref,
   sourcePdfThumbnailHref,
 } from "@/lib/lease-source-pdf";
+import { isBlankYMD } from "@/lib/lease-dates";
+import { RenewLeasePopover } from "@/components/renew-lease-popover";
 
 export interface LeasesTableProps {
   leases: readonly Lease[];
@@ -46,6 +48,16 @@ export interface LeasesTableProps {
    * actions only.
    */
   onMarkReviewed?: (id: string) => void;
+  /**
+   * Optional handler that lets the End column render an inline date
+   * editor on rows whose `endDate` is blank (Task #430). When wired,
+   * the cell shows a clickable "No end date" pill that opens the same
+   * RenewLeasePopover used by the per-property header — saving updates
+   * the lease via this callback (which the page maps to the data
+   * store's `updateLease`). When omitted (mockup sandbox / unit tests)
+   * blank-end rows fall back to a plain em-dash.
+   */
+  onUpdateLease?: (id: string, updates: Partial<Lease>) => void;
   /**
    * Optional handler for the bulk "Mark selected as reviewed" toolbar
    * action (Task #360 — stretch from #329). When wired, the table renders
@@ -157,6 +169,7 @@ export function LeasesTable({
   onCustomerClick,
   onDelete,
   onMarkReviewed,
+  onUpdateLease,
   onBulkMarkReviewed,
   emptyMessage = "No leases found.",
   emptyAction,
@@ -437,7 +450,43 @@ export function LeasesTable({
                     {lease.startDate || "—"}
                   </TableCell>
                   <TableCell className="text-sm" data-testid={`cell-lease-end-${lease.id}`}>
-                    {lease.endDate || "—"}
+                    {isBlankYMD(lease.endDate) ? (
+                      onUpdateLease ? (
+                        // Inline end-date editor for master-import /
+                        // month-to-month rows that ship with no endDate
+                        // (Task #430). Reuses the same RenewLeasePopover
+                        // the property-detail header uses, so a single
+                        // click on the pill opens a date input the
+                        // operator can fill in without leaving the row.
+                        <RenewLeasePopover
+                          currentEndDate={lease.endDate}
+                          currentStatus={lease.status}
+                          propertyName={property?.name}
+                          onRenew={(newEndDate, newStatus) =>
+                            onUpdateLease(lease.id, {
+                              endDate: newEndDate,
+                              status: newStatus,
+                            })
+                          }
+                          align="start"
+                          trigger={
+                            <button
+                              type="button"
+                              onClick={(e) => e.stopPropagation()}
+                              data-testid={`badge-lease-no-end-date-${lease.id}`}
+                              title="Click to set the lease end date"
+                              className="inline-flex items-center rounded-md border border-dashed border-input bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              No end date
+                            </button>
+                          }
+                        />
+                      ) : (
+                        "—"
+                      )
+                    ) : (
+                      lease.endDate
+                    )}
                   </TableCell>
                   <TableCell className="text-right text-sm tabular-nums" data-testid={`cell-lease-rent-${lease.id}`}>
                     {formatMoney(lease.monthlyRent)}

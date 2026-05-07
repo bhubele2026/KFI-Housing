@@ -885,13 +885,32 @@ export default function PropertyDetail() {
                       Renewal: {renewal.label}
                     </Badge>
                   ) : (
-                    <Badge
-                      variant="outline"
-                      className="text-xs font-medium border-dashed text-muted-foreground"
-                      data-testid="badge-property-no-end-date"
-                    >
-                      No end date
-                    </Badge>
+                    // Inline end-date editor (task #430). Clicking the
+                    // "No end date" pill opens the same RenewLeasePopover
+                    // the explicit Renew button uses, so operators can
+                    // type in a date right from the header without
+                    // hunting for the renew action first.
+                    <RenewLeasePopover
+                      currentEndDate={primaryActiveLease.endDate}
+                      currentStatus={primaryActiveLease.status}
+                      propertyName={property.name}
+                      onRenew={(newEndDate, newStatus) =>
+                        updateLease(primaryActiveLease.id, {
+                          endDate: newEndDate,
+                          status: newStatus,
+                        })
+                      }
+                      trigger={
+                        <button
+                          type="button"
+                          data-testid="badge-property-no-end-date"
+                          title="Click to set the lease end date"
+                          className="inline-flex items-center rounded-md border border-dashed border-input bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          No end date
+                        </button>
+                      }
+                    />
                   )}
                   <RenewLeasePopover
                     currentEndDate={primaryActiveLease.endDate}
@@ -1625,6 +1644,7 @@ export default function PropertyDetail() {
                       description: "The 'Needs review' flag has been cleared.",
                     });
                   }}
+                  onUpdateLease={updateLease}
                   onBulkMarkReviewed={(ids) => {
                     for (const id of ids) {
                       updateLease(id, { needsReview: false });

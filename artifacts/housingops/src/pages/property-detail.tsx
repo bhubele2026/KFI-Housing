@@ -946,6 +946,29 @@ export default function PropertyDetail() {
               );
             })()}
             {(() => {
+              // Laundry location pill (task #504). Surfaces the Onsite /
+              // Offsite value picked on the Furnishings tab so operators
+              // don't have to switch tabs to see it. Hidden when the
+              // operator hasn't picked a value (radio is N/A by default).
+              const furnishings = property.furnishings ?? [];
+              const laundryCat = FURNISHING_CATEGORIES.find((c) => c.id === "laundry");
+              const radio = laundryCat?.radioGroup;
+              const picked = radio?.options.find((o) => furnishings.includes(o)) ?? null;
+              if (!picked) return null;
+              const short = radio?.shortLabels?.[picked] ?? picked;
+              return (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium ml-1 bg-emerald-50 text-emerald-700 border-emerald-200"
+                  data-testid="badge-property-laundry"
+                  title={`Laundry facility is ${short.toLowerCase()}`}
+                >
+                  <WashingMachine className="h-3 w-3 mr-1" />
+                  Laundry: {short}
+                </Badge>
+              );
+            })()}
+            {(() => {
               const certs = propCerts.filter((c) => c.coverageEnd);
               if (certs.length === 0) return null;
               let worst: { days: number; coverageEnd: string } | null = null;

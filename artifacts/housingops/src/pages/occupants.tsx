@@ -18,13 +18,13 @@ import { SkeletonRows } from "@/components/skeleton-rows";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
-import { toWeeklyCharge, toMonthlyCharge, formatUsd } from "@/data/mockData";
+import { toWeeklyCharge, toMonthlyCharge, formatUsd, STANDARD_SHIFTS } from "@/data/mockData";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useMemo } from "react";
 
 export default function Occupants() {
   const { t } = useTranslation();
-  const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
+  const { occupants, properties, beds, customers, isLoading, deleteOccupant, updateOccupant } = useData();
   const { toast } = useToast();
   const { customerId: customerScope } = useCustomerScope();
   const customerScopedPropertyIds = useMemo(() => {
@@ -56,9 +56,13 @@ export default function Occupants() {
       ? "Active"
       : "All",
   );
-  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">(() => {
+  // Shift filter is free-form (Task #506): "All", "Unassigned", or any
+  // shift title that appears on at least one occupant. The URL value is
+  // accepted as-is for any non-empty string so per-customer custom
+  // shifts deep-link cleanly.
+  const [shiftFilter, setShiftFilter] = useState<string>(() => {
     const raw = new URLSearchParams(searchString).get("shift");
-    return raw === "1st" || raw === "2nd" || raw === "Unassigned" ? raw : "All";
+    return raw && raw.length > 0 ? raw : "All";
   });
   const [moveInFilter, setMoveInFilter] = useState<"All" | "NeedsReview">(() =>
     new URLSearchParams(searchString).get("needsReview") === "1"
@@ -76,10 +80,7 @@ export default function Occupants() {
       params.get("needsReview") === "1" ? "NeedsReview" : "All";
     setMoveInFilter((prev) => (prev === next ? prev : next));
     const rawShift = params.get("shift");
-    const nextShift: "All" | "1st" | "2nd" | "Unassigned" =
-      rawShift === "1st" || rawShift === "2nd" || rawShift === "Unassigned"
-        ? rawShift
-        : "All";
+    const nextShift = rawShift && rawShift.length > 0 ? rawShift : "All";
     setShiftFilter((prev) => (prev === nextShift ? prev : nextShift));
     const q = params.get("q") ?? "";
     setSearch((prev) => (prev === q || prev !== "" && q === "" ? prev : q));
@@ -101,7 +102,7 @@ export default function Occupants() {
     updateUrlParam("needsReview", value === "NeedsReview" ? "1" : null);
   };
 
-  const updateShiftFilter = (value: "All" | "1st" | "2nd" | "Unassigned") => {
+  const updateShiftFilter = (value: string) => {
     setShiftFilter(value);
     updateUrlParam("shift", value === "All" ? null : value);
   };
@@ -135,15 +136,48 @@ export default function Occupants() {
     return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift && matchesChargeSource && matchesCustomer;
   });
 
-  const shiftCounts = occupants.reduce(
-    (acc, o) => {
-      if (o.shift === "1st") acc["1st"]++;
-      else if (o.shift === "2nd") acc["2nd"]++;
-      else acc.Unassigned++;
-      return acc;
-    },
-    { "1st": 0, "2nd": 0, Unassigned: 0 },
-  );
+  // Per-shift counts (Task #506). We tally every distinct title we see
+  // on an occupant so the filter dropdown can offer one row per real
+  // shift — the standard set is shown first (always, even when empty)
+  // followed by any custom titles that actually appear.
+  const shiftCounts = useMemo(() => {
+    const counts: Record<string, number> = { Unassigned: 0 };
+    for (const s of STANDARD_SHIFTS) counts[s] = 0;
+    for (const o of occupants) {
+      if (!o.shift) counts.Unassigned += 1;
+      else counts[o.shift] = (counts[o.shift] ?? 0) + 1;
+    }
+    return counts;
+  }, [occupants]);
+
+  // Filter options reuse the same source-of-truth as <ShiftPicker>:
+  // STANDARD_SHIFTS first, then per-customer customShifts (so seeded
+  // presets like Penda/TriEnda always appear even at zero count), then
+  // any orphaned shift titles still present on occupants. Scope honours
+  // the active customer scope so operators only see shifts relevant to
+  // the customers they're looking at.
+  const shiftFilterOptions = useMemo(() => {
+    const seen = new Set<string>(STANDARD_SHIFTS);
+    const extras: string[] = [];
+    const inScope = (c: { id: string }) =>
+      customerScope === ALL_CUSTOMERS || c.id === customerScope;
+    for (const c of customers) {
+      if (!inScope(c)) continue;
+      for (const s of c.customShifts ?? []) {
+        if (s && !seen.has(s)) {
+          seen.add(s);
+          extras.push(s);
+        }
+      }
+    }
+    for (const o of occupants) {
+      if (o.shift && !seen.has(o.shift)) {
+        seen.add(o.shift);
+        extras.push(o.shift);
+      }
+    }
+    return [...STANDARD_SHIFTS, ...extras];
+  }, [occupants, customers, customerScope]);
 
   const handleDownloadCsv = () => {
     const csv = toCsv(filteredOccupants, [
@@ -243,7 +277,7 @@ export default function Occupants() {
               </Select>
               <Select
                 value={shiftFilter}
-                onValueChange={(v) => updateShiftFilter(v as "All" | "1st" | "2nd" | "Unassigned")}
+                onValueChange={updateShiftFilter}
               >
                 <SelectTrigger
                   className="w-full sm:w-44"
@@ -253,8 +287,11 @@ export default function Occupants() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Shifts</SelectItem>
-                  <SelectItem value="1st">1st shift ({shiftCounts["1st"]})</SelectItem>
-                  <SelectItem value="2nd">2nd shift ({shiftCounts["2nd"]})</SelectItem>
+                  {shiftFilterOptions.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s} ({shiftCounts[s] ?? 0})
+                    </SelectItem>
+                  ))}
                   <SelectItem value="Unassigned">Unassigned ({shiftCounts.Unassigned})</SelectItem>
                 </SelectContent>
               </Select>

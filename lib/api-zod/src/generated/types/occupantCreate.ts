@@ -9,7 +9,6 @@ import type { OccupantCreateBillingFrequency } from "./occupantCreateBillingFreq
 import type { OccupantCreateChargeSource } from "./occupantCreateChargeSource";
 import type { OccupantCreateGender } from "./occupantCreateGender";
 import type { OccupantCreateLanguage } from "./occupantCreateLanguage";
-import type { OccupantCreateShift } from "./occupantCreateShift";
 import type { OccupantCreateStatus } from "./occupantCreateStatus";
 import type { OccupantCreateTitle } from "./occupantCreateTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
@@ -33,8 +32,14 @@ export interface OccupantCreate {
   chargeSource?: OccupantCreateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
-  /** @nullable */
-  shift?: OccupantCreateShift;
+  /**
+   * See `Occupant.shift` for accepted values. Standard
+"Days"/"Nights"/"Overnights" plus any per-customer custom
+shift title.
+
+   * @nullable
+   */
+  shift?: string | null;
   /** @nullable */
   language?: OccupantCreateLanguage;
   /** @nullable */

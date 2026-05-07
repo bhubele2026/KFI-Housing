@@ -15,4 +15,9 @@ export interface CustomerUpdate {
   notes?: string;
   state?: string;
   noHousingReason?: CustomerUpdateNoHousingReason;
+  /** See `Customer.customShifts`. Operators add titles by PATCHing
+the customer with the new title appended to the existing
+list.
+ */
+  customShifts?: string[];
 }

@@ -18,6 +18,13 @@ export const customersTable = pgTable("customers", {
   // enforced at the API + normalizer boundary; the column is plain text
   // so a future reason can be added without a destructive migration.
   noHousingReason: text("no_housing_reason"),
+  // Per-customer reusable shift titles (Task #506). Operators add free-form
+  // shift names through the bed-row "Add custom shift…" UI; the chosen
+  // titles are stored here so they appear as picker options the next time
+  // an occupant on one of this customer's properties needs a shift set.
+  // Empty array = no per-customer custom shifts; the standard
+  // "Days" / "Nights" / "Overnights" options are always available.
+  customShifts: text("custom_shifts").array().notNull().default([]),
 });
 
 export type CustomerRow = typeof customersTable.$inferSelect;

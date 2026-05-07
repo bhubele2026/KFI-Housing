@@ -71,8 +71,30 @@ export const CustomerSchema = z.object({
   // means no reason has been chosen yet. Optional so older payloads
   // and existing test fixtures continue to parse.
   noHousingReason: z.enum(NO_HOUSING_REASONS).nullable().optional(),
+  // Per-customer reusable shift titles (Task #506). Operators add free-form
+  // shift names via the bed-row "Add custom shift…" picker; the chosen
+  // titles persist here so they re-appear as picker options the next
+  // time an occupant on one of this customer's properties needs a
+  // shift set. Optional + defaulted so older payloads keep parsing.
+  customShifts: z.array(z.string()).optional().default([]),
 });
 export type Customer = z.infer<typeof CustomerSchema>;
+
+// Standard shift titles available on every property (Task #506).
+// Custom per-customer titles are stored on `Customer.customShifts`.
+export const STANDARD_SHIFTS = ["Days", "Nights", "Overnights"] as const;
+export type StandardShift = (typeof STANDARD_SHIFTS)[number];
+
+/**
+ * Coerce a legacy "1st"/"2nd" shift value to its renamed
+ * "Days"/"Nights" equivalent (Task #506). All other values pass
+ * through unchanged. Idempotent — safe to apply on every read.
+ */
+export function coerceLegacyShift(value: string | null | undefined): string | null {
+  if (value === "1st") return "Days";
+  if (value === "2nd") return "Nights";
+  return value ?? null;
+}
 
 export const PropertySchema = z.object({
   id: z.string(),
@@ -738,11 +760,25 @@ export const OccupantSchema = z.object({
   chargeSource: z.enum(["", "payroll", "manual_override"]).default(""),
   chargeSourceCustomer: z.string().default(""),
   chargeSourcePersonId: z.string().default(""),
-  // Crew shift this occupant works (e.g. "1st", "2nd"). Null for properties
-  // where shift assignments don't apply. Surfaced for hot-bedded units like
-  // 1850 W. Pine St. Baraboo (task #315).
-  shift: z.enum(["1st", "2nd"]).nullable().default(null),
-  // Workforce profile (Task #502).
+  // Crew shift this occupant works. Standard values are "Days",
+  // "Nights", "Overnights" (Task #506); per-customer custom titles
+  // (e.g. client-specific "Penda" / "TriEnda") are also accepted —
+  // the field is free-form so any title the operator adds via the
+  // "Add custom shift…" UI round-trips. Null for properties where
+  // shift assignments don't apply (most of the portfolio). Legacy
+  // "1st"/"2nd" values are coerced to "Days"/"Nights" via
+  // `coerceLegacyShift` at the read boundary.
+  shift: z
+    .preprocess(
+      (v) => (v === "1st" ? "Days" : v === "2nd" ? "Nights" : v),
+      z.string().nullable(),
+    )
+    .default(null),
+  // Workforce profile (Task #502). All four are nullable + defaulted
+  // so older API payloads (and existing test fixtures) continue to
+  // parse without each one having to be updated. The XLSX importer
+  // and PATCH route normalise unrecognised values to `null` rather
+  // than throwing, matching the rest of the boundary normaliser.
   language: z.enum(OCCUPANT_LANGUAGES).nullable().optional().default(null),
   gender: z.enum(OCCUPANT_GENDERS).nullable().optional().default(null),
   title: z.enum(OCCUPANT_TITLES).nullable().optional().default(null),

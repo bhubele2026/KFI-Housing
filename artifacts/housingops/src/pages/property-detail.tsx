@@ -48,7 +48,8 @@ import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
-import { computeShiftPairs, roomHasAnyShift } from "@/lib/shift-pairs";
+import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift-pairs";
+import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { useUpload } from "@workspace/object-storage-web";
@@ -2460,30 +2461,31 @@ export default function PropertyDetail() {
                                   data-testid={`shift-coverage-${room.id}`}
                                 >
                                   {pairs.map(p => {
+                                    // Coverage tone (Task #506):
+                                    // emerald = fully covered (canonical
+                                    // Days+Nights or any two distinct
+                                    // shifts), rose = duplicate /
+                                    // double-booked, amber = half-covered,
+                                    // muted = neither slot set.
                                     let tone =
                                       "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800";
-                                    let status = "1st + 2nd";
                                     let icon: React.ReactNode = (
                                       <CheckCircle2 className="h-3 w-3" />
                                     );
                                     if (p.hasDuplicate) {
                                       tone =
                                         "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800";
-                                      status = `Two ${p.shifts[0]} shifts — double-booked`;
                                       icon = <AlertTriangle className="h-3 w-3" />;
                                     } else if (p.isEmpty) {
                                       tone =
                                         "bg-muted text-muted-foreground border-border";
-                                      status = "No shifts set";
                                       icon = null;
-                                    } else if (!p.isFullyCovered) {
+                                    } else if (p.isHalfCovered) {
                                       tone =
                                         "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800";
-                                      const have = p.hasFirst ? "1st" : "2nd";
-                                      const need = p.hasFirst ? "2nd" : "1st";
-                                      status = `${have} only — needs ${need}`;
                                       icon = <AlertTriangle className="h-3 w-3" />;
                                     }
+                                    const status = pairStatusLabel(p);
                                     return (
                                       <Tooltip key={p.letter} delayDuration={100}>
                                         <TooltipTrigger asChild>
@@ -2763,23 +2765,13 @@ export default function PropertyDetail() {
                                             <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
                                             <TableCell data-testid={`cell-occupant-shift-${occ.id}`}>
-                                              <Select
-                                                value={occ.shift ?? "none"}
-                                                onValueChange={v =>
-                                                  updateOccupant(occ.id, {
-                                                    shift: v === "none" ? null : (v as "1st" | "2nd"),
-                                                  })
-                                                }
-                                              >
-                                                <SelectTrigger className="h-7 text-xs w-20" data-testid={`select-occupant-shift-${occ.id}`}>
-                                                  <SelectValue placeholder="—" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  <SelectItem value="none">—</SelectItem>
-                                                  <SelectItem value="1st">1st</SelectItem>
-                                                  <SelectItem value="2nd">2nd</SelectItem>
-                                                </SelectContent>
-                                              </Select>
+                                              <ShiftPicker
+                                                value={occ.shift ?? null}
+                                                onChange={v => updateOccupant(occ.id, { shift: v })}
+                                                customerId={property.customerId}
+                                                testId={`select-occupant-shift-${occ.id}`}
+                                                triggerClassName="h-7 text-xs w-28"
+                                              />
                                             </TableCell>
                                             <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
                                             <TableCell className="text-right">

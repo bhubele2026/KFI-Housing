@@ -9,7 +9,6 @@ import type { OccupantBillingFrequency } from "./occupantBillingFrequency";
 import type { OccupantChargeSource } from "./occupantChargeSource";
 import type { OccupantGender } from "./occupantGender";
 import type { OccupantLanguage } from "./occupantLanguage";
-import type { OccupantShift } from "./occupantShift";
 import type { OccupantStatus } from "./occupantStatus";
 import type { OccupantTitle } from "./occupantTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
@@ -34,15 +33,19 @@ export interface Occupant {
   chargeSourceCustomer: string;
   chargeSourcePersonId: string;
   /**
-   * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
-2pm–midnight. Null for properties where shift assignments
-don't apply (most of the portfolio). Surfaced for hot-bedded
-units like 1850 W. Pine St. Baraboo where two shifts share
-the same bedroom (task #315).
+   * Crew shift this occupant works. Standard values are
+"Days" (5am–2pm), "Nights" (2pm–midnight), and "Overnights"
+(midnight–8am). Per-customer custom titles (e.g.
+client-specific "Penda" / "TriEnda") are also accepted —
+the field is free-form so any title the operator adds via
+the "Add custom shift…" UI round-trips. Null for properties
+where shift assignments don't apply (most of the portfolio).
+Legacy "1st"/"2nd" values from before Task #506 are coerced
+to "Days"/"Nights" at the API boundary.
 
    * @nullable
    */
-  shift: OccupantShift;
+  shift: string | null;
   /**
    * Workforce language profile (Task #502). Null when not on
 file yet. Unrecognised legacy values are normalised to

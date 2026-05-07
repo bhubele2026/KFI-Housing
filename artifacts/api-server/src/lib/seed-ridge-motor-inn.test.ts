@@ -143,6 +143,7 @@ vi.mock("@workspace/db", () => ({
     __table: "customers",
     id: { __col: "id" },
     name: { __col: "name" },
+    customShifts: { __col: "customShifts" },
   },
   propertiesTable: {
     __table: "properties",

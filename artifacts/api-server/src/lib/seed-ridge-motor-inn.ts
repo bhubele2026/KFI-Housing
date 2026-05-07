@@ -10,7 +10,11 @@ import {
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
 import { normalizeCustomerName } from "./master-lease-parser";
-import { normalizePropertyRow, normalizeLeaseRow } from "./db-row-normalizers";
+import {
+  normalizePropertyRow,
+  normalizeLeaseRow,
+  normalizeCustomerRow,
+} from "./db-row-normalizers";
 
 export const RIDGE_PROPERTY_ID = "prop-ridge-motor-inn-portage";
 export const ridgeLeaseId = (slug: "penda" | "trienda"): string =>
@@ -196,6 +200,36 @@ export async function seedRidgeMotorInnIfMissing(
         "Ridge Motor Inn seed: skipping Trienda lease — customer not found, run master import first",
       );
     }
+
+    // Seed the client-specific shift titles on each matched customer
+    // (Task #506) so operators on Ridge Motor Inn (and any other Penda
+    // or Trienda property) can pick "Penda" / "TriEnda" from the shift
+    // dropdown out of the box. Idempotent — only writes when the title
+    // is missing from the existing customShifts array.
+    const ensureCustomShift = async (
+      customer: CustomerLookup | null,
+      title: string,
+    ): Promise<void> => {
+      if (!customer) return;
+      const [existing] = await tx
+        .select({ customShifts: customersTable.customShifts })
+        .from(customersTable)
+        .where(eq(customersTable.id, customer.id))
+        .limit(1);
+      const current = existing?.customShifts ?? [];
+      if (current.includes(title)) return;
+      const merged = [...current, title];
+      await tx
+        .update(customersTable)
+        .set(normalizeCustomerRow({ customShifts: merged }))
+        .where(eq(customersTable.id, customer.id));
+      log.info(
+        { customerId: customer.id, addedShift: title, mergedCustomShifts: merged },
+        "Ridge Motor Inn seed: seeded client-specific shift on customer",
+      );
+    };
+    await ensureCustomShift(penda, "Penda");
+    await ensureCustomShift(trienda, "TriEnda");
 
     const customersMatched = (penda ? 1 : 0) + (trienda ? 1 : 0);
     if (!penda && !trienda) {

@@ -161,7 +161,7 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
   // row whose enum values are off-list (e.g. `billingFrequency:
   // "Annually"` or `shift: "graveyard"`) doesn't 500 the entire list
   // endpoint.
-  it("coerces a legacy off-list billingFrequency / shift in the store on GET (Task #416)", async () => {
+  it("coerces a legacy off-list billingFrequency in the store on GET, and remaps legacy '1st' shift → 'Days' (Tasks #416, #506)", async () => {
     getStoreRows.push({
       id: "o-legacy",
       name: "Legacy Lou",
@@ -179,7 +179,9 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
       chargeSource: "weird-source",
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
-      shift: "graveyard",
+      // Pre-#506 row: "1st" must round-trip out as "Days" so the
+      // operator never sees the legacy label again.
+      shift: "1st",
       createdAt: new Date("2026-01-01T00:00:00Z"),
     });
     const res = await fetch(`${baseUrl}/api/occupants`);
@@ -191,7 +193,7 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
       status: "Active",
       billingFrequency: "Monthly",
       chargeSource: "",
-      shift: null,
+      shift: "Days",
     });
   });
 

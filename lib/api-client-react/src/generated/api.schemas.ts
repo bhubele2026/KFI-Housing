@@ -113,6 +113,13 @@ meaningful when the customer has no associated properties;
 `null` (or absent) means no reason has been chosen yet.
  */
   noHousingReason?: CustomerNoHousingReason;
+  /** Per-customer reusable shift titles (Task #506). Free-form
+strings the operator added through the bed-row "Add custom
+shift…" UI. The standard "Days" / "Nights" / "Overnights"
+options are always available regardless of this list.
+Optional + defaulted to `[]` so older payloads keep parsing.
+ */
+  customShifts?: string[];
 }
 
 export type CustomerUpdateNoHousingReason =
@@ -133,6 +140,11 @@ export interface CustomerUpdate {
   notes?: string;
   state?: string;
   noHousingReason?: CustomerUpdateNoHousingReason;
+  /** See `Customer.customShifts`. Operators add titles by PATCHing
+the customer with the new title appended to the existing
+list.
+ */
+  customShifts?: string[];
 }
 
 export type PropertyStatus =
@@ -904,24 +916,6 @@ export const OccupantChargeSource = {
 } as const;
 
 /**
- * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
-2pm–midnight. Null for properties where shift assignments
-don't apply (most of the portfolio). Surfaced for hot-bedded
-units like 1850 W. Pine St. Baraboo where two shifts share
-the same bedroom (task #315).
-
- * @nullable
- */
-export type OccupantShift =
-  | (typeof OccupantShift)[keyof typeof OccupantShift]
-  | null;
-
-export const OccupantShift = {
-  "1st": "1st",
-  "2nd": "2nd",
-} as const;
-
-/**
  * Workforce language profile (Task #502). Null when not on
 file yet. Unrecognised legacy values are normalised to
 null at the boundary so the list endpoint never 500s.
@@ -993,15 +987,19 @@ export interface Occupant {
   chargeSourceCustomer: string;
   chargeSourcePersonId: string;
   /**
-   * Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
-2pm–midnight. Null for properties where shift assignments
-don't apply (most of the portfolio). Surfaced for hot-bedded
-units like 1850 W. Pine St. Baraboo where two shifts share
-the same bedroom (task #315).
+   * Crew shift this occupant works. Standard values are
+"Days" (5am–2pm), "Nights" (2pm–midnight), and "Overnights"
+(midnight–8am). Per-customer custom titles (e.g.
+client-specific "Penda" / "TriEnda") are also accepted —
+the field is free-form so any title the operator adds via
+the "Add custom shift…" UI round-trips. Null for properties
+where shift assignments don't apply (most of the portfolio).
+Legacy "1st"/"2nd" values from before Task #506 are coerced
+to "Days"/"Nights" at the API boundary.
 
    * @nullable
    */
-  shift: OccupantShift;
+  shift: string | null;
   /**
    * Workforce language profile (Task #502). Null when not on
 file yet. Unrecognised legacy values are normalised to
@@ -1088,18 +1086,6 @@ export const OccupantCreateChargeSource = {
 /**
  * @nullable
  */
-export type OccupantCreateShift =
-  | (typeof OccupantCreateShift)[keyof typeof OccupantCreateShift]
-  | null;
-
-export const OccupantCreateShift = {
-  "1st": "1st",
-  "2nd": "2nd",
-} as const;
-
-/**
- * @nullable
- */
 export type OccupantCreateLanguage =
   | (typeof OccupantCreateLanguage)[keyof typeof OccupantCreateLanguage]
   | null;
@@ -1159,8 +1145,14 @@ export interface OccupantCreate {
   chargeSource?: OccupantCreateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
-  /** @nullable */
-  shift?: OccupantCreateShift;
+  /**
+   * See `Occupant.shift` for accepted values. Standard
+"Days"/"Nights"/"Overnights" plus any per-customer custom
+shift title.
+
+   * @nullable
+   */
+  shift?: string | null;
   /** @nullable */
   language?: OccupantCreateLanguage;
   /** @nullable */
@@ -1198,18 +1190,6 @@ export const OccupantUpdateChargeSource = {
   "": "",
   payroll: "payroll",
   manual_override: "manual_override",
-} as const;
-
-/**
- * @nullable
- */
-export type OccupantUpdateShift =
-  | (typeof OccupantUpdateShift)[keyof typeof OccupantUpdateShift]
-  | null;
-
-export const OccupantUpdateShift = {
-  "1st": "1st",
-  "2nd": "2nd",
 } as const;
 
 /**
@@ -1273,8 +1253,14 @@ export interface OccupantUpdate {
   chargeSource?: OccupantUpdateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
-  /** @nullable */
-  shift?: OccupantUpdateShift;
+  /**
+   * See `Occupant.shift` for accepted values. Standard
+"Days"/"Nights"/"Overnights" plus any per-customer custom
+shift title.
+
+   * @nullable
+   */
+  shift?: string | null;
   /** @nullable */
   language?: OccupantUpdateLanguage;
   /** @nullable */

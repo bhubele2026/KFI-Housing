@@ -33,6 +33,7 @@ import {
   type OccupantTitle,
 } from "@/data/mockData";
 import { shortPropertyName } from "@/lib/property-name";
+import { ShiftPicker } from "@/components/shift-picker";
 
 export interface AssignOccupantInitialValues {
   name?: string;
@@ -98,6 +99,7 @@ const EMPTY_FORM = {
   // nullability so an untouched form never collapses an unknown
   // driver-license status to a hard `false`.
   kfisAuthorizedToDrive: null as boolean | null,
+  shift: null as string | null,
 };
 
 function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
@@ -118,6 +120,7 @@ function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
     gender: (initial.gender ?? UNSET) as OccupantGender | typeof UNSET,
     title: (initial.title ?? UNSET) as OccupantTitle | typeof UNSET,
     kfisAuthorizedToDrive: initial.kfisAuthorizedToDrive ?? null,
+    shift: null as string | null,
   };
 }
 
@@ -222,7 +225,7 @@ export function AssignOccupantDialog({
       chargeSource: "",
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
-      shift: null,
+      shift: form.shift,
       language: form.language === UNSET ? null : form.language,
       gender: form.gender === UNSET ? null : form.gender,
       title: form.title === UNSET ? null : form.title,
@@ -386,6 +389,20 @@ export function AssignOccupantDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label>Shift</Label>
+              <ShiftPicker
+                value={form.shift}
+                onChange={(v) => setForm((p) => ({ ...p, shift: v }))}
+                customerId={
+                  resolvedBed
+                    ? properties.find((p) => p.id === resolvedBed.propertyId)?.customerId ?? null
+                    : null
+                }
+                testId={`select-assign-shift${tidSuffix}`}
+                triggerClassName="h-9 text-sm w-full"
+              />
             </div>
             <div>
               <Label>{t("dialogs.assignOccupant.email")}</Label>

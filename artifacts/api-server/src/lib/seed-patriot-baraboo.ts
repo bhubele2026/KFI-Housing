@@ -130,7 +130,7 @@ function buildPropertyRow(
       "Properties of any tenant changes. End-client: Milwaukee Valve. " +
       "Occupant roster sourced from the Housing Master File 2026 " +
       "(MV.Baraboo,WI sheet); each unit hot-beds 4 adults across two " +
-      "bedrooms (1st shift 5am–2pm, 2nd shift 2pm–midnight).",
+      "bedrooms (Days shift 5am–2pm, Nights shift 2pm–midnight).",
     furnishings: [],
   };
 }
@@ -211,35 +211,35 @@ interface PatriotBarabooOccupantSpec {
   slot: 1 | 2 | 3 | 4;
   name: string;
   moveInDate: string;
-  shift: "1st" | "2nd";
+  shift: "Days" | "Nights";
 }
 
 const PATRIOT_BARABOO_ROSTER: readonly PatriotBarabooOccupantSpec[] = [
   // Unit 509
-  { unit: "509", slot: 1, name: "Eladio Ramos Jr",         moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "509", slot: 2, name: "Lawrence Cortez",         moveInDate: "2025-10-03", shift: "2nd" },
-  { unit: "509", slot: 3, name: "Pedro Garcia",            moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "509", slot: 4, name: "Jonathan Ariola",         moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "509", slot: 1, name: "Eladio Ramos Jr",         moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "509", slot: 2, name: "Lawrence Cortez",         moveInDate: "2025-10-03", shift: "Nights" },
+  { unit: "509", slot: 3, name: "Pedro Garcia",            moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "509", slot: 4, name: "Jonathan Ariola",         moveInDate: "2025-10-03", shift: "Nights" },
   // Unit 510
-  { unit: "510", slot: 1, name: "Claudio Alvarado",        moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "510", slot: 2, name: "Juan Lozada Lugo",        moveInDate: "2025-10-03", shift: "2nd" },
-  { unit: "510", slot: 3, name: "Carlos Galvez Garcia",    moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "510", slot: 4, name: "Jacob Zepeda",            moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "510", slot: 1, name: "Claudio Alvarado",        moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "510", slot: 2, name: "Juan Lozada Lugo",        moveInDate: "2025-10-03", shift: "Nights" },
+  { unit: "510", slot: 3, name: "Carlos Galvez Garcia",    moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "510", slot: 4, name: "Jacob Zepeda",            moveInDate: "2025-10-03", shift: "Nights" },
   // Unit 512
-  { unit: "512", slot: 1, name: "Alexander A Marrero",     moveInDate: "2025-09-30", shift: "1st" },
-  { unit: "512", slot: 2, name: "Alexis Perez",            moveInDate: "2025-09-30", shift: "2nd" },
-  { unit: "512", slot: 3, name: "Xavior R Robinson",       moveInDate: "2025-09-30", shift: "1st" },
-  { unit: "512", slot: 4, name: "Dorian Kyles",            moveInDate: "2025-09-30", shift: "2nd" },
+  { unit: "512", slot: 1, name: "Alexander A Marrero",     moveInDate: "2025-09-30", shift: "Days" },
+  { unit: "512", slot: 2, name: "Alexis Perez",            moveInDate: "2025-09-30", shift: "Nights" },
+  { unit: "512", slot: 3, name: "Xavior R Robinson",       moveInDate: "2025-09-30", shift: "Days" },
+  { unit: "512", slot: 4, name: "Dorian Kyles",            moveInDate: "2025-09-30", shift: "Nights" },
   // Unit 811
-  { unit: "811", slot: 1, name: "Moices Bernal",           moveInDate: "2025-09-30", shift: "1st" },
-  { unit: "811", slot: 2, name: "Jacob C Ferguson",        moveInDate: "2025-09-30", shift: "2nd" },
-  { unit: "811", slot: 3, name: "Gabriel Romero",          moveInDate: "2025-09-30", shift: "1st" },
-  { unit: "811", slot: 4, name: "Ricco Antonio Lorenzana", moveInDate: "2025-09-30", shift: "2nd" },
+  { unit: "811", slot: 1, name: "Moices Bernal",           moveInDate: "2025-09-30", shift: "Days" },
+  { unit: "811", slot: 2, name: "Jacob C Ferguson",        moveInDate: "2025-09-30", shift: "Nights" },
+  { unit: "811", slot: 3, name: "Gabriel Romero",          moveInDate: "2025-09-30", shift: "Days" },
+  { unit: "811", slot: 4, name: "Ricco Antonio Lorenzana", moveInDate: "2025-09-30", shift: "Nights" },
   // Unit 812
-  { unit: "812", slot: 1, name: "Abein Flores",            moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "812", slot: 2, name: "Antonio Hernandez",       moveInDate: "2025-10-03", shift: "2nd" },
-  { unit: "812", slot: 3, name: "Jose Castro",             moveInDate: "2025-10-03", shift: "1st" },
-  { unit: "812", slot: 4, name: "Ismael Meza",             moveInDate: "2025-10-03", shift: "2nd" },
+  { unit: "812", slot: 1, name: "Abein Flores",            moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "812", slot: 2, name: "Antonio Hernandez",       moveInDate: "2025-10-03", shift: "Nights" },
+  { unit: "812", slot: 3, name: "Jose Castro",             moveInDate: "2025-10-03", shift: "Days" },
+  { unit: "812", slot: 4, name: "Ismael Meza",             moveInDate: "2025-10-03", shift: "Nights" },
 ];
 
 export const PATRIOT_BARABOO_END_CLIENT = "Milwaukee Valve";

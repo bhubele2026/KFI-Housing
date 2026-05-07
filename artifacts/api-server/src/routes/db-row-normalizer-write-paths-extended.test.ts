@@ -220,7 +220,7 @@ beforeEach(() => {
 });
 
 describe("Task #375 — write-path normalizer for remaining resources", () => {
-  it("POST /occupants coerces off-list status, billingFrequency, chargeSource, shift, and datetime dates", async () => {
+  it("POST /occupants coerces off-list status, billingFrequency, chargeSource, legacy shift, and datetime dates", async () => {
     const res = await fetch(`${baseUrl}/api/occupants`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -230,7 +230,8 @@ describe("Task #375 — write-path normalizer for remaining resources", () => {
         status: "Pending",
         billingFrequency: "Quarterly",
         chargeSource: "magic",
-        shift: "3rd",
+        // Legacy "1st" should coerce to "Days" (Task #506).
+        shift: "1st",
         moveInDate: "2026-01-15 00:00:00",
         moveOutDate: "2026-06-30T23:59:59.000Z",
       }),
@@ -240,7 +241,7 @@ describe("Task #375 — write-path normalizer for remaining resources", () => {
     expect(persisted.status).toBe("Active");
     expect(persisted.billingFrequency).toBe("Monthly");
     expect(persisted.chargeSource).toBe("");
-    expect(persisted.shift).toBeNull();
+    expect(persisted.shift).toBe("Days");
     expect(persisted.moveInDate).toBe("2026-01-15");
     expect(persisted.moveOutDate).toBe("2026-06-30");
   });

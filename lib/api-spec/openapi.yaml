@@ -1284,6 +1284,15 @@ components:
             zero housing managed through HousingOps (Task #498). Only
             meaningful when the customer has no associated properties;
             `null` (or absent) means no reason has been chosen yet.
+        customShifts:
+          type: array
+          items: { type: string }
+          description: |
+            Per-customer reusable shift titles (Task #506). Free-form
+            strings the operator added through the bed-row "Add custom
+            shift…" UI. The standard "Days" / "Nights" / "Overnights"
+            options are always available regardless of this list.
+            Optional + defaulted to `[]` so older payloads keep parsing.
     CustomerUpdate:
       type: object
       properties:
@@ -1297,6 +1306,13 @@ components:
           type: string
           nullable: true
           enum: [provided_by_client, kfis_property, all_associates_local, null]
+        customShifts:
+          type: array
+          items: { type: string }
+          description: |
+            See `Customer.customShifts`. Operators add titles by PATCHing
+            the customer with the new title appended to the existing
+            list.
 
     Property:
       type: object
@@ -2005,13 +2021,16 @@ components:
         chargeSourcePersonId: { type: string }
         shift:
           type: ["string", "null"]
-          enum: ["1st", "2nd", null]
           description: |
-            Crew shift this occupant works. "1st" = 5am–2pm, "2nd" =
-            2pm–midnight. Null for properties where shift assignments
-            don't apply (most of the portfolio). Surfaced for hot-bedded
-            units like 1850 W. Pine St. Baraboo where two shifts share
-            the same bedroom (task #315).
+            Crew shift this occupant works. Standard values are
+            "Days" (5am–2pm), "Nights" (2pm–midnight), and "Overnights"
+            (midnight–8am). Per-customer custom titles (e.g.
+            client-specific "Penda" / "TriEnda") are also accepted —
+            the field is free-form so any title the operator adds via
+            the "Add custom shift…" UI round-trips. Null for properties
+            where shift assignments don't apply (most of the portfolio).
+            Legacy "1st"/"2nd" values from before Task #506 are coerced
+            to "Days"/"Nights" at the API boundary.
         language:
           type: ["string", "null"]
           enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
@@ -2108,7 +2127,10 @@ components:
         chargeSourcePersonId: { type: string }
         shift:
           type: ["string", "null"]
-          enum: ["1st", "2nd", null]
+          description: |
+            See `Occupant.shift` for accepted values. Standard
+            "Days"/"Nights"/"Overnights" plus any per-customer custom
+            shift title.
         language:
           type: ["string", "null"]
           enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
@@ -2150,7 +2172,10 @@ components:
         chargeSourcePersonId: { type: string }
         shift:
           type: ["string", "null"]
-          enum: ["1st", "2nd", null]
+          description: |
+            See `Occupant.shift` for accepted values. Standard
+            "Days"/"Nights"/"Overnights" plus any per-customer custom
+            shift title.
         language:
           type: ["string", "null"]
           enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]

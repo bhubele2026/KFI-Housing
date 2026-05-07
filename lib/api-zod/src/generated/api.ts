@@ -140,6 +140,12 @@ export const ImportDataBody = zod.object({
         .describe(
           "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
         ),
+      customShifts: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
+        ),
     }),
   ),
   properties: zod.array(
@@ -436,8 +442,11 @@ export const ImportDataBody = zod.object({
       chargeSourceCustomer: zod.string().optional(),
       chargeSourcePersonId: zod.string().optional(),
       shift: zod
-        .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
-        .nullish(),
+        .string()
+        .nullish()
+        .describe(
+          'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
+        ),
       language: zod
         .union([
           zod.literal("Bilingual"),
@@ -612,6 +621,12 @@ export const ListCustomersResponseItem = zod.object({
     .describe(
       "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
     ),
+  customShifts: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
+    ),
 });
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
 
@@ -642,6 +657,12 @@ export const CreateCustomerBody = zod.object({
     .describe(
       "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
     ),
+  customShifts: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
+    ),
 });
 
 /**
@@ -666,6 +687,12 @@ export const UpdateCustomerBody = zod.object({
       zod.literal(null),
     ])
     .nullish(),
+  customShifts: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "See `Customer.customShifts`. Operators add titles by PATCHing\nthe customer with the new title appended to the existing\nlist.\n",
+    ),
 });
 
 export const UpdateCustomerResponse = zod.object({
@@ -691,6 +718,12 @@ export const UpdateCustomerResponse = zod.object({
     .nullish()
     .describe(
       "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
+    ),
+  customShifts: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
     ),
 });
 
@@ -2641,10 +2674,10 @@ export const ListOccupantsResponseItem = zod.object({
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
   shift: zod
-    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .string()
     .nullable()
     .describe(
-      'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+      'Crew shift this occupant works. Standard values are\n\"Days\" (5am–2pm), \"Nights\" (2pm–midnight), and \"Overnights\"\n(midnight–8am). Per-customer custom titles (e.g.\nclient-specific \"Penda\" \/ \"TriEnda\") are also accepted —\nthe field is free-form so any title the operator adds via\nthe \"Add custom shift…\" UI round-trips. Null for properties\nwhere shift assignments don\'t apply (most of the portfolio).\nLegacy \"1st\"\/\"2nd\" values from before Task #506 are coerced\nto \"Days\"\/\"Nights\" at the API boundary.\n',
     ),
   language: zod
     .union([
@@ -2741,8 +2774,11 @@ export const CreateOccupantBody = zod.object({
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
   shift: zod
-    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
-    .nullish(),
+    .string()
+    .nullish()
+    .describe(
+      'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
+    ),
   language: zod
     .union([
       zod.literal("Bilingual"),
@@ -2809,8 +2845,11 @@ export const UpdateOccupantBody = zod.object({
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
   shift: zod
-    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
-    .nullish(),
+    .string()
+    .nullish()
+    .describe(
+      'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
+    ),
   language: zod
     .union([
       zod.literal("Bilingual"),
@@ -2869,10 +2908,10 @@ export const UpdateOccupantResponse = zod.object({
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
   shift: zod
-    .union([zod.literal("1st"), zod.literal("2nd"), zod.literal(null)])
+    .string()
     .nullable()
     .describe(
-      'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+      'Crew shift this occupant works. Standard values are\n\"Days\" (5am–2pm), \"Nights\" (2pm–midnight), and \"Overnights\"\n(midnight–8am). Per-customer custom titles (e.g.\nclient-specific \"Penda\" \/ \"TriEnda\") are also accepted —\nthe field is free-form so any title the operator adds via\nthe \"Add custom shift…\" UI round-trips. Null for properties\nwhere shift assignments don\'t apply (most of the portfolio).\nLegacy \"1st\"\/\"2nd\" values from before Task #506 are coerced\nto \"Days\"\/\"Nights\" at the API boundary.\n',
     ),
   language: zod
     .union([

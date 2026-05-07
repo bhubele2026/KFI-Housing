@@ -392,11 +392,11 @@ describe("seedPatriotBarabooIfMissing", () => {
     const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
     expect(result.occupantsInserted).toBe(0);
 
-    const expectedShiftBySlot: Record<number, "1st" | "2nd"> = {
-      1: "1st",
-      2: "2nd",
-      3: "1st",
-      4: "2nd",
+    const expectedShiftBySlot: Record<number, "Days" | "Nights"> = {
+      1: "Days",
+      2: "Nights",
+      3: "Days",
+      4: "Nights",
     };
     for (const unit of UNITS) {
       for (let slot = 1; slot <= 4; slot++) {
@@ -412,10 +412,10 @@ describe("seedPatriotBarabooIfMissing", () => {
     const occ = stores.occupants.get(occId)!;
     // Operator manually moved this person to the 2nd shift even though
     // the roster says 1st. The seed must not clobber that edit.
-    stores.occupants.set(occId, { ...occ, shift: "2nd" });
+    stores.occupants.set(occId, { ...occ, shift: "Nights" });
 
     await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
-    expect(stores.occupants.get(occId)!["shift"]).toBe("2nd");
+    expect(stores.occupants.get(occId)!["shift"]).toBe("Nights");
   });
 
   it("reuses a pre-existing KFI Staffing customer matched by name LIKE", async () => {
@@ -477,11 +477,11 @@ describe("seedPatriotBarabooIfMissing", () => {
      // share bedroom B, so the pairs alternate shifts so each bedroom is
      // occupied around the clock without two tenants sleeping at the same
      // time (task #315).
-    const SHIFT_BY_SLOT: Record<number, "1st" | "2nd"> = {
-      1: "1st",
-      2: "2nd",
-      3: "1st",
-      4: "2nd",
+    const SHIFT_BY_SLOT: Record<number, "Days" | "Nights"> = {
+      1: "Days",
+      2: "Nights",
+      3: "Days",
+      4: "Nights",
     };
     const expected: Record<string, { names: string[]; moveIn: string }> = {
       "509": {

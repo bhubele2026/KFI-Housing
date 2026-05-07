@@ -248,7 +248,7 @@ describe("Task #417 — bulk-import normalizers", () => {
           status: "Pending", // off-list -> "Active"
           billingFrequency: "Quarterly", // off-list -> "Monthly"
           chargeSource: "magic", // off-list -> ""
-          shift: "3rd", // off-list -> null
+          shift: "1st", // legacy -> "Days" (Task #506)
           moveInDate: "2026-01-15 00:00:00", // datetime -> "2026-01-15"
           moveOutDate: "2026-06-30T23:59:59.000Z", // ISO -> "2026-06-30"
         },
@@ -278,7 +278,7 @@ describe("Task #417 — bulk-import normalizers", () => {
     expect(occ.status).toBe("Active");
     expect(occ.billingFrequency).toBe("Monthly");
     expect(occ.chargeSource).toBe("");
-    expect(occ.shift).toBeNull();
+    expect(occ.shift).toBe("Days");
     expect(occ.moveInDate).toBe("2026-01-15");
     expect(occ.moveOutDate).toBe("2026-06-30");
 

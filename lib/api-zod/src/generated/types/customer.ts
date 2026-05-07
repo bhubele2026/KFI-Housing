@@ -25,4 +25,11 @@ meaningful when the customer has no associated properties;
 `null` (or absent) means no reason has been chosen yet.
  */
   noHousingReason?: CustomerNoHousingReason;
+  /** Per-customer reusable shift titles (Task #506). Free-form
+strings the operator added through the bed-row "Add custom
+shift…" UI. The standard "Days" / "Nights" / "Overnights"
+options are always available regardless of this list.
+Optional + defaulted to `[]` so older payloads keep parsing.
+ */
+  customShifts?: string[];
 }

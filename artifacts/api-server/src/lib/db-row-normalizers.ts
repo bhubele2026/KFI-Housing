@@ -360,7 +360,33 @@ export function normalizeCustomerRow<
     recordFixup(fixups, "noHousingReason", row.noHousingReason, after);
     out.noHousingReason = after;
   }
+  if ("customShifts" in row) {
+    const after = normalizeCustomShifts(row.customShifts);
+    recordFixup(fixups, "customShifts", row.customShifts, after);
+    out.customShifts = after;
+  }
   return out as T;
+}
+
+/**
+ * Normalize a per-customer custom shifts array (Task #506). Drops
+ * non-string entries, trims whitespace, removes empty strings, and
+ * de-duplicates while preserving the original order. Returns `[]` for
+ * any non-array input so the column always carries a clean array.
+ */
+function normalizeCustomShifts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (trimmed === "") continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +404,23 @@ const OCCUPANT_CHARGE_SOURCES = new Set<string>([
   "payroll",
   "manual_override",
 ]);
-const OCCUPANT_SHIFTS = new Set<string>(["1st", "2nd"]);
+// Standard shift titles. Per-customer custom titles are *also* accepted
+// (Task #506) — the column is free-form text so any non-empty trimmed
+// string round-trips, and the standard set is just there for code that
+// wants to know whether a value is one of the canonical options.
+export const STANDARD_OCCUPANT_SHIFTS = new Set<string>([
+  "Days",
+  "Nights",
+  "Overnights",
+]);
+// Legacy values from before Task #506 — coerced to the renamed
+// canonical "Days"/"Nights" at the read/write boundary so older DB
+// rows and import payloads keep round-tripping without a destructive
+// migration.
+const LEGACY_SHIFT_REMAP: Record<string, string> = {
+  "1st": "Days",
+  "2nd": "Nights",
+};
 const OCCUPANT_LANGUAGES = new Set<string>([
   "Bilingual",
   "English only",
@@ -456,11 +498,21 @@ function normalizeChargeSource(
   return "";
 }
 
-function normalizeOccupantShift(value: unknown): "1st" | "2nd" | null {
-  if (typeof value === "string" && OCCUPANT_SHIFTS.has(value)) {
-    return value as "1st" | "2nd";
+function normalizeOccupantShift(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  // One-shot legacy coercion: "1st" → "Days", "2nd" → "Nights"
+  // (Task #506). Idempotent because the remap target is itself a
+  // canonical value.
+  if (Object.prototype.hasOwnProperty.call(LEGACY_SHIFT_REMAP, trimmed)) {
+    return LEGACY_SHIFT_REMAP[trimmed]!;
   }
-  return null;
+  // Free-form: any non-empty title is accepted so per-customer custom
+  // shifts round-trip without needing the normalizer to know about
+  // them. The standard set (`STANDARD_OCCUPANT_SHIFTS`) is exposed for
+  // callers that want to distinguish canonical vs. custom titles.
+  return trimmed;
 }
 
 export function normalizeOccupantRow<

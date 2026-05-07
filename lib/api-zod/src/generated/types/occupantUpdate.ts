@@ -9,7 +9,6 @@ import type { OccupantUpdateBillingFrequency } from "./occupantUpdateBillingFreq
 import type { OccupantUpdateChargeSource } from "./occupantUpdateChargeSource";
 import type { OccupantUpdateGender } from "./occupantUpdateGender";
 import type { OccupantUpdateLanguage } from "./occupantUpdateLanguage";
-import type { OccupantUpdateShift } from "./occupantUpdateShift";
 import type { OccupantUpdateStatus } from "./occupantUpdateStatus";
 import type { OccupantUpdateTitle } from "./occupantUpdateTitle";
 import type { OptionalLeaseDate } from "./optionalLeaseDate";
@@ -32,8 +31,14 @@ export interface OccupantUpdate {
   chargeSource?: OccupantUpdateChargeSource;
   chargeSourceCustomer?: string;
   chargeSourcePersonId?: string;
-  /** @nullable */
-  shift?: OccupantUpdateShift;
+  /**
+   * See `Occupant.shift` for accepted values. Standard
+"Days"/"Nights"/"Overnights" plus any per-customer custom
+shift title.
+
+   * @nullable
+   */
+  shift?: string | null;
   /** @nullable */
   language?: OccupantUpdateLanguage;
   /** @nullable */

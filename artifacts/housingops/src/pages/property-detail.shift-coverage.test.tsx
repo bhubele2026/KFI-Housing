@@ -263,7 +263,7 @@ function roomId(unit: string) {
 
 function makeBarabooUnit(
   unit: string,
-  roster: Array<{ slot: 1 | 2 | 3 | 4; name: string; shift: "1st" | "2nd" | null }>,
+  roster: Array<{ slot: 1 | 2 | 3 | 4; name: string; shift: "Days" | "Nights" | null }>,
 ) {
   const room = { id: roomId(unit), propertyId: PROP_ID, name: `Unit ${unit}`, sqft: 0, bathrooms: 0, monthlyRent: 1675 };
   const beds = roster.map((r) => ({
@@ -295,34 +295,34 @@ function makeBarabooUnit(
 
 function makeSeededBarabooState(): State {
   const u509 = makeBarabooUnit("509", [
-    { slot: 1, name: "Eladio Ramos Jr", shift: "1st" },
-    { slot: 2, name: "Lawrence Cortez", shift: "2nd" },
-    { slot: 3, name: "Pedro Garcia", shift: "1st" },
-    { slot: 4, name: "Jonathan Ariola", shift: "2nd" },
+    { slot: 1, name: "Eladio Ramos Jr", shift: "Days" },
+    { slot: 2, name: "Lawrence Cortez", shift: "Nights" },
+    { slot: 3, name: "Pedro Garcia", shift: "Days" },
+    { slot: 4, name: "Jonathan Ariola", shift: "Nights" },
   ]);
   const u510 = makeBarabooUnit("510", [
-    { slot: 1, name: "Claudio Alvarado", shift: "1st" },
-    { slot: 2, name: "Juan Lozada Lugo", shift: "2nd" },
-    { slot: 3, name: "Carlos Galvez Garcia", shift: "1st" },
-    { slot: 4, name: "Jacob Zepeda", shift: "2nd" },
+    { slot: 1, name: "Claudio Alvarado", shift: "Days" },
+    { slot: 2, name: "Juan Lozada Lugo", shift: "Nights" },
+    { slot: 3, name: "Carlos Galvez Garcia", shift: "Days" },
+    { slot: 4, name: "Jacob Zepeda", shift: "Nights" },
   ]);
   const u512 = makeBarabooUnit("512", [
-    { slot: 1, name: "Alexander A Marrero", shift: "1st" },
-    { slot: 2, name: "Alexis Perez", shift: "2nd" },
-    { slot: 3, name: "Xavior R Robinson", shift: "1st" },
-    { slot: 4, name: "Dorian Kyles", shift: "2nd" },
+    { slot: 1, name: "Alexander A Marrero", shift: "Days" },
+    { slot: 2, name: "Alexis Perez", shift: "Nights" },
+    { slot: 3, name: "Xavior R Robinson", shift: "Days" },
+    { slot: 4, name: "Dorian Kyles", shift: "Nights" },
   ]);
   const u811 = makeBarabooUnit("811", [
-    { slot: 1, name: "Moices Bernal", shift: "1st" },
-    { slot: 2, name: "Jacob C Ferguson", shift: "2nd" },
-    { slot: 3, name: "Gabriel Romero", shift: "1st" },
-    { slot: 4, name: "Ricco Antonio Lorenzana", shift: "2nd" },
+    { slot: 1, name: "Moices Bernal", shift: "Days" },
+    { slot: 2, name: "Jacob C Ferguson", shift: "Nights" },
+    { slot: 3, name: "Gabriel Romero", shift: "Days" },
+    { slot: 4, name: "Ricco Antonio Lorenzana", shift: "Nights" },
   ]);
   const u812 = makeBarabooUnit("812", [
-    { slot: 1, name: "Abein Flores", shift: "1st" },
-    { slot: 2, name: "Antonio Hernandez", shift: "2nd" },
-    { slot: 3, name: "Jose Castro", shift: "1st" },
-    { slot: 4, name: "Ismael Meza", shift: "2nd" },
+    { slot: 1, name: "Abein Flores", shift: "Days" },
+    { slot: 2, name: "Antonio Hernandez", shift: "Nights" },
+    { slot: 3, name: "Jose Castro", shift: "Days" },
+    { slot: 4, name: "Ismael Meza", shift: "Nights" },
   ]);
   const units = [u509, u510, u512, u811, u812];
   return {
@@ -495,7 +495,7 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     });
   }
 
-  it("renders fully-covered badges (emerald) for all five units when each bedroom pair has 1st + 2nd shifts", async () => {
+  it("renders fully-covered badges (emerald) for all five units when each bedroom pair has Days + Nights shifts", async () => {
     await renderBedsTab();
 
     for (const unit of ["509", "510", "512", "811", "812"]) {
@@ -509,11 +509,11 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
       expect(badgeB, `Bedroom B badge missing for Unit ${unit}`).not.toBeNull();
 
       expect(badgeA!.textContent).toContain("Bedroom A");
-      expect(badgeA!.textContent).toContain("1st + 2nd");
+      expect(badgeA!.textContent).toContain("Days + Nights");
       expect(badgeA!.className).toContain("emerald");
 
       expect(badgeB!.textContent).toContain("Bedroom B");
-      expect(badgeB!.textContent).toContain("1st + 2nd");
+      expect(badgeB!.textContent).toContain("Days + Nights");
       expect(badgeB!.className).toContain("emerald");
     }
   });
@@ -547,19 +547,19 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
 
     const badgeA = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-A"]`);
     expect(badgeA).not.toBeNull();
-    expect(badgeA!.textContent).toContain("1st only");
-    expect(badgeA!.textContent).toContain("needs 2nd");
+    expect(badgeA!.textContent).toContain("Days only");
+    expect(badgeA!.textContent).toContain("needs Nights");
     expect(badgeA!.className).toContain("amber");
 
     const badgeB = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-B"]`);
     expect(badgeB).not.toBeNull();
-    expect(badgeB!.textContent).toContain("1st + 2nd");
+    expect(badgeB!.textContent).toContain("Days + Nights");
     expect(badgeB!.className).toContain("emerald");
   });
 
   it("shows double-booked (rose) badge when both occupants in a pair share the same shift", async () => {
     const occ = state.occupants.find((o) => o.id === occId("509", 2));
-    if (occ) occ.shift = "1st";
+    if (occ) occ.shift = "Days";
 
     await renderBedsTab();
 
@@ -583,7 +583,7 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     expect(badgeA!.className).toContain("muted");
 
     const badgeB = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-B"]`);
-    expect(badgeB!.textContent).toContain("1st + 2nd");
+    expect(badgeB!.textContent).toContain("Days + Nights");
     expect(badgeB!.className).toContain("emerald");
   });
 
@@ -591,7 +591,7 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     await renderBedsTab();
 
     const badgeA = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-A"]`);
-    expect(badgeA!.textContent).toContain("1st + 2nd");
+    expect(badgeA!.textContent).toContain("Days + Nights");
     expect(badgeA!.className).toContain("emerald");
 
     const shiftSelect = container.querySelector(
@@ -599,7 +599,7 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     ) as HTMLElement;
     expect(shiftSelect).not.toBeNull();
 
-    const noneBtn = shiftSelect.querySelector('[data-select-item="none"]') as HTMLButtonElement;
+    const noneBtn = shiftSelect.querySelector('[data-select-item="__none__"]') as HTMLButtonElement;
     await act(async () => {
       noneBtn.click();
     });
@@ -614,20 +614,20 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     await act(async () => { trigger1.click(); });
 
     const badgeAHalf = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-A"]`);
-    expect(badgeAHalf!.textContent).toContain("1st only");
-    expect(badgeAHalf!.textContent).toContain("needs 2nd");
+    expect(badgeAHalf!.textContent).toContain("Days only");
+    expect(badgeAHalf!.textContent).toContain("needs Nights");
     expect(badgeAHalf!.className).toContain("amber");
 
     const shiftSelect2 = container.querySelector(
       `[data-testid="select-occupant-shift-${occId("509", 2)}"]`,
     ) as HTMLElement;
-    const firstBtn = shiftSelect2.querySelector('[data-select-item="1st"]') as HTMLButtonElement;
+    const firstBtn = shiftSelect2.querySelector('[data-select-item="Days"]') as HTMLButtonElement;
     await act(async () => {
       firstBtn.click();
     });
-    expect(mocks.updateOccupant).toHaveBeenCalledWith(occId("509", 2), { shift: "1st" });
+    expect(mocks.updateOccupant).toHaveBeenCalledWith(occId("509", 2), { shift: "Days" });
 
-    occ.shift = "1st";
+    occ.shift = "Days";
     await act(async () => {
       root!.render(makeHarness(`/properties/${PROP_ID}`).Harness());
     });
@@ -641,13 +641,13 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     const shiftSelect3 = container.querySelector(
       `[data-testid="select-occupant-shift-${occId("509", 2)}"]`,
     ) as HTMLElement;
-    const secondBtn = shiftSelect3.querySelector('[data-select-item="2nd"]') as HTMLButtonElement;
+    const secondBtn = shiftSelect3.querySelector('[data-select-item="Nights"]') as HTMLButtonElement;
     await act(async () => {
       secondBtn.click();
     });
-    expect(mocks.updateOccupant).toHaveBeenCalledWith(occId("509", 2), { shift: "2nd" });
+    expect(mocks.updateOccupant).toHaveBeenCalledWith(occId("509", 2), { shift: "Nights" });
 
-    occ.shift = "2nd";
+    occ.shift = "Nights";
     await act(async () => {
       root!.render(makeHarness(`/properties/${PROP_ID}`).Harness());
     });
@@ -655,7 +655,7 @@ describe("Property detail — Shift coverage badges (seeded 1850 W. Pine St. Bar
     await act(async () => { trigger3.click(); });
 
     const badgeARestored = container.querySelector(`[data-testid="shift-pair-${ROOM_509}-A"]`);
-    expect(badgeARestored!.textContent).toContain("1st + 2nd");
+    expect(badgeARestored!.textContent).toContain("Days + Nights");
     expect(badgeARestored!.className).toContain("emerald");
   });
 });

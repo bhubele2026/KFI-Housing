@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   recordPayrollReconciliation,
+  removePayrollReconciliation,
   __resetRecentPayrollReconciliationsForTests,
   __getRecentPayrollReconciliationsForTests,
   __reloadFromStorageForTests,
@@ -19,6 +20,7 @@ function make(
     weekly: partial.weekly ?? 100,
     kind: partial.kind ?? "typo",
     timestamp: partial.timestamp ?? Date.now(),
+    prev: partial.prev ?? { chargePerBed: 0, billingFrequency: "Monthly", employeeId: "", company: "" },
   };
 }
 
@@ -53,7 +55,7 @@ describe("recent-payroll-reconciliations store", () => {
     ]);
   });
 
-  it("preserves all fields including the cross-employer kind", () => {
+  it("preserves all fields including the cross-employer kind and prev state", () => {
     recordPayrollReconciliation(
       make({
         id: "x",
@@ -64,6 +66,7 @@ describe("recent-payroll-reconciliations store", () => {
         weekly: 175.5,
         kind: "cross-employer",
         timestamp: 12345,
+        prev: { chargePerBed: 50, billingFrequency: "Monthly", employeeId: "E100", company: "OldCo" },
       }),
     );
     const top = __getRecentPayrollReconciliationsForTests()[0]!;
@@ -76,7 +79,24 @@ describe("recent-payroll-reconciliations store", () => {
       weekly: 175.5,
       kind: "cross-employer",
       timestamp: 12345,
+      prev: { chargePerBed: 50, billingFrequency: "Monthly", employeeId: "E100", company: "OldCo" },
     });
+  });
+
+  it("removes a single entry by id", () => {
+    recordPayrollReconciliation(make({ id: "a" }));
+    recordPayrollReconciliation(make({ id: "b" }));
+    recordPayrollReconciliation(make({ id: "c" }));
+    removePayrollReconciliation("b");
+    expect(
+      __getRecentPayrollReconciliationsForTests().map((e) => e.id),
+    ).toEqual(["c", "a"]);
+  });
+
+  it("is a no-op when removing a non-existent id", () => {
+    recordPayrollReconciliation(make({ id: "a" }));
+    removePayrollReconciliation("non-existent");
+    expect(__getRecentPayrollReconciliationsForTests()).toHaveLength(1);
   });
 
   describe("localStorage persistence", () => {

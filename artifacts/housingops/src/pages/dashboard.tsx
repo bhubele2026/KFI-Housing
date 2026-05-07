@@ -48,6 +48,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   recordPayrollReconciliation,
+  removePayrollReconciliation,
   useRecentPayrollReconciliations,
   type PayrollReconciliationKind,
 } from "@/lib/recent-payroll-reconciliations";
@@ -295,6 +296,69 @@ export default function Dashboard() {
       setSendingDigestPreview(false);
       setDigestSecret("");
     }
+  };
+
+  const [undoingReconciliationIds, setUndoingReconciliationIds] = useState<Set<string>>(new Set());
+  const [pendingUndoEntry, setPendingUndoEntry] = useState<(typeof recentReconciliations)[number] | null>(null);
+
+  const executeUndo = async (entry: (typeof recentReconciliations)[number]) => {
+    setUndoingReconciliationIds((prev) => new Set(prev).add(entry.id));
+    const restoreFields: Record<string, unknown> = {
+      chargePerBed: entry.prev.chargePerBed,
+      billingFrequency: entry.prev.billingFrequency,
+      employeeId: entry.prev.employeeId,
+    };
+    if (entry.kind === "cross-employer") {
+      restoreFields.company = entry.prev.company;
+    }
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(
+        `${baseUrl}api/occupants/${encodeURIComponent(entry.occupantId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(restoreFields),
+        },
+      );
+      if (!res.ok) {
+        toast({
+          title: "Undo failed",
+          description: `Server returned ${res.status}. The entry is still in the audit trail — try again.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      removePayrollReconciliation(entry.id);
+      queryClient.invalidateQueries({
+        queryKey: getListUnplacedPayrollQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+      const desc = entry.kind === "cross-employer"
+        ? `${entry.occupantName} restored to ${entry.prev.company}.`
+        : `${entry.occupantName} reverted to previous values.`;
+      toast({ title: "Undo complete", description: desc });
+    } catch {
+      toast({
+        title: "Undo failed",
+        description: "Could not reach the server. The entry is still in the audit trail — try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUndoingReconciliationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(entry.id);
+        return next;
+      });
+    }
+  };
+
+  const handleUndoReconciliation = (entry: (typeof recentReconciliations)[number]) => {
+    if (entry.kind === "cross-employer") {
+      setPendingUndoEntry(entry);
+      return;
+    }
+    executeUndo(entry);
   };
 
   const [reclaimingIds, setReclaimingIds] = useState<Set<string>>(new Set());
@@ -1985,6 +2049,13 @@ export default function Dashboard() {
                                         });
                                         return;
                                       }
+                                      const prevOcc = occupants.find((o) => o.id === s.occupantId);
+                                      const prev = {
+                                        chargePerBed: prevOcc?.chargePerBed ?? 0,
+                                        billingFrequency: prevOcc?.billingFrequency ?? "Monthly",
+                                        employeeId: prevOcc?.employeeId ?? "",
+                                        company: prevOcc?.company ?? "",
+                                      };
                                       updateOccupant(s.occupantId, {
                                         chargePerBed: row.weekly,
                                         billingFrequency: "Weekly",
@@ -1992,11 +2063,6 @@ export default function Dashboard() {
                                           ? { employeeId: row.personId }
                                           : {}),
                                       });
-                                      // Audit trail: the row is about to
-                                      // disappear from this card on the
-                                      // next refetch, so log it before
-                                      // refetching so the operator can
-                                      // spot a wrong guess afterwards.
                                       recordPayrollReconciliation({
                                         id: `${row.customer}::${row.personId}::${s.occupantId}::${Date.now()}`,
                                         occupantId: s.occupantId,
@@ -2006,6 +2072,7 @@ export default function Dashboard() {
                                         weekly: row.weekly,
                                         kind: s.crossEmployer ? "cross-employer" : "typo",
                                         timestamp: Date.now(),
+                                        prev,
                                       });
                                       queryClient.invalidateQueries({
                                         queryKey: getListUnplacedPayrollQueryKey(),
@@ -2221,18 +2288,18 @@ export default function Dashboard() {
                                       // employeeId. The seeder will
                                       // then drop this row from the
                                       // low-confidence list.
+                                      const prevOccLc = occupants.find((o) => o.id === s.occupantId);
+                                      const prevLc = {
+                                        chargePerBed: prevOccLc?.chargePerBed ?? 0,
+                                        billingFrequency: prevOccLc?.billingFrequency ?? "Monthly",
+                                        employeeId: prevOccLc?.employeeId ?? "",
+                                        company: prevOccLc?.company ?? "",
+                                      };
                                       updateOccupant(s.occupantId, {
                                         chargePerBed: row.weekly,
                                         billingFrequency: "Weekly",
                                         employeeId: row.personId,
                                       });
-                                      // Redirecting from the matched
-                                      // namesake to a same-employer
-                                      // alternative is the typo class
-                                      // of fix. Cross-employer
-                                      // alternatives don't appear in
-                                      // this list (suggestions are
-                                      // ranked same-employer only).
                                       recordPayrollReconciliation({
                                         id: `lc::${row.customer}::${row.personId}::${s.occupantId}::${Date.now()}`,
                                         occupantId: s.occupantId,
@@ -2242,6 +2309,7 @@ export default function Dashboard() {
                                         weekly: row.weekly,
                                         kind: s.crossEmployer ? "cross-employer" : "typo",
                                         timestamp: Date.now(),
+                                        prev: prevLc,
                                       });
                                       queryClient.invalidateQueries({
                                         queryKey: getListUnplacedPayrollQueryKey(),
@@ -2269,6 +2337,13 @@ export default function Dashboard() {
                                 // then matches via the strong
                                 // employeeId path and the row drops
                                 // off the low-confidence list.
+                                const prevOccConf = occupants.find((o) => o.id === row.matched.occupantId);
+                                const prevConf = {
+                                  chargePerBed: prevOccConf?.chargePerBed ?? 0,
+                                  billingFrequency: prevOccConf?.billingFrequency ?? "Monthly",
+                                  employeeId: prevOccConf?.employeeId ?? "",
+                                  company: prevOccConf?.company ?? "",
+                                };
                                 updateOccupant(row.matched.occupantId, {
                                   employeeId: row.personId,
                                 });
@@ -2281,6 +2356,7 @@ export default function Dashboard() {
                                   weekly: row.weekly,
                                   kind: "confirm",
                                   timestamp: Date.now(),
+                                  prev: prevConf,
                                 });
                                 queryClient.invalidateQueries({
                                   queryKey: getListUnplacedPayrollQueryKey(),
@@ -2329,6 +2405,7 @@ export default function Dashboard() {
                     <TableHead>New employer</TableHead>
                     <TableHead className="text-right">Weekly</TableHead>
                     <TableHead>When</TableHead>
+                    <TableHead className="text-right" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2397,6 +2474,19 @@ export default function Dashboard() {
                           data-testid={`text-recent-reconciliation-when-${entry.occupantId}`}
                         >
                           {formatRelativeTime(entry.timestamp)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={undoingReconciliationIds.has(entry.id)}
+                            onClick={() => handleUndoReconciliation(entry)}
+                            data-testid={`button-undo-reconciliation-${entry.occupantId}`}
+                          >
+                            <Undo2 className="h-3 w-3 mr-1" />
+                            {undoingReconciliationIds.has(entry.id) ? "Undoing…" : "Undo"}
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -2626,6 +2716,44 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <AlertDialog
+        open={pendingUndoEntry !== null}
+        onOpenChange={(open) => { if (!open) setPendingUndoEntry(null); }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-undo-cross-employer">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undo cross-employer change?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingUndoEntry && (
+                <>
+                  This will move{" "}
+                  <span className="font-medium">{pendingUndoEntry.occupantName}</span>
+                  {" "}back from{" "}
+                  <span className="font-medium">{pendingUndoEntry.employer}</span>
+                  {" "}to{" "}
+                  <span className="font-medium">{pendingUndoEntry.prev.company}</span>
+                  , and restore the previous charge and employee ID.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-confirm-undo-cross-employer-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-confirm-undo-cross-employer-confirm"
+              onClick={() => {
+                if (pendingUndoEntry) executeUndo(pendingUndoEntry);
+                setPendingUndoEntry(null);
+              }}
+            >
+              Undo change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Confirm cross-employer move from a "Did you mean (different
           employer)" suggestion. The same-employer (typo) path applies in
           one click — only the ownership-changing path goes through this
@@ -2660,19 +2788,35 @@ export default function Dashboard() {
               onClick={() => {
                 const move = pendingEmployerMove;
                 if (!move) return;
-                const prev = occupants.find((o) => o.id === move.occupantId);
-                const prevCompany = prev?.company ?? move.fromCompany;
-                const prevChargePerBed = prev?.chargePerBed ?? 0;
-                const prevBillingFrequency = prev?.billingFrequency ?? "Monthly";
-                const prevEmployeeId = prev?.employeeId ?? "";
-                const prevChargeSource = prev?.chargeSource ?? "";
-                const prevChargeSourceCustomer = prev?.chargeSourceCustomer ?? "";
-                const prevChargeSourcePersonId = prev?.chargeSourcePersonId ?? "";
+                const prevOccMove = occupants.find((o) => o.id === move.occupantId);
+                const prevCompany = prevOccMove?.company ?? move.fromCompany;
+                const prevChargePerBed = prevOccMove?.chargePerBed ?? 0;
+                const prevBillingFrequency = prevOccMove?.billingFrequency ?? "Monthly";
+                const prevEmployeeId = prevOccMove?.employeeId ?? "";
+                const prevChargeSource = prevOccMove?.chargeSource ?? "";
+                const prevChargeSourceCustomer = prevOccMove?.chargeSourceCustomer ?? "";
+                const prevChargeSourcePersonId = prevOccMove?.chargeSourcePersonId ?? "";
                 updateOccupant(move.occupantId, {
                   chargePerBed: move.chargePerBed,
                   billingFrequency: "Weekly",
                   ...(move.employeeId ? { employeeId: move.employeeId } : {}),
                   company: move.toCompany,
+                });
+                recordPayrollReconciliation({
+                  id: `ce::${move.toCompany}::${move.employeeId}::${move.occupantId}::${Date.now()}`,
+                  occupantId: move.occupantId,
+                  occupantName: move.occupantName,
+                  propertyName: move.propertyName,
+                  employer: move.toCompany,
+                  weekly: move.chargePerBed,
+                  kind: "cross-employer",
+                  timestamp: Date.now(),
+                  prev: {
+                    chargePerBed: prevChargePerBed,
+                    billingFrequency: prevBillingFrequency,
+                    employeeId: prevEmployeeId,
+                    company: prevCompany,
+                  },
                 });
                 queryClient.invalidateQueries({
                   queryKey: getListUnplacedPayrollQueryKey(),

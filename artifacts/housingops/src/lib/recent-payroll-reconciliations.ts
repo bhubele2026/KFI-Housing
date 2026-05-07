@@ -5,6 +5,13 @@ export type PayrollReconciliationKind =
   | "typo"
   | "cross-employer";
 
+export interface PayrollReconciliationPrevState {
+  chargePerBed: number;
+  billingFrequency: string;
+  employeeId: string;
+  company: string;
+}
+
 export interface RecentPayrollReconciliation {
   id: string;
   occupantId: string;
@@ -14,6 +21,7 @@ export interface RecentPayrollReconciliation {
   weekly: number;
   kind: PayrollReconciliationKind;
   timestamp: number;
+  prev: PayrollReconciliationPrevState;
 }
 
 const MAX_ENTRIES = 8;
@@ -62,6 +70,13 @@ export function recordPayrollReconciliation(
   entry: RecentPayrollReconciliation,
 ): void {
   entries = [entry, ...pruneStale(entries)].slice(0, MAX_ENTRIES);
+  saveToStorage(entries);
+  emit();
+}
+
+/** Remove a single entry by id (used by the Undo button). */
+export function removePayrollReconciliation(id: string): void {
+  entries = entries.filter((e) => e.id !== id);
   saveToStorage(entries);
   emit();
 }

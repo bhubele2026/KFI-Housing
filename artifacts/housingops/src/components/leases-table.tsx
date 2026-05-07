@@ -4,9 +4,10 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
@@ -41,6 +42,17 @@ export interface LeasesTableProps {
    * actions only.
    */
   onMarkReviewed?: (id: string) => void;
+  /**
+   * Optional handler for the bulk "Mark selected as reviewed" toolbar
+   * action (Task #360 — stretch from #329). When wired, the table renders
+   * a leftmost checkbox column on flagged rows plus a header master
+   * checkbox, and a toolbar above the grid showing the selection count
+   * and a "Mark N selected as reviewed" button. The handler receives the
+   * list of selected lease ids; the table clears its own selection
+   * afterwards. When omitted (mockup sandbox / unit tests) the column
+   * and toolbar are hidden so the surface keeps its original shape.
+   */
+  onBulkMarkReviewed?: (ids: string[]) => void;
   /** Custom message for the empty state. */
   emptyMessage?: string;
   /** Optional CTA rendered inside the empty-state block (e.g. "Add Lease"). */
@@ -141,6 +153,7 @@ export function LeasesTable({
   onCustomerClick,
   onDelete,
   onMarkReviewed,
+  onBulkMarkReviewed,
   emptyMessage = "No leases found.",
   emptyAction,
   placeholderProperties = [],
@@ -150,6 +163,61 @@ export function LeasesTable({
   const propertyById = new Map(properties.map((p) => [p.id, p] as const));
   const customerById = new Map((customers ?? []).map((c) => [c.id, c] as const));
   const [, navigate] = useLocation();
+
+  // Bulk-select state for the "Mark selected as reviewed" toolbar
+  // (Task #360). Selection is internal to the table — the parent only
+  // hands us a handler — so we can clear it ourselves after the bulk
+  // action without round-tripping through the data store.
+  const bulkEnabled = !!onBulkMarkReviewed;
+  const flaggedIds = useMemo(
+    () => leases.filter((l) => l.needsReview).map((l) => l.id),
+    [leases],
+  );
+  const flaggedIdSet = useMemo(() => new Set(flaggedIds), [flaggedIds]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  // Drop selections for ids that are no longer in the (possibly filtered)
+  // flagged set so the toolbar count never lies. Runs whenever the set of
+  // flagged ids in this table changes (filter swap, parent refetch, etc.).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (flaggedIdSet.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [flaggedIdSet]);
+  const selectedFlaggedCount = selectedIds.size;
+  const allFlaggedSelected =
+    flaggedIds.length > 0 && selectedFlaggedCount === flaggedIds.length;
+  const someFlaggedSelected =
+    selectedFlaggedCount > 0 && selectedFlaggedCount < flaggedIds.length;
+  const headerCheckedState: boolean | "indeterminate" = allFlaggedSelected
+    ? true
+    : someFlaggedSelected
+    ? "indeterminate"
+    : false;
+  const toggleRowSelected = (id: string, checked: boolean | "indeterminate") => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked === true) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+  const toggleAllSelected = (checked: boolean | "indeterminate") => {
+    if (checked === true) setSelectedIds(new Set(flaggedIds));
+    else setSelectedIds(new Set());
+  };
+  const handleBulkMarkReviewed = () => {
+    if (!onBulkMarkReviewed) return;
+    const ids = flaggedIds.filter((id) => selectedIds.has(id));
+    if (ids.length === 0) return;
+    onBulkMarkReviewed(ids);
+    setSelectedIds(new Set());
+  };
 
   const fromSuffix = originPath ? `?from=${encodeURIComponent(originPath)}` : "";
   const leaseHref = (leaseId: string) => `/leases/${leaseId}${fromSuffix}`;
@@ -183,17 +251,72 @@ export function LeasesTable({
       navigate(href);
     };
 
-  // 1 PDF thumbnail column + Property + Customer + 7 always-on columns
-  // (Start, End, Rent, Deposit, Status, Terms, Notes) + 1 trash column.
+  // (optional) 1 bulk-select column + 1 PDF thumbnail column + Property +
+  // Customer + 7 always-on columns (Start, End, Rent, Deposit, Status,
+  // Terms, Notes) + 1 trash column.
   const columnCount =
-    1 + (showProperty ? 1 : 0) + (showCustomer ? 1 : 0) + 7 + 1;
+    (bulkEnabled ? 1 : 0) +
+    1 +
+    (showProperty ? 1 : 0) +
+    (showCustomer ? 1 : 0) +
+    7 +
+    1;
 
   const hasAnyRows = leases.length > 0 || placeholderProperties.length > 0;
 
   return (
-    <Table>
+    <>
+      {bulkEnabled && selectedFlaggedCount > 0 && (
+        <div
+          className="flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 mx-2 mt-2"
+          data-testid="leases-bulk-toolbar"
+          role="toolbar"
+          aria-label="Bulk lease actions"
+        >
+          <span
+            className="text-sm font-medium text-amber-900"
+            data-testid="text-bulk-selected-count"
+          >
+            {selectedFlaggedCount} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+              data-testid="button-clear-bulk-selection"
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleBulkMarkReviewed}
+              data-testid="button-bulk-mark-reviewed"
+              className="gap-1"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Mark {selectedFlaggedCount} as reviewed
+            </Button>
+          </div>
+        </div>
+      )}
+      <Table>
       <TableHeader>
         <TableRow>
+          {bulkEnabled && (
+            <TableHead className="w-10">
+              {flaggedIds.length > 0 ? (
+                <Checkbox
+                  checked={headerCheckedState}
+                  onCheckedChange={toggleAllSelected}
+                  aria-label="Select all flagged leases"
+                  data-testid="checkbox-select-all-flagged-leases"
+                />
+              ) : (
+                <span className="sr-only">Select</span>
+              )}
+            </TableHead>
+          )}
           <TableHead className="w-12">
             <span className="sr-only">Source PDF</span>
           </TableHead>
@@ -236,6 +359,23 @@ export function LeasesTable({
                   aria-label={`Open lease for ${property?.name ?? "unknown property"}`}
                   className="cursor-pointer hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
                 >
+                  {bulkEnabled && (
+                    <TableCell
+                      className="w-10"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {lease.needsReview ? (
+                        <Checkbox
+                          checked={selectedIds.has(lease.id)}
+                          onCheckedChange={(checked) =>
+                            toggleRowSelected(lease.id, checked)
+                          }
+                          aria-label={`Select lease ${lease.id} for bulk review`}
+                          data-testid={`checkbox-select-lease-${lease.id}`}
+                        />
+                      ) : null}
+                    </TableCell>
+                  )}
                   <TableCell className="w-12 py-1">
                     <LeaseSourceThumbnail
                       lease={lease}
@@ -573,6 +713,7 @@ export function LeasesTable({
                   tabIndex={0}
                   aria-label={`Create lease for ${property.name}`}
                 >
+                  {bulkEnabled && <TableCell className="w-10" />}
                   {/* Placeholder rows have no lease record (and therefore
                       no source PDF), so the thumbnail column renders an
                       empty cell to keep grid alignment with real rows. */}
@@ -635,6 +776,7 @@ export function LeasesTable({
         )}
       </TableBody>
     </Table>
+    </>
   );
 }
 

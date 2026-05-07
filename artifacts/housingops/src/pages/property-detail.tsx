@@ -1486,6 +1486,17 @@ export default function PropertyDetail() {
                       description: "The 'Needs review' flag has been cleared.",
                     });
                   }}
+                  onBulkMarkReviewed={(ids) => {
+                    for (const id of ids) {
+                      updateLease(id, { needsReview: false });
+                    }
+                    toast({
+                      title: `Marked ${ids.length} as reviewed`,
+                      description: `Cleared the 'Needs review' flag on ${ids.length} ${
+                        ids.length === 1 ? "lease" : "leases"
+                      }.`,
+                    });
+                  }}
                   emptyMessage="No leases yet"
                   // Render the branded EmptyState block (icon + headline +
                   // CTA) when this property has no leases — same treatment

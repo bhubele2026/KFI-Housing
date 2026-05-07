@@ -822,6 +822,17 @@ export default function Leases() {
                     description: "The 'Needs review' flag has been cleared.",
                   });
                 }}
+                onBulkMarkReviewed={(ids) => {
+                  for (const id of ids) {
+                    updateLease(id, { needsReview: false });
+                  }
+                  toast({
+                    title: `Marked ${ids.length} as reviewed`,
+                    description: `Cleared the 'Needs review' flag on ${ids.length} ${
+                      ids.length === 1 ? "lease" : "leases"
+                    }.`,
+                  });
+                }}
                 placeholderProperties={visiblePlaceholderProperties}
                 roomNightLogs={roomNightLogs}
                 emptyAction={
@@ -899,6 +910,17 @@ export default function Leases() {
                           toast({
                             title: "Marked as reviewed",
                             description: "The 'Needs review' flag has been cleared.",
+                          });
+                        }}
+                        onBulkMarkReviewed={(ids) => {
+                          for (const id of ids) {
+                            updateLease(id, { needsReview: false });
+                          }
+                          toast({
+                            title: `Marked ${ids.length} as reviewed`,
+                            description: `Cleared the 'Needs review' flag on ${ids.length} ${
+                              ids.length === 1 ? "lease" : "leases"
+                            }.`,
                           });
                         }}
                         roomNightLogs={roomNightLogs}

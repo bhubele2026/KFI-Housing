@@ -400,6 +400,54 @@ describe("seedHousingDeductions — chargeSource provenance (Task #304)", () => 
     expect(result.lowConfidenceMatches).toEqual([]);
   });
 
+  it("auto-confirms a name-only fallback when there are zero same-employer alternatives, stamping employeeId", async () => {
+    // Only one "Jane Smith" exists across the whole DB (no
+    // employeeId, no company match against Adient). The Confirm-match
+    // tile would have nothing to disambiguate, so the seeder
+    // auto-confirms by stamping employeeId on that occupant.
+    seed([
+      occ({
+        id: "o-only",
+        name: "Jane Smith",
+        employeeId: "",
+        company: "Globex",
+      }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: [{ customer: "Adient", name: "JANE SMITH", personId: "EMP-NEW", weekly: 200 }],
+    });
+    expect(result.lowConfidenceMatches).toEqual([]);
+    expect(result.matched).toBe(1);
+    expect(result.updated).toBe(1);
+    expect(result.matchedByEmployeeId).toBe(1);
+    expect(result.matchedByNameOnly).toBe(0);
+    expect(occupants.get("o-only")).toMatchObject({
+      employeeId: "EMP-NEW",
+      chargePerBed: 200,
+      billingFrequency: "Weekly",
+      chargeSource: "payroll",
+      chargeSourceCustomer: "Adient",
+      chargeSourcePersonId: "EMP-NEW",
+    });
+  });
+
+  it("still surfaces name-only fallback in lowConfidenceMatches when same-employer alternatives exist", async () => {
+    // Two plausible occupants at Adient — auto-confirm must NOT fire.
+    seed([
+      occ({ id: "o-wrong", name: "Jane Smith", employeeId: "", company: "Globex" }),
+      occ({ id: "o-alt", name: "Jane A. Smith", employeeId: "", company: "Adient" }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: [{ customer: "Adient", name: "JANE SMITH", personId: "EMP-NEW", weekly: 200 }],
+    });
+    expect(result.lowConfidenceMatches).toHaveLength(1);
+    expect(result.matchedByNameOnly).toBe(1);
+    // employeeId must NOT have been auto-stamped on the picked occupant.
+    expect(occupants.get("o-wrong")?.employeeId).toBe("");
+  });
+
   it("is idempotent on a re-run — already-stamped rows count as alreadyCorrect with no writes", async () => {
     seed([
       occ({

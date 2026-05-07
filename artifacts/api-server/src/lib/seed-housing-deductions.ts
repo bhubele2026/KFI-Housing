@@ -519,47 +519,67 @@ export async function seedHousingDeductions(
     }
 
     matched++;
+    // When the name-only fallback is the only matcher we'd normally
+    // surface the row in the Confirm-match tile so an operator can
+    // verify which namesake to stamp. But if there are zero
+    // same-employer alternative candidates there is literally no one
+    // else this row could plausibly be — confirming would just stamp
+    // the same occupant. Auto-confirm those by promoting them to a
+    // full employeeId match (stamping employeeId on the occupant) so
+    // (a) the operator's queue shrinks on its own and (b) future runs
+    // match strongly via employeeId without revisiting the fallback.
+    let autoConfirmedNameOnly = false;
     if (matchPath === "employeeId") matchedByEmployeeId++;
     else if (matchPath === "nameCompany") matchedByNameCompany++;
     else if (matchPath === "nameOnly") {
-      matchedByNameOnly++;
-      // Surface for operator confirmation: the name-only fallback is
-      // the dangerous matcher. Score is forced to 1 because the
-      // payroll name and occupant name are equal post-normalization
-      // (that's how nameOnly matched in the first place); the risk
-      // isn't a typo, it's namesake collision. We deliberately
-      // include alternative same-employer candidates EXCLUDING the
-      // already-matched occupant so the "Did you mean someone else?"
-      // buttons point at distinct people.
+      // Score is forced to 1 because the payroll name and occupant
+      // name are equal post-normalization (that's how nameOnly
+      // matched in the first place); the risk isn't a typo, it's
+      // namesake collision. Alternatives exclude the already-matched
+      // occupant so the "Did you mean someone else?" buttons point at
+      // distinct people.
       const alternatives = rankSuggestions(
         row.name,
         row.customer,
         suggestionCandidates,
         propertyNameById,
       ).filter((s) => s.occupantId !== target.id);
-      lowConfidenceMatches.push({
-        customer: row.customer,
-        name: row.name,
-        personId: row.personId,
-        weekly: row.weekly,
-        matched: {
-          occupantId: target.id,
-          name: target.name,
-          company: target.company,
-          propertyName: target.propertyId
-            ? propertyNameById.get(target.propertyId) ?? null
-            : null,
-          score: 1,
-          // nameOnly doesn't constrain by employer at all — it picks
-          // whichever occupant has the same normalized name. Flag the
-          // mismatch so the dashboard can warn.
-          crossEmployer:
-            target.company.trim().toLowerCase() !== row.customer.trim().toLowerCase(),
-        },
-        suggestions: alternatives,
-      });
+      if (alternatives.length === 0) {
+        // No same-employer namesake exists — auto-confirm. Counts as
+        // an employeeId match from the perspective of the per-path
+        // counters since we're stamping employeeId below.
+        autoConfirmedNameOnly = true;
+        matchedByEmployeeId++;
+      } else {
+        matchedByNameOnly++;
+        lowConfidenceMatches.push({
+          customer: row.customer,
+          name: row.name,
+          personId: row.personId,
+          weekly: row.weekly,
+          matched: {
+            occupantId: target.id,
+            name: target.name,
+            company: target.company,
+            propertyName: target.propertyId
+              ? propertyNameById.get(target.propertyId) ?? null
+              : null,
+            score: 1,
+            // nameOnly doesn't constrain by employer at all — it
+            // picks whichever occupant has the same normalized name.
+            // Flag the mismatch so the dashboard can warn.
+            crossEmployer:
+              target.company.trim().toLowerCase() !== row.customer.trim().toLowerCase(),
+          },
+          suggestions: alternatives,
+        });
+      }
     }
+    const willStampEmployeeId =
+      autoConfirmedNameOnly &&
+      (target.employeeId ?? "").trim() !== row.personId.trim();
     const isCorrect =
+      !willStampEmployeeId &&
       target.billingFrequency === "Weekly" &&
       Math.abs((target.chargePerBed ?? 0) - row.weekly) < 1e-6 &&
       target.chargeSource === "payroll" &&
@@ -582,6 +602,9 @@ export async function seedHousingDeductions(
         chargeSource: "payroll",
         chargeSourceCustomer: row.customer,
         chargeSourcePersonId: row.personId,
+        // Auto-confirmed name-only matches also get employeeId
+        // stamped so the next run takes the strong match path.
+        ...(autoConfirmedNameOnly ? { employeeId: row.personId } : {}),
       })
       .where(eq(occupantsTable.id, target.id));
     updated++;

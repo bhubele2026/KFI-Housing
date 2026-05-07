@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
@@ -61,17 +61,21 @@ type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 // audit trail. The card never lives long enough on screen to need a
 // self-refreshing tick (entries are session-scoped and the operator
 // usually clicks through immediately), so a one-shot string is fine.
-function formatRelativeTime(timestamp: number, now: number = Date.now()): string {
+function formatRelativeTime(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  timestamp: number,
+  now: number = Date.now(),
+): string {
   const diffMs = Math.max(0, now - timestamp);
   const sec = Math.floor(diffMs / 1000);
-  if (sec < 5) return "just now";
-  if (sec < 60) return `${sec}s ago`;
+  if (sec < 5) return t("pages.dashboard.relativeTime.justNow");
+  if (sec < 60) return t("pages.dashboard.relativeTime.secondsAgo", { count: sec });
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min${min === 1 ? "" : "s"} ago`;
+  if (min < 60) return t("pages.dashboard.relativeTime.minutesAgo", { count: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr${hr === 1 ? "" : "s"} ago`;
+  if (hr < 24) return t("pages.dashboard.relativeTime.hoursAgo", { count: hr });
   const day = Math.floor(hr / 24);
-  return `${day} day${day === 1 ? "" : "s"} ago`;
+  return t("pages.dashboard.relativeTime.daysAgo", { count: day });
 }
 
 export default function Dashboard() {
@@ -268,8 +272,10 @@ export default function Dashboard() {
       const body = await res.json();
       if (!res.ok) {
         toast({
-          title: mode === "dry-run" ? "Preview render failed" : "Digest preview failed",
-          description: body.error ?? `Server returned ${res.status}`,
+          title: mode === "dry-run"
+            ? t("pages.dashboard.digest.previewRenderFailedTitle")
+            : t("pages.dashboard.digest.digestPreviewFailedTitle"),
+          description: body.error ?? t("pages.dashboard.digest.serverReturned", { status: res.status }),
           variant: "destructive",
         });
         return;
@@ -279,21 +285,27 @@ export default function Dashboard() {
           setDigestDryRunResult({ email: body.email, total: body.total ?? 0 });
         } else {
           toast({
-            title: "Preview render failed",
-            description: "Server did not return an email payload.",
+            title: t("pages.dashboard.digest.previewRenderFailedTitle"),
+            description: t("pages.dashboard.digest.previewRenderFailedDescription"),
             variant: "destructive",
           });
         }
         return;
       }
       toast({
-        title: "Preview digest sent",
-        description: `Emailed ${body.total} expiring lease${body.total === 1 ? "" : "s"} to ${body.recipients} recipient${body.recipients === 1 ? "" : "s"}.`,
+        title: t("pages.dashboard.digest.previewSentTitle"),
+        description: t("pages.dashboard.digest.previewSentDescription", {
+          count: body.recipients,
+          leases: body.total,
+          recipients: body.recipients,
+        }),
       });
     } catch (err) {
       toast({
-        title: mode === "dry-run" ? "Preview render failed" : "Digest preview failed",
-        description: "Could not reach the server. Try again.",
+        title: mode === "dry-run"
+          ? t("pages.dashboard.digest.previewRenderFailedTitle")
+          : t("pages.dashboard.digest.digestPreviewFailedTitle"),
+        description: t("pages.dashboard.digest.networkErrorDescription"),
         variant: "destructive",
       });
     } finally {
@@ -332,8 +344,8 @@ export default function Dashboard() {
       );
       if (!res.ok) {
         toast({
-          title: "Undo failed",
-          description: `Server returned ${res.status}. The entry is still in the audit trail — try again.`,
+          title: t("pages.dashboard.undoToast.failedTitle"),
+          description: t("pages.dashboard.undoToast.failedDescriptionStatus", { status: res.status }),
           variant: "destructive",
         });
         return;
@@ -344,13 +356,13 @@ export default function Dashboard() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
       const desc = entry.kind === "cross-employer"
-        ? `${entry.occupantName} restored to ${entry.prev.company}.`
-        : `${entry.occupantName} reverted to previous values.`;
-      toast({ title: "Undo complete", description: desc });
+        ? t("pages.dashboard.undoToast.completeDescriptionCrossEmployer", { occupant: entry.occupantName, prevCompany: entry.prev.company })
+        : t("pages.dashboard.undoToast.completeDescriptionDefault", { occupant: entry.occupantName });
+      toast({ title: t("pages.dashboard.undoToast.completeTitle"), description: desc });
     } catch {
       toast({
-        title: "Undo failed",
-        description: "Could not reach the server. The entry is still in the audit trail — try again.",
+        title: t("pages.dashboard.undoToast.failedTitle"),
+        description: t("pages.dashboard.undoToast.failedDescriptionNetwork"),
         variant: "destructive",
       });
     } finally {
@@ -382,8 +394,8 @@ export default function Dashboard() {
       );
       if (!res.ok) {
         toast({
-          title: "Re-claim failed",
-          description: `Server returned ${res.status}. Try again or re-claim all.`,
+          title: t("pages.dashboard.reclaim.failedTitle"),
+          description: t("pages.dashboard.reclaim.failedDescriptionSingle", { status: res.status }),
           variant: "destructive",
         });
         return;
@@ -393,8 +405,8 @@ export default function Dashboard() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
       toast({
-        title: "Re-claimed from payroll",
-        description: "The occupant's charge has been reset to the payroll value.",
+        title: t("pages.dashboard.reclaim.claimedTitle"),
+        description: t("pages.dashboard.reclaim.claimedDescription"),
       });
     } finally {
       setReclaimingIds((prev) => {
@@ -412,8 +424,8 @@ export default function Dashboard() {
       const res = await fetch(`${baseUrl}api/payroll/unplaced?reclaimOverridden=true`);
       if (!res.ok) {
         toast({
-          title: "Re-claim failed",
-          description: `Server returned ${res.status}. Try again later.`,
+          title: t("pages.dashboard.reclaim.failedTitle"),
+          description: t("pages.dashboard.reclaim.failedDescriptionAll", { status: res.status }),
           variant: "destructive",
         });
         return;
@@ -423,8 +435,8 @@ export default function Dashboard() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
       toast({
-        title: "All overrides re-claimed",
-        description: `${overriddenOccupants.length} occupant${overriddenOccupants.length === 1 ? "" : "s"} reset to payroll values.`,
+        title: t("pages.dashboard.reclaim.allClaimedTitle"),
+        description: t("pages.dashboard.reclaim.allClaimedDescription", { count: overriddenOccupants.length }),
       });
     } finally {
       setReclaimingAll(false);
@@ -487,40 +499,40 @@ export default function Dashboard() {
     {
       key: "occupants" as const,
       count: needsReviewOccupantCount,
-      label: "Occupants missing a move-in date",
-      cta: "Review occupants",
+      label: t("pages.dashboard.needsReviewItems.occupantsLabel"),
+      cta: t("pages.dashboard.needsReviewItems.reviewOccupantsCta"),
       href: `/occupants?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-occupants",
     },
     {
       key: "leases" as const,
       count: needsReviewLeaseCount,
-      label: "Leases flagged for review",
-      cta: "Review leases",
+      label: t("pages.dashboard.needsReviewItems.leasesLabel"),
+      cta: t("pages.dashboard.needsReviewItems.reviewLeasesCta"),
       href: `/leases?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-leases",
     },
     {
       key: "leases-needs-dates" as const,
       count: needsDatesLeaseCount,
-      label: "Leases missing term dates",
-      cta: "Review missing dates",
+      label: t("pages.dashboard.needsReviewItems.leasesMissingDatesLabel"),
+      cta: t("pages.dashboard.needsReviewItems.reviewMissingDatesCta"),
       href: `/leases?needsDates=1${customerQuerySuffix}`,
       testId: "needs-review-leases-needs-dates",
     },
     {
       key: "properties" as const,
       count: needsReviewPropertyCount,
-      label: "Properties missing monthly rent",
-      cta: "Review properties",
+      label: t("pages.dashboard.needsReviewItems.propertiesLabel"),
+      cta: t("pages.dashboard.needsReviewItems.reviewPropertiesCta"),
       href: `/properties?needsReview=1${customerQuerySuffix}`,
       testId: "needs-review-properties",
     },
     {
       key: "hotel-rate-at-risk" as const,
       count: hotelRateAtRiskCount,
-      label: `Hotel-rate leases at risk this month (${currentMonth})`,
-      cta: "Review hotel-rate leases",
+      label: t("pages.dashboard.needsReviewItems.hotelRateAtRiskLabel", { month: currentMonth }),
+      cta: t("pages.dashboard.needsReviewItems.reviewHotelRateCta"),
       // `?atRisk=1` (task #358) narrows the leases table itself to just
       // the at-risk rows so the dashboard count and the filtered table
       // line up. Customer scope is preserved so the two counts match.
@@ -838,10 +850,10 @@ export default function Dashboard() {
   function expiryRowLabel(days: number): string {
     if (days < 0) {
       const abs = Math.abs(days);
-      return `Expired ${abs} day${abs === 1 ? "" : "s"} ago`;
+      return t("pages.dashboard.expiry.expiredDaysAgo", { count: abs });
     }
-    if (days === 0) return "Expires today";
-    return `${days} day${days === 1 ? "" : "s"} left`;
+    if (days === 0) return t("pages.dashboard.expiry.expiresToday");
+    return t("pages.dashboard.expiry.daysLeft", { count: days });
   }
 
   const totalProperties = scopedProperties.length;
@@ -916,8 +928,12 @@ export default function Dashboard() {
 
   const sortLabel =
     topRatingSort === "overall"
-      ? "Overall"
-      : RATING_CATEGORIES.find((c) => c.key === topRatingSort)?.label ?? "Overall";
+      ? t("pages.dashboard.topProperties.overall")
+      : t(`pages.dashboard.ratings.${topRatingSort}` as const, {
+          defaultValue:
+            RATING_CATEGORIES.find((c) => c.key === topRatingSort)?.label ??
+            "Overall",
+        });
 
   // Carry the property id through chartData so downstream lookups (customer
   // name, occupancy %, row keys) don't depend on `name` — two properties can
@@ -952,29 +968,29 @@ export default function Dashboard() {
   );
 
   const cards = [
-    { title: "Properties", value: totalProperties, icon: Building2, trend: "+2 this year" },
-    { title: "Total Beds", value: totalBeds, icon: BedDouble, trend: `${occupiedBeds} occupied` },
-    { title: "Occupancy", value: `${occupancyRate.toFixed(1)}%`, icon: Users, trend: `${vacantBeds} vacant` },
-    { title: "Monthly Revenue", value: formatUsdWhole(totalMonthlyRevenue), icon: TrendingUp, trend: "Target: $45k" },
-    { title: "Monthly Costs", value: formatUsdWhole(totalMonthlyCosts), icon: DollarSign, trend: "Leases + Utilities" },
-    { title: "Net Profit", value: formatUsdWhole(netProfit), icon: Zap, trend: netProfit >= 0 ? "+12% vs last month" : "Needs attention" },
+    { title: t("pages.dashboard.metrics.properties"), value: totalProperties, icon: Building2, trend: t("pages.dashboard.metrics.trend.thisYear") },
+    { title: t("pages.dashboard.metrics.totalBeds"), value: totalBeds, icon: BedDouble, trend: t("pages.dashboard.metrics.trend.occupied", { count: occupiedBeds }) },
+    { title: t("pages.dashboard.metrics.occupancy"), value: `${occupancyRate.toFixed(1)}%`, icon: Users, trend: t("pages.dashboard.metrics.trend.vacant", { count: vacantBeds }) },
+    { title: t("pages.dashboard.metrics.monthlyRevenue"), value: formatUsdWhole(totalMonthlyRevenue), icon: TrendingUp, trend: t("pages.dashboard.metrics.trend.target") },
+    { title: t("pages.dashboard.metrics.monthlyCosts"), value: formatUsdWhole(totalMonthlyCosts), icon: DollarSign, trend: t("pages.dashboard.metrics.trend.leasesUtilities") },
+    { title: t("pages.dashboard.metrics.netProfit"), value: formatUsdWhole(netProfit), icon: Zap, trend: netProfit >= 0 ? t("pages.dashboard.metrics.trend.vsLastMonth") : t("pages.dashboard.metrics.trend.needsAttention") },
     {
-      title: "Rent / Bed",
+      title: t("pages.dashboard.metrics.rentPerBed"),
       value: portfolioRentPerBed === null ? "—" : formatUsdWhole(portfolioRentPerBed),
       icon: BedDouble,
-      trend: `${formatUsdWhole(portfolioMonthlyRent)} ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: t("pages.dashboard.metrics.trend.rentPerBedBreakdown", { count: totalBeds, rent: formatUsdWhole(portfolioMonthlyRent) }),
     },
     {
-      title: "Electric / Bed",
+      title: t("pages.dashboard.metrics.electricPerBed"),
       value: portfolioElectricPerBed === null ? "—" : formatUsdWhole(portfolioElectricPerBed),
       icon: Zap,
-      trend: `${formatUsdWhole(portfolioMonthlyElectric)} electric ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: t("pages.dashboard.metrics.trend.electricPerBedBreakdown", { count: totalBeds, electric: formatUsdWhole(portfolioMonthlyElectric) }),
     },
     {
-      title: "Rent + Electric / Bed",
+      title: t("pages.dashboard.metrics.rentPlusElectricPerBed"),
       value: portfolioRentPlusElectricPerBed === null ? "—" : formatUsdWhole(portfolioRentPlusElectricPerBed),
       icon: DollarSign,
-      trend: `(Rent + ${formatUsdWhole(portfolioMonthlyElectric)} electric) ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: t("pages.dashboard.metrics.trend.rentPlusElectricPerBedBreakdown", { count: totalBeds, electric: formatUsdWhole(portfolioMonthlyElectric) }),
     },
   ];
 
@@ -1030,17 +1046,17 @@ export default function Dashboard() {
                 data-testid="text-dashboard-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
-                Showing only <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.dashboard.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
               </p>
             ) : null
           }
           actions={
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-dashboard-customer-filter">
-                <SelectValue placeholder="Customer" />
+                <SelectValue placeholder={t("pages.dashboard.customerPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>{t("pages.dashboard.allCustomers")}</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -1076,7 +1092,7 @@ export default function Dashboard() {
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                <p className="text-sm font-semibold">Needs review</p>
+                <p className="text-sm font-semibold">{t("pages.dashboard.needsReview.title")}</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {needsReviewItems.map((item) => (
@@ -1115,13 +1131,12 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Lease expiry alerts</CardTitle>
+                <CardTitle>{t("pages.dashboard.leaseExpiry.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-expiring-leases-total-count"
                 >
-                  {expiringLeases.length} lease
-                  {expiringLeases.length === 1 ? "" : "s"}
+                  {t("pages.dashboard.leaseExpiry.leaseCount", { count: expiringLeases.length })}
                 </span>
                 {digestPreviewEnabled && (
                   <DropdownMenu>
@@ -1134,7 +1149,7 @@ export default function Dashboard() {
                         data-testid="button-send-digest-preview"
                       >
                         <Send className="h-3.5 w-3.5" />
-                        {sendingDigestPreview ? "Sending…" : "Send preview"}
+                        {sendingDigestPreview ? t("pages.dashboard.leaseExpiry.sending") : t("pages.dashboard.leaseExpiry.sendPreview")}
                         <ChevronDown className="h-3.5 w-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1144,22 +1159,21 @@ export default function Dashboard() {
                         data-testid="menuitem-send-digest-now"
                       >
                         <Send className="h-3.5 w-3.5 mr-2" />
-                        Send now to recipients
+                        {t("pages.dashboard.leaseExpiry.sendNow")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onSelect={() => openDigestDialog("dry-run")}
                         data-testid="menuitem-preview-digest-dryrun"
                       >
                         <Eye className="h-3.5 w-3.5 mr-2" />
-                        Preview without sending
+                        {t("pages.dashboard.leaseExpiry.previewWithoutSending")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Leases ending in the next 30 / 60 / 90 days, plus any that
-                quietly expired in the last 30 days.
+                {t("pages.dashboard.leaseExpiry.helperText")}
               </p>
               {snoozedLeases.length > 0 && (
                 <div
@@ -1168,14 +1182,14 @@ export default function Dashboard() {
                 >
                   <BellOff className="h-3.5 w-3.5" />
                   <span data-testid="text-snoozed-leases-count">
-                    {snoozedLeases.length} snoozed
+                    {t("pages.dashboard.leaseExpiry.snoozedCount", { count: snoozedLeases.length })}
                   </span>
                   <Link
                     href="/leases/snoozed"
                     className="text-xs text-primary hover:underline"
                     data-testid="link-review-snoozed-leases"
                   >
-                    Review
+                    {t("pages.dashboard.leaseExpiry.review")}
                   </Link>
                   {(() => {
                     // Surface "who snoozed and when" from the most recent
@@ -1222,13 +1236,18 @@ export default function Dashboard() {
                         >
                           <div className="text-xs">
                             <div>
-                              Most recent snooze by{" "}
-                              <span
-                                className="font-medium"
-                                data-testid="snoozed-leases-audit-by"
-                              >
-                                {who}
-                              </span>
+                              <Trans
+                                i18nKey="pages.dashboard.leaseExpiry.recentSnoozeBy"
+                                values={{ who }}
+                                components={{
+                                  1: (
+                                    <span
+                                      className="font-medium"
+                                      data-testid="snoozed-leases-audit-by"
+                                    />
+                                  ),
+                                }}
+                              />
                             </div>
                             <div
                               className="text-muted-foreground"
@@ -1256,14 +1275,14 @@ export default function Dashboard() {
                         });
                       }
                       toast({
-                        title: "Snoozes cleared",
-                        description: `${snoozedLeases.length} lease alert${
-                          snoozedLeases.length === 1 ? "" : "s"
-                        } restored to the panel.`,
+                        title: t("pages.dashboard.leaseExpiry.snoozesClearedTitle"),
+                        description: t("pages.dashboard.leaseExpiry.snoozesClearedDescription", {
+                          count: snoozedLeases.length,
+                        }),
                       });
                     }}
                   >
-                    Unsnooze all
+                    {t("pages.dashboard.leaseExpiry.unsnoozeAll")}
                   </Button>
                 </div>
               )}
@@ -1276,7 +1295,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.expired.badge}`}
                     data-testid="bucket-count-expiring-leases-expired"
                   >
-                    {expiringCounts.expired} expired
+                    {t("pages.dashboard.expiry.expiredBucket", { count: expiringCounts.expired })}
                   </span>
                 )}
                 {expiringCounts.critical > 0 && (
@@ -1284,7 +1303,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.critical.badge}`}
                     data-testid="bucket-count-expiring-leases-critical"
                   >
-                    {expiringCounts.critical} ≤ 30 days
+                    {t("pages.dashboard.expiry.criticalBucket", { count: expiringCounts.critical })}
                   </span>
                 )}
                 {expiringCounts.warning > 0 && (
@@ -1292,7 +1311,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.warning.badge}`}
                     data-testid="bucket-count-expiring-leases-warning"
                   >
-                    {expiringCounts.warning} 31–60 days
+                    {t("pages.dashboard.expiry.warningBucket", { count: expiringCounts.warning })}
                   </span>
                 )}
                 {expiringCounts.soon > 0 && (
@@ -1300,7 +1319,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.soon.badge}`}
                     data-testid="bucket-count-expiring-leases-soon"
                   >
-                    {expiringCounts.soon} 61–90 days
+                    {t("pages.dashboard.expiry.soonBucket", { count: expiringCounts.soon })}
                   </span>
                 )}
               </div>
@@ -1309,11 +1328,11 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Ends</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">When</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t("pages.dashboard.expiry.propertyHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.expiry.endsHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.expiry.statusHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.expiry.whenHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.expiry.actionsHeader")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1334,8 +1353,11 @@ export default function Dashboard() {
                         snoozedBy,
                       });
                       toast({
-                        title: `Snoozed ${label}`,
-                        description: `${propertyName} alert hidden until ${formatYMDPretty(until)}.`,
+                        title: t("pages.dashboard.expiry.snoozedTitle", { label }),
+                        description: t("pages.dashboard.expiry.snoozedDescription", {
+                          property: propertyName,
+                          until: formatYMDPretty(until),
+                        }),
                       });
                     }
                     return (
@@ -1385,35 +1407,35 @@ export default function Dashboard() {
                                 data-testid={`button-snooze-lease-${lease.id}`}
                               >
                                 <BellOff className="h-3 w-3 mr-1" />
-                                Snooze
+                                {t("pages.dashboard.expiry.snooze")}
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Hide this alert for…</DropdownMenuLabel>
+                              <DropdownMenuLabel>{t("pages.dashboard.expiry.hideForLabel")}</DropdownMenuLabel>
                               <DropdownMenuItem
                                 data-testid={`button-snooze-lease-${lease.id}-7d`}
-                                onSelect={() => snooze(7, "7 days")}
+                                onSelect={() => snooze(7, t("pages.dashboard.expiry.days7"))}
                               >
-                                7 days
+                                {t("pages.dashboard.expiry.days7")}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 data-testid={`button-snooze-lease-${lease.id}-30d`}
-                                onSelect={() => snooze(30, "30 days")}
+                                onSelect={() => snooze(30, t("pages.dashboard.expiry.days30"))}
                               >
-                                30 days
+                                {t("pages.dashboard.expiry.days30")}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 data-testid={`button-snooze-lease-${lease.id}-90d`}
-                                onSelect={() => snooze(90, "90 days")}
+                                onSelect={() => snooze(90, t("pages.dashboard.expiry.days90"))}
                               >
-                                90 days
+                                {t("pages.dashboard.expiry.days90")}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 data-testid={`button-snooze-lease-${lease.id}-renewal`}
-                                onSelect={() => snooze(365, "until renewal")}
+                                onSelect={() => snooze(365, t("pages.dashboard.expiry.untilRenewal"))}
                               >
-                                Renewal in progress (1 year)
+                                {t("pages.dashboard.expiry.renewalInProgress")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1433,30 +1455,27 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Notice deadline approaching</CardTitle>
+                <CardTitle>{t("pages.dashboard.noticeDeadline.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-notice-deadline-count"
                 >
-                  {noticeDeadlineLeases.length} lease
-                  {noticeDeadlineLeases.length === 1 ? "" : "s"}
+                  {t("pages.dashboard.noticeDeadline.leaseCount", { count: noticeDeadlineLeases.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Leases whose non-renewal notice deadline lands in the
-                next {NOTICE_LEAD_DAYS} days. Snoozing the lease in the
-                expiry panel above also hides it here.
+                {t("pages.dashboard.noticeDeadline.helperText", { days: NOTICE_LEAD_DAYS })}
               </p>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Notice by</TableHead>
-                    <TableHead>Ends</TableHead>
-                    <TableHead className="text-right">Notice</TableHead>
-                    <TableHead className="text-right">When</TableHead>
+                    <TableHead>{t("pages.dashboard.noticeDeadline.propertyHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.noticeDeadline.noticeByHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.noticeDeadline.endsHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.noticeDeadline.noticeHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.noticeDeadline.whenHeader")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1484,7 +1503,7 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {e.daysUntilDeadline === 0
-                          ? "today"
+                          ? t("pages.dashboard.noticeDeadline.today")
                           : `${e.daysUntilDeadline}d`}
                       </TableCell>
                     </TableRow>
@@ -1501,27 +1520,25 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CalendarClock className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Low combined occupancy</CardTitle>
+                <CardTitle>{t("pages.dashboard.lowOccupancy.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-low-occupancy-count"
                 >
-                  {lowOccupancyCustomers.length} customer
-                  {lowOccupancyCustomers.length === 1 ? "" : "s"}
+                  {t("pages.dashboard.lowOccupancy.customerCount", { count: lowOccupancyCustomers.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Customers below {LOW_OCCUPANCY_THRESHOLD_PCT}% combined
-                bed occupancy across owned + shared properties.
+                {t("pages.dashboard.lowOccupancy.helperText", { pct: LOW_OCCUPANCY_THRESHOLD_PCT })}
               </p>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead className="text-right">Beds</TableHead>
-                    <TableHead className="text-right">Occupancy</TableHead>
+                    <TableHead>{t("pages.dashboard.lowOccupancy.customerHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.lowOccupancy.bedsHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.lowOccupancy.occupancyHeader")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1557,20 +1574,18 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2 flex-wrap">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Insurance expiry alerts</CardTitle>
+                <CardTitle>{t("pages.dashboard.insurance.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-expiring-insurance-total-count"
                 >
-                  {expiringCerts.length} certificate
-                  {expiringCerts.length === 1 ? "" : "s"} across{" "}
-                  {certsByProperty.length} propert
-                  {certsByProperty.length === 1 ? "y" : "ies"}
+                  {t("pages.dashboard.insurance.certificateCount", { count: expiringCerts.length })}{" "}
+                  {t("pages.dashboard.insurance.across")}{" "}
+                  {t("pages.dashboard.insurance.propertyCount", { count: certsByProperty.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Insurance certificates whose coverage ends in the next 90
-                days, plus any that quietly lapsed in the last 30 days.
+                {t("pages.dashboard.insurance.helperText")}
               </p>
               <div className="flex flex-wrap gap-2 mt-2">
                 {expiringCertCounts.expired > 0 && (
@@ -1578,7 +1593,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.expired.badge}`}
                     data-testid="bucket-count-expiring-insurance-expired"
                   >
-                    {expiringCertCounts.expired} Expired
+                    {t("pages.dashboard.insurance.expiredBucket", { count: expiringCertCounts.expired })}
                   </span>
                 )}
                 {expiringCertCounts.critical > 0 && (
@@ -1586,7 +1601,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.critical.badge}`}
                     data-testid="bucket-count-expiring-insurance-critical"
                   >
-                    {expiringCertCounts.critical} ≤ 30 days
+                    {t("pages.dashboard.insurance.criticalBucket", { count: expiringCertCounts.critical })}
                   </span>
                 )}
                 {expiringCertCounts.warning > 0 && (
@@ -1594,7 +1609,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.warning.badge}`}
                     data-testid="bucket-count-expiring-insurance-warning"
                   >
-                    {expiringCertCounts.warning} 31–60 days
+                    {t("pages.dashboard.insurance.warningBucket", { count: expiringCertCounts.warning })}
                   </span>
                 )}
                 {expiringCertCounts.soon > 0 && (
@@ -1602,7 +1617,7 @@ export default function Dashboard() {
                     className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.soon.badge}`}
                     data-testid="bucket-count-expiring-insurance-soon"
                   >
-                    {expiringCertCounts.soon} 61–90 days
+                    {t("pages.dashboard.insurance.soonBucket", { count: expiringCertCounts.soon })}
                   </span>
                 )}
               </div>
@@ -1611,12 +1626,12 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Carrier</TableHead>
-                    <TableHead>Policy #</TableHead>
-                    <TableHead>Coverage Ends</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">When</TableHead>
+                    <TableHead>{t("pages.dashboard.insurance.propertyHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.insurance.carrierHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.insurance.policyHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.insurance.coverageEndsHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.insurance.statusHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.insurance.whenHeader")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1642,7 +1657,7 @@ export default function Dashboard() {
                                 />
                               </Link>
                             ) : (
-                              <span className="text-xs text-muted-foreground italic">↳ same property</span>
+                              <span className="text-xs text-muted-foreground italic">{t("pages.dashboard.insurance.sameProperty")}</span>
                             )}
                           </TableCell>
                           <TableCell className="text-sm">{c.carrier || "—"}</TableCell>
@@ -1680,7 +1695,7 @@ export default function Dashboard() {
             <CardContent className="p-6">
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-semibold">Customer-paid monthly rent</p>
+                <p className="text-sm font-semibold">{t("pages.dashboard.customerPaidRent.title")}</p>
                 <ToggleGroup
                   type="single"
                   size="sm"
@@ -1694,13 +1709,13 @@ export default function Dashboard() {
                   data-testid="toggle-customer-paid-rent-status"
                 >
                   <ToggleGroupItem value="Active" data-testid="toggle-customer-paid-rent-status-active">
-                    Active
+                    {t("pages.dashboard.customerPaidRent.statusActive")}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="Upcoming" data-testid="toggle-customer-paid-rent-status-upcoming">
-                    Upcoming
+                    {t("pages.dashboard.customerPaidRent.statusUpcoming")}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="All" data-testid="toggle-customer-paid-rent-status-all">
-                    All
+                    {t("pages.dashboard.customerPaidRent.statusAll")}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
@@ -1712,29 +1727,33 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {customerPaidRentStatus === "Active"
-                  ? "Total monthly rent across all Active leases where the customer is responsible for paying the landlord."
+                  ? t("pages.dashboard.customerPaidRent.descriptionActive")
                   : customerPaidRentStatus === "Upcoming"
-                    ? "Forecast monthly rent across Upcoming customer-responsible leases that haven't started yet."
-                    : "Total monthly rent across all customer-responsible leases (Active, Upcoming, and Expired)."}
+                    ? t("pages.dashboard.customerPaidRent.descriptionUpcoming")
+                    : t("pages.dashboard.customerPaidRent.descriptionAll")}
               </p>
               {customerPaidRentByCustomer.rows.length === 0 ? (
                 <p
                   className="text-sm text-muted-foreground mt-6"
                   data-testid="text-customer-paid-rent-empty"
                 >
-                  No {customerPaidRentStatus === "All" ? "" : `${customerPaidRentStatus.toLowerCase()} `}customer-responsible leases.
+                  {customerPaidRentStatus === "Active"
+                    ? t("pages.dashboard.customerPaidRent.emptyActive")
+                    : customerPaidRentStatus === "Upcoming"
+                      ? t("pages.dashboard.customerPaidRent.emptyUpcoming")
+                      : t("pages.dashboard.customerPaidRent.emptyAll")}
                 </p>
               ) : (
                 <div className="mt-6">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    By customer · ranked by rent
+                    {t("pages.dashboard.customerPaidRent.byCustomerHeading")}
                   </p>
                   <Table data-testid="table-customer-paid-rent-by-customer">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Leases</TableHead>
-                        <TableHead className="text-right">Monthly rent</TableHead>
+                        <TableHead>{t("pages.dashboard.customerPaidRent.customerHeader")}</TableHead>
+                        <TableHead className="text-right">{t("pages.dashboard.customerPaidRent.leasesHeader")}</TableHead>
+                        <TableHead className="text-right">{t("pages.dashboard.customerPaidRent.monthlyRentHeader")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1779,18 +1798,16 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <CardTitle>Review payroll mismatches</CardTitle>
+                <CardTitle>{t("pages.dashboard.payrollMismatches.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-payroll-mismatches-count"
                 >
-                  {overriddenOccupants.length} override{overriddenOccupants.length === 1 ? "" : "s"}
+                  {t("pages.dashboard.payrollMismatches.overrideCount", { count: overriddenOccupants.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Occupants whose payroll-set charge was manually edited. Compare
-                against the latest payroll run — if the override now agrees with
-                payroll, re-claim to let the seeder manage it again.
+                {t("pages.dashboard.payrollMismatches.helperText")}
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1804,7 +1821,9 @@ export default function Dashboard() {
                     data-testid="button-reclaim-all-overrides"
                   >
                     <RotateCcw className="h-3 w-3 mr-1" />
-                    {reclaimingAll ? "Re-claiming…" : "Re-claim all from payroll"}
+                    {reclaimingAll
+                      ? t("pages.dashboard.payrollMismatches.reclaimAllLoading")
+                      : t("pages.dashboard.payrollMismatches.reclaimAll")}
                   </Button>
                 </div>
               )}
@@ -1816,16 +1835,16 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold">{group.customer}</p>
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      {group.rows.length} override{group.rows.length === 1 ? "" : "s"}
+                      {t("pages.dashboard.payrollMismatches.overrideCount", { count: group.rows.length })}
                     </p>
                   </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="text-right">Current charge</TableHead>
-                        <TableHead>Payroll source</TableHead>
-                        <TableHead>Property</TableHead>
+                        <TableHead>{t("pages.dashboard.payrollMismatches.nameHeader")}</TableHead>
+                        <TableHead className="text-right">{t("pages.dashboard.payrollMismatches.currentChargeHeader")}</TableHead>
+                        <TableHead>{t("pages.dashboard.payrollMismatches.payrollSourceHeader")}</TableHead>
+                        <TableHead>{t("pages.dashboard.payrollMismatches.propertyHeader")}</TableHead>
                         <TableHead className="w-40" />
                       </TableRow>
                     </TableHeader>
@@ -1842,13 +1861,15 @@ export default function Dashboard() {
                               className="ml-2 text-[10px] bg-amber-100 text-amber-800 border-amber-200"
                               data-testid={`badge-overridden-${o.id}`}
                             >
-                              overridden
+                              {t("pages.dashboard.payrollMismatches.overriddenBadge")}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatUsd(o.chargePerBed)}
                             <span className="text-xs text-muted-foreground ml-1">
-                              /{o.billingFrequency === "Weekly" ? "wk" : "mo"}
+                              /{o.billingFrequency === "Weekly"
+                                ? t("pages.dashboard.payrollMismatches.weeklyAbbrev")
+                                : t("pages.dashboard.payrollMismatches.monthlyAbbrev")}
                             </span>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -1861,11 +1882,11 @@ export default function Dashboard() {
                                   className="text-xs tabular-nums"
                                   data-testid={`text-overridden-source-person-${o.id}`}
                                 >
-                                  Person {o.chargeSourcePersonId}
+                                  {t("pages.dashboard.payrollMismatches.person", { id: o.chargeSourcePersonId })}
                                 </div>
                               </div>
                             ) : (
-                              <span className="italic">No payroll link</span>
+                              <span className="italic">{t("pages.dashboard.payrollMismatches.noPayrollLink")}</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -1882,7 +1903,7 @@ export default function Dashboard() {
                               </Link>
                             ) : (
                               <span className="text-sm text-muted-foreground italic">
-                                unassigned
+                                {t("pages.dashboard.payrollMismatches.unassigned")}
                               </span>
                             )}
                           </TableCell>
@@ -1895,7 +1916,9 @@ export default function Dashboard() {
                               data-testid={`button-reclaim-${o.id}`}
                             >
                               <RotateCcw className="h-3 w-3 mr-1" />
-                              {reclaimingIds.has(o.id) ? "Re-claiming…" : "Re-claim"}
+                              {reclaimingIds.has(o.id)
+                                ? t("pages.dashboard.payrollMismatches.reclaimLoading")
+                                : t("pages.dashboard.payrollMismatches.reclaim")}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -1914,21 +1937,16 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <CardTitle>Confirm match</CardTitle>
+                <CardTitle>{t("pages.dashboard.confirmMatch.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-low-confidence-payroll-total-count"
                 >
-                  {scopedLowConfidencePayroll.length} row
-                  {scopedLowConfidencePayroll.length === 1 ? "" : "s"}
+                  {t("pages.dashboard.confirmMatch.rowCount", { count: scopedLowConfidencePayroll.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Payroll rows that matched an existing occupant only by
-                name. At employers with two namesakes the wrong person may
-                have received the rate — confirm the right one (or pick a
-                different occupant) so the next sync locks the match in by
-                Person Id.
+                {t("pages.dashboard.confirmMatch.helperText")}
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1940,15 +1958,15 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold">{group.customer}</p>
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      {group.rows.length} row{group.rows.length === 1 ? "" : "s"}
+                      {t("pages.dashboard.confirmMatch.rowCount", { count: group.rows.length })}
                     </p>
                   </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Payroll name · Person Id</TableHead>
-                        <TableHead>Currently applied to</TableHead>
-                        <TableHead className="text-right">Weekly</TableHead>
+                        <TableHead>{t("pages.dashboard.confirmMatch.payrollNameHeader")}</TableHead>
+                        <TableHead>{t("pages.dashboard.confirmMatch.currentlyAppliedHeader")}</TableHead>
+                        <TableHead className="text-right">{t("pages.dashboard.confirmMatch.weeklyHeader")}</TableHead>
                         <TableHead className="w-32" />
                       </TableRow>
                     </TableHeader>
@@ -1968,8 +1986,8 @@ export default function Dashboard() {
                             <div data-testid={`low-confidence-matched-${row.personId}`}>
                               {row.matched.name}
                               {row.matched.propertyName
-                                ? ` @ ${row.matched.propertyName}`
-                                : " (unassigned)"}
+                                ? t("pages.dashboard.confirmMatch.atProperty", { property: row.matched.propertyName })
+                                : t("pages.dashboard.confirmMatch.unassignedSuffix")}
                             </div>
                             {row.suggestions.length > 0 && (
                               <div
@@ -1978,7 +1996,7 @@ export default function Dashboard() {
                               >
                                 <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                                   <Wand2 className="h-3 w-3" />
-                                  Did you mean:
+                                  {t("pages.dashboard.confirmMatch.didYouMean")}
                                 </span>
                                 {row.suggestions.map((s) => (
                                   <Button
@@ -2025,7 +2043,9 @@ export default function Dashboard() {
                                     data-testid={`button-redirect-low-confidence-${row.personId}-${s.occupantId}`}
                                   >
                                     {s.name}
-                                    {s.propertyName ? ` @ ${s.propertyName}` : " (unassigned)"}
+                                    {s.propertyName
+                                      ? t("pages.dashboard.confirmMatch.atProperty", { property: s.propertyName })
+                                      : t("pages.dashboard.confirmMatch.unassignedSuffix")}
                                   </Button>
                                 ))}
                               </div>
@@ -2071,7 +2091,7 @@ export default function Dashboard() {
                               }}
                               data-testid={`button-confirm-low-confidence-${row.personId}`}
                             >
-                              Confirm
+                              {t("pages.dashboard.confirmMatch.confirm")}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -2089,29 +2109,26 @@ export default function Dashboard() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <History className="h-4 w-4 text-muted-foreground" />
-                <CardTitle>Recently reconciled from payroll</CardTitle>
+                <CardTitle>{t("pages.dashboard.recentReconciliations.title")}</CardTitle>
                 <span
                   className="text-xs text-muted-foreground ml-auto tabular-nums"
                   data-testid="text-recent-payroll-reconciliations-count"
                 >
-                  {recentReconciliations.length} entr
-                  {recentReconciliations.length === 1 ? "y" : "ies"}
+                  {t("pages.dashboard.recentReconciliations.entryCount", { count: recentReconciliations.length })}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Suggestion clicks from this session. Open an occupant to
-                sanity-check the new employer / weekly rate, or undo the
-                change if the seeder guessed wrong.
+                {t("pages.dashboard.recentReconciliations.helperText")}
               </p>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Occupant</TableHead>
-                    <TableHead>New employer</TableHead>
-                    <TableHead className="text-right">Weekly</TableHead>
-                    <TableHead>When</TableHead>
+                    <TableHead>{t("pages.dashboard.recentReconciliations.occupantHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.recentReconciliations.newEmployerHeader")}</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.recentReconciliations.weeklyHeader")}</TableHead>
+                    <TableHead>{t("pages.dashboard.recentReconciliations.whenHeader")}</TableHead>
                     <TableHead className="text-right" />
                   </TableRow>
                 </TableHeader>
@@ -2122,17 +2139,17 @@ export default function Dashboard() {
                       { label: string; className: string }
                     > = {
                       "cross-employer": {
-                        label: "Cross-employer",
+                        label: t("pages.dashboard.recentReconciliations.kindCrossEmployer"),
                         className:
                           "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200",
                       },
                       typo: {
-                        label: "Typo fix",
+                        label: t("pages.dashboard.recentReconciliations.kindTypo"),
                         className:
                           "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200",
                       },
                       confirm: {
-                        label: "Confirmed",
+                        label: t("pages.dashboard.recentReconciliations.kindConfirmed"),
                         className:
                           "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200",
                       },
@@ -2157,7 +2174,7 @@ export default function Dashboard() {
                             </div>
                           ) : (
                             <div className="text-xs text-muted-foreground italic">
-                              unassigned
+                              {t("pages.dashboard.recentReconciliations.unassigned")}
                             </div>
                           )}
                         </TableCell>
@@ -2180,7 +2197,7 @@ export default function Dashboard() {
                           className="text-xs text-muted-foreground"
                           data-testid={`text-recent-reconciliation-when-${entry.occupantId}`}
                         >
-                          {formatRelativeTime(entry.timestamp)}
+                          {formatRelativeTime(t, entry.timestamp)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button
@@ -2192,7 +2209,7 @@ export default function Dashboard() {
                             data-testid={`button-undo-reconciliation-${entry.occupantId}`}
                           >
                             <Undo2 className="h-3 w-3 mr-1" />
-                            {undoingReconciliationIds.has(entry.id) ? "Undoing…" : "Undo"}
+                            {undoingReconciliationIds.has(entry.id) ? t("pages.dashboard.reconciliation.undoing") : t("pages.dashboard.reconciliation.undo")}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -2206,13 +2223,13 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Occupancy Rate</CardTitle>
+            <CardTitle>{t("pages.dashboard.occupancyCard.title")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>{occupiedBeds} Occupied</span>
-                <span>{vacantBeds} Vacant</span>
+                <span>{t("pages.dashboard.occupancyCard.occupied", { count: occupiedBeds })}</span>
+                <span>{t("pages.dashboard.occupancyCard.vacant", { count: vacantBeds })}</span>
               </div>
               <Progress value={occupancyRate} className="h-4" />
             </div>
@@ -2223,10 +2240,10 @@ export default function Dashboard() {
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Trophy className="h-4 w-4 text-amber-500" />
-              <CardTitle>Top Properties by Rating</CardTitle>
+              <CardTitle>{t("pages.dashboard.topProperties.title")}</CardTitle>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sort by</span>
+              <span className="text-xs text-muted-foreground">{t("pages.dashboard.topProperties.sortBy")}</span>
               <Select
                 value={topRatingSort}
                 onValueChange={(v) => setTopRatingSort(v as TopPropertiesSortKey)}
@@ -2235,9 +2252,9 @@ export default function Dashboard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="overall">Overall</SelectItem>
+                  <SelectItem value="overall">{t("pages.dashboard.topProperties.overall")}</SelectItem>
                   {RATING_CATEGORIES.map((c) => (
-                    <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+                    <SelectItem key={c.key} value={c.key}>{t(`pages.dashboard.ratings.${c.key}` as const, { defaultValue: c.label })}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -2249,18 +2266,20 @@ export default function Dashboard() {
                 icon={properties.length === 0 ? Building2 : Trophy}
                 title={
                   properties.length === 0
-                    ? "No properties yet"
-                    : `No ${sortLabel.toLowerCase()} ratings yet`
+                    ? t("pages.dashboard.emptyProperties.title")
+                    : t("pages.dashboard.topProperties.noRatingsTitle", { label: sortLabel.toLowerCase() })
                 }
                 description={
                   properties.length === 0
-                    ? "Add your first property to start ranking your top performers here."
-                    : "Rate your properties to see your top performers ranked here."
+                    ? t("pages.dashboard.emptyProperties.topRatedDescription")
+                    : t("pages.dashboard.topProperties.noRatingsDescription")
                 }
                 action={
                   <Button asChild data-testid="button-empty-top-rated-cta">
                     <Link href="/properties">
-                      {properties.length === 0 ? "Add Property" : "Rate Properties"}
+                      {properties.length === 0
+                        ? t("pages.dashboard.emptyProperties.addProperty")
+                        : t("pages.dashboard.topProperties.ratePropertiesAction")}
                     </Link>
                   </Button>
                 }
@@ -2271,10 +2290,10 @@ export default function Dashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">#</TableHead>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Customer</TableHead>
+                    <TableHead>{t("pages.dashboard.topProperties.property")}</TableHead>
+                    <TableHead>{t("pages.dashboard.topProperties.customer")}</TableHead>
                     <TableHead>{sortLabel}</TableHead>
-                    <TableHead className="text-right">Score</TableHead>
+                    <TableHead className="text-right">{t("pages.dashboard.topProperties.score")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2301,7 +2320,7 @@ export default function Dashboard() {
                           {customer?.name ?? <span className="italic">—</span>}
                         </TableCell>
                         <TableCell>
-                          <StarRating value={score} readOnly size="sm" ariaLabel={`${sortLabel} rating`} />
+                          <StarRating value={score} readOnly size="sm" ariaLabel={t("pages.dashboard.topProperties.ratingAriaLabel", { label: sortLabel })} />
                         </TableCell>
                         <TableCell className="text-right text-sm font-semibold tabular-nums">
                           {score.toFixed(1)}
@@ -2318,7 +2337,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card>
             <CardHeader>
-              <CardTitle>Financial Overview</CardTitle>
+              <CardTitle>{t("pages.dashboard.financialOverview")}</CardTitle>
             </CardHeader>
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -2372,17 +2391,17 @@ export default function Dashboard() {
                       icon={Building2}
                       title={
                         properties.length === 0
-                          ? "No properties yet"
-                          : "No properties match this customer"
+                          ? t("pages.dashboard.emptyProperties.title")
+                          : t("pages.dashboard.performance.noMatchTitle")
                       }
                       description={
                         properties.length === 0
-                          ? "Add your first property to start tracking performance here."
-                          : "Pick a different customer above, or add properties to this one to see performance."
+                          ? t("pages.dashboard.emptyProperties.performanceDescription")
+                          : t("pages.dashboard.performance.noMatchDescription")
                       }
                       action={
                         <Button asChild data-testid="button-empty-perf-cta">
-                          <Link href="/properties">Add Property</Link>
+                          <Link href="/properties">{t("pages.dashboard.emptyProperties.addProperty")}</Link>
                         </Button>
                       }
                       testId="empty-property-performance"
@@ -2409,7 +2428,7 @@ export default function Dashboard() {
                           <TableCell>{occupancyPct}%</TableCell>
                           <TableCell className="text-right">
                             <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                              {formatUsd(Math.abs(data.Profit))} {data.Profit >= 0 ? 'Profit' : 'Loss'}
+                              {formatUsd(Math.abs(data.Profit))} {data.Profit >= 0 ? t("pages.dashboard.performance.profitBadge") : t("pages.dashboard.performance.lossBadge")}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -2429,24 +2448,28 @@ export default function Dashboard() {
       >
         <AlertDialogContent data-testid="dialog-confirm-undo-cross-employer">
           <AlertDialogHeader>
-            <AlertDialogTitle>Undo cross-employer change?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.dashboard.crossEmployer.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingUndoEntry && (
-                <>
-                  This will move{" "}
-                  <span className="font-medium">{pendingUndoEntry.occupantName}</span>
-                  {" "}back from{" "}
-                  <span className="font-medium">{pendingUndoEntry.employer}</span>
-                  {" "}to{" "}
-                  <span className="font-medium">{pendingUndoEntry.prev.company}</span>
-                  , and restore the previous charge and employee ID.
-                </>
+                <Trans
+                  i18nKey="pages.dashboard.crossEmployer.confirmDescription"
+                  values={{
+                    occupant: pendingUndoEntry.occupantName,
+                    employer: pendingUndoEntry.employer,
+                    prevCompany: pendingUndoEntry.prev.company,
+                  }}
+                  components={{
+                    1: <span className="font-medium" />,
+                    3: <span className="font-medium" />,
+                    5: <span className="font-medium" />,
+                  }}
+                />
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-confirm-undo-cross-employer-cancel">
-              Cancel
+              {t("pages.dashboard.crossEmployer.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               data-testid="button-confirm-undo-cross-employer-confirm"
@@ -2455,7 +2478,7 @@ export default function Dashboard() {
                 setPendingUndoEntry(null);
               }}
             >
-              Undo change
+              {t("pages.dashboard.crossEmployer.undoChange")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2471,24 +2494,34 @@ export default function Dashboard() {
       >
         <AlertDialogContent data-testid="dialog-confirm-employer-move">
           <AlertDialogHeader>
-            <AlertDialogTitle>Move occupant to a new employer?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.dashboard.employerMove.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingEmployerMove && (
-                <>
-                  Move <span className="font-medium">{pendingEmployerMove.occupantName}</span>
-                  {" "}from <span className="font-medium">{pendingEmployerMove.fromCompany}</span>
-                  {" "}to <span className="font-medium">{pendingEmployerMove.toCompany}</span>
-                  {pendingEmployerMove.propertyName ? (
-                    <> at <span className="font-medium">{pendingEmployerMove.propertyName}</span></>
-                  ) : null}
-                  ? This changes which customer the occupant belongs to.
-                </>
+                <Trans
+                  i18nKey={
+                    pendingEmployerMove.propertyName
+                      ? "pages.dashboard.employerMove.confirmDescriptionWithProperty"
+                      : "pages.dashboard.employerMove.confirmDescription"
+                  }
+                  values={{
+                    occupant: pendingEmployerMove.occupantName,
+                    from: pendingEmployerMove.fromCompany,
+                    to: pendingEmployerMove.toCompany,
+                    property: pendingEmployerMove.propertyName ?? "",
+                  }}
+                  components={{
+                    1: <span className="font-medium" />,
+                    3: <span className="font-medium" />,
+                    5: <span className="font-medium" />,
+                    7: <span className="font-medium" />,
+                  }}
+                />
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-confirm-employer-move-cancel">
-              Cancel
+              {t("pages.dashboard.employerMove.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               data-testid="button-confirm-employer-move-confirm"
@@ -2529,11 +2562,14 @@ export default function Dashboard() {
                   queryKey: getListUnplacedPayrollQueryKey(),
                 });
                 toast({
-                  title: "Occupant moved",
-                  description: `${move.occupantName} is now under ${move.toCompany}.`,
+                  title: t("pages.dashboard.employerMove.movedTitle"),
+                  description: t("pages.dashboard.employerMove.movedDescription", {
+                    occupant: move.occupantName,
+                    employer: move.toCompany,
+                  }),
                   action: (
                     <ToastAction
-                      altText="Undo employer move"
+                      altText={t("pages.dashboard.employerMove.undoAltText")}
                       data-testid="button-undo-employer-move"
                       onClick={() => {
                         updateOccupant(move.occupantId, {
@@ -2550,20 +2586,23 @@ export default function Dashboard() {
                         });
                         queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
                         toast({
-                          title: "Move undone",
-                          description: `${move.occupantName} restored to ${prevCompany}.`,
+                          title: t("pages.dashboard.employerMove.undoneTitle"),
+                          description: t("pages.dashboard.employerMove.undoneDescription", {
+                            occupant: move.occupantName,
+                            prevCompany,
+                          }),
                         });
                       }}
                     >
                       <Undo2 className="h-3 w-3 mr-1" />
-                      Undo
+                      {t("pages.dashboard.employerMove.undoButton")}
                     </ToastAction>
                   ),
                 });
                 setPendingEmployerMove(null);
               }}
             >
-              Move occupant
+              {t("pages.dashboard.employerMove.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2573,20 +2612,22 @@ export default function Dashboard() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {digestMode === "dry-run" ? "Preview digest (dry-run)" : "Send digest preview"}
+              {digestMode === "dry-run"
+                ? t("pages.dashboard.digest.dryRunTitle")
+                : t("pages.dashboard.digest.sendTitle")}
             </DialogTitle>
             <DialogDescription>
               {digestMode === "dry-run"
-                ? "Enter the admin secret to render the weekly lease digest email without sending it. The recipients won't receive anything."
-                : "Enter the admin secret to send the weekly lease digest email now."}
+                ? t("pages.dashboard.digest.dryRunDescription")
+                : t("pages.dashboard.digest.sendDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-4">
-            <Label htmlFor="digest-secret">Admin secret</Label>
+            <Label htmlFor="digest-secret">{t("pages.dashboard.digest.adminSecretLabel")}</Label>
             <Input
               id="digest-secret"
               type="password"
-              placeholder="Enter admin secret"
+              placeholder={t("pages.dashboard.digest.adminSecretPlaceholder")}
               value={digestSecret}
               onChange={(e) => setDigestSecret(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && digestSecret.trim()) handleSendDigestPreview(); }}
@@ -2595,17 +2636,17 @@ export default function Dashboard() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDigestSecretDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDigestSecretDialogOpen(false)}>{t("pages.dashboard.digest.cancel")}</Button>
             <Button onClick={handleSendDigestPreview} disabled={!digestSecret.trim()} data-testid="button-confirm-digest-preview">
               {digestMode === "dry-run" ? (
                 <>
                   <Eye className="h-4 w-4 mr-2" />
-                  Render preview
+                  {t("pages.dashboard.digest.renderPreview")}
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Send now
+                  {t("pages.dashboard.digest.sendNow")}
                 </>
               )}
             </Button>
@@ -2619,31 +2660,28 @@ export default function Dashboard() {
       >
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="dialog-digest-dryrun-preview">
           <DialogHeader>
-            <DialogTitle>Digest email preview</DialogTitle>
+            <DialogTitle>{t("pages.dashboard.digest.emailPreviewTitle")}</DialogTitle>
             <DialogDescription>
-              This is exactly what would be POSTed to the digest webhook.
-              Nothing was sent — close to discard, or use "Send now to
-              recipients" if it looks right.
+              {t("pages.dashboard.digest.emailPreviewDescription")}
             </DialogDescription>
           </DialogHeader>
           {digestDryRunResult && (
             <div className="grid gap-3 py-2 overflow-y-auto pr-1">
               <div className="grid gap-1 text-sm">
-                <Label className="text-xs text-muted-foreground">To</Label>
+                <Label className="text-xs text-muted-foreground">{t("pages.dashboard.digest.to")}</Label>
                 <div className="font-mono text-xs break-all" data-testid="text-digest-preview-to">
                   {digestDryRunResult.email.to.join(", ")}
                 </div>
               </div>
               <div className="grid gap-1 text-sm">
-                <Label className="text-xs text-muted-foreground">Subject</Label>
+                <Label className="text-xs text-muted-foreground">{t("pages.dashboard.digest.subject")}</Label>
                 <div className="font-medium" data-testid="text-digest-preview-subject">
                   {digestDryRunResult.email.subject}
                 </div>
               </div>
               <div className="grid gap-1 text-sm">
                 <Label className="text-xs text-muted-foreground">
-                  Rendered HTML ({digestDryRunResult.total} expiring lease
-                  {digestDryRunResult.total === 1 ? "" : "s"})
+                  {t("pages.dashboard.digest.renderedHtml", { count: digestDryRunResult.total })}
                 </Label>
                 <div
                   className="rounded-md border bg-muted/30 p-3 text-sm prose prose-sm max-w-none [&_a]:text-primary"
@@ -2652,7 +2690,7 @@ export default function Dashboard() {
                 />
               </div>
               <div className="grid gap-1 text-sm">
-                <Label className="text-xs text-muted-foreground">Plain-text body</Label>
+                <Label className="text-xs text-muted-foreground">{t("pages.dashboard.digest.plainTextBody")}</Label>
                 <pre
                   className="rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap font-mono"
                   data-testid="text-digest-preview-text"
@@ -2662,7 +2700,7 @@ export default function Dashboard() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDigestDryRunResult(null)} data-testid="button-close-digest-preview">
-              Close
+              {t("pages.dashboard.digest.close")}
             </Button>
             <Button
               onClick={() => {
@@ -2672,7 +2710,7 @@ export default function Dashboard() {
               data-testid="button-send-after-preview"
             >
               <Send className="h-4 w-4 mr-2" />
-              Send now to recipients
+              {t("pages.dashboard.digest.sendNowToRecipients")}
             </Button>
           </DialogFooter>
         </DialogContent>

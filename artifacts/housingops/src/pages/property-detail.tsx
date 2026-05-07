@@ -38,6 +38,7 @@ import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
+import { computeShiftPairs, roomHasAnyShift } from "@/lib/shift-pairs";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 
@@ -121,59 +122,11 @@ function writePersistedBedsSort(sort: BedsSortKey): void {
 //
 // Coverage mode is opt-in: if no occupant in the room has a shift set, we skip
 // the badges entirely so non-hot-bedded properties look unchanged.
-type PairCoverage = {
-  letter: string;          // "A", "B", ...
-  pairLabel: string;       // "Bedroom A"
-  bedNumbers: [number, number];
-  shifts: Array<"1st" | "2nd" | null>; // per slot, in order
-  hasFirst: boolean;
-  hasSecond: boolean;
-  hasDuplicate: boolean;   // both occupants on the same shift → double-booked
-  isFullyCovered: boolean; // exactly one 1st and one 2nd
-  isEmpty: boolean;        // no shifts assigned in this pair yet
-};
-
-function computeShiftPairs(
-  beds: Bed[],
-  occupants: Occupant[],
-): PairCoverage[] {
-  const sorted = [...beds].sort((a, b) => a.bedNumber - b.bedNumber);
-  const pairs: PairCoverage[] = [];
-  for (let i = 0; i + 1 < sorted.length; i += 2) {
-    const left = sorted[i];
-    const right = sorted[i + 1];
-    const leftOcc = occupants.find(o => o.bedId === left.id && o.status === "Active");
-    const rightOcc = occupants.find(o => o.bedId === right.id && o.status === "Active");
-    const shifts: Array<"1st" | "2nd" | null> = [
-      leftOcc?.shift ?? null,
-      rightOcc?.shift ?? null,
-    ];
-    const hasFirst = shifts.includes("1st");
-    const hasSecond = shifts.includes("2nd");
-    const hasDuplicate =
-      (shifts[0] !== null && shifts[0] === shifts[1]);
-    const isEmpty = shifts.every(s => s === null);
-    pairs.push({
-      letter: String.fromCharCode(65 + i / 2),
-      pairLabel: `Bedroom ${String.fromCharCode(65 + i / 2)}`,
-      bedNumbers: [left.bedNumber, right.bedNumber],
-      shifts,
-      hasFirst,
-      hasSecond,
-      hasDuplicate,
-      isFullyCovered: hasFirst && hasSecond && !hasDuplicate,
-      isEmpty,
-    });
-  }
-  return pairs;
-}
-
-function roomHasAnyShift(beds: Bed[], occupants: Occupant[]): boolean {
-  return beds.some(b => {
-    const occ = occupants.find(o => o.bedId === b.id && o.status === "Active");
-    return occ?.shift != null;
-  });
-}
+//
+// `computeShiftPairs` and `roomHasAnyShift` live in `@/lib/shift-pairs` so
+// they can be reused by the dashboard shift-gap card (task #388).
+// Re-export the type locally for convenience inside this file.
+export type { PairCoverage } from "@/lib/shift-pairs";
 
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
@@ -575,15 +528,15 @@ export default function PropertyDetail() {
     const tab = new URLSearchParams(window.location.search).get("tab");
     return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
   });
-  const [highlightedBedId, setHighlightedBedId] = useState<string | null>(null);
+  const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
   }, []);
+  const highlightConsumedRef = useRef(false);
   const focusBed = (bedId: string) => {
     setActiveTab("beds");
-    setHighlightedBedId(bedId);
-    // Wait for the Beds tab content to mount before scrolling.
+    setHighlightedBedIds(new Set([bedId]));
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const el = document.getElementById(`bed-row-${bedId}`);
@@ -593,8 +546,40 @@ export default function PropertyDetail() {
       });
     });
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedBedId(null), 2000);
+    highlightTimerRef.current = setTimeout(() => setHighlightedBedIds(new Set()), 2000);
   };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (highlightConsumedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const roomId = params.get("highlightRoom");
+    const bedroomLetter = params.get("highlightBedroom");
+    if (!roomId || !bedroomLetter) return;
+    const roomBeds = beds
+      .filter((b) => b.roomId === roomId)
+      .sort((a, b) => a.bedNumber - b.bedNumber);
+    if (roomBeds.length < 2) return;
+    const pairIndex = bedroomLetter.charCodeAt(0) - 65;
+    const startIdx = pairIndex * 2;
+    const pairBeds = roomBeds.slice(startIdx, startIdx + 2);
+    if (pairBeds.length === 0) return;
+    highlightConsumedRef.current = true;
+    const ids = new Set(pairBeds.map((b) => b.id));
+    setHighlightedBedIds(ids);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const firstBed = pairBeds[0];
+        if (firstBed) {
+          const el = document.getElementById(`bed-row-${firstBed.id}`);
+          if (el && typeof el.scrollIntoView === "function") {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+      });
+    });
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedBedIds(new Set()), 3000);
+  }, [beds]);
 
   if (isLoading) {
     return (
@@ -2044,7 +2029,7 @@ export default function PropertyDetail() {
                                       }
                                     };
 
-                                    const isHighlighted = highlightedBedId === bed.id;
+                                    const isHighlighted = highlightedBedIds.has(bed.id);
                                     return (
                                       <TableRow
                                         key={bed.id}

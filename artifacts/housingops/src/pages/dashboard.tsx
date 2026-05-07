@@ -49,7 +49,16 @@ export default function Dashboard() {
 
   const scopedProperties = useMemo(() => {
     if (customerFilter === ALL_CUSTOMERS) return properties;
-    return properties.filter((p) => p.customerId === customerFilter);
+    // Shared-housing properties (task #295/#311) surface under every
+    // customer in `sharedWithCustomerIds`, in addition to the primary
+    // `customerId`, so a scoped dashboard for a shared tenant still
+    // sees those properties (and the beds/leases/utilities/occupants
+    // derived from them).
+    return properties.filter(
+      (p) =>
+        p.customerId === customerFilter ||
+        (p.sharedWithCustomerIds ?? []).includes(customerFilter),
+    );
   }, [properties, customerFilter]);
 
   const scopedPropertyIds = useMemo(

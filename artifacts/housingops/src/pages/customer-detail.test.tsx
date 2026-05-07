@@ -90,11 +90,25 @@ const mockData = {
     { id: "c1", name: "Acme Co", contactName: "Dana Rivera", email: "dana@acme.test", phone: "555-0100", notes: "VIP customer." },
     { id: "c2", name: "Globex", contactName: "", email: "", phone: "", notes: "" },
     { id: "c3", name: "Empty Co", contactName: "Jamie", email: "jamie@empty.test", phone: "", notes: "" },
+    { id: "c4", name: "Penda", contactName: "", email: "", phone: "", notes: "" },
   ],
   properties: [
     { ...baseProperty, id: "p1", customerId: "c1", name: "Maple House", city: "Austin", state: "TX" },
     { ...baseProperty, id: "p2", customerId: "c1", name: "Oak House",   city: "Dallas", state: "TX" },
     { ...baseProperty, id: "p3", customerId: "c2", name: "Pine Lodge",  city: "Los Angeles", state: "CA" },
+    // Shared-housing property (task #295/#311). Primary customer is
+    // c4 (Penda), but c1 is listed in `sharedWithCustomerIds` so it
+    // must surface on c1's detail page too — without polluting c2's
+    // page, which is asserted independently below.
+    {
+      ...baseProperty,
+      id: "p4",
+      customerId: "c4",
+      sharedWithCustomerIds: ["c1"],
+      name: "Ridge Motor Inn",
+      city: "Baraboo",
+      state: "WI",
+    },
   ],
   beds: [
     // p1: 4 beds, 3 occupied
@@ -305,8 +319,12 @@ describe("Customer detail page", () => {
     expect(byTestId("card-customer-properties")).not.toBeNull();
     expect(byTestId("row-customer-property-p1")).not.toBeNull();
     expect(byTestId("row-customer-property-p2")).not.toBeNull();
-    // c1 does NOT own p3, so that row must be absent on c1's page.
+    // c1 does NOT own p3 (and p3 isn't shared with c1), so that row
+    // must be absent on c1's page.
     expect(byTestId("row-customer-property-p3")).toBeNull();
+    // p4 is primarily owned by c2 but shared with c1 via
+    // sharedWithCustomerIds — it should surface on c1's page (task #339).
+    expect(byTestId("row-customer-property-p4")).not.toBeNull();
     expect(byTestId("empty-properties")).toBeNull();
   });
 
@@ -343,8 +361,9 @@ describe("Customer detail page", () => {
     await clickEl(requireTestId("button-view-customer-c1"));
     expect(requireTestId("customer-detail-name").textContent).toBe("Acme Co");
 
-    // 2 properties → "Properties" card shows 2.
-    expect(requireTestId("stat-properties").textContent).toContain("2");
+    // 3 properties → "Properties" card shows 3 (p1 + p2 owned, p4
+    // shared from c2 via sharedWithCustomerIds — task #339).
+    expect(requireTestId("stat-properties").textContent).toContain("3");
     // Beds card shows "4/6" — same occupied/total as the list cell.
     expect(requireTestId("stat-beds").textContent).toMatch(/4\s*\/\s*6/);
     // Occupancy card shows 67%, matching the list's 67%.
@@ -421,6 +440,39 @@ describe("Customer detail page", () => {
     expect(requireTestId("stat-customer-paid-rent").textContent).toContain("—");
     expect(requireTestId("empty-customer-paid-leases")).not.toBeNull();
     expect(byTestId("list-customer-paid-leases")).toBeNull();
+  });
+
+  // ── Shared-housing properties (task #339) ───────────────────────────
+
+  it("surfaces a shared-housing property on every customer's detail page (task #339)", async () => {
+    // p4 is primarily owned by c4 (Penda) but shared with c1 (Acme) via
+    // `sharedWithCustomerIds`. Both customers should see Ridge Motor
+    // Inn in their property table; c2, which is unrelated to p4,
+    // should not.
+    await renderAt("/customers/c1");
+    expect(byTestId("row-customer-property-p4")).not.toBeNull();
+
+    // Re-render the harness at c4's page — primary owner sees it too.
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    await renderAt("/customers/c4");
+    expect(byTestId("row-customer-property-p4")).not.toBeNull();
+
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    // c2 is unrelated to p4 — Ridge Motor Inn must NOT appear on its page.
+    await renderAt("/customers/c2");
+    expect(byTestId("row-customer-property-p4")).toBeNull();
   });
 
   // ── Bad-id state ─────────────────────────────────────────────────────

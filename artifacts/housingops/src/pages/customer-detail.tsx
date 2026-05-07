@@ -89,7 +89,14 @@ export default function CustomerDetail() {
   // charge). Memoized so the calculation only re-runs when the underlying
   // collections actually change.
   const propertyStats = useMemo(() => {
-    const customerProperties = properties.filter((p) => p.customerId === id);
+    // Include shared-housing properties (task #295/#311): a property
+    // belongs to this customer's page if it's their primary
+    // `customerId` OR if they're listed in `sharedWithCustomerIds`.
+    const customerProperties = properties.filter(
+      (p) =>
+        p.customerId === id ||
+        (p.sharedWithCustomerIds ?? []).includes(id),
+    );
 
     const bedsByProperty = new Map<string, { total: number; occupied: number }>();
     for (const b of beds) {
@@ -145,7 +152,13 @@ export default function CustomerDetail() {
     }
 
     const customerPropIds = new Set(
-      properties.filter((p) => p.customerId === id).map((p) => p.id),
+      properties
+        .filter(
+          (p) =>
+            p.customerId === id ||
+            (p.sharedWithCustomerIds ?? []).includes(id),
+        )
+        .map((p) => p.id),
     );
     const relevantOccupants = occupants.filter(
       (o) => o.propertyId && customerPropIds.has(o.propertyId),

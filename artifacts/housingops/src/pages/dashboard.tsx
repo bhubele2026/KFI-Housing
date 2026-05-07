@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2, Send } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send } from "lucide-react";
 import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -35,7 +35,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
-import { computeShiftPairs, roomHasAnyShift } from "@/lib/shift-pairs";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -144,56 +143,10 @@ export default function Dashboard() {
     [occupants, scopedPropertyIds],
   );
 
-  // Payroll-reconciliation counters (Task #304). Only consider Active
-  // occupants — Former occupants don't show up in the property page so
-  // counting them in the dashboard total would mislead the operator.
-  // "Auto-reconciled" = `chargeSource === "payroll"`; everything else
-  // (including occupants the seeder couldn't match) is "manually set".
   const activeOccupants = useMemo(
     () => scopedOccupants.filter((o) => o.status === "Active"),
     [scopedOccupants],
   );
-  const autoReconciledOccupantCount = useMemo(
-    () => activeOccupants.filter((o) => o.chargeSource === "payroll").length,
-    [activeOccupants],
-  );
-  const manualOccupantCount = activeOccupants.length - autoReconciledOccupantCount;
-
-  // Per-customer reconciliation breakdown (Task #331). Operators want to
-  // see *which* customer still has manual rows so they can chase the
-  // right payroll cycle. Group active in-scope occupants by their
-  // property's customerId, then rank by manual count desc (tie-break by
-  // name) so the worst offender sits at the top. When a single customer
-  // is filtered the list collapses to one row, which is still useful as
-  // a same-card confirmation of the totals above.
-  const reconciliationByCustomer = useMemo(() => {
-    const propertyCustomerById = new Map(
-      scopedProperties.map((p) => [p.id, p.customerId] as const),
-    );
-    const customerNameById = new Map(customers.map((c) => [c.id, c.name] as const));
-    const map = new Map<
-      string,
-      { customerId: string; customerName: string; manual: number; auto: number }
-    >();
-    for (const o of activeOccupants) {
-      if (o.propertyId === null) continue;
-      const customerId = propertyCustomerById.get(o.propertyId);
-      if (!customerId) continue;
-      const existing =
-        map.get(customerId) ?? {
-          customerId,
-          customerName: customerNameById.get(customerId) ?? "Unknown customer",
-          manual: 0,
-          auto: 0,
-        };
-      if (o.chargeSource === "payroll") existing.auto += 1;
-      else existing.manual += 1;
-      map.set(customerId, existing);
-    }
-    return Array.from(map.values()).sort(
-      (a, b) => b.manual - a.manual || a.customerName.localeCompare(b.customerName),
-    );
-  }, [activeOccupants, scopedProperties, customers]);
 
   const customerPaidRentByCustomer = useMemo(() => {
     const rows: { customerId: string; customerName: string; rent: number; leaseCount: number }[] = [];
@@ -931,60 +884,6 @@ export default function Dashboard() {
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  interface ShiftGapRow {
-    propertyId: string;
-    propertyName: string;
-    roomId: string;
-    roomName: string;
-    pairLabel: string;
-    issue: "half-covered" | "double-booked";
-    detail: string;
-  }
-  const shiftGapRows = useMemo<ShiftGapRow[]>(() => {
-    const out: ShiftGapRow[] = [];
-    const scopedRooms = rooms.filter((r) => scopedPropertyIds.has(r.propertyId));
-    for (const room of scopedRooms) {
-      const roomBeds = scopedBeds.filter((b) => b.roomId === room.id);
-      if (roomBeds.length < 2) continue;
-      if (!roomHasAnyShift(roomBeds, scopedOccupants)) continue;
-      const pairs = computeShiftPairs(roomBeds, scopedOccupants);
-      for (const pair of pairs) {
-        if (pair.isFullyCovered || pair.isEmpty) continue;
-        const propertyName =
-          scopedProperties.find((p) => p.id === room.propertyId)?.name ?? "—";
-        if (pair.hasDuplicate) {
-          out.push({
-            propertyId: room.propertyId,
-            propertyName,
-            roomId: room.id,
-            roomName: room.name,
-            pairLabel: pair.pairLabel,
-            issue: "double-booked",
-            detail: `Both beds on ${pair.shifts[0]} shift`,
-          });
-        } else {
-          const missing = pair.hasFirst ? "2nd" : "1st";
-          out.push({
-            propertyId: room.propertyId,
-            propertyName,
-            roomId: room.id,
-            roomName: room.name,
-            pairLabel: pair.pairLabel,
-            issue: "half-covered",
-            detail: `Needs ${missing} shift`,
-          });
-        }
-      }
-    }
-    out.sort((a, b) => {
-      const issueOrder = a.issue === "double-booked" ? 0 : 1;
-      const issueOrderB = b.issue === "double-booked" ? 0 : 1;
-      if (issueOrder !== issueOrderB) return issueOrder - issueOrderB;
-      return a.propertyName.localeCompare(b.propertyName) || a.roomName.localeCompare(b.roomName);
-    });
-    return out;
-  }, [rooms, scopedPropertyIds, scopedBeds, scopedOccupants, scopedProperties]);
-
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS
       ? null
@@ -1437,209 +1336,6 @@ export default function Dashboard() {
                   )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card data-testid="card-shift-gaps">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <BedDouble className="h-4 w-4 text-muted-foreground" />
-              <CardTitle>Bedroom shift coverage</CardTitle>
-              {shiftGapRows.length > 0 && (
-                <span
-                  className="text-xs text-muted-foreground ml-auto tabular-nums"
-                  data-testid="text-shift-gaps-total-count"
-                >
-                  {shiftGapRows.length} gap{shiftGapRows.length === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {shiftGapRows.length > 0
-                ? "Hot-bedded bedrooms that are half-covered (missing a shift) or double-booked (two on the same shift)."
-                : "All hot-bedded bedrooms are fully covered — every pair has one 1st-shift and one 2nd-shift occupant."}
-            </p>
-          </CardHeader>
-          {shiftGapRows.length > 0 ? (
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Room</TableHead>
-                    <TableHead>Bedroom</TableHead>
-                    <TableHead>Issue</TableHead>
-                    <TableHead>Detail</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {shiftGapRows.map((row) => (
-                    <TableRow
-                      key={`${row.roomId}-${row.pairLabel}`}
-                      className={
-                        row.issue === "double-booked"
-                          ? "border-l-4 border-l-red-500"
-                          : "border-l-4 border-l-amber-500"
-                      }
-                      data-testid={`row-shift-gap-${row.roomId}-${row.pairLabel}`}
-                    >
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/properties/${row.propertyId}?tab=beds&highlightRoom=${encodeURIComponent(row.roomId)}&highlightBedroom=${encodeURIComponent(row.pairLabel.replace("Bedroom ", ""))}`}
-                          className="hover:underline text-primary"
-                          data-testid={`link-shift-gap-${row.roomId}-${row.pairLabel}`}
-                        >
-                          <PropertyNameCell
-                            name={row.propertyName}
-                            primaryClassName="text-primary"
-                          />
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-sm">{row.roomName}</TableCell>
-                      <TableCell className="text-sm">{row.pairLabel}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            row.issue === "double-booked"
-                              ? "bg-red-100 text-red-800 border-red-200"
-                              : "bg-amber-100 text-amber-800 border-amber-200"
-                          }
-                          data-testid={`badge-shift-gap-${row.roomId}-${row.pairLabel}`}
-                        >
-                          {row.issue === "double-booked" ? "Double-booked" : "Half-covered"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell
-                        className="text-sm text-muted-foreground"
-                        data-testid={`text-shift-gap-detail-${row.roomId}-${row.pairLabel}`}
-                      >
-                        {row.detail}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          ) : (
-            <CardContent>
-              <div
-                className="flex items-center gap-2 rounded-md border border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-950/20 px-4 py-3"
-                data-testid="shift-gaps-all-clear"
-              >
-                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
-                <p className="text-sm text-green-800 dark:text-green-300">
-                  All clear — every hot-bedded bedroom has complementary shift coverage.
-                </p>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-
-        {activeOccupants.length > 0 && (
-          <Card data-testid="card-payroll-reconciliation">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Receipt className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm font-semibold">Payroll reconciliation</p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <p
-                    className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400"
-                    data-testid="text-payroll-auto-reconciled-count"
-                  >
-                    {autoReconciledOccupantCount}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Occupant{autoReconciledOccupantCount === 1 ? "" : "s"} with charge auto-set from payroll.
-                  </p>
-                </div>
-                <div>
-                  <p
-                    className="text-2xl font-bold tabular-nums"
-                    data-testid="text-payroll-manual-count"
-                  >
-                    {manualOccupantCount}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Occupant{manualOccupantCount === 1 ? "" : "s"} with manually-entered charge.
-                  </p>
-                </div>
-                <div>
-                  <p
-                    className="text-2xl font-bold tabular-nums text-muted-foreground"
-                    data-testid="text-payroll-total-count"
-                  >
-                    {activeOccupants.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Total active occupants in scope.
-                  </p>
-                </div>
-              </div>
-              {reconciliationByCustomer.length > 0 && (
-                <div className="mt-6">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    By customer · ranked by manual rows
-                  </p>
-                  <Table data-testid="table-payroll-reconciliation-by-customer">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Manual</TableHead>
-                        <TableHead className="text-right">Auto</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {reconciliationByCustomer.map((row) => {
-                        const total = row.manual + row.auto;
-                        return (
-                          <TableRow
-                            key={row.customerId}
-                            data-testid={`row-payroll-reconciliation-${row.customerId}`}
-                          >
-                            <TableCell className="font-medium">{row.customerName}</TableCell>
-                            <TableCell
-                              className={
-                                "text-right tabular-nums " +
-                                (row.manual > 0 ? "font-semibold" : "text-muted-foreground")
-                              }
-                              data-testid={`text-payroll-reconciliation-${row.customerId}-manual`}
-                            >
-                              {row.manual > 0 ? (
-                                <Link
-                                  href={`/occupants?chargeSource=manual&customer=${encodeURIComponent(row.customerId)}`}
-                                  className="underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer"
-                                  data-testid={`link-payroll-reconciliation-${row.customerId}-manual`}
-                                >
-                                  {row.manual}
-                                </Link>
-                              ) : (
-                                row.manual
-                              )}
-                            </TableCell>
-                            <TableCell
-                              className="text-right tabular-nums text-emerald-700 dark:text-emerald-400"
-                              data-testid={`text-payroll-reconciliation-${row.customerId}-auto`}
-                            >
-                              {row.auto}
-                            </TableCell>
-                            <TableCell
-                              className="text-right tabular-nums text-muted-foreground"
-                              data-testid={`text-payroll-reconciliation-${row.customerId}-total`}
-                            >
-                              {total}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}

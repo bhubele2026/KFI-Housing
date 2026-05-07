@@ -1,54 +1,23 @@
 import { Router, type IRouter } from "express";
 import path from "node:path";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 
-/**
- * Read-only static-ish endpoint for serving the bundled lease PDFs that ship
- * under the repo's `attached_assets/` directory. The seeders all stamp the
- * source PDF filename into a lease's notes/clauses (e.g. `Source:
- * Lease_-1331_..._kfi-staff_1778107848648.pdf`); the Leases UI extracts that
- * filename and links here so an operator can open the original document in
- * a new tab without digging through the workspace by hand (Task #308).
- *
- * Why a hand-rolled route instead of `express.static`:
- *   • Restricting to `.pdf` (and a couple of other doc types) keeps any
- *     future xlsx/png/etc. that happen to land in `attached_assets/` from
- *     leaking through this surface.
- *   • Strict filename validation is the only path-traversal defence we
- *     need — the route never accepts subdirectories or `..` segments and
- *     `path.basename` strips any that slip past the validator.
- */
 const router: IRouter = Router();
 
-// Resolve the repo's `attached_assets/` once at module load. The api-server
-// is started from `artifacts/api-server/` (cwd via package.json scripts), so
-// the bundled assets sit two levels up — same convention used by
-// `import-master-leases.ts` for the master xlsx workbook.
 function attachedAssetsDir(): string {
   return path.resolve(process.cwd(), "..", "..", "attached_assets");
 }
 
-// Operator-facing PDFs are the only thing operators link to from the Leases
-// UI. Anything else under `attached_assets/` (xlsx exports, screenshots, …)
-// is irrelevant to this surface and is rejected so we never broaden the
-// blast radius of a leaked URL beyond the lease documents themselves.
+function thumbnailDir(): string {
+  return path.join(attachedAssetsDir(), ".thumbnails");
+}
+
 const ALLOWED_EXTENSIONS = new Set([".pdf"]);
 
-// Filenames the seeders write are ASCII-only with letters, digits, and a
-// small punctuation set (`_`, `-`, `.`, `,`, `(`, `)`, `#`, `+`, `@`). The
-// regex pins to that alphabet so a malicious `?filename=../../etc/passwd`
-// is rejected before it can reach `path.basename`. We deliberately do NOT
-// allow forward slashes or backslashes anywhere in the value.
 const SAFE_FILENAME_RE = /^[A-Za-z0-9._,\-+()#@]+$/;
 
-/**
- * Resolve a request's filename param against `attached_assets/`, applying the
- * same allow-list and traversal defences as the file route below. Returns the
- * absolute path on success, or an HTTP-style error code/message the caller
- * can surface to the client. Factored out so the thumbnail endpoint reuses
- * the exact same validation as the file endpoint.
- */
 function resolveAttachedAsset(
   raw: string,
 ): { ok: true; fullPath: string; filename: string } | { ok: false; status: 400 | 404; error: string } {
@@ -72,48 +41,70 @@ function resolveAttachedAsset(
   return { ok: true, fullPath, filename };
 }
 
-/**
- * In-process cache of rendered page-1 thumbnails keyed by filename + mtimeMs.
- * The leases list re-requests the same handful of PDF thumbnails on every
- * navigation; rendering each one fresh would burn ~150ms of pdfjs+canvas work
- * per request. The cache is bounded to keep RSS predictable on long-running
- * servers — leases lists rarely exceed a few dozen distinct PDFs, but we cap
- * at 64 entries and evict the oldest when full. The mtime suffix means a
- * replaced PDF on disk auto-invalidates without a server restart.
- */
-const THUMBNAIL_CACHE_MAX = 64;
-const thumbnailCache = new Map<string, Buffer>();
+function thumbnailCacheKey(filename: string, mtimeMs: number, width: number): string {
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${filename}:${mtimeMs}:${width}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `${hash}.png`;
+}
 
-function rememberThumbnail(key: string, png: Buffer): void {
-  if (thumbnailCache.has(key)) thumbnailCache.delete(key);
-  thumbnailCache.set(key, png);
-  while (thumbnailCache.size > THUMBNAIL_CACHE_MAX) {
-    const oldestKey = thumbnailCache.keys().next().value;
-    if (oldestKey === undefined) break;
-    thumbnailCache.delete(oldestKey);
+async function readCachedThumbnail(cacheFile: string): Promise<Buffer | null> {
+  try {
+    return await fsp.readFile(cacheFile);
+  } catch {
+    return null;
   }
 }
 
-/**
- * Render page 1 of `pdfPath` to a PNG roughly `targetWidth` pixels wide.
- * Uses pdfjs-dist's legacy build (no worker, runs synchronously on the
- * Node event loop) and `@napi-rs/canvas` for the 2D backend. Both are
- * declared as dependencies of the api-server. Returns null on any render
- * failure so the route can fall back to a 500 → the client renders a PDF
- * icon instead of a broken image.
- */
+async function writeCachedThumbnail(cacheFile: string, png: Buffer): Promise<void> {
+  const dir = path.dirname(cacheFile);
+  await fsp.mkdir(dir, { recursive: true });
+  const tmp = cacheFile + ".tmp." + process.pid + "." + Math.random().toString(36).slice(2, 8);
+  try {
+    await fsp.writeFile(tmp, png);
+    await fsp.rename(tmp, cacheFile);
+  } catch {
+    await fsp.unlink(tmp).catch(() => {});
+  }
+}
+
+let _pdfjsMod: typeof import("pdfjs-dist/legacy/build/pdf.mjs") | null = null;
+let _canvasMod: typeof import("@napi-rs/canvas") | null = null;
+let _protoFixed = false;
+
+function fixEnumerableArrayPrototypeForPdfjs(): void {
+  if (_protoFixed) return;
+  _protoFixed = true;
+  const desc = Object.getOwnPropertyDescriptor(Array.prototype, "random");
+  if (desc && desc.enumerable) {
+    Object.defineProperty(Array.prototype, "random", {
+      ...desc,
+      enumerable: false,
+    });
+  }
+}
+
+async function loadRenderDeps() {
+  if (!_pdfjsMod || !_canvasMod) {
+    fixEnumerableArrayPrototypeForPdfjs();
+    const [canvas, pdfjs] = await Promise.all([
+      import("@napi-rs/canvas"),
+      import("pdfjs-dist/legacy/build/pdf.mjs"),
+    ]);
+    _canvasMod = canvas;
+    _pdfjsMod = pdfjs;
+  }
+  return { createCanvas: _canvasMod.createCanvas, pdfjs: _pdfjsMod };
+}
+
 async function renderPdfFirstPagePng(
   pdfPath: string,
   targetWidth: number,
 ): Promise<Buffer | null> {
   try {
-    // Dynamic imports keep the module graph lazy: thumbnails are an opt-in
-    // feature for the leases list, so the api-server's cold start (and tests
-    // that never touch this route) shouldn't pay the pdfjs+canvas load cost.
-    const [{ createCanvas }, pdfjs] = await Promise.all([
-      import("@napi-rs/canvas"),
-      import("pdfjs-dist/legacy/build/pdf.mjs"),
-    ]);
+    const { createCanvas, pdfjs } = await loadRenderDeps();
     const data = new Uint8Array(await fsp.readFile(pdfPath));
     const doc = await pdfjs.getDocument({
       data,
@@ -129,13 +120,6 @@ async function renderPdfFirstPagePng(
       const height = Math.max(1, Math.ceil(viewport.height));
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext("2d");
-      // pdfjs-dist's `RenderParameters` types reference DOM
-      // `CanvasRenderingContext2D` and `HTMLCanvasElement`, which aren't in
-      // the api-server's node tsconfig libs. The @napi-rs/canvas shapes are
-      // structurally compatible at runtime; we cast the *parameter object*
-      // through `unknown` to pdfjs's own `RenderParameters` so the call
-      // stays typed end-to-end (no `any`, no eslint suppressions) while
-      // not requiring the server build to pull in the full DOM lib.
       type RenderParams = Parameters<typeof page.render>[0];
       const renderParams = {
         canvasContext: ctx,
@@ -153,13 +137,6 @@ async function renderPdfFirstPagePng(
   }
 }
 
-/**
- * Page-1 thumbnail of a bundled lease PDF, used by the leases list to make
- * each row visually scannable (Task #344). Returns a PNG sized roughly to
- * the requested width (clamped to a sane range so a malicious caller can't
- * ask for a 100k-pixel-wide image). Errors are surfaced as a JSON 4xx/5xx
- * so the client `<img onError>` falls back to a generic PDF icon.
- */
 router.get("/attached-assets/:filename/thumbnail", async (req, res): Promise<void> => {
   const raw = req.params.filename ?? "";
   const resolved = resolveAttachedAsset(raw);
@@ -181,8 +158,11 @@ router.get("/attached-assets/:filename/thumbnail", async (req, res): Promise<voi
     ? Math.min(400, Math.max(40, widthParam))
     : 160;
 
-  const cacheKey = `${resolved.filename}:${stat.mtimeMs}:${targetWidth}`;
-  const cached = thumbnailCache.get(cacheKey);
+  const cacheFile = path.join(
+    thumbnailDir(),
+    thumbnailCacheKey(resolved.filename, stat.mtimeMs, targetWidth),
+  );
+  const cached = await readCachedThumbnail(cacheFile);
   if (cached) {
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "private, max-age=3600");
@@ -196,7 +176,7 @@ router.get("/attached-assets/:filename/thumbnail", async (req, res): Promise<voi
     res.status(500).json({ error: "Failed to render PDF thumbnail." });
     return;
   }
-  rememberThumbnail(cacheKey, png);
+  await writeCachedThumbnail(cacheFile, png);
   res.setHeader("Content-Type", "image/png");
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.setHeader("X-Thumbnail-Cache", "MISS");
@@ -253,5 +233,81 @@ router.get("/attached-assets/:filename", (req, res): void => {
     res.sendFile(fullPath);
   });
 });
+
+const DEFAULT_PREWARM_WIDTH = 120;
+const PREWARM_YIELD_INTERVAL = 3;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export interface PrewarmLogger {
+  info: (msg: string) => void;
+  warn: (obj: { err?: unknown }, msg: string) => void;
+}
+
+export async function prewarmThumbnails(logger: PrewarmLogger): Promise<void> {
+  const baseDir = attachedAssetsDir();
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(baseDir);
+  } catch {
+    logger.warn({}, "Could not read attached_assets/ for thumbnail pre-warm — skipping");
+    return;
+  }
+
+  const pdfs = entries.filter((e) => e.toLowerCase().endsWith(".pdf"));
+  if (pdfs.length === 0) return;
+
+  await fsp.mkdir(thumbnailDir(), { recursive: true });
+
+  await loadRenderDeps();
+
+  let rendered = 0;
+  let skipped = 0;
+  let failed = 0;
+  let firstError: string | undefined;
+  let sinceYield = 0;
+
+  for (const filename of pdfs) {
+    const fullPath = path.join(baseDir, filename);
+    let stat: fs.Stats;
+    try {
+      stat = await fsp.stat(fullPath);
+      if (!stat.isFile()) continue;
+    } catch {
+      continue;
+    }
+    const cacheFile = path.join(
+      thumbnailDir(),
+      thumbnailCacheKey(filename, stat.mtimeMs, DEFAULT_PREWARM_WIDTH),
+    );
+    const existing = await readCachedThumbnail(cacheFile);
+    if (existing) {
+      skipped++;
+      continue;
+    }
+    const png = await renderPdfFirstPagePng(fullPath, DEFAULT_PREWARM_WIDTH);
+    if (png) {
+      await writeCachedThumbnail(cacheFile, png);
+      rendered++;
+    } else {
+      failed++;
+      if (!firstError) firstError = filename;
+    }
+    sinceYield++;
+    if (sinceYield >= PREWARM_YIELD_INTERVAL) {
+      sinceYield = 0;
+      await yieldToEventLoop();
+    }
+  }
+
+  const summary = `Thumbnail pre-warm complete: ${rendered} rendered, ${skipped} already cached, ${failed} failed (${pdfs.length} PDFs total)`;
+  if (firstError && failed > 0) {
+    logger.warn({ err: firstError }, summary);
+  } else {
+    logger.info(summary);
+  }
+}
 
 export default router;

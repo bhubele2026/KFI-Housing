@@ -9,6 +9,7 @@ import {
   readReminderConfig,
   startRoomNightReminderScheduler,
 } from "./lib/room-night-reminder-scheduler";
+import { prewarmThumbnails } from "./routes/attached-assets";
 import type {
   DigestLease,
   DigestProperty,
@@ -404,9 +405,12 @@ export async function start(deps: StartDeps): Promise<void> {
     await deps.listen(port);
     deps.logger.info({ port }, "Server listening");
     warnIfGoogleMapsKeyMissing(deps);
-    // Kick off the weekly lease-expiry digest scheduler (Task #356).
-    // No-ops when LEASE_DIGEST_WEBHOOK_URL / LEASE_DIGEST_RECIPIENTS
-    // are unset, so dev workflows are unaffected.
+    prewarmThumbnails(deps.logger).catch((err) => {
+      deps.logger.warn(
+        { err },
+        "Thumbnail pre-warm failed — thumbnails will render on demand",
+      );
+    });
     startWeeklyLeaseDigestScheduler({
       config: readDigestConfig(deps.env),
       fetch: deps.digestFetch,

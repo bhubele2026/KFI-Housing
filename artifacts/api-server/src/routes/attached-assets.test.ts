@@ -159,13 +159,43 @@ describe("GET /api/attached-assets/:filename", () => {
     });
 
     it("clamps the requested width to the supported range", async () => {
-      // 5000 is well above the 400px ceiling — the route should clamp and
-      // still render successfully rather than rejecting the request.
       const res = await fetch(
         `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail?w=5000`,
       );
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toBe("image/png");
+    });
+
+    it("persists the rendered thumbnail to disk under .thumbnails/", async () => {
+      await fetch(`${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`);
+      const thumbDir = path.join(REPO_ROOT, "attached_assets", ".thumbnails");
+      const files = fs.existsSync(thumbDir) ? fs.readdirSync(thumbDir) : [];
+      const pngs = files.filter((f) => f.endsWith(".png"));
+      expect(pngs.length).toBeGreaterThan(0);
+    });
+
+    it("serves from disk cache after first render (X-Thumbnail-Cache: HIT)", async () => {
+      const first = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`,
+      );
+      expect(first.status).toBe(200);
+      const second = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail`,
+      );
+      expect(second.status).toBe(200);
+      expect(second.headers.get("x-thumbnail-cache")).toBe("HIT");
+    });
+
+    it("serves the leases-table default width (120px) from disk cache on repeat", async () => {
+      const first = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail?w=120`,
+      );
+      expect(first.status).toBe(200);
+      const second = await fetch(
+        `${baseUrl}/api/attached-assets/${REAL_PDF}/thumbnail?w=120`,
+      );
+      expect(second.status).toBe(200);
+      expect(second.headers.get("x-thumbnail-cache")).toBe("HIT");
     });
   });
 });

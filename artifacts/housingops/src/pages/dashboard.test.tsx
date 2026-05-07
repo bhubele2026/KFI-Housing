@@ -177,6 +177,7 @@ vi.mock("recharts", () => {
 const mockData: {
   properties: unknown[];
   beds: unknown[];
+  rooms: unknown[];
   leases: unknown[];
   utilities: unknown[];
   insuranceCertificates: unknown[];
@@ -186,6 +187,7 @@ const mockData: {
 } = {
   properties: [],
   beds: [],
+  rooms: [],
   leases: [],
   utilities: [],
   insuranceCertificates: [],
@@ -2202,6 +2204,211 @@ describe("Dashboard recently-reconciled-from-payroll audit trail", () => {
       '[data-testid="badge-recent-reconciliation-kind-occ-a"]',
     );
     expect(badge?.textContent).toContain("Confirmed");
+  });
+});
+
+describe("Dashboard payroll-needs-review KPI (Task #406)", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    invalidateQueriesMock.mockReset();
+    updateOccupantMock.mockReset();
+    toastMock.mockReset();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+    mockData.isLoading = false;
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+    mockData.properties = [];
+    mockData.occupants = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  function getKpi() {
+    return container.querySelector('[data-testid="kpi-payroll-needs-review"]');
+  }
+
+  function getKpiCount(): string | null {
+    const el = container.querySelector(
+      '[data-testid="text-kpi-payroll-needs-review-count"]',
+    );
+    return el ? el.textContent : null;
+  }
+
+  it("hides the KPI when both payroll tiles are empty", async () => {
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+
+    await render();
+
+    expect(getKpi()).toBeNull();
+  });
+
+  it("shows the count equal to unplaced + low-confidence rows", async () => {
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Alice", personId: "E1", weekly: 100, suggestions: [] },
+      { customer: "Acme Co", name: "Bob", personId: "E2", weekly: 150, suggestions: [] },
+    ];
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "Carol",
+        personId: "E3",
+        weekly: 200,
+        matched: {
+          occupantId: "occ-c",
+          name: "Carol",
+          company: "Acme Co",
+          propertyName: "Hilltop",
+          score: 0.6,
+          crossEmployer: false,
+        },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    expect(getKpi()).not.toBeNull();
+    expect(getKpiCount()).toBe("3");
+  });
+
+  it("clicking the KPI scrolls the relevant card into view", async () => {
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Alice", personId: "E1", weekly: 100, suggestions: [] },
+    ];
+
+    await render();
+
+    const target = container.querySelector('[data-testid="card-unplaced-payroll"]');
+    expect(target).not.toBeNull();
+
+    const scrollSpy = vi.fn();
+    target!.scrollIntoView = scrollSpy;
+
+    const kpi = getKpi() as HTMLButtonElement;
+    await act(async () => {
+      kpi.click();
+    });
+
+    expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("scrolls to confirm-match card when only low-confidence rows exist", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "Carol",
+        personId: "E3",
+        weekly: 200,
+        matched: {
+          occupantId: "occ-c",
+          name: "Carol",
+          company: "Acme Co",
+          propertyName: "Hilltop",
+          score: 0.6,
+          crossEmployer: false,
+        },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    const target = container.querySelector('[data-testid="card-low-confidence-payroll"]');
+    expect(target).not.toBeNull();
+
+    const scrollSpy = vi.fn();
+    target!.scrollIntoView = scrollSpy;
+
+    const kpi = getKpi() as HTMLButtonElement;
+    await act(async () => {
+      kpi.click();
+    });
+
+    expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("updates the KPI count when the customer filter changes", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Hillside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Alice", personId: "E1", weekly: 100, suggestions: [] },
+      { customer: "Globex", name: "Bob", personId: "E2", weekly: 150, suggestions: [] },
+    ];
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "Carol",
+        personId: "E3",
+        weekly: 200,
+        matched: {
+          occupantId: "occ-c",
+          name: "Carol",
+          company: "Acme Co",
+          propertyName: "Hilltop",
+          score: 0.6,
+          crossEmployer: false,
+        },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    expect(getKpiCount()).toBe("3");
+
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+
+    await act(async () => {
+      handler.onValueChange("c1");
+    });
+
+    expect(getKpiCount()).toBe("2");
+
+    await act(async () => {
+      handler.onValueChange("c2");
+    });
+
+    expect(getKpiCount()).toBe("1");
+
+    await act(async () => {
+      handler.onValueChange("All");
+    });
+
+    expect(getKpiCount()).toBe("3");
   });
 });
 

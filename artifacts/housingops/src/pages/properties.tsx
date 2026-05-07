@@ -7,8 +7,8 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
-import { isBlankYMD } from "@/lib/lease-dates";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { isBlankYMD, formatYMDPretty } from "@/lib/lease-dates";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, ChevronDown, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw } from "lucide-react";
+import { Search, Plus, ChevronRight, ChevronDown, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { PortfolioMap, type MappableProperty } from "@/components/portfolio-map";
 import { EmptyStateRow } from "@/components/empty-state";
 import {
@@ -249,7 +249,7 @@ export default function Properties() {
   // Defensive fallback to `[]` for `utilities` keeps existing tests
   // with partial `useData` mocks from crashing on the per-bed-electric
   // pre-compute below — production always returns an array.
-  const { properties, beds, leases, customers, utilities = [], addProperty, addCustomer, updateProperty, isLoading } = useData();
+  const { properties, beds, leases, customers, utilities = [], insuranceCertificates, addProperty, addCustomer, updateProperty, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -1995,15 +1995,16 @@ export default function Properties() {
                     </DropdownMenu>
                   </TableHead>
                   <TableHead>Lease Renewal</TableHead>
+                  <TableHead>Insurance</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  <SkeletonRows rows={6} columns={11} />
+                  <SkeletonRows rows={6} columns={12} />
                 ) : filtered.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={11}
+                    colSpan={12}
                     icon={Home}
                     title="No properties found"
                     description={
@@ -2032,7 +2033,7 @@ export default function Properties() {
                         data-testid={`row-customer-group-${group.customer.id}`}
                         data-expanded={isExpanded ? "true" : "false"}
                       >
-                        <TableCell colSpan={11} className="py-2.5">
+                        <TableCell colSpan={12} className="py-2.5">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -2078,6 +2079,19 @@ export default function Properties() {
                       !!activeLease && !renewal && isBlankYMD(activeLease.endDate);
                     const overallRating = computeOverallRating(property.ratings);
                     const customer = customerById.get(property.customerId);
+                    const worstInsuranceCert = (() => {
+                      const certs = insuranceCertificates.filter(
+                        (c) => c.propertyId === property.id && c.coverageEnd,
+                      );
+                      if (certs.length === 0) return null;
+                      let worst: { days: number; coverageEnd: string } | null = null;
+                      for (const c of certs) {
+                        const d = daysUntil(c.coverageEnd);
+                        if (d > 30) continue;
+                        if (!worst || d < worst.days) worst = { days: d, coverageEnd: c.coverageEnd };
+                      }
+                      return worst;
+                    })();
 
                     return (
                       <motion.tr
@@ -2266,6 +2280,26 @@ export default function Properties() {
                               data-testid={`badge-no-end-date-${property.id}`}
                             >
                               No end date
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          {worstInsuranceCert ? (
+                            <Badge
+                              variant="outline"
+                              className={`text-[11px] font-medium ${
+                                worstInsuranceCert.days < 0
+                                  ? "bg-red-100 text-red-800 border-red-200"
+                                  : "bg-amber-100 text-amber-800 border-amber-200"
+                              }`}
+                              data-testid={`badge-insurance-expiry-${property.id}`}
+                            >
+                              <ShieldCheck className="h-3 w-3 mr-1" />
+                              {worstInsuranceCert.days < 0
+                                ? "Insurance expired"
+                                : `Insurance expiring ${formatYMDPretty(worstInsuranceCert.coverageEnd)}`}
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>

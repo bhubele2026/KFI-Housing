@@ -1,4 +1,4 @@
-import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable } from "@workspace/db";
+import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable, insuranceCertificatesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -129,6 +129,36 @@ void start({
       .onConflictDoUpdate({
         target: schedulerStateTable.id,
         set: { lastSentKey: monthKey },
+      });
+  },
+  loadCertsForInsuranceExpiry: async () => {
+    const rows = await db.select().from(insuranceCertificatesTable);
+    return rows.map((r) => ({
+      id: r.id,
+      propertyId: r.propertyId,
+      carrier: r.carrier,
+      policyNumber: r.policyNumber,
+      coverageEnd: r.coverageEnd,
+    }));
+  },
+  loadPropertiesForInsuranceExpiry: async () => {
+    const rows = await db.select().from(propertiesTable);
+    return rows.map((r) => ({ id: r.id, name: r.name }));
+  },
+  getInsuranceExpiryLastSentWeekKey: async () => {
+    const rows = await db
+      .select()
+      .from(schedulerStateTable)
+      .where(eq(schedulerStateTable.id, "insurance-expiry-reminder"));
+    return rows[0]?.lastSentKey || null;
+  },
+  setInsuranceExpiryLastSentWeekKey: async (weekKey: string) => {
+    await db
+      .insert(schedulerStateTable)
+      .values({ id: "insurance-expiry-reminder", lastSentKey: weekKey })
+      .onConflictDoUpdate({
+        target: schedulerStateTable.id,
+        set: { lastSentKey: weekKey },
       });
   },
   digestFetch: globalThis.fetch,

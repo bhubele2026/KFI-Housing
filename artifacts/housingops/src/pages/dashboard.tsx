@@ -507,13 +507,14 @@ export default function Dashboard() {
     return counts;
   }, [expiringLeases]);
 
-  // ── Expiring insurance certificates (Task #333) ───────────────────
-  // Surface every certificate whose `coverageEnd` is within the next 30
+  // ── Expiring insurance certificates (Task #333, enhanced Task #398) ─
+  // Surface every certificate whose `coverageEnd` is within the next 90
   // days (or expired in the last 30) so operators can chase a renewed
-  // PDF before coverage actually lapses. Threshold matches the property
-  // page badge so the dashboard and detail view always agree on
-  // "expiring soon". Certs without a coverage end date are skipped — a
-  // blank window has no calendar to alert on.
+  // PDF before coverage actually lapses. Buckets mirror the lease expiry
+  // widget: critical (≤30d), warning (31-60d), soon (61-90d), expired.
+  // Grouped by property so operators see all certs for a given property
+  // together.
+  type CertExpiryBucket = "critical" | "warning" | "soon" | "expired";
   interface ExpiringCert {
     id: string;
     propertyId: string;
@@ -522,7 +523,7 @@ export default function Dashboard() {
     policyNumber: string;
     coverageEnd: string;
     days: number;
-    expired: boolean;
+    bucket: CertExpiryBucket;
   }
   const scopedCerts = useMemo(
     () => insuranceCertificates.filter((c) => scopedPropertyIds.has(c.propertyId)),
@@ -533,7 +534,19 @@ export default function Dashboard() {
     for (const c of scopedCerts) {
       if (!c.coverageEnd) continue;
       const days = daysUntil(c.coverageEnd);
-      if (days < -30 || days > 30) continue;
+      let bucket: CertExpiryBucket;
+      if (days < 0) {
+        if (days < -30) continue;
+        bucket = "expired";
+      } else if (days <= 30) {
+        bucket = "critical";
+      } else if (days <= 60) {
+        bucket = "warning";
+      } else if (days <= 90) {
+        bucket = "soon";
+      } else {
+        continue;
+      }
       const propertyName =
         scopedProperties.find((p) => p.id === c.propertyId)?.name ?? "—";
       out.push({
@@ -544,12 +557,33 @@ export default function Dashboard() {
         policyNumber: c.policyNumber,
         coverageEnd: c.coverageEnd,
         days,
-        expired: days < 0,
+        bucket,
       });
     }
     out.sort((a, b) => a.days - b.days);
     return out;
   }, [scopedCerts, scopedProperties]);
+
+  const expiringCertCounts = useMemo(() => {
+    const counts = { critical: 0, warning: 0, soon: 0, expired: 0 };
+    for (const c of expiringCerts) counts[c.bucket] += 1;
+    return counts;
+  }, [expiringCerts]);
+
+  const certsByProperty = useMemo(() => {
+    const map = new Map<string, ExpiringCert[]>();
+    for (const c of expiringCerts) {
+      const existing = map.get(c.propertyId) ?? [];
+      existing.push(c);
+      map.set(c.propertyId, existing);
+    }
+    return Array.from(map.entries()).map(([propertyId, certs]) => ({
+      propertyId,
+      propertyName: certs[0].propertyName,
+      certs,
+      worstBucket: certs[0].bucket,
+    }));
+  }, [expiringCerts]);
 
   const expiryBucketStyle: Record<
     ExpiryBucket,
@@ -1228,7 +1262,7 @@ export default function Dashboard() {
         {expiringCerts.length > 0 && (
           <Card data-testid="card-expiring-insurance">
             <CardHeader>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                 <CardTitle>Insurance expiry alerts</CardTitle>
                 <span
@@ -1236,13 +1270,49 @@ export default function Dashboard() {
                   data-testid="text-expiring-insurance-total-count"
                 >
                   {expiringCerts.length} certificate
-                  {expiringCerts.length === 1 ? "" : "s"}
+                  {expiringCerts.length === 1 ? "" : "s"} across{" "}
+                  {certsByProperty.length} propert
+                  {certsByProperty.length === 1 ? "y" : "ies"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Insurance certificates whose coverage ends in the next 30
+                Insurance certificates whose coverage ends in the next 90
                 days, plus any that quietly lapsed in the last 30 days.
               </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {expiringCertCounts.expired > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.expired.badge}`}
+                    data-testid="bucket-count-expiring-insurance-expired"
+                  >
+                    {expiringCertCounts.expired} Expired
+                  </span>
+                )}
+                {expiringCertCounts.critical > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.critical.badge}`}
+                    data-testid="bucket-count-expiring-insurance-critical"
+                  >
+                    {expiringCertCounts.critical} ≤ 30 days
+                  </span>
+                )}
+                {expiringCertCounts.warning > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.warning.badge}`}
+                    data-testid="bucket-count-expiring-insurance-warning"
+                  >
+                    {expiringCertCounts.warning} 31–60 days
+                  </span>
+                )}
+                {expiringCertCounts.soon > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${expiryBucketStyle.soon.badge}`}
+                    data-testid="bucket-count-expiring-insurance-soon"
+                  >
+                    {expiringCertCounts.soon} 61–90 days
+                  </span>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -1257,54 +1327,55 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expiringCerts.map((c) => (
-                    <TableRow
-                      key={c.id}
-                      className={
-                        c.expired
-                          ? "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-950/20"
-                          : "border-l-4 border-l-amber-500"
-                      }
-                      data-testid={`row-expiring-insurance-${c.id}`}
-                    >
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/properties/${c.propertyId}`}
-                          className="hover:underline text-primary"
-                          data-testid={`link-expiring-insurance-${c.id}`}
+                  {certsByProperty.map((group) =>
+                    group.certs.map((c, idx) => {
+                      const style = expiryBucketStyle[c.bucket];
+                      return (
+                        <TableRow
+                          key={c.id}
+                          className={`${style.row}${idx > 0 ? " border-t-0" : ""}`}
+                          data-testid={`row-expiring-insurance-${c.id}`}
                         >
-                          <PropertyNameCell
-                            name={c.propertyName}
-                            primaryClassName="text-primary"
-                          />
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-sm">{c.carrier || "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{c.policyNumber || "—"}</TableCell>
-                      <TableCell className="text-sm tabular-nums text-muted-foreground">
-                        {formatYMDPretty(c.coverageEnd)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            c.expired
-                              ? "bg-red-100 text-red-800 border-red-200"
-                              : "bg-amber-100 text-amber-800 border-amber-200"
-                          }
-                          data-testid={`badge-expiring-insurance-${c.id}`}
-                        >
-                          {c.expired ? "Expired" : "≤ 30 days"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell
-                        className="text-right text-sm tabular-nums"
-                        data-testid={`text-expiring-insurance-${c.id}-when`}
-                      >
-                        {expiryRowLabel(c.days)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          <TableCell className="font-medium">
+                            {idx === 0 ? (
+                              <Link
+                                href={`/properties/${c.propertyId}`}
+                                className="hover:underline text-primary"
+                                data-testid={`link-expiring-insurance-${c.id}`}
+                              >
+                                <PropertyNameCell
+                                  name={c.propertyName}
+                                  primaryClassName="text-primary"
+                                />
+                              </Link>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">↳ same property</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">{c.carrier || "—"}</TableCell>
+                          <TableCell className="font-mono text-sm">{c.policyNumber || "—"}</TableCell>
+                          <TableCell className="text-sm tabular-nums text-muted-foreground">
+                            {formatYMDPretty(c.coverageEnd)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={style.badge}
+                              data-testid={`badge-expiring-insurance-${c.id}`}
+                            >
+                              {style.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-sm tabular-nums"
+                            data-testid={`text-expiring-insurance-${c.id}-when`}
+                          >
+                            {expiryRowLabel(c.days)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }),
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

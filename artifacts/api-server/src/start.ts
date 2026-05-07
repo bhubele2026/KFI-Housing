@@ -9,6 +9,10 @@ import {
   readReminderConfig,
   startRoomNightReminderScheduler,
 } from "./lib/room-night-reminder-scheduler";
+import {
+  readInsuranceExpiryConfig,
+  startInsuranceExpiryScheduler,
+} from "./lib/insurance-expiry-scheduler";
 import { prewarmThumbnails } from "./routes/attached-assets";
 import type {
   DigestLease,
@@ -19,6 +23,10 @@ import type {
   ReminderProperty,
   ReminderLog,
 } from "./lib/room-night-reminder";
+import type {
+  ReminderCert,
+  ReminderProperty as InsuranceReminderProperty,
+} from "./lib/insurance-expiry-reminder";
 
 export interface StartDeps {
   pushSchemaIfNeeded: (
@@ -74,6 +82,12 @@ export interface StartDeps {
   // double-sends.
   getReminderLastSentMonthKey: () => Promise<string | null>;
   setReminderLastSentMonthKey: (monthKey: string) => Promise<void>;
+  // Live data loaders for the weekly insurance-expiry reminder (Task #398).
+  loadCertsForInsuranceExpiry: () => Promise<ReminderCert[]>;
+  loadPropertiesForInsuranceExpiry: () => Promise<InsuranceReminderProperty[]>;
+  // Persistent dedupe for the insurance-expiry reminder (Task #398).
+  getInsuranceExpiryLastSentWeekKey: () => Promise<string | null>;
+  setInsuranceExpiryLastSentWeekKey: (weekKey: string) => Promise<void>;
   // `fetch` impl used by the digest webhook POST. Defaults to
   // `globalThis.fetch` in `index.ts`; tests inject a vi.fn().
   digestFetch: typeof fetch;
@@ -427,6 +441,16 @@ export async function start(deps: StartDeps): Promise<void> {
       loadRoomNightLogs: deps.loadRoomNightLogsForReminder,
       getLastSentMonthKey: deps.getReminderLastSentMonthKey,
       setLastSentMonthKey: deps.setReminderLastSentMonthKey,
+      now: () => new Date(),
+      logger: deps.logger,
+    });
+    startInsuranceExpiryScheduler({
+      config: readInsuranceExpiryConfig(deps.env),
+      fetch: deps.digestFetch,
+      loadCerts: deps.loadCertsForInsuranceExpiry,
+      loadProperties: deps.loadPropertiesForInsuranceExpiry,
+      getLastSentWeekKey: deps.getInsuranceExpiryLastSentWeekKey,
+      setLastSentWeekKey: deps.setInsuranceExpiryLastSentWeekKey,
       now: () => new Date(),
       logger: deps.logger,
     });

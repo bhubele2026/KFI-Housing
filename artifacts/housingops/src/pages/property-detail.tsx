@@ -906,6 +906,33 @@ export default function PropertyDetail() {
                 </div>
               );
             })()}
+            {(() => {
+              const certs = propCerts.filter((c) => c.coverageEnd);
+              if (certs.length === 0) return null;
+              let worst: { days: number; coverageEnd: string } | null = null;
+              for (const c of certs) {
+                const d = daysUntil(c.coverageEnd);
+                if (d > 30) continue;
+                if (!worst || d < worst.days) worst = { days: d, coverageEnd: c.coverageEnd };
+              }
+              if (!worst) return null;
+              return (
+                <Badge
+                  variant="outline"
+                  className={`text-xs font-medium ml-1 ${
+                    worst.days < 0
+                      ? "bg-red-100 text-red-800 border-red-200"
+                      : "bg-amber-100 text-amber-800 border-amber-200"
+                  }`}
+                  data-testid="badge-property-insurance-expiry"
+                >
+                  <ShieldCheck className="h-3 w-3 mr-1" />
+                  {worst.days < 0
+                    ? "Insurance expired"
+                    : `Insurance expiring ${formatYMDPretty(worst.coverageEnd)}`}
+                </Badge>
+              );
+            })()}
           </div>
         </div>
 

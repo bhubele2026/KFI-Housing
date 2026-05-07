@@ -6,26 +6,28 @@ import {
   getListPropertiesQueryKey,
   getListCustomersQueryKey,
   type MasterLeaseImportResult,
+  type MasterLeaseImportRowDecision,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { FileSpreadsheet, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
 
-/**
- * Admin trigger for the master-lease importer (task #288). Opens a hidden
- * file picker so the operator can upload an updated copy of the master
- * spreadsheet; if they cancel without picking a file, we fall back to the
- * bundled `attached_assets/Housing_Lease_MASTER_*.xlsx` on the server.
- *
- * The import is fully idempotent — re-running over the same data produces
- * zero new rows and never overwrites operator-edited landlord / payment
- * data — so we don't gate the button behind a confirmation dialog.
- */
 export function ImportMasterLeasesButton() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [pending, setPending] = useState(false);
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [importResult, setImportResult] = useState<MasterLeaseImportResult | null>(null);
 
   const { mutateAsync } = useImportMasterLeases();
 
@@ -48,20 +50,13 @@ export function ImportMasterLeasesButton() {
     setPending(true);
     try {
       const result = await mutateAsync({
-        // The generated mutation accepts an optional body; pass an empty
-        // object when no file is selected so the server falls back to the
-        // bundled master file.
         data: file ? { file } : ({} as { file: File }),
       });
-      // Refresh the cached list queries so the leases / customers /
-      // properties pages reflect the import without a hard reload.
       await queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
       await queryClient.invalidateQueries({ queryKey: getListPropertiesQueryKey() });
       await queryClient.invalidateQueries({ queryKey: getListLeasesQueryKey() });
-      toast({
-        title: "Master file imported",
-        description: summarize(result),
-      });
+      setImportResult(result);
+      setResultDialogOpen(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       toast({
@@ -102,6 +97,99 @@ export function ImportMasterLeasesButton() {
         )}
         Import master file
       </Button>
+
+      <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="master-import-results-dialog">
+          <DialogHeader>
+            <DialogTitle>Master file imported</DialogTitle>
+            <DialogDescription>
+              {importResult ? summarize(importResult) : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {importResult && (
+            <div className="space-y-4 py-2">
+              <FixupsSection rows={importResult.rowsWithFixups} />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setResultDialogOpen(false)} data-testid="button-close-import-results">
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+  );
+}
+
+function FixupsSection({ rows }: { rows: MasterLeaseImportRowDecision[] }) {
+  if (rows.length === 0) {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+        data-testid="no-fixups-message"
+      >
+        <CheckCircle2 className="h-4 w-4 shrink-0" />
+        No fix-ups needed — every cell was canonical.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3" data-testid="fixups-section">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+        <p className="text-sm font-medium">
+          {rows.length} row{rows.length === 1 ? "" : "s"} had values rewritten
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        These source-file cells were automatically corrected during import. Consider
+        fixing them upstream so future imports don't need the coercion.
+      </p>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <FixupRowCard key={`${row.sourceRow}-${row.customerName}`} row={row} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FixupRowCard({ row }: { row: MasterLeaseImportRowDecision }) {
+  return (
+    <div
+      className="rounded-md border bg-muted/30 p-3 space-y-2"
+      data-testid={`fixup-row-${row.sourceRow}`}
+    >
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge variant="outline" className="font-mono text-xs">
+          Row {row.sourceRow}
+        </Badge>
+        <span className="text-sm font-medium truncate">{row.customerName}</span>
+      </div>
+      <div className="space-y-1">
+        {row.fixups.map((f, i) => (
+          <div
+            key={`${f.field}-${i}`}
+            className="flex items-start gap-1.5 text-xs"
+          >
+            <Badge variant="secondary" className="shrink-0 font-mono text-[11px] px-1.5">
+              {f.field}
+            </Badge>
+            <span className="text-muted-foreground truncate" title={f.before}>
+              {f.before}
+            </span>
+            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground mt-0.5" />
+            <span className="font-medium truncate" title={f.after}>
+              {f.after}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

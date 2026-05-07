@@ -1660,11 +1660,23 @@ components:
           type: number
           description: 0..1 match score, higher is better.
 
+    LeasePdfFixup:
+      type: object
+      required: [field, before, after]
+      properties:
+        field: { type: string }
+        before: { type: string }
+        after: { type: string }
+
     LeasePdfImportResult:
       type: object
-      required: [extracted, topMatch, candidates]
+      required: [extracted, topMatch, candidates, fixups]
       properties:
         extracted: { $ref: "#/components/schemas/LeasePdfExtracted" }
+        fixups:
+          type: array
+          description: Coercions the normaliser applied to the extracted lease values.
+          items: { $ref: "#/components/schemas/LeasePdfFixup" }
         topMatch:
           allOf: [{ $ref: "#/components/schemas/LeasePdfPropertyCandidate" }]
           nullable: true
@@ -1674,6 +1686,14 @@ components:
           maxItems: 5
           description: Top candidates sorted by score desc; may be empty.
           items: { $ref: "#/components/schemas/LeasePdfPropertyCandidate" }
+
+    MasterLeaseImportRowFixup:
+      type: object
+      required: [field, before, after]
+      properties:
+        field: { type: string }
+        before: { type: string }
+        after: { type: string }
 
     MasterLeaseImportRowDecision:
       type: object
@@ -1686,6 +1706,7 @@ components:
         - leaseAction
         - needsReview
         - reviewReasons
+        - fixups
       properties:
         sourceRow: { type: integer }
         customerName: { type: string }
@@ -1701,6 +1722,9 @@ components:
         reviewReasons:
           type: array
           items: { type: string }
+        fixups:
+          type: array
+          items: { $ref: "#/components/schemas/MasterLeaseImportRowFixup" }
 
     MasterLeaseImportResult:
       type: object
@@ -1715,6 +1739,7 @@ components:
         - rowsNeedingReview
         - fuzzyCustomerMatches
         - decisions
+        - rowsWithFixups
       properties:
         customersCreated: { type: integer }
         customersUpdated: { type: integer }
@@ -1737,6 +1762,10 @@ components:
               distance: { type: integer }
         decisions:
           type: array
+          items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
+        rowsWithFixups:
+          type: array
+          description: Subset of decisions whose row had at least one normaliser fix-up applied.
           items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
 
     LastAutoMasterImport:

@@ -43,8 +43,15 @@ export interface PropertyMatchCandidate {
   score: number;
 }
 
+export interface LeasePdfFixup {
+  field: string;
+  before: string;
+  after: string;
+}
+
 export interface LeasePdfImportResponse {
   extracted: ExtractedLeaseFromPdf;
+  fixups: LeasePdfFixup[];
   /** Best match when its score is comfortably above the noise floor (>=0.6); null otherwise. */
   topMatch: PropertyMatchCandidate | null;
   /** Up to 5 best candidates, sorted by score desc. May be empty. */

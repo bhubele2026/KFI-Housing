@@ -857,8 +857,16 @@ export interface LeasePdfPropertyCandidate {
   score: number;
 }
 
+export interface LeasePdfFixup {
+  field: string;
+  before: string;
+  after: string;
+}
+
 export interface LeasePdfImportResult {
   extracted: LeasePdfExtracted;
+  /** Coercions the normaliser applied to the extracted lease values. */
+  fixups: LeasePdfFixup[];
   /** Best candidate when its score is comfortably above the noise floor; otherwise `null`. */
   topMatch: LeasePdfPropertyCandidate | null;
   /**
@@ -866,6 +874,12 @@ export interface LeasePdfImportResult {
    * @maxItems 5
    */
   candidates: LeasePdfPropertyCandidate[];
+}
+
+export interface MasterLeaseImportRowFixup {
+  field: string;
+  before: string;
+  after: string;
 }
 
 export type MasterLeaseImportRowDecisionCustomerAction =
@@ -909,6 +923,7 @@ export interface MasterLeaseImportRowDecision {
   leaseId?: string;
   needsReview: boolean;
   reviewReasons: string[];
+  fixups: MasterLeaseImportRowFixup[];
 }
 
 export type MasterLeaseImportResultFuzzyCustomerMatchesItem = {
@@ -928,6 +943,8 @@ export interface MasterLeaseImportResult {
   rowsNeedingReview: MasterLeaseImportRowDecision[];
   fuzzyCustomerMatches: MasterLeaseImportResultFuzzyCustomerMatchesItem[];
   decisions: MasterLeaseImportRowDecision[];
+  /** Subset of decisions whose row had at least one normaliser fix-up applied. */
+  rowsWithFixups: MasterLeaseImportRowDecision[];
 }
 
 /**

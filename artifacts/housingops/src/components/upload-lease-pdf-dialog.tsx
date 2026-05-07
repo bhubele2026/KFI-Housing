@@ -17,7 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Check,
   CheckCircle2,
   DollarSign,
@@ -38,6 +40,7 @@ import {
   importLeasePdf,
   LeasePdfImportError,
   type LeasePdfImportResponse,
+  type LeasePdfFixup,
   type ExtractedLeaseFromPdf,
   type PropertyMatchCandidate,
 } from "@/lib/lease-pdf-import";
@@ -810,6 +813,8 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
               )}
             </div>
 
+            <PdfFixupsSection fixups={reviewingItem.importResult.fixups ?? []} />
+
             <Separator />
 
             {/* ── Property section ─────────────────────────────────────── */}
@@ -1262,6 +1267,53 @@ function RecentUploadsList({
           Some failed uploads can't be retried automatically — re-pick the PDF above.
         </p>
       )}
+    </div>
+  );
+}
+
+function PdfFixupsSection({ fixups }: { fixups: LeasePdfFixup[] }) {
+  if (fixups.length === 0) {
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+        data-testid="pdf-no-fixups-message"
+      >
+        <CheckCircle2 className="h-4 w-4 shrink-0" />
+        No fix-ups needed — every cell was canonical.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2" data-testid="pdf-fixups-section">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+        <p className="text-sm font-medium">
+          {fixups.length} value{fixups.length === 1 ? " was" : "s were"} rewritten
+        </p>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The extracted values below were automatically corrected before review.
+      </p>
+      <div className="space-y-1">
+        {fixups.map((f, i) => (
+          <div
+            key={`${f.field}-${i}`}
+            className="flex items-start gap-1.5 text-xs"
+          >
+            <Badge variant="secondary" className="shrink-0 font-mono text-[11px] px-1.5">
+              {f.field}
+            </Badge>
+            <span className="text-muted-foreground truncate" title={f.before}>
+              {f.before}
+            </span>
+            <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground mt-0.5" />
+            <span className="font-medium truncate" title={f.after}>
+              {f.after}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

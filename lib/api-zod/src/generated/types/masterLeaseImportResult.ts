@@ -19,4 +19,6 @@ export interface MasterLeaseImportResult {
   rowsNeedingReview: MasterLeaseImportRowDecision[];
   fuzzyCustomerMatches: MasterLeaseImportResultFuzzyCustomerMatchesItem[];
   decisions: MasterLeaseImportRowDecision[];
+  /** Subset of decisions whose row had at least one normaliser fix-up applied. */
+  rowsWithFixups: MasterLeaseImportRowDecision[];
 }

@@ -8,6 +8,7 @@
 import type { MasterLeaseImportRowDecisionCustomerAction } from "./masterLeaseImportRowDecisionCustomerAction";
 import type { MasterLeaseImportRowDecisionLeaseAction } from "./masterLeaseImportRowDecisionLeaseAction";
 import type { MasterLeaseImportRowDecisionPropertyAction } from "./masterLeaseImportRowDecisionPropertyAction";
+import type { MasterLeaseImportRowFixup } from "./masterLeaseImportRowFixup";
 
 export interface MasterLeaseImportRowDecision {
   sourceRow: number;
@@ -22,4 +23,5 @@ export interface MasterLeaseImportRowDecision {
   leaseId?: string;
   needsReview: boolean;
   reviewReasons: string[];
+  fixups: MasterLeaseImportRowFixup[];
 }

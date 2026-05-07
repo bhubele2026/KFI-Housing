@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LeasePdfExtracted } from "./leasePdfExtracted";
+import type { LeasePdfFixup } from "./leasePdfFixup";
 import type { LeasePdfPropertyCandidate } from "./leasePdfPropertyCandidate";
 
 export interface LeasePdfImportResult {
   extracted: LeasePdfExtracted;
+  /** Coercions the normaliser applied to the extracted lease values. */
+  fixups: LeasePdfFixup[];
   /** Best candidate when its score is comfortably above the noise floor; otherwise `null`. */
   topMatch: LeasePdfPropertyCandidate | null;
   /**

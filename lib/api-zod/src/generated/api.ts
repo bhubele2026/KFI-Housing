@@ -1285,6 +1285,17 @@ export const ImportLeasePdfResponse = zod.object({
     .describe(
       'Lease fields parsed from the uploaded PDF. Any field the LLM could not\nidentify with reasonable certainty is returned as `null` (or `\"\"` \/\n`false` for the non-nullable string \/ boolean fields) so the user can\nfill it in during the review step.\n',
     ),
+  fixups: zod
+    .array(
+      zod.object({
+        field: zod.string(),
+        before: zod.string(),
+        after: zod.string(),
+      }),
+    )
+    .describe(
+      "Coercions the normaliser applied to the extracted lease values.",
+    ),
   topMatch: zod
     .object({
       propertyId: zod.string(),
@@ -1409,6 +1420,13 @@ export const ImportMasterLeasesResponse = zod.object({
       leaseId: zod.string().optional(),
       needsReview: zod.boolean(),
       reviewReasons: zod.array(zod.string()),
+      fixups: zod.array(
+        zod.object({
+          field: zod.string(),
+          before: zod.string(),
+          after: zod.string(),
+        }),
+      ),
     }),
   ),
   fuzzyCustomerMatches: zod.array(
@@ -1432,8 +1450,42 @@ export const ImportMasterLeasesResponse = zod.object({
       leaseId: zod.string().optional(),
       needsReview: zod.boolean(),
       reviewReasons: zod.array(zod.string()),
+      fixups: zod.array(
+        zod.object({
+          field: zod.string(),
+          before: zod.string(),
+          after: zod.string(),
+        }),
+      ),
     }),
   ),
+  rowsWithFixups: zod
+    .array(
+      zod.object({
+        sourceRow: zod.number(),
+        customerName: zod.string(),
+        customerAction: zod.enum(["created", "updated", "matched"]),
+        customerId: zod.string(),
+        customerMatchReason: zod.string().optional(),
+        propertyAction: zod.enum(["created", "updated", "matched", "skipped"]),
+        propertyId: zod.string().optional(),
+        propertyMatchReason: zod.string().optional(),
+        leaseAction: zod.enum(["created", "updated", "skipped"]),
+        leaseId: zod.string().optional(),
+        needsReview: zod.boolean(),
+        reviewReasons: zod.array(zod.string()),
+        fixups: zod.array(
+          zod.object({
+            field: zod.string(),
+            before: zod.string(),
+            after: zod.string(),
+          }),
+        ),
+      }),
+    )
+    .describe(
+      "Subset of decisions whose row had at least one normaliser fix-up applied.",
+    ),
 });
 
 /**

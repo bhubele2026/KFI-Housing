@@ -18,10 +18,25 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { toWeeklyCharge, toMonthlyCharge, formatUsd } from "@/data/mockData";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
+import { useMemo } from "react";
 
 export default function Occupants() {
   const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
   const { toast } = useToast();
+  const { customerId: customerScope } = useCustomerScope();
+  const customerScopedPropertyIds = useMemo(() => {
+    if (customerScope === ALL_CUSTOMERS) return null;
+    return new Set(
+      properties
+        .filter(
+          (p) =>
+            p.customerId === customerScope ||
+            (p.sharedWithCustomerIds ?? []).includes(customerScope),
+        )
+        .map((p) => p.id),
+    );
+  }, [properties, customerScope]);
   // Move-in filter is URL-driven so the dashboard "Needs review" card can deep
   // link straight into the missing-move-in subset (`?needsReview=1`). We seed
   // state from the search string and write back on change so refresh/back work.
@@ -34,7 +49,11 @@ export default function Occupants() {
     () => new URLSearchParams(searchString).get("q") ?? "",
   );
   const [propertyFilter, setPropertyFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState(() =>
+    new URLSearchParams(searchString).get("chargeSource") === "manual"
+      ? "Active"
+      : "All",
+  );
   const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">(() => {
     const raw = new URLSearchParams(searchString).get("shift");
     return raw === "1st" || raw === "2nd" || raw === "Unassigned" ? raw : "All";
@@ -44,6 +63,10 @@ export default function Occupants() {
       ? "NeedsReview"
       : "All",
   );
+  const [chargeSourceFilter, setChargeSourceFilter] = useState<"All" | "manual" | "payroll">(() => {
+    const v = new URLSearchParams(searchString).get("chargeSource");
+    return v === "manual" || v === "payroll" ? v : "All";
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -58,6 +81,9 @@ export default function Occupants() {
     setShiftFilter((prev) => (prev === nextShift ? prev : nextShift));
     const q = params.get("q") ?? "";
     setSearch((prev) => (prev === q || prev !== "" && q === "" ? prev : q));
+    const cs = params.get("chargeSource");
+    const nextCs = cs === "manual" || cs === "payroll" ? cs : "All";
+    setChargeSourceFilter((prev) => (prev === nextCs ? prev : nextCs));
   }, [searchString]);
 
   const updateUrlParam = (key: string, value: string | null) => {
@@ -78,6 +104,11 @@ export default function Occupants() {
     updateUrlParam("shift", value === "All" ? null : value);
   };
 
+  const updateChargeSourceFilter = (value: "All" | "manual" | "payroll") => {
+    setChargeSourceFilter(value);
+    updateUrlParam("chargeSource", value === "All" ? null : value);
+  };
+
   const filteredOccupants = occupants.filter((o) => {
     const matchesSearch = o.name.toLowerCase().includes(search.toLowerCase());
     const matchesProperty = propertyFilter === "All" || o.propertyId === propertyFilter;
@@ -90,7 +121,16 @@ export default function Occupants() {
         : shiftFilter === "Unassigned"
           ? !o.shift
           : o.shift === shiftFilter;
-    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift;
+    const matchesChargeSource =
+      chargeSourceFilter === "All"
+        ? true
+        : chargeSourceFilter === "manual"
+          ? o.chargeSource !== "payroll"
+          : o.chargeSource === "payroll";
+    const matchesCustomer =
+      customerScopedPropertyIds === null ||
+      (o.propertyId !== null && customerScopedPropertyIds.has(o.propertyId));
+    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift && matchesChargeSource && matchesCustomer;
   });
 
   const shiftCounts = occupants.reduce(
@@ -229,6 +269,22 @@ export default function Occupants() {
                 <SelectContent>
                   <SelectItem value="All">All Move-ins</SelectItem>
                   <SelectItem value="NeedsReview">Needs review</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={chargeSourceFilter}
+                onValueChange={(v) => updateChargeSourceFilter(v as "All" | "manual" | "payroll")}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-44"
+                  data-testid="select-charge-source-filter"
+                >
+                  <SelectValue placeholder="Charge source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Sources</SelectItem>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="payroll">Payroll</SelectItem>
                 </SelectContent>
               </Select>
             </div>

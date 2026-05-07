@@ -1111,7 +1111,17 @@ export default function Dashboard() {
                               }
                               data-testid={`text-payroll-reconciliation-${row.customerId}-manual`}
                             >
-                              {row.manual}
+                              {row.manual > 0 ? (
+                                <Link
+                                  href={`/occupants?chargeSource=manual&customer=${encodeURIComponent(row.customerId)}`}
+                                  className="underline decoration-dotted underline-offset-2 hover:decoration-solid cursor-pointer"
+                                  data-testid={`link-payroll-reconciliation-${row.customerId}-manual`}
+                                >
+                                  {row.manual}
+                                </Link>
+                              ) : (
+                                row.manual
+                              )}
                             </TableCell>
                             <TableCell
                               className="text-right tabular-nums text-emerald-700 dark:text-emerald-400"

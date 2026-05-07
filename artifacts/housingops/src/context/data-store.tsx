@@ -70,7 +70,7 @@ const LegacyPropertySchema = z.object({
   landlordEmail: z.string().optional().default(""),
   landlordPhone: z.string().optional().default(""),
   paymentMethod: z
-    .enum(["ACH", "Check", "Wire", "Online Portal", "Money Order"])
+    .enum(["", "ACH", "Check", "Wire", "Online Portal", "Money Order", "Invoice"])
     .optional()
     .default("ACH"),
   paymentRecipient: z.string().optional().default(""),

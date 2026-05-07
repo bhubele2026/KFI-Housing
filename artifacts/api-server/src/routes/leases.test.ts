@@ -229,4 +229,49 @@ describe("GET /leases — dynamic status derivation (task #309 / #327)", () => {
     expect(rows[0].status).toBe("Upcoming");
     expect(store.get("l-blank")?.status).toBe("Upcoming");
   });
+
+  // Task #364 — datetime-style dates that slipped past the import
+  // boundary (e.g. `"2026-05-31 00:00:00"` from a date-typed XLSX
+  // cell, or `"2026-05-31T00:00:00.000Z"` from a JS Date toString)
+  // must be normalized down to YYYY-MM-DD by the route so they
+  // don't 500 the entire list. One bad row used to poison
+  // `ListLeasesResponse.parse(...)` and blank the Customers /
+  // Leases / Dashboard pages.
+  it.each([
+    ["space + time", "2026-05-31 00:00:00", "2027-05-31 00:00:00"],
+    ["T + time + Z", "2026-05-31T00:00:00.000Z", "2027-05-31T00:00:00.000Z"],
+    ["T + time, no zone", "2026-05-31T00:00:00", "2027-05-31T00:00:00"],
+  ])(
+    "normalizes datetime-style %s strings to YYYY-MM-DD on the way out (task #364)",
+    async (_label, badStart, badEnd) => {
+      store.set(
+        "l-dt",
+        makeLease({
+          id: "l-dt",
+          startDate: badStart,
+          endDate: badEnd,
+          status: "Active",
+        }),
+      );
+      // Plus a clean row so we also prove the bad row no longer
+      // poisons the rest of the array.
+      store.set(
+        "l-clean",
+        makeLease({
+          id: "l-clean",
+          startDate: "2025-01-01",
+          endDate: "2026-12-31",
+        }),
+      );
+
+      const res = await fetch(`${baseUrl}/api/leases`);
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as LeaseRow[];
+      const dt = rows.find((r) => r.id === "l-dt");
+      const clean = rows.find((r) => r.id === "l-clean");
+      expect(dt?.startDate).toBe("2026-05-31");
+      expect(dt?.endDate).toBe("2027-05-31");
+      expect(clean?.id).toBe("l-clean");
+    },
+  );
 });

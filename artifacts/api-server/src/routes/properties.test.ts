@@ -36,11 +36,13 @@ interface PropertyRow {
   landlordEmail: string;
   landlordPhone: string;
   paymentMethod:
+    | ""
     | "ACH"
     | "Check"
     | "Wire"
     | "Online Portal"
-    | "Money Order";
+    | "Money Order"
+    | "Invoice";
   paymentRecipient: string;
   paymentDueDay: number;
   rentFrequency?: "Weekly" | "Bi-Weekly" | "Monthly";
@@ -718,4 +720,34 @@ describe("properties route — server-side geocoding (Task #152)", () => {
     expect(res.status).toBe(404);
     expect(geocodeMock).not.toHaveBeenCalled();
   });
+
+  // Task #364 — legacy / triage rows whose paymentMethod is the
+  // empty string (Ridge Motor Inn, Chateau Knoll seeds) or
+  // "Invoice" (the hotel-corporate-rate seed) used to 500 the
+  // entire GET /properties response because zod's enum check
+  // poisoned the whole array. The widened OpenAPI enum now lets
+  // them round-trip so the Customers page renders all rows.
+  it.each([
+    ["blank legacy paymentMethod", ""] as const,
+    ['"Invoice" hotel-corporate-rate paymentMethod', "Invoice"] as const,
+  ])(
+    "GET /properties returns rows whose paymentMethod is %s without dropping any other rows (task #364)",
+    async (_label, value) => {
+      store.set("p-clean", { ...makeCreateBody({ id: "p-clean" }) });
+      store.set("p-legacy", {
+        ...makeCreateBody({
+          id: "p-legacy",
+          paymentMethod: value as PropertyRow["paymentMethod"],
+        }),
+      });
+
+      const res = await fetch(`${baseUrl}/api/properties`);
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as PropertyRow[];
+      const ids = rows.map((r) => r.id).sort();
+      expect(ids).toEqual(["p-clean", "p-legacy"]);
+      const legacy = rows.find((r) => r.id === "p-legacy");
+      expect(legacy?.paymentMethod).toBe(value);
+    },
+  );
 });

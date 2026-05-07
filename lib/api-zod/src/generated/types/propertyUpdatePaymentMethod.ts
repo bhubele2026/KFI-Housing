@@ -10,9 +10,11 @@ export type PropertyUpdatePaymentMethod =
   (typeof PropertyUpdatePaymentMethod)[keyof typeof PropertyUpdatePaymentMethod];
 
 export const PropertyUpdatePaymentMethod = {
+  "": "",
   ACH: "ACH",
   Check: "Check",
   Wire: "Wire",
   Online_Portal: "Online Portal",
   Money_Order: "Money Order",
+  Invoice: "Invoice",
 } as const;

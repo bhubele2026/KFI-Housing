@@ -70,7 +70,10 @@ export const PropertySchema = z.object({
   landlordName: z.string(),
   landlordEmail: z.string(),
   landlordPhone: z.string(),
-  paymentMethod: z.enum(["ACH", "Check", "Wire", "Online Portal", "Money Order"]),
+  // Mirror the OpenAPI enum (task #364): blank covers triage rows
+  // whose payment method isn't filled in yet, "Invoice" covers
+  // hotel-style corporate-rate agreements (e.g. Ridge Motor Inn).
+  paymentMethod: z.enum(["", "ACH", "Check", "Wire", "Online Portal", "Money Order", "Invoice"]),
   paymentRecipient: z.string(),
   paymentDueDay: z.number(),
   rentFrequency: z.enum(["Weekly", "Bi-Weekly", "Monthly"]).optional(),

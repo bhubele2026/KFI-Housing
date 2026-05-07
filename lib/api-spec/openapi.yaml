@@ -898,9 +898,17 @@ components:
         landlordName: { type: string }
         landlordEmail: { type: string }
         landlordPhone: { type: string }
+        # `""` and `"Invoice"` are accepted alongside the canonical
+        # five payment methods so legacy / triage rows survive the
+        # response parser. Blank means "not yet known"; "Invoice"
+        # covers hotel-style corporate-rate agreements (e.g. the
+        # Ridge Motor Inn KFI seed) that bill per room-night via an
+        # invoice rather than one of the recurring channels. See
+        # task #364 — without these, GET /properties 500s on legacy
+        # seed rows and the entire Customers page renders blank.
         paymentMethod:
           type: string
-          enum: [ACH, Check, Wire, Online Portal, Money Order]
+          enum: ["", ACH, Check, Wire, Online Portal, Money Order, Invoice]
         paymentRecipient: { type: string }
         paymentDueDay: { type: integer }
         rentFrequency:
@@ -984,9 +992,17 @@ components:
         landlordName: { type: string }
         landlordEmail: { type: string }
         landlordPhone: { type: string }
+        # `""` and `"Invoice"` are accepted alongside the canonical
+        # five payment methods so legacy / triage rows survive the
+        # response parser. Blank means "not yet known"; "Invoice"
+        # covers hotel-style corporate-rate agreements (e.g. the
+        # Ridge Motor Inn KFI seed) that bill per room-night via an
+        # invoice rather than one of the recurring channels. See
+        # task #364 — without these, GET /properties 500s on legacy
+        # seed rows and the entire Customers page renders blank.
         paymentMethod:
           type: string
-          enum: [ACH, Check, Wire, Online Portal, Money Order]
+          enum: ["", ACH, Check, Wire, Online Portal, Money Order, Invoice]
         paymentRecipient: { type: string }
         paymentDueDay: { type: integer }
         rentFrequency:

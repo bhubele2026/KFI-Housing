@@ -95,6 +95,42 @@ export default function Dashboard() {
   );
   const manualOccupantCount = activeOccupants.length - autoReconciledOccupantCount;
 
+  // Per-customer reconciliation breakdown (Task #331). Operators want to
+  // see *which* customer still has manual rows so they can chase the
+  // right payroll cycle. Group active in-scope occupants by their
+  // property's customerId, then rank by manual count desc (tie-break by
+  // name) so the worst offender sits at the top. When a single customer
+  // is filtered the list collapses to one row, which is still useful as
+  // a same-card confirmation of the totals above.
+  const reconciliationByCustomer = useMemo(() => {
+    const propertyCustomerById = new Map(
+      scopedProperties.map((p) => [p.id, p.customerId] as const),
+    );
+    const customerNameById = new Map(customers.map((c) => [c.id, c.name] as const));
+    const map = new Map<
+      string,
+      { customerId: string; customerName: string; manual: number; auto: number }
+    >();
+    for (const o of activeOccupants) {
+      if (o.propertyId === null) continue;
+      const customerId = propertyCustomerById.get(o.propertyId);
+      if (!customerId) continue;
+      const existing =
+        map.get(customerId) ?? {
+          customerId,
+          customerName: customerNameById.get(customerId) ?? "Unknown customer",
+          manual: 0,
+          auto: 0,
+        };
+      if (o.chargeSource === "payroll") existing.auto += 1;
+      else existing.manual += 1;
+      map.set(customerId, existing);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.manual - a.manual || a.customerName.localeCompare(b.customerName),
+    );
+  }, [activeOccupants, scopedProperties, customers]);
+
   // "Needs review" mirrors the per-page filters that the dashboard tiles
   // deep-link into. Each predicate matches what the corresponding page
   // shows when `?needsReview=1` is set — keeping the counts in sync with
@@ -682,6 +718,57 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
+              {reconciliationByCustomer.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    By customer · ranked by manual rows
+                  </p>
+                  <Table data-testid="table-payroll-reconciliation-by-customer">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="text-right">Manual</TableHead>
+                        <TableHead className="text-right">Auto</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reconciliationByCustomer.map((row) => {
+                        const total = row.manual + row.auto;
+                        return (
+                          <TableRow
+                            key={row.customerId}
+                            data-testid={`row-payroll-reconciliation-${row.customerId}`}
+                          >
+                            <TableCell className="font-medium">{row.customerName}</TableCell>
+                            <TableCell
+                              className={
+                                "text-right tabular-nums " +
+                                (row.manual > 0 ? "font-semibold" : "text-muted-foreground")
+                              }
+                              data-testid={`text-payroll-reconciliation-${row.customerId}-manual`}
+                            >
+                              {row.manual}
+                            </TableCell>
+                            <TableCell
+                              className="text-right tabular-nums text-emerald-700 dark:text-emerald-400"
+                              data-testid={`text-payroll-reconciliation-${row.customerId}-auto`}
+                            >
+                              {row.auto}
+                            </TableCell>
+                            <TableCell
+                              className="text-right tabular-nums text-muted-foreground"
+                              data-testid={`text-payroll-reconciliation-${row.customerId}-total`}
+                            >
+                              {total}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

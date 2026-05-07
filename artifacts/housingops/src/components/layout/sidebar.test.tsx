@@ -1118,6 +1118,34 @@ describe("Sidebar import dialog — merge preview", () => {
     }
   });
 
+  it("replace-mode success toast description includes room-night logs count", async () => {
+    importDataMock.mockReturnValue({
+      mode: "replace",
+      summary: { customers: 1, properties: 2, leases: 3, rooms: 0, beds: 4, occupants: 5, utilities: 6, roomNightLogs: 7 },
+    });
+    await openImportDialog();
+    await confirmImport();
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const arg = toastMock.mock.calls[0][0];
+    expect(arg.title).toBe("Data imported");
+    expect(arg.description).toContain("7 room-night logs");
+  });
+
+  it("merge-mode success toast description includes room-night logs count when falling through to counts string", async () => {
+    importDataMock.mockReturnValue({
+      mode: "merge",
+      summary: { customers: 1, properties: 2, leases: 0, rooms: 0, beds: 0, occupants: 0, utilities: 0, roomNightLogs: 4 },
+    });
+    await openImportDialog();
+    await selectMergeMode();
+    await confirmImport();
+
+    expect(toastMock).toHaveBeenCalledTimes(1);
+    const arg = toastMock.mock.calls[0][0];
+    expect(arg.description).toContain("4 room-night logs");
+  });
+
   it("recomputes the preview when toggling back from merge to replace and forward again", async () => {
     previewMergeImportMock.mockReturnValue(dryRun({
       properties: { added: 1, updated: 0, unchanged: 0, addedItems: [{ id: "p9", label: "New" }] },

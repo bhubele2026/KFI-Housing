@@ -68,11 +68,14 @@ export default function Customers() {
   // Recomputes whenever properties, beds, or occupants change so the numbers
   // stay in sync with edits elsewhere in the app.
   const statsByCustomer = useMemo(() => {
-    const propertiesByCustomer = new Map<string, string[]>();
+    const propertiesByCustomer = new Map<string, Set<string>>();
     for (const p of properties) {
-      const list = propertiesByCustomer.get(p.customerId) ?? [];
-      list.push(p.id);
-      propertiesByCustomer.set(p.customerId, list);
+      const ownerIds = [p.customerId, ...(p.sharedWithCustomerIds ?? [])];
+      for (const cid of ownerIds) {
+        const set = propertiesByCustomer.get(cid) ?? new Set<string>();
+        set.add(p.id);
+        propertiesByCustomer.set(cid, set);
+      }
     }
 
     const bedsByProperty = new Map<string, { total: number; occupied: number }>();
@@ -95,7 +98,7 @@ export default function Customers() {
       { propertyCount: number; totalBeds: number; occupiedBeds: number; occupancyPct: number; monthlyRevenue: number }
     >();
     for (const c of customers) {
-      const propIds = propertiesByCustomer.get(c.id) ?? [];
+      const propIds = propertiesByCustomer.get(c.id) ?? new Set<string>();
       let totalBeds = 0;
       let occupiedBeds = 0;
       let monthlyRevenue = 0;
@@ -109,7 +112,7 @@ export default function Customers() {
       }
       const occupancyPct = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
       map.set(c.id, {
-        propertyCount: propIds.length,
+        propertyCount: propIds.size,
         totalBeds,
         occupiedBeds,
         occupancyPct,

@@ -711,6 +711,128 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     ).toBe("NeedsReview");
   });
 
+  // ── At-risk hotel-rate filter (?atRisk=1) (task #358) ────────────────
+  // The dashboard hotel-rate "at risk this month" tile deep-links to
+  // /leases?atRisk=1, mirroring the needsReview pattern: the page must
+  // (a) filter to only Active/Upcoming hotel-rate leases that are at
+  // risk this month, (b) surface a removable chip explaining the
+  // shortened list, and (c) keep the at-risk Select in sync with the
+  // URL so the operator can toggle it without page reloads. Without any
+  // of those three the deep-link silently behaves like a no-op or makes
+  // the page look broken. The module-level useListRoomNightLogs mock
+  // returns no logs, so any hotel-rate lease (monthlyRoomNightMin > 0)
+  // counts as `missing` for the current month — exactly the row this
+  // filter exists to surface.
+  function pushHotelRateAtRiskLease() {
+    state.leases.push({
+      id: "lHotel",
+      propertyId: "p2",
+      startDate: "2025-04-01",
+      endDate: "2026-04-01",
+      monthlyRent: 0,
+      securityDeposit: 0,
+      status: "Active",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+      monthlyRoomNightMin: 50,
+    });
+  }
+
+  it("?atRisk=1 filters to at-risk hotel-rate leases, shows the removable chip, and keeps the at-risk Select in sync", async () => {
+    pushHotelRateAtRiskLease();
+
+    const { Harness } = makeHarness("/leases?atRisk=1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+
+    // Only the at-risk hotel-rate row remains; the existing non-hotel
+    // leases (l1, l2) and placeholder rows are filtered out.
+    expect(
+      container.querySelector('[data-testid="row-lease-lHotel"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p3"]'),
+    ).toBeNull();
+
+    // Removable chip is visible so operators see why the list shrank.
+    expect(
+      container.querySelector('[data-testid="badge-at-risk-filter"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="button-clear-at-risk-filter"]'),
+    ).not.toBeNull();
+
+    // The Select reflects the URL state — without this a deep-link from
+    // the dashboard would leave the dropdown on "All Leases", making
+    // the truncated table look like a bug.
+    expect(
+      container
+        .querySelector('[data-testid="select-at-risk-filter"]')
+        ?.getAttribute("data-current"),
+    ).toBe("AtRisk");
+  });
+
+  it("toggling the at-risk Select pushes ?atRisk=1 onto the URL and clearing the chip removes it", async () => {
+    pushHotelRateAtRiskLease();
+
+    const memory = await renderPageWithMemory();
+
+    // First paint: filter inactive, every row visible, chip absent.
+    expect(
+      container.querySelector('[data-testid="row-lease-l1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="badge-at-risk-filter"]'),
+    ).toBeNull();
+
+    // Toggle the Select to AtRisk via the select-mock's per-item button.
+    const atRiskOption = container.querySelector(
+      '[data-testid="select-at-risk-filter"] [data-select-item="AtRisk"]',
+    ) as HTMLButtonElement | null;
+    expect(atRiskOption).not.toBeNull();
+    await act(async () => atRiskOption!.click());
+
+    // URL now carries ?atRisk=1 and only the at-risk row remains. The
+    // chip appears so the operator can clear it without re-opening the
+    // dropdown.
+    expect(memory.history[memory.history.length - 1]).toBe(
+      "/leases?atRisk=1",
+    );
+    expect(
+      container.querySelector('[data-testid="row-lease-lHotel"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="badge-at-risk-filter"]'),
+    ).not.toBeNull();
+
+    // Clearing the chip drops the URL param and restores the full list.
+    const clearBtn = container.querySelector(
+      '[data-testid="button-clear-at-risk-filter"]',
+    ) as HTMLButtonElement | null;
+    expect(clearBtn).not.toBeNull();
+    await act(async () => clearBtn!.click());
+
+    expect(memory.history[memory.history.length - 1]).toBe("/leases");
+    expect(
+      container.querySelector('[data-testid="row-lease-l1"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="badge-at-risk-filter"]'),
+    ).toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="select-at-risk-filter"]')
+        ?.getAttribute("data-current"),
+    ).toBe("All");
+  });
+
   it("filtering by Buyout=No hides leases that have a buyout", async () => {
     await renderPage();
 

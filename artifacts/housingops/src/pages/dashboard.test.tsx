@@ -625,6 +625,149 @@ describe("Dashboard Needs review tile", () => {
   });
 });
 
+describe("Dashboard Hotel-rate at-risk tile (task #358 deep-link)", () => {
+  // The Needs review card surfaces a "hotel-rate leases at risk this
+  // month" item whose CTA must deep-link to /leases?atRisk=1, where the
+  // matching at-risk filter (also task #358) does the actual narrowing.
+  // Two contracts have to hold for the round-trip to feel honest:
+  //   1. The dashboard count equals the number of Active/Upcoming
+  //      hotel-rate leases that are at risk for the current month.
+  //   2. The CTA href carries `?atRisk=1` so /leases lands pre-filtered
+  //      and shows the same set of rows. The customer scope is also
+  //      threaded through so a scoped dashboard hands a scoped list to
+  //      /leases (not the global one).
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  it("counts only Active/Upcoming hotel-rate leases at risk this month and points the CTA at /leases?atRisk=1", async () => {
+    // Module-level useListRoomNightLogs mock returns []  → every
+    // hotel-rate lease is `missing` for the current month, exactly
+    // the case the tile exists to surface. Mix in non-hotel and
+    // expired leases to prove they're correctly excluded from the
+    // count (and therefore from the deep-linked /leases view).
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      // Two at-risk hotel-rate leases — both should count.
+      { id: "lH1", propertyId: "p1", status: "Active",   startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 0, monthlyRoomNightMin: 50 },
+      { id: "lH2", propertyId: "p1", status: "Upcoming", startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 0, monthlyRoomNightMin: 25 },
+      // Hotel-rate but Expired — must NOT count (rate no longer applies).
+      { id: "lH3", propertyId: "p1", status: "Expired",  startDate: "2024-01-01", endDate: "2024-06-01", monthlyRent: 0, monthlyRoomNightMin: 50 },
+      // Non-hotel-rate Active lease — must NOT count.
+      { id: "lN1", propertyId: "p1", status: "Active",   startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 1000 },
+    ];
+
+    await render();
+
+    // Tile is visible with the count of 2 (lH1 + lH2).
+    expect(
+      container.querySelector('[data-testid="tile-needs-review-hotel-rate-at-risk"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="text-needs-review-hotel-rate-at-risk-count"]')?.textContent,
+    ).toBe("2");
+
+    // CTA is an anchor (Button asChild → Link) carrying the deep-link
+    // URL that activates the matching ?atRisk=1 filter on /leases.
+    const cta = container.querySelector(
+      'a[data-testid="button-needs-review-hotel-rate-at-risk-cta"]',
+    );
+    expect(cta).not.toBeNull();
+    expect(cta!.getAttribute("href")).toBe("/leases?atRisk=1");
+  });
+
+  it("hides the tile when there are no at-risk hotel-rate leases", async () => {
+    // No hotel-rate leases at all (no monthlyRoomNightMin) → tile
+    // must not render. Without this guard the dashboard would show a
+    // 0-count "Needs review" item with a link to an empty list.
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "lN1", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 1000 },
+    ];
+
+    await render();
+
+    expect(
+      container.querySelector('[data-testid="tile-needs-review-hotel-rate-at-risk"]'),
+    ).toBeNull();
+  });
+
+  it("threads the active customer scope through the CTA so the linked /leases view stays in the same scope", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+      { id: "p2", name: "Hillside", customerId: "c2", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      { id: "lH-c1", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 0, monthlyRoomNightMin: 50 },
+      { id: "lH-c2", propertyId: "p2", status: "Active", startDate: "2025-01-01", endDate: "2026-12-31", monthlyRent: 0, monthlyRoomNightMin: 50 },
+    ];
+
+    await render();
+
+    // Both at-risk under all-customers default.
+    expect(
+      container.querySelector('[data-testid="text-needs-review-hotel-rate-at-risk-count"]')?.textContent,
+    ).toBe("2");
+    expect(
+      container
+        .querySelector('a[data-testid="button-needs-review-hotel-rate-at-risk-cta"]')
+        ?.getAttribute("href"),
+    ).toBe("/leases?atRisk=1");
+
+    // Scope to c1 → count drops to 1 and the CTA carries the scope so
+    // /leases lands on the same filter+scope combo.
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1");
+    });
+
+    expect(
+      container.querySelector('[data-testid="text-needs-review-hotel-rate-at-risk-count"]')?.textContent,
+    ).toBe("1");
+    expect(
+      container
+        .querySelector('a[data-testid="button-needs-review-hotel-rate-at-risk-cta"]')
+        ?.getAttribute("href"),
+    ).toBe("/leases?atRisk=1&customer=c1");
+  });
+});
+
 describe("Dashboard Unplaced payroll tile", () => {
   let container: HTMLDivElement;
   let root: Root | null = null;

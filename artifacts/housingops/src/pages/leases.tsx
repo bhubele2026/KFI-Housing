@@ -41,6 +41,12 @@ type AtRiskFilter = "All" | "AtRisk";
 
 type NeedsDatesFilter = "All" | "NeedsDates";
 
+// Customer-pays filter values. "All" lets every lease through; "Yes" / "No"
+// map to the lease's `customerResponsibleForRent` flag (task #313). Kept
+// narrow so a regression that introduces a new option also has to teach
+// the filter what to do with it.
+type CustomerResponsibleFilter = "All" | "Yes" | "No";
+
 type ViewMode = "flat" | "by-customer";
 
 export default function Leases() {
@@ -122,6 +128,30 @@ export default function Leases() {
     const qs = params.toString();
     navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
   };
+  // URL-driven so other surfaces (e.g. the customer page "Customer pays"
+  // rollup) can deep-link straight to the matching rows
+  // (`?customerResponsible=1` for Yes, `=0` for No), mirroring the
+  // needsReview pattern above.
+  const [customerResponsibleFilter, setCustomerResponsibleFilter] =
+    useState<CustomerResponsibleFilter>(() => {
+      const v = new URLSearchParams(searchString).get("customerResponsible");
+      return v === "1" ? "Yes" : v === "0" ? "No" : "All";
+    });
+  useEffect(() => {
+    const v = new URLSearchParams(searchString).get("customerResponsible");
+    const next: CustomerResponsibleFilter =
+      v === "1" ? "Yes" : v === "0" ? "No" : "All";
+    setCustomerResponsibleFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+  const updateCustomerResponsibleFilter = (value: CustomerResponsibleFilter) => {
+    setCustomerResponsibleFilter(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "Yes") params.set("customerResponsible", "1");
+    else if (value === "No") params.set("customerResponsible", "0");
+    else params.delete("customerResponsible");
+    const qs = params.toString();
+    navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
+  };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
@@ -182,6 +212,16 @@ export default function Leases() {
           // import quality use this to find the exact rows that need a
           // weekly cost / vendor cleanup pass.
           if (needsReviewFilter === "NeedsReview" && !l.needsReview) return false;
+          // Customer-pays filter (task #335) — narrows to leases where
+          // the tenant customer is on the hook for rent, or explicitly
+          // not. Booleans only — `undefined` (legacy / unannotated rows)
+          // are treated as "not customer-paid" so a "Yes" filter never
+          // surprises operators with rows that have no badge.
+          if (customerResponsibleFilter !== "All") {
+            const isCustomerPaid = l.customerResponsibleForRent === true;
+            if (customerResponsibleFilter === "Yes" && !isCustomerPaid) return false;
+            if (customerResponsibleFilter === "No" && isCustomerPaid) return false;
+          }
           // Blank-date triage filter (task #363) — surfaces just the rows
           // whose `startDate` or `endDate` is empty, so operators can work
           // through them without hunting for missing cells.
@@ -207,7 +247,7 @@ export default function Leases() {
           return tenantId === customerFilter;
         }),
       ),
-    [leases, statusFilter, buyoutFilter, needsReviewFilter, needsDatesFilter, atRiskFilter, customerFilter, propertyById, roomNightLogs, currentMonth],
+    [leases, statusFilter, buyoutFilter, needsReviewFilter, needsDatesFilter, atRiskFilter, customerResponsibleFilter, customerFilter, propertyById, roomNightLogs, currentMonth],
   );
 
   // Placeholder rows: every property in the active customer scope that has no
@@ -234,7 +274,8 @@ export default function Leases() {
     buyoutFilter === "All" &&
     needsReviewFilter === "All" &&
     needsDatesFilter === "All" &&
-    atRiskFilter === "All";
+    atRiskFilter === "All" &&
+    customerResponsibleFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
   // By-customer view: one group per customer with ≥1 Active lease in
@@ -645,6 +686,24 @@ export default function Leases() {
                     <SelectItem value="All">Any Buyout</SelectItem>
                     <SelectItem value="Yes">Buyout available</SelectItem>
                     <SelectItem value="No">No buyout</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={customerResponsibleFilter}
+                  onValueChange={(v) =>
+                    updateCustomerResponsibleFilter(v as CustomerResponsibleFilter)
+                  }
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-44"
+                    data-testid="select-customer-responsible-filter"
+                  >
+                    <SelectValue placeholder="Customer pays" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">Any payer</SelectItem>
+                    <SelectItem value="Yes">Customer pays</SelectItem>
+                    <SelectItem value="No">Not customer-paid</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select

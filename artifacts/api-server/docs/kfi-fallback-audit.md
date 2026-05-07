@@ -66,3 +66,14 @@ deployment) and should be reconciled by either (a) confirming the master
 row's downstream end-client and updating the corresponding
 `*_END_CLIENT_NAME_PATTERN` constant in the seed, or (b) marking the row
 operator-managed in the same way Webster and Ridge Motor Inn are above.
+
+## Production verification log
+
+- **Task #369 (2026-05-07)** — Ran the query above against the
+  production read replica. Result: **0 rows**. No property in production
+  is currently attached to any `KFI Staffing%` customer (synthetic
+  fallback or operator-managed). The Webster Zielsdorf and Ridge Motor
+  Inn operator-managed rows are absent because their seeds have not yet
+  run against the deployed database; this is not a fallback-attachment
+  problem. The audit's pass criterion (no synthetic fallback
+  attachments) is satisfied.

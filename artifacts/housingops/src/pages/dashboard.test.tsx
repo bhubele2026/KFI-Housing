@@ -127,14 +127,42 @@ vi.mock("@/context/data-store", () => ({
   }),
 }));
 
-const unplacedPayrollState: { rows: Array<{ customer: string; name: string; personId: string; weekly: number; suggestions: Array<{ occupantId: string; name: string; company: string; propertyName: string | null; score: number; crossEmployer: boolean }> }> } = {
+type Suggestion = {
+  occupantId: string;
+  name: string;
+  company: string;
+  propertyName: string | null;
+  score: number;
+  crossEmployer: boolean;
+};
+const unplacedPayrollState: {
+  rows: Array<{ customer: string; name: string; personId: string; weekly: number; suggestions: Suggestion[] }>;
+  lowConfidenceMatches: Array<{
+    customer: string;
+    name: string;
+    personId: string;
+    weekly: number;
+    matched: Suggestion;
+    suggestions: Suggestion[];
+  }>;
+} = {
   rows: [],
+  lowConfidenceMatches: [],
 };
 const invalidateQueriesMock = vi.fn();
 
 vi.mock("@workspace/api-client-react", () => ({
-  useListUnplacedPayroll: () => ({ data: unplacedPayrollState.rows }),
+  useListUnplacedPayroll: () => ({
+    data: {
+      unmatched: unplacedPayrollState.rows,
+      lowConfidenceMatches: unplacedPayrollState.lowConfidenceMatches,
+    },
+  }),
   getListUnplacedPayrollQueryKey: () => ["/payroll/unplaced"],
+  // Task #320 added a hotel-rate / lease-expiry alerts tile that
+  // reads from this hook. Tests in this file don't exercise it
+  // directly but the hook must still resolve cleanly.
+  useListRoomNightLogs: () => ({ data: [] }),
 }));
 
 vi.mock("@tanstack/react-query", async () => {
@@ -607,7 +635,9 @@ describe("Dashboard Unplaced payroll tile", () => {
     invalidateQueriesMock.mockReset();
     addOccupantMock.mockReset();
     updateBedMock.mockReset();
+    updateOccupantMock.mockReset();
     unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
     mockData.isLoading = false;
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/dashboard");
@@ -625,6 +655,7 @@ describe("Dashboard Unplaced payroll tile", () => {
     }
     container.remove();
     unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
   });
 
   async function render() {
@@ -638,6 +669,7 @@ describe("Dashboard Unplaced payroll tile", () => {
     unplacedPayrollState.rows = [];
     await render();
     expect(container.querySelector('[data-testid="card-unplaced-payroll"]')).toBeNull();
+    expect(container.querySelector('[data-testid="card-low-confidence-payroll"]')).toBeNull();
   });
 
   it("groups rows by customer, shows weekly totals, and pre-fills the assign dialog", async () => {
@@ -821,6 +853,10 @@ describe("Dashboard Lease expiry alerts", () => {
 
   beforeEach(() => {
     selectHandlers.clear();
+    invalidateQueriesMock.mockReset();
+    updateOccupantMock.mockReset();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
     mockData.isLoading = false;
     mockData.properties = [];
     mockData.beds = [];
@@ -851,6 +887,7 @@ describe("Dashboard Lease expiry alerts", () => {
     vi.useRealTimers();
     mockData.properties = [];
     mockData.leases = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
   });
 
   async function render() {
@@ -997,6 +1034,167 @@ describe("Dashboard Lease expiry alerts", () => {
 
     expect(container.querySelector('[data-testid="row-expiring-lease-l-c1"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="row-expiring-lease-l-c2"]')).toBeNull();
+  });
+});
+
+describe("Dashboard Confirm match (low-confidence payroll) tile", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    invalidateQueriesMock.mockReset();
+    updateOccupantMock.mockReset();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    unplacedPayrollState.lowConfidenceMatches = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  it("renders one row per low-confidence match with the currently-applied occupant and alternatives", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "JOSE GARCIA",
+        personId: "EMP9",
+        weekly: 125,
+        matched: { occupantId: "occ-a", name: "Jose Garcia", company: "Acme Co", propertyName: "Hilltop", score: 1, crossEmployer: false },
+        suggestions: [
+          { occupantId: "occ-b", name: "Jose Garcia", company: "Acme Co", propertyName: "Lakeside", score: 1, crossEmployer: false },
+        ],
+      },
+    ];
+
+    await render();
+
+    expect(container.querySelector('[data-testid="card-low-confidence-payroll"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="text-low-confidence-payroll-total-count"]')?.textContent,
+    ).toContain("1");
+    expect(
+      container.querySelector('[data-testid="row-low-confidence-EMP9"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="low-confidence-matched-EMP9"]')?.textContent,
+    ).toContain("Jose Garcia @ Hilltop");
+    expect(
+      container.querySelector('[data-testid="button-redirect-low-confidence-EMP9-occ-b"]'),
+    ).not.toBeNull();
+  });
+
+  it("Confirm stamps the payroll Person Id on the matched occupant and refetches", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "JOSE GARCIA",
+        personId: "EMP9",
+        weekly: 125,
+        matched: { occupantId: "occ-a", name: "Jose Garcia", company: "Acme Co", propertyName: "Hilltop", score: 1, crossEmployer: false },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    const btn = container.querySelector(
+      '[data-testid="button-confirm-low-confidence-EMP9"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(updateOccupantMock).toHaveBeenCalledWith("occ-a", { employeeId: "EMP9" });
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ["/payroll/unplaced"] });
+  });
+
+  it("Pick-different redirects the rate to an alternate occupant and refetches", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "JOSE GARCIA",
+        personId: "EMP9",
+        weekly: 125,
+        matched: { occupantId: "occ-a", name: "Jose Garcia", company: "Acme Co", propertyName: "Hilltop", score: 1, crossEmployer: false },
+        suggestions: [
+          { occupantId: "occ-b", name: "Jose Garcia", company: "Acme Co", propertyName: "Lakeside", score: 1, crossEmployer: false },
+        ],
+      },
+    ];
+
+    await render();
+
+    const btn = container.querySelector(
+      '[data-testid="button-redirect-low-confidence-EMP9-occ-b"]',
+    ) as HTMLButtonElement | null;
+    expect(btn).not.toBeNull();
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(updateOccupantMock).toHaveBeenCalledWith("occ-b", {
+      chargePerBed: 125,
+      billingFrequency: "Weekly",
+      employeeId: "EMP9",
+    });
+    expect(invalidateQueriesMock).toHaveBeenCalledWith({ queryKey: ["/payroll/unplaced"] });
+  });
+
+  it("scopes the list to the active customer filter", async () => {
+    unplacedPayrollState.lowConfidenceMatches = [
+      {
+        customer: "Acme Co",
+        name: "A",
+        personId: "EMP1",
+        weekly: 100,
+        matched: { occupantId: "occ-a", name: "A", company: "Acme Co", propertyName: null, score: 1, crossEmployer: false },
+        suggestions: [],
+      },
+      {
+        customer: "Globex",
+        name: "B",
+        personId: "EMP2",
+        weekly: 50,
+        matched: { occupantId: "occ-b", name: "B", company: "Globex", propertyName: null, score: 1, crossEmployer: false },
+        suggestions: [],
+      },
+    ];
+
+    await render();
+
+    expect(container.querySelector('[data-testid="group-low-confidence-Acme Co"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="group-low-confidence-Globex"]')).not.toBeNull();
+
+    const handler = selectHandlers.get(FILTER_TESTID);
+    if (!handler) throw new Error("filter handler missing");
+    await act(async () => {
+      handler.onValueChange("c1"); // Acme Co
+    });
+
+    expect(container.querySelector('[data-testid="group-low-confidence-Acme Co"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="group-low-confidence-Globex"]')).toBeNull();
   });
 });
 

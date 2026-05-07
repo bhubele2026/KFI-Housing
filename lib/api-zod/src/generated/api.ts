@@ -1960,72 +1960,188 @@ export const DeleteUtilityParams = zod.object({
 
 /**
  * Re-runs the idempotent payroll → occupant reconciler (the same
-seeder that runs at startup) and returns the rows that still
-don't match any occupant by `(employeeId)`, `(name + company)`,
-or unique `(name)`. Each row carries the customer, employee
-name, payroll Person Id, and the recurring weekly deduction so
-leasing can pre-fill an Assign-to-bed dialog and either place
-the person or correct the payroll record.
+seeder that runs at startup) and returns two lists:
+
+- `unmatched`: payroll rows that don't match any occupant by
+  `(employeeId)`, `(name + company)`, or unique `(name)`. The
+  dashboard renders these as "assign to a bed" rows.
+- `lowConfidenceMatches`: payroll rows that DID match — but
+  only via the fragile name-only fallback (no employeeId, no
+  name+company hit). The seeder already applied the rate to
+  the matched occupant, but at the same employer there can be
+  two namesakes (two "Jose Garcia"s) so the wrong one may have
+  received the rate. The dashboard surfaces these in a
+  "Confirm match" section so the operator can either confirm
+  the picked occupant (stamping employeeId so future runs
+  match strongly) or redirect the rate to a different
+  same-employer candidate.
 
  * @summary List payroll deductions with no matching occupant yet
  */
-export const ListUnplacedPayrollResponseItem = zod
+export const ListUnplacedPayrollResponse = zod
   .object({
-    customer: zod
-      .string()
-      .describe(
-        "Customer \/ employer name as it appears in the payroll export.",
-      ),
-    name: zod
-      .string()
-      .describe("Employee full name as it appears in the payroll export."),
-    personId: zod
-      .string()
-      .describe("Payroll Person Id (employeeId) for the employee."),
-    weekly: zod.number().describe("Recurring weekly deduction amount (USD)."),
-    suggestions: zod
-      .array(
-        zod
-          .object({
-            occupantId: zod
-              .string()
-              .describe(
-                "Id of the existing occupant the suggestion points at.",
-              ),
-            name: zod
-              .string()
-              .describe("Existing occupant's name as stored in HousingOps."),
-            company: zod
-              .string()
-              .describe(
-                'Existing occupant\'s employer as stored in HousingOps.\nSurfaced so the dashboard can show the cross-employer\nwarning (\"… — Penda Corp?\") without an extra lookup.\n',
-              ),
-            propertyName: zod
-              .string()
-              .nullable()
-              .describe(
-                "Property the candidate is currently assigned to, or null\nwhen the occupant isn't assigned to a property yet.\n",
-              ),
-            score: zod
-              .number()
-              .describe("Name similarity in [0, 1]. Higher is closer."),
-            crossEmployer: zod
-              .boolean()
-              .describe(
-                "True when this candidate's employer differs from the\npayroll row's customer. Only set on the cross-employer\nfallback pass; the dashboard uses this to render a\ndistinct \"Did you mean (different employer): …\" label and\nto also overwrite the occupant's company on confirm.\n",
-              ),
-          })
-          .describe(
-            'A close-but-not-exact existing-occupant candidate for an\nunplaced payroll row. The dashboard renders these as\n\"Did you mean: <name> @ <propertyName>?\" buttons that update\nthe existing occupant\'s chargePerBed\/billingFrequency from the\npayroll row instead of creating a duplicate.\n',
-          ),
-      )
-      .describe(
-        "Up to 3 likely existing occupants whose name closely\nresembles the payroll row's name (typo \/ initial \/\nformatting differences). Sorted by descending similarity.\nSame-employer candidates are preferred; if none clear the\nthreshold the seeder falls back to cross-employer\ncandidates flagged with `crossEmployer = true` so the\ndashboard can warn the operator that confirming will also\nchange the occupant's employer. Empty when nothing scores\n≥ 0.6 in either pass.\n",
-      ),
+    unmatched: zod.array(
+      zod
+        .object({
+          customer: zod
+            .string()
+            .describe(
+              "Customer \/ employer name as it appears in the payroll export.",
+            ),
+          name: zod
+            .string()
+            .describe(
+              "Employee full name as it appears in the payroll export.",
+            ),
+          personId: zod
+            .string()
+            .describe("Payroll Person Id (employeeId) for the employee."),
+          weekly: zod
+            .number()
+            .describe("Recurring weekly deduction amount (USD)."),
+          suggestions: zod
+            .array(
+              zod
+                .object({
+                  occupantId: zod
+                    .string()
+                    .describe(
+                      "Id of the existing occupant the suggestion points at.",
+                    ),
+                  name: zod
+                    .string()
+                    .describe(
+                      "Existing occupant's name as stored in HousingOps.",
+                    ),
+                  company: zod
+                    .string()
+                    .describe(
+                      'Existing occupant\'s employer as stored in HousingOps.\nSurfaced so the dashboard can show the cross-employer\nwarning (\"… — Penda Corp?\") without an extra lookup.\n',
+                    ),
+                  propertyName: zod
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Property the candidate is currently assigned to, or null\nwhen the occupant isn't assigned to a property yet.\n",
+                    ),
+                  score: zod
+                    .number()
+                    .describe("Name similarity in [0, 1]. Higher is closer."),
+                  crossEmployer: zod
+                    .boolean()
+                    .describe(
+                      "True when this candidate's employer differs from the\npayroll row's customer. Only set on the cross-employer\nfallback pass; the dashboard uses this to render a\ndistinct \"Did you mean (different employer): …\" label and\nto also overwrite the occupant's company on confirm.\n",
+                    ),
+                })
+                .describe(
+                  'A close-but-not-exact existing-occupant candidate for an\nunplaced payroll row. The dashboard renders these as\n\"Did you mean: <name> @ <propertyName>?\" buttons that update\nthe existing occupant\'s chargePerBed\/billingFrequency from the\npayroll row instead of creating a duplicate.\n',
+                ),
+            )
+            .describe(
+              "Up to 3 likely existing occupants whose name closely\nresembles the payroll row's name (typo \/ initial \/\nformatting differences). Sorted by descending similarity.\nSame-employer candidates are preferred; if none clear the\nthreshold the seeder falls back to cross-employer\ncandidates flagged with `crossEmployer = true` so the\ndashboard can warn the operator that confirming will also\nchange the occupant's employer. Empty when nothing scores\n≥ 0.6 in either pass.\n",
+            ),
+        })
+        .describe(
+          "A payroll row that should be deducting weekly housing rent for an\nemployee, but doesn't match any occupant in HousingOps yet.\nReturned by `GET \/payroll\/unplaced`.\n",
+        ),
+    ),
+    lowConfidenceMatches: zod.array(
+      zod
+        .object({
+          customer: zod
+            .string()
+            .describe("Customer \/ employer name from the payroll export."),
+          name: zod
+            .string()
+            .describe("Employee full name from the payroll export."),
+          personId: zod
+            .string()
+            .describe("Payroll Person Id (employeeId) for the employee."),
+          weekly: zod
+            .number()
+            .describe(
+              "Recurring weekly deduction amount (USD) the seeder applied.",
+            ),
+          matched: zod
+            .object({
+              occupantId: zod
+                .string()
+                .describe(
+                  "Id of the existing occupant the suggestion points at.",
+                ),
+              name: zod
+                .string()
+                .describe("Existing occupant's name as stored in HousingOps."),
+              company: zod
+                .string()
+                .describe(
+                  'Existing occupant\'s employer as stored in HousingOps.\nSurfaced so the dashboard can show the cross-employer\nwarning (\"… — Penda Corp?\") without an extra lookup.\n',
+                ),
+              propertyName: zod
+                .string()
+                .nullable()
+                .describe(
+                  "Property the candidate is currently assigned to, or null\nwhen the occupant isn't assigned to a property yet.\n",
+                ),
+              score: zod
+                .number()
+                .describe("Name similarity in [0, 1]. Higher is closer."),
+              crossEmployer: zod
+                .boolean()
+                .describe(
+                  "True when this candidate's employer differs from the\npayroll row's customer. Only set on the cross-employer\nfallback pass; the dashboard uses this to render a\ndistinct \"Did you mean (different employer): …\" label and\nto also overwrite the occupant's company on confirm.\n",
+                ),
+            })
+            .describe(
+              "The occupant the seeder picked via the name-only fallback.\nRe-uses the suggestion shape so the UI can render it the\nsame way as alternatives (name, propertyName, score=1).\n",
+            ),
+          suggestions: zod
+            .array(
+              zod
+                .object({
+                  occupantId: zod
+                    .string()
+                    .describe(
+                      "Id of the existing occupant the suggestion points at.",
+                    ),
+                  name: zod
+                    .string()
+                    .describe(
+                      "Existing occupant's name as stored in HousingOps.",
+                    ),
+                  company: zod
+                    .string()
+                    .describe(
+                      'Existing occupant\'s employer as stored in HousingOps.\nSurfaced so the dashboard can show the cross-employer\nwarning (\"… — Penda Corp?\") without an extra lookup.\n',
+                    ),
+                  propertyName: zod
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Property the candidate is currently assigned to, or null\nwhen the occupant isn't assigned to a property yet.\n",
+                    ),
+                  score: zod
+                    .number()
+                    .describe("Name similarity in [0, 1]. Higher is closer."),
+                  crossEmployer: zod
+                    .boolean()
+                    .describe(
+                      "True when this candidate's employer differs from the\npayroll row's customer. Only set on the cross-employer\nfallback pass; the dashboard uses this to render a\ndistinct \"Did you mean (different employer): …\" label and\nto also overwrite the occupant's company on confirm.\n",
+                    ),
+                })
+                .describe(
+                  'A close-but-not-exact existing-occupant candidate for an\nunplaced payroll row. The dashboard renders these as\n\"Did you mean: <name> @ <propertyName>?\" buttons that update\nthe existing occupant\'s chargePerBed\/billingFrequency from the\npayroll row instead of creating a duplicate.\n',
+                ),
+            )
+            .describe(
+              "Alternative same-employer candidates (excluding the\nalready-matched occupant). Empty when no other plausible\nnamesake exists at that employer — the operator can still\nconfirm the matched occupant or open the assign-to-bed\ndialog manually.\n",
+            ),
+        })
+        .describe(
+          "A payroll row that the seeder \*did\* apply, but only via the\nname-only fallback — meaning the matched occupant has no\nemployeeId stamped and no exact (name, company) hit. At an\nemployer with two namesakes the wrong one may have received\nthe rate, so the dashboard asks the operator to confirm.\n",
+        ),
+    ),
   })
   .describe(
-    "A payroll row that should be deducting weekly housing rent for an\nemployee, but doesn't match any occupant in HousingOps yet.\nReturned by `GET \/payroll\/unplaced`.\n",
+    "Response payload for `GET \/payroll\/unplaced`. Splits the\nseeder's output into rows that need a fresh placement\n(`unmatched`) vs. rows that matched only via the name-only\nfallback (`lowConfidenceMatches`) and may need an operator\nconfirmation that the right person was picked.\n",
   );
-export const ListUnplacedPayrollResponse = zod.array(
-  ListUnplacedPayrollResponseItem,
-);

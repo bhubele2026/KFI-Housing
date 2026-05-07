@@ -32,6 +32,7 @@ import type {
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  ListUnplacedPayrollResult,
   MasterLeaseImportResult,
   Occupant,
   OccupantCreate,
@@ -43,7 +44,6 @@ import type {
   RoomNightLogUpdate,
   RoomUpdate,
   RuntimeConfig,
-  UnplacedPayrollRow,
   Utility,
   UtilityUpdate,
 } from "./api.schemas";
@@ -3410,12 +3410,21 @@ export const useDeleteUtility = <
 
 /**
  * Re-runs the idempotent payroll → occupant reconciler (the same
-seeder that runs at startup) and returns the rows that still
-don't match any occupant by `(employeeId)`, `(name + company)`,
-or unique `(name)`. Each row carries the customer, employee
-name, payroll Person Id, and the recurring weekly deduction so
-leasing can pre-fill an Assign-to-bed dialog and either place
-the person or correct the payroll record.
+seeder that runs at startup) and returns two lists:
+
+- `unmatched`: payroll rows that don't match any occupant by
+  `(employeeId)`, `(name + company)`, or unique `(name)`. The
+  dashboard renders these as "assign to a bed" rows.
+- `lowConfidenceMatches`: payroll rows that DID match — but
+  only via the fragile name-only fallback (no employeeId, no
+  name+company hit). The seeder already applied the rate to
+  the matched occupant, but at the same employer there can be
+  two namesakes (two "Jose Garcia"s) so the wrong one may have
+  received the rate. The dashboard surfaces these in a
+  "Confirm match" section so the operator can either confirm
+  the picked occupant (stamping employeeId so future runs
+  match strongly) or redirect the rate to a different
+  same-employer candidate.
 
  * @summary List payroll deductions with no matching occupant yet
  */
@@ -3425,8 +3434,8 @@ export const getListUnplacedPayrollUrl = () => {
 
 export const listUnplacedPayroll = async (
   options?: RequestInit,
-): Promise<UnplacedPayrollRow[]> => {
-  return customFetch<UnplacedPayrollRow[]>(getListUnplacedPayrollUrl(), {
+): Promise<ListUnplacedPayrollResult> => {
+  return customFetch<ListUnplacedPayrollResult>(getListUnplacedPayrollUrl(), {
     ...options,
     method: "GET",
   });

@@ -341,6 +341,65 @@ describe("seedHousingDeductions — chargeSource provenance (Task #304)", () => 
     expect(occupants.get("o1")?.chargeSource).toBe("payroll");
   });
 
+  it("reports nameOnly fallback hits in lowConfidenceMatches with same-employer alternatives", async () => {
+    // The payroll row is for "JANE SMITH @ Adient". The DB has:
+    //   o-wrong: a unique-named "Jane Smith" at a DIFFERENT employer
+    //            (no employeeId, no company match) — the nameOnly
+    //            fallback will pick this one, which is exactly the
+    //            dangerous case the dashboard exists to surface.
+    //   o-right: a "Jane Smith" at Adient — but with a slightly
+    //            different name normalization so byNameOnly tags as
+    //            ambiguous? No — same normalized name → ambiguous.
+    // We instead seed o-right as "Jane A. Smith" so its name doesn't
+    // collide in byNameOnly, leaving o-wrong as the unique nameOnly hit
+    // and making o-right available as an alternative suggestion via
+    // rankSuggestions (token similarity ignores middle initials).
+    seed([
+      occ({
+        id: "o-wrong",
+        name: "Jane Smith",
+        employeeId: "",
+        company: "Globex",
+      }),
+      occ({
+        id: "o-right",
+        name: "Jane A. Smith",
+        employeeId: "",
+        company: "Adient",
+      }),
+    ]);
+
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: [{ customer: "Adient", name: "JANE SMITH", personId: "EMP-NEW", weekly: 200 }],
+    });
+
+    expect(result.lowConfidenceMatches).toHaveLength(1);
+    const lc = result.lowConfidenceMatches[0]!;
+    expect(lc).toMatchObject({
+      customer: "Adient",
+      name: "JANE SMITH",
+      personId: "EMP-NEW",
+      weekly: 200,
+      matched: { occupantId: "o-wrong", score: 1 },
+    });
+    // Alternatives must (a) not include the already-matched occupant
+    // and (b) only contain same-employer candidates.
+    expect(lc.suggestions.map((s) => s.occupantId)).not.toContain("o-wrong");
+    expect(lc.suggestions.map((s) => s.occupantId)).toContain("o-right");
+  });
+
+  it("does NOT report employeeId or nameCompany matches in lowConfidenceMatches", async () => {
+    seed([
+      occ({ id: "o1", name: "MARISA L LOERA", employeeId: "2005126", company: "Adient" }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+    });
+    expect(result.lowConfidenceMatches).toEqual([]);
+  });
+
   it("is idempotent on a re-run — already-stamped rows count as alreadyCorrect with no writes", async () => {
     seed([
       occ({

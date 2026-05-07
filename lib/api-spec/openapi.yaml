@@ -774,20 +774,27 @@ paths:
       summary: List payroll deductions with no matching occupant yet
       description: |
         Re-runs the idempotent payroll → occupant reconciler (the same
-        seeder that runs at startup) and returns the rows that still
-        don't match any occupant by `(employeeId)`, `(name + company)`,
-        or unique `(name)`. Each row carries the customer, employee
-        name, payroll Person Id, and the recurring weekly deduction so
-        leasing can pre-fill an Assign-to-bed dialog and either place
-        the person or correct the payroll record.
+        seeder that runs at startup) and returns two lists:
+
+        - `unmatched`: payroll rows that don't match any occupant by
+          `(employeeId)`, `(name + company)`, or unique `(name)`. The
+          dashboard renders these as "assign to a bed" rows.
+        - `lowConfidenceMatches`: payroll rows that DID match — but
+          only via the fragile name-only fallback (no employeeId, no
+          name+company hit). The seeder already applied the rate to
+          the matched occupant, but at the same employer there can be
+          two namesakes (two "Jose Garcia"s) so the wrong one may have
+          received the rate. The dashboard surfaces these in a
+          "Confirm match" section so the operator can either confirm
+          the picked occupant (stamping employeeId so future runs
+          match strongly) or redirect the rate to a different
+          same-employer candidate.
       responses:
         "200":
           description: OK
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/UnplacedPayrollRow" }
+              schema: { $ref: "#/components/schemas/ListUnplacedPayrollResult" }
 
 components:
   schemas:
@@ -1598,6 +1605,61 @@ components:
             dashboard can warn the operator that confirming will also
             change the occupant's employer. Empty when nothing scores
             ≥ 0.6 in either pass.
+          items: { $ref: "#/components/schemas/UnplacedPayrollSuggestion" }
+
+    ListUnplacedPayrollResult:
+      type: object
+      required: [unmatched, lowConfidenceMatches]
+      description: |
+        Response payload for `GET /payroll/unplaced`. Splits the
+        seeder's output into rows that need a fresh placement
+        (`unmatched`) vs. rows that matched only via the name-only
+        fallback (`lowConfidenceMatches`) and may need an operator
+        confirmation that the right person was picked.
+      properties:
+        unmatched:
+          type: array
+          items: { $ref: "#/components/schemas/UnplacedPayrollRow" }
+        lowConfidenceMatches:
+          type: array
+          items: { $ref: "#/components/schemas/LowConfidencePayrollMatch" }
+
+    LowConfidencePayrollMatch:
+      type: object
+      required: [customer, name, personId, weekly, matched, suggestions]
+      description: |
+        A payroll row that the seeder *did* apply, but only via the
+        name-only fallback — meaning the matched occupant has no
+        employeeId stamped and no exact (name, company) hit. At an
+        employer with two namesakes the wrong one may have received
+        the rate, so the dashboard asks the operator to confirm.
+      properties:
+        customer:
+          type: string
+          description: Customer / employer name from the payroll export.
+        name:
+          type: string
+          description: Employee full name from the payroll export.
+        personId:
+          type: string
+          description: Payroll Person Id (employeeId) for the employee.
+        weekly:
+          type: number
+          description: Recurring weekly deduction amount (USD) the seeder applied.
+        matched:
+          $ref: "#/components/schemas/UnplacedPayrollSuggestion"
+          description: |
+            The occupant the seeder picked via the name-only fallback.
+            Re-uses the suggestion shape so the UI can render it the
+            same way as alternatives (name, propertyName, score=1).
+        suggestions:
+          type: array
+          description: |
+            Alternative same-employer candidates (excluding the
+            already-matched occupant). Empty when no other plausible
+            namesake exists at that employer — the operator can still
+            confirm the matched occupant or open the assign-to-bed
+            dialog manually.
           items: { $ref: "#/components/schemas/UnplacedPayrollSuggestion" }
 
     UnplacedPayrollSuggestion:

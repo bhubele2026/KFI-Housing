@@ -967,6 +967,50 @@ change the occupant's employer. Empty when nothing scores
   suggestions: UnplacedPayrollSuggestion[];
 }
 
+/**
+ * A payroll row that the seeder *did* apply, but only via the
+name-only fallback — meaning the matched occupant has no
+employeeId stamped and no exact (name, company) hit. At an
+employer with two namesakes the wrong one may have received
+the rate, so the dashboard asks the operator to confirm.
+
+ */
+export interface LowConfidencePayrollMatch {
+  /** Customer / employer name from the payroll export. */
+  customer: string;
+  /** Employee full name from the payroll export. */
+  name: string;
+  /** Payroll Person Id (employeeId) for the employee. */
+  personId: string;
+  /** Recurring weekly deduction amount (USD) the seeder applied. */
+  weekly: number;
+  /** The occupant the seeder picked via the name-only fallback.
+Re-uses the suggestion shape so the UI can render it the
+same way as alternatives (name, propertyName, score=1).
+ */
+  matched: UnplacedPayrollSuggestion;
+  /** Alternative same-employer candidates (excluding the
+already-matched occupant). Empty when no other plausible
+namesake exists at that employer — the operator can still
+confirm the matched occupant or open the assign-to-bed
+dialog manually.
+ */
+  suggestions: UnplacedPayrollSuggestion[];
+}
+
+/**
+ * Response payload for `GET /payroll/unplaced`. Splits the
+seeder's output into rows that need a fresh placement
+(`unmatched`) vs. rows that matched only via the name-only
+fallback (`lowConfidenceMatches`) and may need an operator
+confirmation that the right person was picked.
+
+ */
+export interface ListUnplacedPayrollResult {
+  unmatched: UnplacedPayrollRow[];
+  lowConfidenceMatches: LowConfidencePayrollMatch[];
+}
+
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];

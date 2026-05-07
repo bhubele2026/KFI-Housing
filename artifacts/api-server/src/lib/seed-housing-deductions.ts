@@ -44,12 +44,32 @@ export interface UnplacedPayrollUnmatchedRow {
   suggestions: UnplacedPayrollSuggestion[];
 }
 
+/**
+ * A payroll row that the seeder *did* apply, but only via the
+ * fragile name-only fallback (no employeeId, no name+company hit).
+ * At an employer with two namesakes ("Jose Garcia" + "Jose Garcia")
+ * the wrong occupant may have received the rate, so the dashboard
+ * surfaces these in a "Confirm match" section. Operators can either
+ * confirm the picked occupant (stamping employeeId so future runs
+ * match strongly) or redirect the rate to a same-employer
+ * alternative.
+ */
+export interface LowConfidencePayrollMatch {
+  customer: string;
+  name: string;
+  personId: string;
+  weekly: number;
+  matched: UnplacedPayrollSuggestion;
+  suggestions: UnplacedPayrollSuggestion[];
+}
+
 export interface SeedHousingDeductionsResult {
   totalRows: number;
   matched: number;
   updated: number;
   alreadyCorrect: number;
   unmatched: UnplacedPayrollUnmatchedRow[];
+  lowConfidenceMatches: LowConfidencePayrollMatch[];
   // Per-path match counters so we can verify in the workflow log that
   // employeeId is the dominant matcher and the fragile name-only
   // fallback resolves at most a handful of rows. Sum equals `matched`.
@@ -443,6 +463,7 @@ export async function seedHousingDeductions(
   let matchedByNameCompany = 0;
   let matchedByNameOnly = 0;
   const unmatched: SeedHousingDeductionsResult["unmatched"] = [];
+  const lowConfidenceMatches: SeedHousingDeductionsResult["lowConfidenceMatches"] = [];
 
   for (const row of rows) {
     let target: (typeof allOccupants)[number] | null = null;
@@ -500,7 +521,44 @@ export async function seedHousingDeductions(
     matched++;
     if (matchPath === "employeeId") matchedByEmployeeId++;
     else if (matchPath === "nameCompany") matchedByNameCompany++;
-    else if (matchPath === "nameOnly") matchedByNameOnly++;
+    else if (matchPath === "nameOnly") {
+      matchedByNameOnly++;
+      // Surface for operator confirmation: the name-only fallback is
+      // the dangerous matcher. Score is forced to 1 because the
+      // payroll name and occupant name are equal post-normalization
+      // (that's how nameOnly matched in the first place); the risk
+      // isn't a typo, it's namesake collision. We deliberately
+      // include alternative same-employer candidates EXCLUDING the
+      // already-matched occupant so the "Did you mean someone else?"
+      // buttons point at distinct people.
+      const alternatives = rankSuggestions(
+        row.name,
+        row.customer,
+        suggestionCandidates,
+        propertyNameById,
+      ).filter((s) => s.occupantId !== target.id);
+      lowConfidenceMatches.push({
+        customer: row.customer,
+        name: row.name,
+        personId: row.personId,
+        weekly: row.weekly,
+        matched: {
+          occupantId: target.id,
+          name: target.name,
+          company: target.company,
+          propertyName: target.propertyId
+            ? propertyNameById.get(target.propertyId) ?? null
+            : null,
+          score: 1,
+          // nameOnly doesn't constrain by employer at all — it picks
+          // whichever occupant has the same normalized name. Flag the
+          // mismatch so the dashboard can warn.
+          crossEmployer:
+            target.company.trim().toLowerCase() !== row.customer.trim().toLowerCase(),
+        },
+        suggestions: alternatives,
+      });
+    }
     const isCorrect =
       target.billingFrequency === "Weekly" &&
       Math.abs((target.chargePerBed ?? 0) - row.weekly) < 1e-6 &&
@@ -535,6 +593,7 @@ export async function seedHousingDeductions(
     updated,
     alreadyCorrect,
     unmatched,
+    lowConfidenceMatches,
     matchedByEmployeeId,
     matchedByNameCompany,
     matchedByNameOnly,
@@ -547,6 +606,7 @@ export async function seedHousingDeductions(
       updated: result.updated,
       alreadyCorrect: result.alreadyCorrect,
       unmatched: result.unmatched.length,
+      lowConfidenceMatches: result.lowConfidenceMatches.length,
       matchedByEmployeeId: result.matchedByEmployeeId,
       matchedByNameCompany: result.matchedByNameCompany,
       matchedByNameOnly: result.matchedByNameOnly,
@@ -557,6 +617,12 @@ export async function seedHousingDeductions(
     log.warn(
       { unmatched: result.unmatched },
       "Some payroll rows did not match an existing occupant — they were NOT inserted; reconcile by name + Person Id",
+    );
+  }
+  if (result.lowConfidenceMatches.length > 0) {
+    log.warn(
+      { lowConfidenceMatches: result.lowConfidenceMatches },
+      "Some payroll rows matched an occupant only via the name-only fallback — operator should confirm the correct namesake",
     );
   }
 

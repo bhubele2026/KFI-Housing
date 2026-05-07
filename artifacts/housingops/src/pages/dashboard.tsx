@@ -12,6 +12,7 @@ import {
   getListUnplacedPayrollQueryKey,
   useListRoomNightLogs,
   type UnplacedPayrollRow,
+  type LowConfidencePayrollMatch,
 } from "@workspace/api-client-react";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
@@ -34,7 +35,9 @@ type TopPropertiesSortKey = "overall" | RatingCategoryKey;
 export default function Dashboard() {
   const { properties, beds, leases, utilities, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
   const queryClient = useQueryClient();
-  const { data: unplacedPayroll } = useListUnplacedPayroll();
+  const { data: unplacedPayrollResult } = useListUnplacedPayroll();
+  const unplacedPayroll = unplacedPayrollResult?.unmatched;
+  const lowConfidencePayroll = unplacedPayrollResult?.lowConfidenceMatches;
   // Room-night logs power the hotel-rate "at risk this month" tile —
   // mirrors the leases page (task #319). Hook returns undefined while
   // loading; treat as empty so the tile just shows 0 / no tile.
@@ -400,6 +403,29 @@ export default function Dashboard() {
     }
     return Array.from(map.values()).sort((a, b) => b.weeklyTotal - a.weeklyTotal);
   }, [scopedUnplacedPayroll]);
+
+  // Low-confidence matches = payroll rows the seeder applied via the
+  // name-only fallback. The rate is already on someone, but at an
+  // employer with two namesakes it may be the wrong someone — surface
+  // them so the operator can confirm or redirect. Same scoping rules
+  // as the unplaced list above.
+  const scopedLowConfidencePayroll = useMemo<LowConfidencePayrollMatch[]>(() => {
+    const rows = lowConfidencePayroll ?? [];
+    if (customerFilter === ALL_CUSTOMERS) return rows;
+    const customerName = customers.find((c) => c.id === customerFilter)?.name;
+    if (!customerName) return [];
+    return rows.filter((r) => r.customer === customerName);
+  }, [lowConfidencePayroll, customerFilter, customers]);
+
+  const lowConfidenceByCustomer = useMemo(() => {
+    const map = new Map<string, { customer: string; rows: LowConfidencePayrollMatch[] }>();
+    for (const r of scopedLowConfidencePayroll) {
+      const existing = map.get(r.customer) ?? { customer: r.customer, rows: [] };
+      existing.rows.push(r);
+      map.set(r.customer, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => a.customer.localeCompare(b.customer));
+  }, [scopedLowConfidencePayroll]);
 
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS
@@ -807,6 +833,145 @@ export default function Dashboard() {
                                 });
                               }}
                             />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {lowConfidenceByCustomer.length > 0 && (
+          <Card data-testid="card-low-confidence-payroll">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <CardTitle>Confirm match</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-low-confidence-payroll-total-count"
+                >
+                  {scopedLowConfidencePayroll.length} row
+                  {scopedLowConfidencePayroll.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Payroll rows that matched an existing occupant only by
+                name. At employers with two namesakes the wrong person may
+                have received the rate — confirm the right one (or pick a
+                different occupant) so the next sync locks the match in by
+                Person Id.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {lowConfidenceByCustomer.map((group) => (
+                <div
+                  key={group.customer}
+                  data-testid={`group-low-confidence-${group.customer}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">{group.customer}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {group.rows.length} row{group.rows.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Payroll name · Person Id</TableHead>
+                        <TableHead>Currently applied to</TableHead>
+                        <TableHead className="text-right">Weekly</TableHead>
+                        <TableHead className="w-32" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.rows.map((row) => (
+                        <TableRow
+                          key={`${row.customer}::${row.personId}`}
+                          data-testid={`row-low-confidence-${row.personId}`}
+                        >
+                          <TableCell className="font-medium">
+                            <div>{row.name}</div>
+                            <div className="text-xs text-muted-foreground tabular-nums">
+                              {row.personId}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <div data-testid={`low-confidence-matched-${row.personId}`}>
+                              {row.matched.name}
+                              {row.matched.propertyName
+                                ? ` @ ${row.matched.propertyName}`
+                                : " (unassigned)"}
+                            </div>
+                            {row.suggestions.length > 0 && (
+                              <div
+                                className="mt-1 flex flex-wrap items-center gap-1"
+                                data-testid={`low-confidence-alternatives-${row.personId}`}
+                              >
+                                <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+                                  <Wand2 className="h-3 w-3" />
+                                  Did you mean:
+                                </span>
+                                {row.suggestions.map((s) => (
+                                  <Button
+                                    key={s.occupantId}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-2 text-xs"
+                                    onClick={() => {
+                                      // Redirect the rate to the
+                                      // alternative occupant and stamp
+                                      // the payroll Person Id so the
+                                      // next sync matches strongly via
+                                      // employeeId. The seeder will
+                                      // then drop this row from the
+                                      // low-confidence list.
+                                      updateOccupant(s.occupantId, {
+                                        chargePerBed: row.weekly,
+                                        billingFrequency: "Weekly",
+                                        employeeId: row.personId,
+                                      });
+                                      queryClient.invalidateQueries({
+                                        queryKey: getListUnplacedPayrollQueryKey(),
+                                      });
+                                    }}
+                                    data-testid={`button-redirect-low-confidence-${row.personId}-${s.occupantId}`}
+                                  >
+                                    {s.name}
+                                    {s.propertyName ? ` @ ${s.propertyName}` : " (unassigned)"}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            ${row.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                // "Confirm" stamps employeeId on the
+                                // already-matched occupant. The seeder
+                                // then matches via the strong
+                                // employeeId path and the row drops
+                                // off the low-confidence list.
+                                updateOccupant(row.matched.occupantId, {
+                                  employeeId: row.personId,
+                                });
+                                queryClient.invalidateQueries({
+                                  queryKey: getListUnplacedPayrollQueryKey(),
+                                });
+                              }}
+                              data-testid={`button-confirm-low-confidence-${row.personId}`}
+                            >
+                              Confirm
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}

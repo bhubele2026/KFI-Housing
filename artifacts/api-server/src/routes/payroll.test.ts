@@ -52,12 +52,12 @@ describe("GET /payroll/unplaced", () => {
     seedMock.mockReset();
   });
 
-  it("returns the seeder's `unmatched` array verbatim, including weekly amount", async () => {
+  it("returns the seeder's `unmatched` and `lowConfidenceMatches` arrays verbatim", async () => {
     seedMock.mockResolvedValueOnce({
-      totalRows: 3,
-      matched: 1,
+      totalRows: 4,
+      matched: 2,
       updated: 0,
-      alreadyCorrect: 1,
+      alreadyCorrect: 2,
       unmatched: [
         {
           customer: "Adient",
@@ -83,48 +83,103 @@ describe("GET /payroll/unplaced", () => {
           ],
         },
       ],
+      lowConfidenceMatches: [
+        {
+          customer: "Burnett Dairy - Grantsburg",
+          name: "JOSE GARCIA",
+          personId: "2002150",
+          weekly: 125,
+          matched: {
+            occupantId: "occ-jg-a",
+            name: "Jose Garcia",
+            company: "Burnett Dairy - Grantsburg",
+            propertyName: "Hilltop",
+            score: 1,
+            crossEmployer: false,
+          },
+          suggestions: [
+            {
+              occupantId: "occ-jg-b",
+              name: "Jose Garcia",
+              company: "Burnett Dairy - Grantsburg",
+              propertyName: "Lakeside",
+              score: 1,
+              crossEmployer: false,
+            },
+          ],
+        },
+      ],
     });
 
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual([
-      { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25, suggestions: [] },
-      {
-        customer: "Bell Timber, Inc.",
-        name: "GERARD A DERBY",
-        personId: "2004445",
-        weekly: 150.5,
-        suggestions: [
-          {
-            occupantId: "occ-1",
-            name: "Gerard Derby",
-            company: "Bell Timber, Inc.",
-            propertyName: "Maple Court",
-            score: 0.85,
+    expect(body).toEqual({
+      unmatched: [
+        { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25, suggestions: [] },
+        {
+          customer: "Bell Timber, Inc.",
+          name: "GERARD A DERBY",
+          personId: "2004445",
+          weekly: 150.5,
+          suggestions: [
+            {
+              occupantId: "occ-1",
+              name: "Gerard Derby",
+              company: "Bell Timber, Inc.",
+              propertyName: "Maple Court",
+              score: 0.85,
+              crossEmployer: false,
+            },
+          ],
+        },
+      ],
+      lowConfidenceMatches: [
+        {
+          customer: "Burnett Dairy - Grantsburg",
+          name: "JOSE GARCIA",
+          personId: "2002150",
+          weekly: 125,
+          matched: {
+            occupantId: "occ-jg-a",
+            name: "Jose Garcia",
+            company: "Burnett Dairy - Grantsburg",
+            propertyName: "Hilltop",
+            score: 1,
             crossEmployer: false,
           },
-        ],
-      },
-    ]);
+          suggestions: [
+            {
+              occupantId: "occ-jg-b",
+              name: "Jose Garcia",
+              company: "Burnett Dairy - Grantsburg",
+              propertyName: "Lakeside",
+              score: 1,
+              crossEmployer: false,
+            },
+          ],
+        },
+      ],
+    });
     // Re-running the seeder on every request is the contract — the
     // dashboard relies on this so a freshly assigned occupant disappears
     // from the list on the next refetch.
     expect(seedMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns an empty array when every payroll row matches an occupant", async () => {
+  it("returns empty arrays when every payroll row matches an occupant cleanly", async () => {
     seedMock.mockResolvedValueOnce({
       totalRows: 5,
       matched: 5,
       updated: 0,
       alreadyCorrect: 5,
       unmatched: [],
+      lowConfidenceMatches: [],
     });
 
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([]);
+    expect(await res.json()).toEqual({ unmatched: [], lowConfidenceMatches: [] });
   });
 
   it("rejects malformed seeder output via zod (extra/missing fields would otherwise leak through)", async () => {
@@ -139,6 +194,7 @@ describe("GET /payroll/unplaced", () => {
       unmatched: [
         { customer: "Adient", name: "X", personId: "1" },
       ],
+      lowConfidenceMatches: [],
     });
 
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);

@@ -13,6 +13,8 @@ import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
 import { formatUsd } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import {
   extractSourcePdfFilename,
   sourcePdfHref,
@@ -808,6 +810,7 @@ function LeaseSourceThumbnail({
   originPath?: string;
 }) {
   const [imageBroken, setImageBroken] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const sourcePdf = extractSourcePdfFilename(lease.notes, lease.clauses);
   if (!sourcePdf) return null;
 
@@ -815,6 +818,10 @@ function LeaseSourceThumbnail({
     `/leases/${lease.id}?focus=preview` +
     (originPath ? `&from=${encodeURIComponent(originPath)}` : "");
   const thumbnailSrc = sourcePdfThumbnailHref(sourcePdf, 120);
+  // Show the shimmer placeholder until the lazy-loaded thumbnail finishes
+  // decoding (or errors out to the fallback icon). Sized to match the link's
+  // 9×12 box so swapping it for the image/icon causes no layout shift.
+  const showSkeleton = !imageBroken && !imageLoaded;
 
   return (
     <Link
@@ -823,8 +830,15 @@ function LeaseSourceThumbnail({
       data-testid={`link-lease-source-thumbnail-${lease.id}`}
       title={`Open inline preview: ${sourcePdf}`}
       aria-label={`Open inline preview of source PDF for lease ${lease.id}`}
-      className="inline-flex h-12 w-9 items-center justify-center overflow-hidden rounded border border-border bg-muted/40 hover:border-primary/40 hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="relative inline-flex h-12 w-9 items-center justify-center overflow-hidden rounded border border-border bg-muted/40 hover:border-primary/40 hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
+      {showSkeleton && (
+        <Skeleton
+          className="absolute inset-0 h-full w-full rounded-none"
+          data-testid={`skeleton-lease-source-thumbnail-${lease.id}`}
+          aria-hidden="true"
+        />
+      )}
       {imageBroken ? (
         <FileText
           className="h-5 w-5 text-muted-foreground"
@@ -837,9 +851,16 @@ function LeaseSourceThumbnail({
           alt=""
           loading="lazy"
           decoding="async"
-          onError={() => setImageBroken(true)}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageBroken(true);
+            setImageLoaded(false);
+          }}
           data-testid={`img-lease-source-thumbnail-${lease.id}`}
-          className="h-full w-full object-cover object-top"
+          className={cn(
+            "h-full w-full object-cover object-top transition-opacity",
+            imageLoaded ? "opacity-100" : "opacity-0",
+          )}
         />
       )}
     </Link>

@@ -1,4 +1,5 @@
-import { pushSchemaIfNeeded, db, leasesTable, propertiesTable } from "@workspace/db";
+import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
@@ -93,6 +94,42 @@ void start({
   loadPropertiesForDigest: async () => {
     const rows = await db.select().from(propertiesTable);
     return rows.map((r) => ({ id: r.id, name: r.name }));
+  },
+  loadLeasesForReminder: async () => {
+    const rows = await db.select().from(leasesTable);
+    return rows.map((r) => ({
+      id: r.id,
+      propertyId: r.propertyId,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      status: r.status,
+      monthlyRoomNightMin: r.monthlyRoomNightMin,
+      vendor: r.vendor,
+    }));
+  },
+  loadPropertiesForReminder: async () => {
+    const rows = await db.select().from(propertiesTable);
+    return rows.map((r) => ({ id: r.id, name: r.name }));
+  },
+  loadRoomNightLogsForReminder: async () => {
+    const rows = await db.select().from(roomNightLogsTable);
+    return rows.map((r) => ({ leaseId: r.leaseId, month: r.month }));
+  },
+  getReminderLastSentMonthKey: async () => {
+    const rows = await db
+      .select()
+      .from(schedulerStateTable)
+      .where(eq(schedulerStateTable.id, "room-night-reminder"));
+    return rows[0]?.lastSentKey || null;
+  },
+  setReminderLastSentMonthKey: async (monthKey: string) => {
+    await db
+      .insert(schedulerStateTable)
+      .values({ id: "room-night-reminder", lastSentKey: monthKey })
+      .onConflictDoUpdate({
+        target: schedulerStateTable.id,
+        set: { lastSentKey: monthKey },
+      });
   },
   digestFetch: globalThis.fetch,
   logger,

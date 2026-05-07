@@ -5,10 +5,19 @@ import {
   readDigestConfig,
   startWeeklyLeaseDigestScheduler,
 } from "./lib/lease-digest-scheduler";
+import {
+  readReminderConfig,
+  startRoomNightReminderScheduler,
+} from "./lib/room-night-reminder-scheduler";
 import type {
   DigestLease,
   DigestProperty,
 } from "./lib/weekly-lease-digest";
+import type {
+  ReminderLease,
+  ReminderProperty,
+  ReminderLog,
+} from "./lib/room-night-reminder";
 
 export interface StartDeps {
   pushSchemaIfNeeded: (
@@ -55,6 +64,15 @@ export interface StartDeps {
   // Injected so tests can use fakes without touching the DB module.
   loadLeasesForDigest: () => Promise<DigestLease[]>;
   loadPropertiesForDigest: () => Promise<DigestProperty[]>;
+  // Live data loaders for the monthly room-night reminder (Task #378).
+  loadLeasesForReminder: () => Promise<ReminderLease[]>;
+  loadPropertiesForReminder: () => Promise<ReminderProperty[]>;
+  loadRoomNightLogsForReminder: () => Promise<ReminderLog[]>;
+  // Persistent dedupe for the room-night reminder (Task #378).
+  // Survives process restarts so re-running on the same day never
+  // double-sends.
+  getReminderLastSentMonthKey: () => Promise<string | null>;
+  setReminderLastSentMonthKey: (monthKey: string) => Promise<void>;
   // `fetch` impl used by the digest webhook POST. Defaults to
   // `globalThis.fetch` in `index.ts`; tests inject a vi.fn().
   digestFetch: typeof fetch;
@@ -394,6 +412,17 @@ export async function start(deps: StartDeps): Promise<void> {
       fetch: deps.digestFetch,
       loadLeases: deps.loadLeasesForDigest,
       loadProperties: deps.loadPropertiesForDigest,
+      now: () => new Date(),
+      logger: deps.logger,
+    });
+    startRoomNightReminderScheduler({
+      config: readReminderConfig(deps.env),
+      fetch: deps.digestFetch,
+      loadLeases: deps.loadLeasesForReminder,
+      loadProperties: deps.loadPropertiesForReminder,
+      loadRoomNightLogs: deps.loadRoomNightLogsForReminder,
+      getLastSentMonthKey: deps.getReminderLastSentMonthKey,
+      setLastSentMonthKey: deps.setReminderLastSentMonthKey,
       now: () => new Date(),
       logger: deps.logger,
     });

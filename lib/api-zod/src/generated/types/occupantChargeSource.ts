@@ -12,4 +12,5 @@ export type OccupantChargeSource =
 export const OccupantChargeSource = {
   "": "",
   payroll: "payroll",
+  manual_override: "manual_override",
 } as const;

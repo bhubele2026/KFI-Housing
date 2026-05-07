@@ -789,6 +789,24 @@ paths:
           the picked occupant (stamping employeeId so future runs
           match strongly) or redirect the rate to a different
           same-employer candidate.
+
+        By default the seeder leaves manually-overridden occupants
+        alone (chargeSource === "manual_override"). Pass
+        `reclaimOverridden=true` to overwrite those rows with the
+        payroll values and flip chargeSource back to "payroll" — use
+        sparingly, since this discards the operator's manual edit.
+      parameters:
+        - in: query
+          name: reclaimOverridden
+          required: false
+          description: |
+            When "true", the seeder re-claims occupants whose
+            chargeSource is "manual_override", overwriting their
+            chargePerBed + billingFrequency with the payroll values.
+            Anything else keeps the safe default (skip overrides).
+          schema:
+            type: string
+            enum: ["true", "false"]
       responses:
         "200":
           description: OK
@@ -1312,11 +1330,16 @@ components:
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
         employeeId: { type: string }
         company: { type: string }
-        # Provenance of chargePerBed + billingFrequency. "" = manual,
-        # "payroll" = set by the housing deduction seeder. The customer
-        # and personId pair come straight from the payroll export row
-        # so the UI can show "from payroll (Acme · 2004810)".
-        chargeSource: { type: string, enum: ["", "payroll"] }
+        # Provenance of chargePerBed + billingFrequency.
+        # "" = manual, no payroll history.
+        # "payroll" = set by the housing-deduction seeder.
+        # "manual_override" = was set by the seeder, but a human has
+        #   since edited charge/frequency. The customer+personId stamps
+        #   are KEPT so the UI can show "manually overridden — was
+        #   payroll for Acme · 2004810" and accounting can trace the
+        #   original link. The seeder skips these rows unless run with
+        #   the reclaimOverridden flag.
+        chargeSource: { type: string, enum: ["", "payroll", "manual_override"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
         shift:
@@ -1366,7 +1389,7 @@ components:
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
         employeeId: { type: string }
         company: { type: string }
-        chargeSource: { type: string, enum: ["", "payroll"] }
+        chargeSource: { type: string, enum: ["", "payroll", "manual_override"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
         shift:
@@ -1392,7 +1415,7 @@ components:
         billingFrequency: { type: string, enum: [Weekly, Biweekly, Monthly] }
         employeeId: { type: string }
         company: { type: string }
-        chargeSource: { type: string, enum: ["", "payroll"] }
+        chargeSource: { type: string, enum: ["", "payroll", "manual_override"] }
         chargeSourceCustomer: { type: string }
         chargeSourcePersonId: { type: string }
         shift:

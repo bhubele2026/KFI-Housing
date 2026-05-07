@@ -16,8 +16,19 @@ const router: IRouter = Router();
 // after leasing assigns someone to a bed or stamps an employeeId (the
 // row drops off automatically once the seeder's strong match path
 // finds them).
-router.get("/payroll/unplaced", async (_req, res): Promise<void> => {
-  const result = await seedHousingDeductions({ logger });
+//
+// Optional query: `reclaimOverridden=true` (Task #330). By default the
+// seeder skips occupants whose `chargeSource === "manual_override"` so
+// human edits aren't silently undone. Operators who want payroll to
+// take precedence again — typically after re-importing a payroll file
+// known to be authoritative — can pass the flag to overwrite those
+// rows. Anything other than the literal string "true" (case-insensitive)
+// keeps the safe default.
+router.get("/payroll/unplaced", async (req, res): Promise<void> => {
+  const reclaimOverridden =
+    typeof req.query.reclaimOverridden === "string" &&
+    req.query.reclaimOverridden.toLowerCase() === "true";
+  const result = await seedHousingDeductions({ logger, reclaimOverridden });
   res.json(
     ListUnplacedPayrollResponse.parse({
       unmatched: result.unmatched,

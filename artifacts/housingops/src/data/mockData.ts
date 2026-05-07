@@ -523,12 +523,14 @@ export const OccupantSchema = z.object({
   employeeId: z.string(),
   company: z.string(),
   // Provenance of `chargePerBed` + `billingFrequency`. "" = manual entry,
-  // "payroll" = last set by the housing-deduction seeder. When set by the
-  // seeder we also stash the (customer, personId) row reference so the
-  // property-page badge can show "from payroll" with a hover tooltip.
+  // "payroll" = last set by the housing-deduction seeder, "manual_override"
+  // = was set by the seeder but a human has since edited charge or
+  // frequency (the customer + personId stamps are KEPT in this case so
+  // the property-page badge can render "manually overridden — was payroll
+  // for cust/person" and accounting can trace the source).
   // Defaulted on the client so older payloads (legacy export imports,
   // older API responses during a deploy) keep parsing.
-  chargeSource: z.enum(["", "payroll"]).default(""),
+  chargeSource: z.enum(["", "payroll", "manual_override"]).default(""),
   chargeSourceCustomer: z.string().default(""),
   chargeSourcePersonId: z.string().default(""),
   // Crew shift this occupant works (e.g. "1st", "2nd"). Null for properties

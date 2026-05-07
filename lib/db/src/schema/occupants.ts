@@ -15,11 +15,18 @@ export const occupantsTable = pgTable("occupants", {
   employeeId: text("employee_id").notNull().default(""),
   company: text("company").notNull().default(""),
   // Provenance of the current `chargePerBed` + `billingFrequency` values.
-  // Empty string = manually entered. "payroll" = last set by the housing
-  // deduction seeder; in that case the (customer, personId) pair from
-  // the payroll export is captured below so the UI can show what payroll
-  // row the value came from. Cleared automatically by PATCH /occupants
-  // whenever charge or frequency are written manually.
+  // Empty string  = manually entered, no payroll history.
+  // "payroll"     = last set by the housing-deduction seeder.
+  // "manual_override" = the seeder originally set the value, but a human
+  //                 has since edited charge/frequency. The
+  //                 chargeSourceCustomer + chargeSourcePersonId stamps
+  //                 are KEPT in this case so the UI can render
+  //                 "manually overridden — was payroll for cust/person"
+  //                 and accounting can trace the original payroll link.
+  // PATCH /occupants does this transition automatically (see
+  // routes/occupants.ts) so the UI never has to set chargeSource
+  // explicitly. The seeder skips "manual_override" rows by default;
+  // pass `reclaimOverridden: true` to make it re-claim them.
   chargeSource: text("charge_source").notNull().default(""),
   chargeSourceCustomer: text("charge_source_customer").notNull().default(""),
   chargeSourcePersonId: text("charge_source_person_id").notNull().default(""),

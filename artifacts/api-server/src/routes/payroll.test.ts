@@ -167,6 +167,49 @@ describe("GET /payroll/unplaced", () => {
     expect(seedMock).toHaveBeenCalledTimes(1);
   });
 
+  it("defaults to seeding with reclaimOverridden=false (safe — skips manual overrides)", async () => {
+    seedMock.mockResolvedValueOnce({
+      totalRows: 0,
+      matched: 0,
+      updated: 0,
+      alreadyCorrect: 0,
+      unmatched: [],
+      lowConfidenceMatches: [],
+    });
+    const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
+    expect(res.status).toBe(200);
+    expect(seedMock).toHaveBeenCalledTimes(1);
+    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: false });
+  });
+
+  it("passes reclaimOverridden=true when ?reclaimOverridden=true is set (Task #330)", async () => {
+    seedMock.mockResolvedValueOnce({
+      totalRows: 0,
+      matched: 0,
+      updated: 0,
+      alreadyCorrect: 0,
+      unmatched: [],
+      lowConfidenceMatches: [],
+    });
+    const res = await fetch(`${baseUrl}/api/payroll/unplaced?reclaimOverridden=true`);
+    expect(res.status).toBe(200);
+    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: true });
+  });
+
+  it("ignores any value other than the literal 'true' for reclaimOverridden", async () => {
+    seedMock.mockResolvedValueOnce({
+      totalRows: 0,
+      matched: 0,
+      updated: 0,
+      alreadyCorrect: 0,
+      unmatched: [],
+      lowConfidenceMatches: [],
+    });
+    const res = await fetch(`${baseUrl}/api/payroll/unplaced?reclaimOverridden=1`);
+    expect(res.status).toBe(200);
+    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: false });
+  });
+
   it("returns empty arrays when every payroll row matches an occupant cleanly", async () => {
     seedMock.mockResolvedValueOnce({
       totalRows: 5,

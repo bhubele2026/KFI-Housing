@@ -32,6 +32,7 @@ import type {
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  ListUnplacedPayrollParams,
   ListUnplacedPayrollResult,
   MasterLeaseImportResult,
   Occupant,
@@ -3426,43 +3427,74 @@ seeder that runs at startup) and returns two lists:
   match strongly) or redirect the rate to a different
   same-employer candidate.
 
+By default the seeder leaves manually-overridden occupants
+alone (chargeSource === "manual_override"). Pass
+`reclaimOverridden=true` to overwrite those rows with the
+payroll values and flip chargeSource back to "payroll" — use
+sparingly, since this discards the operator's manual edit.
+
  * @summary List payroll deductions with no matching occupant yet
  */
-export const getListUnplacedPayrollUrl = () => {
-  return `/api/payroll/unplaced`;
+export const getListUnplacedPayrollUrl = (
+  params?: ListUnplacedPayrollParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/payroll/unplaced?${stringifiedParams}`
+    : `/api/payroll/unplaced`;
 };
 
 export const listUnplacedPayroll = async (
+  params?: ListUnplacedPayrollParams,
   options?: RequestInit,
 ): Promise<ListUnplacedPayrollResult> => {
-  return customFetch<ListUnplacedPayrollResult>(getListUnplacedPayrollUrl(), {
-    ...options,
-    method: "GET",
-  });
+  return customFetch<ListUnplacedPayrollResult>(
+    getListUnplacedPayrollUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getListUnplacedPayrollQueryKey = () => {
-  return [`/api/payroll/unplaced`] as const;
+export const getListUnplacedPayrollQueryKey = (
+  params?: ListUnplacedPayrollParams,
+) => {
+  return [`/api/payroll/unplaced`, ...(params ? [params] : [])] as const;
 };
 
 export const getListUnplacedPayrollQueryOptions = <
   TData = Awaited<ReturnType<typeof listUnplacedPayroll>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listUnplacedPayroll>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListUnplacedPayrollParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUnplacedPayroll>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListUnplacedPayrollQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getListUnplacedPayrollQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listUnplacedPayroll>>
-  > = ({ signal }) => listUnplacedPayroll({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    listUnplacedPayroll(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listUnplacedPayroll>>,
@@ -3483,15 +3515,18 @@ export type ListUnplacedPayrollQueryError = ErrorType<unknown>;
 export function useListUnplacedPayroll<
   TData = Awaited<ReturnType<typeof listUnplacedPayroll>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listUnplacedPayroll>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListUnplacedPayrollQueryOptions(options);
+>(
+  params?: ListUnplacedPayrollParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listUnplacedPayroll>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUnplacedPayrollQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -469,3 +469,66 @@ describe("seedHousingDeductions — chargeSource provenance (Task #304)", () => 
     expect(result.updated).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// manual_override / reclaim flag (Task #330)
+// ---------------------------------------------------------------------------
+
+describe("seedHousingDeductions — manual_override handling (Task #330)", () => {
+  it("skips rows whose chargeSource is manual_override by default and counts them in skippedOverridden", async () => {
+    seed([
+      occ({
+        id: "o1",
+        name: "MARISA L LOERA",
+        employeeId: "2005126",
+        chargePerBed: 99, // human-set value
+        billingFrequency: "Monthly",
+        chargeSource: "manual_override",
+        chargeSourceCustomer: "Adient",
+        chargeSourcePersonId: "2005126",
+      }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+    });
+    expect(result.skippedOverridden).toBe(1);
+    expect(result.updated).toBe(0);
+    expect(result.matched).toBe(0);
+    // The human-set values must be preserved.
+    expect(occupants.get("o1")).toMatchObject({
+      chargePerBed: 99,
+      billingFrequency: "Monthly",
+      chargeSource: "manual_override",
+      chargeSourceCustomer: "Adient",
+      chargeSourcePersonId: "2005126",
+    });
+  });
+
+  it("reclaims manual_override rows when reclaimOverridden=true — restoring chargeSource=payroll", async () => {
+    seed([
+      occ({
+        id: "o1",
+        name: "MARISA L LOERA",
+        employeeId: "2005126",
+        chargePerBed: 99,
+        billingFrequency: "Monthly",
+        chargeSource: "manual_override",
+        chargeSourceCustomer: "Adient",
+        chargeSourcePersonId: "2005126",
+      }),
+    ]);
+    const result = await seedHousingDeductions({
+      logger: silentLogger,
+      rows: sampleRows,
+      reclaimOverridden: true,
+    });
+    expect(result.skippedOverridden).toBe(0);
+    expect(result.updated).toBe(1);
+    expect(occupants.get("o1")).toMatchObject({
+      chargePerBed: 175,
+      billingFrequency: "Weekly",
+      chargeSource: "payroll",
+    });
+  });
+});

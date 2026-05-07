@@ -1931,6 +1931,25 @@ export default function PropertyDetail() {
                                                     </TooltipContent>
                                                   </Tooltip>
                                                 )}
+                                                {occ.chargeSource === "manual_override" && (
+                                                  <Tooltip delayDuration={100}>
+                                                    <TooltipTrigger asChild>
+                                                      <Badge
+                                                        variant="secondary"
+                                                        className="h-5 px-1.5 text-[10px] font-medium bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 cursor-help"
+                                                        data-testid={`badge-manual-override-${occ.id}`}
+                                                      >
+                                                        manually overridden
+                                                      </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" className="text-xs">
+                                                      <p className="font-semibold">Manually overridden</p>
+                                                      <p className="text-muted-foreground">
+                                                        was payroll for {occ.chargeSourceCustomer || "—"} · Person {occ.chargeSourcePersonId || "—"}
+                                                      </p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )}
                                               </div>
                                             </TableCell>
                                             <TableCell>

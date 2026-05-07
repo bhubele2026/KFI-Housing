@@ -64,10 +64,20 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  // A manual edit to chargePerBed or billingFrequency invalidates the
-  // payroll provenance — the value no longer "comes from payroll", so
-  // we clear the source stamps unless the caller explicitly set them
-  // (the seeder writes all four fields together when it stamps a row).
+  // A manual edit to chargePerBed or billingFrequency means the value
+  // no longer matches what payroll said — but we don't want to lose the
+  // breadcrumb to the original payroll row (Task #330). Behaviour:
+  //   * If the row was previously "payroll", flip chargeSource to
+  //     "manual_override" but KEEP chargeSourceCustomer and
+  //     chargeSourcePersonId so the property page can render
+  //     "manually overridden — was payroll for cust/person".
+  //   * If the row was already "manual_override", leave the stamps
+  //     alone — a second manual edit doesn't change the original link.
+  //   * If the row had no payroll history ("" + empty stamps), nothing
+  //     to preserve, so leave it as a plain manual entry.
+  // The seeder is the only writer that should ever set chargeSource
+  // back to "payroll", so when the caller explicitly sets any of the
+  // chargeSource* fields we trust them and don't intervene.
   const updates = { ...body.data };
   const touchesCharge =
     Object.prototype.hasOwnProperty.call(updates, "chargePerBed") ||
@@ -77,9 +87,20 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     Object.prototype.hasOwnProperty.call(updates, "chargeSourceCustomer") ||
     Object.prototype.hasOwnProperty.call(updates, "chargeSourcePersonId");
   if (touchesCharge && !setsSource) {
-    updates.chargeSource = "";
-    updates.chargeSourceCustomer = "";
-    updates.chargeSourcePersonId = "";
+    const [existing] = await db
+      .select({ chargeSource: occupantsTable.chargeSource })
+      .from(occupantsTable)
+      .where(eq(occupantsTable.id, params.data.id));
+    if (!existing) {
+      res.status(404).json({ error: "Occupant not found" });
+      return;
+    }
+    if (existing.chargeSource === "payroll") {
+      updates.chargeSource = "manual_override";
+      // Intentionally do NOT touch chargeSourceCustomer /
+      // chargeSourcePersonId — those carry the original payroll link.
+    }
+    // "" or "manual_override": leave provenance fields untouched.
   }
   const [row] = await db
     .update(occupantsTable)

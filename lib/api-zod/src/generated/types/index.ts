@@ -31,6 +31,8 @@ export * from "./leaseStatus";
 export * from "./leaseUpdate";
 export * from "./leaseUpdateRateType";
 export * from "./leaseUpdateStatus";
+export * from "./listUnplacedPayrollParams";
+export * from "./listUnplacedPayrollReclaimOverridden";
 export * from "./listUnplacedPayrollResult";
 export * from "./lowConfidencePayrollMatch";
 export * from "./masterLeaseImportResult";

@@ -334,7 +334,7 @@ export const ImportDataBody = zod.object({
       billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
       employeeId: zod.string(),
       company: zod.string(),
-      chargeSource: zod.enum(["", "payroll"]).optional(),
+      chargeSource: zod.enum(["", "payroll", "manual_override"]).optional(),
       chargeSourceCustomer: zod.string().optional(),
       chargeSourcePersonId: zod.string().optional(),
       shift: zod
@@ -1751,7 +1751,7 @@ export const ListOccupantsResponseItem = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
-  chargeSource: zod.enum(["", "payroll"]),
+  chargeSource: zod.enum(["", "payroll", "manual_override"]),
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
   shift: zod
@@ -1790,7 +1790,7 @@ export const CreateOccupantBody = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
-  chargeSource: zod.enum(["", "payroll"]).optional(),
+  chargeSource: zod.enum(["", "payroll", "manual_override"]).optional(),
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
   shift: zod
@@ -1830,7 +1830,7 @@ export const UpdateOccupantBody = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]).optional(),
   employeeId: zod.string().optional(),
   company: zod.string().optional(),
-  chargeSource: zod.enum(["", "payroll"]).optional(),
+  chargeSource: zod.enum(["", "payroll", "manual_override"]).optional(),
   chargeSourceCustomer: zod.string().optional(),
   chargeSourcePersonId: zod.string().optional(),
   shift: zod
@@ -1862,7 +1862,7 @@ export const UpdateOccupantResponse = zod.object({
   billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
   employeeId: zod.string(),
   company: zod.string(),
-  chargeSource: zod.enum(["", "payroll"]),
+  chargeSource: zod.enum(["", "payroll", "manual_override"]),
   chargeSourceCustomer: zod.string(),
   chargeSourcePersonId: zod.string(),
   shift: zod
@@ -1992,8 +1992,23 @@ seeder that runs at startup) and returns two lists:
   match strongly) or redirect the rate to a different
   same-employer candidate.
 
+By default the seeder leaves manually-overridden occupants
+alone (chargeSource === "manual_override"). Pass
+`reclaimOverridden=true` to overwrite those rows with the
+payroll values and flip chargeSource back to "payroll" — use
+sparingly, since this discards the operator's manual edit.
+
  * @summary List payroll deductions with no matching occupant yet
  */
+export const ListUnplacedPayrollQueryParams = zod.object({
+  reclaimOverridden: zod
+    .enum(["true", "false"])
+    .optional()
+    .describe(
+      'When \"true\", the seeder re-claims occupants whose\nchargeSource is \"manual_override\", overwriting their\nchargePerBed + billingFrequency with the payroll values.\nAnything else keeps the safe default (skip overrides).\n',
+    ),
+});
+
 export const ListUnplacedPayrollResponse = zod
   .object({
     unmatched: zod.array(

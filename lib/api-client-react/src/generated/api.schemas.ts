@@ -548,6 +548,7 @@ export type OccupantChargeSource =
 export const OccupantChargeSource = {
   "": "",
   payroll: "payroll",
+  manual_override: "manual_override",
 } as const;
 
 /**
@@ -622,6 +623,7 @@ export type OccupantCreateChargeSource =
 export const OccupantCreateChargeSource = {
   "": "",
   payroll: "payroll",
+  manual_override: "manual_override",
 } as const;
 
 /**
@@ -682,6 +684,7 @@ export type OccupantUpdateChargeSource =
 export const OccupantUpdateChargeSource = {
   "": "",
   payroll: "payroll",
+  manual_override: "manual_override",
 } as const;
 
 /**
@@ -1066,3 +1069,22 @@ When omitted, the importer reads the bundled
 export type DeleteRoom409 = {
   error: string;
 };
+
+export type ListUnplacedPayrollParams = {
+  /**
+ * When "true", the seeder re-claims occupants whose
+chargeSource is "manual_override", overwriting their
+chargePerBed + billingFrequency with the payroll values.
+Anything else keeps the safe default (skip overrides).
+
+ */
+  reclaimOverridden?: ListUnplacedPayrollReclaimOverridden;
+};
+
+export type ListUnplacedPayrollReclaimOverridden =
+  (typeof ListUnplacedPayrollReclaimOverridden)[keyof typeof ListUnplacedPayrollReclaimOverridden];
+
+export const ListUnplacedPayrollReclaimOverridden = {
+  true: "true",
+  false: "false",
+} as const;

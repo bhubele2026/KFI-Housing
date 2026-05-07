@@ -70,6 +70,12 @@ export interface SeedHousingDeductionsResult {
   alreadyCorrect: number;
   unmatched: UnplacedPayrollUnmatchedRow[];
   lowConfidenceMatches: LowConfidencePayrollMatch[];
+  // Rows that matched an existing occupant whose chargeSource is
+  // "manual_override" (a human edit replaced the payroll-set value).
+  // The seeder skipped these by default; they're surfaced separately so
+  // the operator can review and re-run with `reclaimOverridden: true`
+  // if they want payroll to win again.
+  skippedOverridden: number;
   // Per-path match counters so we can verify in the workflow log that
   // employeeId is the dominant matcher and the fragile name-only
   // fallback resolves at most a handful of rows. Sum equals `matched`.
@@ -82,6 +88,12 @@ export interface SeedHousingDeductionsDeps {
   db: typeof db;
   logger: Pick<Logger, "info" | "warn">;
   rows: HousingDeductionRow[];
+  // When true, re-claim rows that a human had previously overridden
+  // (chargeSource === "manual_override"): overwrite chargePerBed +
+  // billingFrequency with the payroll values and flip chargeSource
+  // back to "payroll". Defaults to false so the seeder is safe to run
+  // on every boot without silently undoing manual corrections.
+  reclaimOverridden: boolean;
 }
 
 // Source of truth: payroll export
@@ -386,6 +398,12 @@ export function rankSuggestions(
  *
  * Idempotent: re-running yields the same result and only writes to rows
  * whose values would change (`alreadyCorrect` covers the no-op path).
+ *
+ * Respects manual overrides (Task #330): if an occupant's `chargeSource`
+ * is "manual_override", the seeder leaves the row alone and counts it
+ * in `skippedOverridden`. Pass `reclaimOverridden: true` to forcibly
+ * reset such rows back to the payroll value (and chargeSource
+ * "payroll").
  */
 export async function seedHousingDeductions(
   deps: Partial<SeedHousingDeductionsDeps> = {},
@@ -393,6 +411,7 @@ export async function seedHousingDeductions(
   const database = deps.db ?? db;
   const log = deps.logger ?? defaultLogger;
   const rows = deps.rows ?? HOUSING_DEDUCTION_ROWS;
+  const reclaimOverridden = deps.reclaimOverridden ?? false;
 
   // Pull the entire occupants table once. The volume is small (hundreds),
   // and pre-loading lets us do both lookups (by employeeId, by
@@ -459,6 +478,7 @@ export async function seedHousingDeductions(
   let matched = 0;
   let updated = 0;
   let alreadyCorrect = 0;
+  let skippedOverridden = 0;
   let matchedByEmployeeId = 0;
   let matchedByNameCompany = 0;
   let matchedByNameOnly = 0;
@@ -515,6 +535,16 @@ export async function seedHousingDeductions(
         weekly: row.weekly,
         suggestions,
       });
+      continue;
+    }
+
+    // Skip rows whose target was manually overridden by an operator
+    // (Task #330). The original payroll link is preserved on the row
+    // (chargeSourceCustomer + chargeSourcePersonId) so accounting can
+    // still trace the source — we just don't clobber the human's
+    // chosen charge value. `reclaimOverridden: true` opts back in.
+    if (target.chargeSource === "manual_override" && !reclaimOverridden) {
+      skippedOverridden++;
       continue;
     }
 
@@ -617,6 +647,7 @@ export async function seedHousingDeductions(
     alreadyCorrect,
     unmatched,
     lowConfidenceMatches,
+    skippedOverridden,
     matchedByEmployeeId,
     matchedByNameCompany,
     matchedByNameOnly,
@@ -628,6 +659,7 @@ export async function seedHousingDeductions(
       matched: result.matched,
       updated: result.updated,
       alreadyCorrect: result.alreadyCorrect,
+      skippedOverridden: result.skippedOverridden,
       unmatched: result.unmatched.length,
       lowConfidenceMatches: result.lowConfidenceMatches.length,
       matchedByEmployeeId: result.matchedByEmployeeId,

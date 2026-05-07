@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
-  ChevronLeft, Building2, Edit2, Check, X, Plus, Trash2,
+  ChevronLeft, ChevronDown, ChevronUp, Building2, Edit2, Check, X, Plus, Trash2,
   BedDouble, Users, Zap, DollarSign, KeyRound, CreditCard, Hotel,
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
@@ -112,6 +112,39 @@ function writePersistedBedsSort(sort: BedsSortKey): void {
   } catch {
     // Quota / disabled storage / private mode — silently ignore;
     // this is a UX nicety, not a correctness requirement.
+  }
+}
+
+// Persist whether the property header's stat-card row is expanded (10 cards)
+// or collapsed to a single condensed summary line. Power users who already
+// know a property tend to scroll past the row to get to beds/leases, so this
+// lets them keep the chrome small while preserving the at-a-glance view for
+// everyone else (task #484).
+const STATS_EXPANDED_STORAGE_KEY = "housingops:property-stats:expanded";
+
+function readPersistedStatsExpanded(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(STATS_EXPANDED_STORAGE_KEY);
+    if (raw === "0") return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function writePersistedStatsExpanded(expanded: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (expanded) {
+      // Expanded is the default — drop the key so storage doesn't accumulate
+      // stale state.
+      window.localStorage.removeItem(STATS_EXPANDED_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(STATS_EXPANDED_STORAGE_KEY, "0");
+    }
+  } catch {
+    // Quota / disabled storage / private mode — silently ignore.
   }
 }
 
@@ -511,6 +544,16 @@ export default function PropertyDetail() {
   useEffect(() => {
     writePersistedBedsSort(bedsSort);
   }, [bedsSort]);
+
+  // Whether the property header's stat-card row is expanded (10 cards) or
+  // collapsed to a single condensed summary line. Same persistence pattern
+  // as bedsSort above (task #484).
+  const [statsExpanded, setStatsExpanded] = useState<boolean>(
+    () => readPersistedStatsExpanded(),
+  );
+  useEffect(() => {
+    writePersistedStatsExpanded(statsExpanded);
+  }, [statsExpanded]);
 
   // Controlled tab state so clicking a tile in the Bed Map can jump
   // straight to the Beds tab and scroll the matching row into view.
@@ -924,7 +967,68 @@ export default function PropertyDetail() {
           </div>
         )}
 
-        {/* Summary Stats */}
+        {/* Summary Stats. Collapsible into a condensed summary line so power
+            users who already know the property can keep the chrome small.
+            State is persisted per-user via localStorage (task #484). */}
+        <div className="space-y-2" data-testid="property-stats-section">
+          <div className="flex items-center justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs text-muted-foreground"
+              onClick={() => setStatsExpanded((v) => !v)}
+              data-testid="button-toggle-stats"
+              aria-expanded={statsExpanded}
+            >
+              {statsExpanded ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Hide stats
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Show all stats
+                </>
+              )}
+            </Button>
+          </div>
+
+          {!statsExpanded && (
+            <Card data-testid="property-stats-summary">
+              <CardContent className="p-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <span className="inline-flex items-center gap-1.5">
+                    <BedDouble className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Total Beds</span>
+                    <span className="font-semibold">{propBeds.length}</span>
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Occupied</span>
+                    <span className="font-semibold text-green-600">{occupiedBeds}</span>
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Monthly Revenue</span>
+                    <span className="font-semibold text-green-600">{formatUsdWhole(monthlyRevenue)}</span>
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Net Profit</span>
+                    <span className={`font-semibold ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
+                      {profit >= 0 ? "+" : ""}{formatUsdWhole(profit)}
+                    </span>
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {statsExpanded && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
@@ -996,6 +1100,8 @@ export default function PropertyDetail() {
             sub={`(Rent + ${formatUsdWhole(monthlyElectricCost)} electric) ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
           />
           <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
+        </div>
+          )}
         </div>
 
         {/* Bed Map */}

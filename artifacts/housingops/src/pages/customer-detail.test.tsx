@@ -119,7 +119,48 @@ const mockData = {
     // Former occupant — must NOT contribute to revenue.
     { ...baseOccupant, id: "o7", bedId: null, propertyId: "p1", status: "Former" as const, chargePerBed: 9999, billingFrequency: "Monthly" as const },
   ],
-  leases: [],
+  leases: [
+    // Active, customer-responsible: counts toward c1's customer-paid rent.
+    {
+      id: "L1", propertyId: "p1", customerId: "c1", monthlyRent: 1200,
+      status: "Active", customerResponsibleForRent: true, rateType: "monthly",
+      startDate: "2025-01-01", endDate: "2025-12-31", securityDeposit: 0, notes: "",
+    },
+    // Active, customer-responsible on p2 (also c1): adds $1,500.
+    {
+      id: "L2", propertyId: "p2", customerId: "c1", monthlyRent: 1500,
+      status: "Active", customerResponsibleForRent: true, rateType: "monthly",
+      startDate: "2025-02-01", endDate: "2025-12-31", securityDeposit: 0, notes: "",
+    },
+    // Active but occupant-paid — must NOT count.
+    {
+      id: "L3", propertyId: "p1", customerId: "c1", monthlyRent: 9999,
+      status: "Active", customerResponsibleForRent: false, rateType: "monthly",
+      startDate: "2025-01-01", endDate: "2025-12-31", securityDeposit: 0, notes: "",
+    },
+    // Expired customer-responsible — must NOT count.
+    {
+      id: "L4", propertyId: "p2", customerId: "c1", monthlyRent: 9999,
+      status: "Expired", customerResponsibleForRent: true, rateType: "monthly",
+      startDate: "2024-01-01", endDate: "2024-12-31", securityDeposit: 0, notes: "",
+    },
+    // Belongs to c2 — must NOT show on c1's page.
+    {
+      id: "L5", propertyId: "p3", customerId: "c2", monthlyRent: 750,
+      status: "Active", customerResponsibleForRent: true, rateType: "monthly",
+      startDate: "2025-03-01", endDate: "2025-12-31", securityDeposit: 0, notes: "",
+    },
+    // Customer-responsible hotel-rate lease for c1: appears in the
+    // drill-down list (with a "—" amount + Hotel rate badge) but is
+    // intentionally excluded from the $ total because room-night rent
+    // depends on logged usage, not a fixed monthly amount.
+    {
+      id: "L6", propertyId: "p1", customerId: "c1", monthlyRent: 0,
+      status: "Active", customerResponsibleForRent: true, rateType: "room-night",
+      nightlyRate: 120, startDate: "2025-04-01", endDate: "2025-12-31",
+      securityDeposit: 0, notes: "",
+    },
+  ],
   utilities: [],
   isLoading: false,
   addCustomer: vi.fn(),
@@ -331,6 +372,55 @@ describe("Customer detail page", () => {
     // we just asserted on the detail page.
     expect(listBedsC2).toContain("2/2");
     expect(listRevC2).toContain("$800");
+  });
+
+  // ── Customer-paid rent roll-up ─────────────────────────────────────
+
+  it("sums monthly rent for Active, customer-responsible leases and lists each one", async () => {
+    await renderAt("/customers/c1");
+
+    // Card present, total = 1200 + 1500 = $2,700. The hotel-rate lease L6
+    // is intentionally excluded from the $ total even though it is shown
+    // in the list below.
+    const card = requireTestId("card-customer-paid-rent");
+    expect(card).not.toBeNull();
+    expect(requireTestId("stat-customer-paid-rent").textContent).toContain("$2,700");
+
+    // Drill-down list: L1, L2, and L6 (hotel-rate). L3 (occupant-paid),
+    // L4 (expired), and L5 (c2) must not appear on c1's page.
+    const list = requireTestId("list-customer-paid-leases");
+    const items = list.querySelectorAll("li");
+    expect(items.length).toBe(3);
+
+    const l2 = requireTestId("link-customer-paid-lease-L2");
+    const l1 = requireTestId("link-customer-paid-lease-L1");
+    const l6 = requireTestId("link-customer-paid-lease-L6");
+    expect(l2.getAttribute("href")).toBe("/leases/L2");
+    expect(l1.getAttribute("href")).toBe("/leases/L1");
+    expect(l6.getAttribute("href")).toBe("/leases/L6");
+    // Sorted desc by monthly rent: L2 ($1,500), L1 ($1,200), then L6 ($0).
+    expect(items[0].contains(l2)).toBe(true);
+    expect(items[1].contains(l1)).toBe(true);
+    expect(items[2].contains(l6)).toBe(true);
+    expect(l2.textContent).toContain("$1,500");
+    expect(l1.textContent).toContain("$1,200");
+    // Hotel-rate row shows the badge and a "—" amount instead of $/mo.
+    expect(l6.textContent).toContain("Hotel rate");
+    expect(l6.textContent).not.toContain("$");
+
+    // Excluded leases must not surface in any form.
+    expect(byTestId("link-customer-paid-lease-L3")).toBeNull();
+    expect(byTestId("link-customer-paid-lease-L4")).toBeNull();
+    expect(byTestId("link-customer-paid-lease-L5")).toBeNull();
+    expect(byTestId("empty-customer-paid-leases")).toBeNull();
+  });
+
+  it("shows the empty state when no Active customer-responsible leases exist", async () => {
+    // c3 has no properties / leases.
+    await renderAt("/customers/c3");
+    expect(requireTestId("stat-customer-paid-rent").textContent).toContain("—");
+    expect(requireTestId("empty-customer-paid-leases")).not.toBeNull();
+    expect(byTestId("list-customer-paid-leases")).toBeNull();
   });
 
   // ── Bad-id state ─────────────────────────────────────────────────────

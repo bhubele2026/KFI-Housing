@@ -3,7 +3,11 @@ import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { toMonthlyCharge } from "@/data/mockData";
+import {
+  getCustomerResponsibleLeases,
+  sumCustomerResponsibleRent,
+  toMonthlyCharge,
+} from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import {
   Briefcase, ChevronLeft, ChevronRight, Building2, BedDouble,
-  TrendingUp, Mail, Phone, FileText, User,
+  TrendingUp, Mail, Phone, FileText, User, Receipt,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -55,7 +59,7 @@ function StatCard({
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, isLoading, updateCustomer } = useData();
+  const { customers, properties, beds, occupants, leases, isLoading, updateCustomer } = useData();
   const { toast } = useToast();
   const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(() => {
     if (typeof window === "undefined") return 12;
@@ -159,6 +163,28 @@ export default function CustomerDetail() {
       return { key, label, tooltipLabel, revenue: Math.round(revenue) };
     });
   }, [properties, occupants, id, trendMonths]);
+
+  // Active leases where THIS customer is on the hook for rent (LOI-style
+  // "customer pays the landlord" arrangement, task #313). We sort by monthly
+  // rent descending so the biggest liabilities surface first in the
+  // drill-down list under the stat card.
+  const customerPaidLeases = useMemo(() => {
+    if (!id) return [];
+    return getCustomerResponsibleLeases(leases, properties, id).sort(
+      (a, b) => (b.monthlyRent || 0) - (a.monthlyRent || 0),
+    );
+  }, [leases, properties, id]);
+
+  const customerPaidRent = useMemo(
+    () => (id ? sumCustomerResponsibleRent(leases, properties, id) : 0),
+    [leases, properties, id],
+  );
+
+  const propertyById = useMemo(() => {
+    const m = new Map<string, (typeof properties)[number]>();
+    for (const p of properties) m.set(p.id, p);
+    return m;
+  }, [properties]);
 
   const totals = useMemo(() => {
     let totalBeds = 0;
@@ -331,6 +357,78 @@ export default function CustomerDetail() {
             testId="stat-revenue"
           />
         </div>
+
+        {/* Customer-paid monthly rent (LOI / corporate-responsibility leases) */}
+        <Card data-testid="card-customer-paid-rent">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <Receipt className="h-4 w-4" />
+                Customer-paid monthly rent
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {customerPaidLeases.length} active lease{customerPaidLeases.length === 1 ? "" : "s"}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p
+              className={`text-2xl font-bold ${customerPaidRent > 0 ? "text-emerald-600" : "text-muted-foreground"}`}
+              data-testid="stat-customer-paid-rent"
+            >
+              {customerPaidRent > 0 ? `$${customerPaidRent.toLocaleString()}` : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Sum of monthly rent on Active leases this customer is on the hook for.
+              Hotel-rate leases are listed below but excluded from this total — their
+              rent depends on logged room-nights, not a fixed monthly amount.
+            </p>
+            {customerPaidLeases.length === 0 ? (
+              <p
+                className="mt-4 text-sm text-muted-foreground"
+                data-testid="empty-customer-paid-leases"
+              >
+                No leases are currently flagged as customer-paid.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y border rounded-md" data-testid="list-customer-paid-leases">
+                {customerPaidLeases.map((l) => {
+                  const property = propertyById.get(l.propertyId);
+                  const isHotelRate = (l.rateType ?? "monthly") === "room-night";
+                  return (
+                    <li key={l.id}>
+                      <Link
+                        href={`/leases/${l.id}`}
+                        className="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-muted/50 transition-colors group"
+                        data-testid={`link-customer-paid-lease-${l.id}`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium truncate">
+                            {property?.name ?? "Unknown property"}
+                            {l.unit ? ` · ${l.unit}` : ""}
+                          </span>
+                          {isHotelRate && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              Hotel rate
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                          <span className="tabular-nums font-medium text-foreground">
+                            {isHotelRate
+                              ? "—"
+                              : `$${(l.monthlyRent || 0).toLocaleString()}/mo`}
+                          </span>
+                          <ChevronRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Revenue trend (last 12 months) */}
         <Card data-testid="card-customer-revenue-trend">

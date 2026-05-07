@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2 } from "lucide-react";
+import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator,
@@ -2485,6 +2486,14 @@ export default function Dashboard() {
               onClick={() => {
                 const move = pendingEmployerMove;
                 if (!move) return;
+                const prev = occupants.find((o) => o.id === move.occupantId);
+                const prevCompany = prev?.company ?? move.fromCompany;
+                const prevChargePerBed = prev?.chargePerBed ?? 0;
+                const prevBillingFrequency = prev?.billingFrequency ?? "Monthly";
+                const prevEmployeeId = prev?.employeeId ?? "";
+                const prevChargeSource = prev?.chargeSource ?? "";
+                const prevChargeSourceCustomer = prev?.chargeSourceCustomer ?? "";
+                const prevChargeSourcePersonId = prev?.chargeSourcePersonId ?? "";
                 updateOccupant(move.occupantId, {
                   chargePerBed: move.chargePerBed,
                   billingFrequency: "Weekly",
@@ -2497,6 +2506,34 @@ export default function Dashboard() {
                 toast({
                   title: "Occupant moved",
                   description: `${move.occupantName} is now under ${move.toCompany}.`,
+                  action: (
+                    <ToastAction
+                      altText="Undo employer move"
+                      data-testid="button-undo-employer-move"
+                      onClick={() => {
+                        updateOccupant(move.occupantId, {
+                          company: prevCompany,
+                          chargePerBed: prevChargePerBed,
+                          billingFrequency: prevBillingFrequency,
+                          employeeId: prevEmployeeId,
+                          chargeSource: prevChargeSource,
+                          chargeSourceCustomer: prevChargeSourceCustomer,
+                          chargeSourcePersonId: prevChargeSourcePersonId,
+                        });
+                        queryClient.invalidateQueries({
+                          queryKey: getListUnplacedPayrollQueryKey(),
+                        });
+                        queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+                        toast({
+                          title: "Move undone",
+                          description: `${move.occupantName} restored to ${prevCompany}.`,
+                        });
+                      }}
+                    >
+                      <Undo2 className="h-3 w-3 mr-1" />
+                      Undo
+                    </ToastAction>
+                  ),
                 });
                 setPendingEmployerMove(null);
               }}

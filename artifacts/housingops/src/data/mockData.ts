@@ -327,7 +327,7 @@ export function getCustomerResponsibleLeases(
   return leases.filter((l) => {
     if (l.status !== "Active") return false;
     if (!l.customerResponsibleForRent) return false;
-    const effective = l.customerId ?? propertyCustomerById.get(l.propertyId);
+    const effective = l.customerId || propertyCustomerById.get(l.propertyId);
     return effective === customerId;
   });
 }

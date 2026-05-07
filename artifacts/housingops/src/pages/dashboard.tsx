@@ -17,7 +17,7 @@ import {
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty } from "@/lib/lease-dates";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { StarRating } from "@/components/star-rating";
@@ -182,6 +182,20 @@ export default function Dashboard() {
       (a, b) => b.manual - a.manual || a.customerName.localeCompare(b.customerName),
     );
   }, [activeOccupants, scopedProperties, customers]);
+
+  const customerPaidRentByCustomer = useMemo(() => {
+    const rows: { customerId: string; customerName: string; rent: number; leaseCount: number }[] = [];
+    let portfolioTotal = 0;
+    for (const c of customers) {
+      const rent = sumCustomerResponsibleRent(scopedLeases, scopedProperties, c.id);
+      if (rent <= 0) continue;
+      const leaseCount = getCustomerResponsibleLeases(scopedLeases, scopedProperties, c.id).length;
+      rows.push({ customerId: c.id, customerName: c.name, rent, leaseCount });
+      portfolioTotal += rent;
+    }
+    rows.sort((a, b) => b.rent - a.rent || a.customerName.localeCompare(b.customerName));
+    return { rows, total: portfolioTotal };
+  }, [customers, scopedLeases, scopedProperties]);
 
   // "Needs review" mirrors the per-page filters that the dashboard tiles
   // deep-link into. Each predicate matches what the corresponding page
@@ -1114,6 +1128,72 @@ export default function Dashboard() {
                           </TableRow>
                         );
                       })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {customerPaidRentByCustomer.total > 0 && (
+          <Card data-testid="card-customer-paid-rent">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-2 mb-3">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">Customer-paid monthly rent</p>
+              </div>
+              <p
+                className="text-2xl font-bold tabular-nums"
+                data-testid="text-customer-paid-rent-total"
+              >
+                ${customerPaidRentByCustomer.total.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Total monthly rent across all Active leases where the customer is responsible for paying the landlord.
+              </p>
+              {customerPaidRentByCustomer.rows.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    By customer · ranked by rent
+                  </p>
+                  <Table data-testid="table-customer-paid-rent-by-customer">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead className="text-right">Leases</TableHead>
+                        <TableHead className="text-right">Monthly rent</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {customerPaidRentByCustomer.rows.map((row) => (
+                        <TableRow
+                          key={row.customerId}
+                          data-testid={`row-customer-paid-rent-${row.customerId}`}
+                        >
+                          <TableCell className="font-medium">
+                            <Link
+                              href={`/customers/${row.customerId}`}
+                              className="hover:underline text-primary"
+                              data-testid={`link-customer-paid-rent-${row.customerId}`}
+                            >
+                              {row.customerName}
+                            </Link>
+                          </TableCell>
+                          <TableCell
+                            className="text-right tabular-nums text-muted-foreground"
+                            data-testid={`text-customer-paid-rent-${row.customerId}-leases`}
+                          >
+                            {row.leaseCount}
+                          </TableCell>
+                          <TableCell
+                            className="text-right tabular-nums font-semibold"
+                            data-testid={`text-customer-paid-rent-${row.customerId}-rent`}
+                          >
+                            ${row.rent.toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>

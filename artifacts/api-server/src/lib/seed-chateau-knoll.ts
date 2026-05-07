@@ -525,6 +525,10 @@ export async function seedChateauKnollIfMissing(
         )
         .limit(1);
       if (exact.length > 0) {
+        await tx
+          .update(leasesTable)
+          .set({ customerResponsibleForRent: spec.loiKfiResponsible })
+          .where(eq(leasesTable.id, exact[0]!.id));
         unitsPresent.push(spec.unit);
         continue;
       }
@@ -543,6 +547,10 @@ export async function seedChateauKnollIfMissing(
         )
         .limit(1);
       if (fallback.length > 0) {
+        await tx
+          .update(leasesTable)
+          .set({ customerResponsibleForRent: spec.loiKfiResponsible })
+          .where(eq(leasesTable.id, fallback[0]!.id));
         unitsPresent.push(spec.unit);
         continue;
       }

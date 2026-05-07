@@ -149,7 +149,45 @@
       "exportedTitle": "Finance summary exported",
       "exportedDescription": "Downloaded {{count}} properties as CSV.",
       "exportedDescription_one": "Downloaded {{count}} property as CSV.",
-      "filterByCustomerAria": "Filter by customer {{customer}}"
+      "filterByCustomerAria": "Filter by customer {{customer}}",
+      "kpi": {
+        "occupancyRate": "Occupancy Rate",
+        "avgChargePerBed": "Avg Charge / Bed",
+        "grossMargin": "Gross Margin",
+        "totalBeds": "Total Beds"
+      },
+      "trend": {
+        "title": "Monthly Trend (trailing 12 months)",
+        "revenue": "Revenue",
+        "totalCost": "Total Cost",
+        "netProfit": "Net Profit",
+        "sparseNote": "Showing {{count}} months of available data.",
+        "empty": "No room-night history yet — trend will appear once monthly logs are recorded."
+      },
+      "utilityBreakdown": {
+        "title": "Utility Expense Breakdown",
+        "empty": "No utility expenses recorded for the current filter."
+      },
+      "ranking": {
+        "title": "Property Profitability Ranking",
+        "marginLabel": "Margin",
+        "noRevenue": "No revenue yet",
+        "costSuffix": "cost",
+        "empty": "Add active leases or occupants to start ranking properties by profitability."
+      },
+      "rentRoll": {
+        "title": "Rent Roll (active leases)",
+        "property": "Property",
+        "customer": "Customer",
+        "rateType": "Rate Type",
+        "monthly": "Monthly",
+        "hotelRate": "Hotel-Rate",
+        "rentOrMin": "Monthly Rent / Min",
+        "guaranteedMinSuffix": "/mo min",
+        "bedsCovered": "Beds Covered",
+        "securityDeposit": "Security Deposit",
+        "empty": "No active leases for the current filter."
+      }
     },
     "insurance": {
       "title": "Insurance Certificates",

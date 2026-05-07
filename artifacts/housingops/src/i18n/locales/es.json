@@ -149,7 +149,45 @@
       "exportedTitle": "Resumen financiero exportado",
       "exportedDescription": "Se descargaron {{count}} propiedades como CSV.",
       "exportedDescription_one": "Se descargó {{count}} propiedad como CSV.",
-      "filterByCustomerAria": "Filtrar por cliente {{customer}}"
+      "filterByCustomerAria": "Filtrar por cliente {{customer}}",
+      "kpi": {
+        "occupancyRate": "Tasa de ocupación",
+        "avgChargePerBed": "Cargo promedio / cama",
+        "grossMargin": "Margen bruto",
+        "totalBeds": "Camas totales"
+      },
+      "trend": {
+        "title": "Tendencia mensual (últimos 12 meses)",
+        "revenue": "Ingresos",
+        "totalCost": "Costo total",
+        "netProfit": "Utilidad neta",
+        "sparseNote": "Mostrando {{count}} meses de datos disponibles.",
+        "empty": "Aún no hay historial de noches por habitación — la tendencia aparecerá cuando se registren los meses."
+      },
+      "utilityBreakdown": {
+        "title": "Desglose de gastos de servicios",
+        "empty": "No hay gastos de servicios registrados para el filtro actual."
+      },
+      "ranking": {
+        "title": "Ranking de rentabilidad por propiedad",
+        "marginLabel": "Margen",
+        "noRevenue": "Sin ingresos aún",
+        "costSuffix": "costo",
+        "empty": "Agrega arrendamientos activos u ocupantes para clasificar propiedades por rentabilidad."
+      },
+      "rentRoll": {
+        "title": "Cédula de rentas (arrendamientos activos)",
+        "property": "Propiedad",
+        "customer": "Cliente",
+        "rateType": "Tipo de tarifa",
+        "monthly": "Mensual",
+        "hotelRate": "Tarifa de hotel",
+        "rentOrMin": "Renta mensual / mínimo",
+        "guaranteedMinSuffix": "/mes mín",
+        "bedsCovered": "Camas cubiertas",
+        "securityDeposit": "Depósito de garantía",
+        "empty": "No hay arrendamientos activos para el filtro actual."
+      }
     },
     "insurance": {
       "title": "Certificados de seguro",

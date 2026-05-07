@@ -933,3 +933,154 @@ describe("LeaseDetail — create mode (/leases/new)", () => {
     );
   });
 });
+
+describe("LeaseDetail — source PDF inline preview (task #325)", () => {
+  // Task #325 added a collapsible inline PDF preview on the lease detail
+  // page so an operator can sanity-check the lease record against the
+  // original document without leaving the page. These tests pin the three
+  // behaviors the audit workflow depends on:
+  //
+  //   1. The preview card only appears when the lease actually has a
+  //      recorded source PDF (parsed out of notes/clauses by
+  //      `extractSourcePdfFilename`). Leases without a PDF must NOT show
+  //      an empty preview slot.
+  //   2. The iframe is NOT mounted until the section is expanded — closed
+  //      cards must never trigger a download of the PDF.
+  //   3. When the HEAD probe to /api/attached-assets/:filename returns
+  //      404, the missing-file fallback message renders (instead of the
+  //      iframe rendering the api-server's JSON 404 payload).
+  let originalFetch: typeof globalThis.fetch | undefined;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    fetchMock = vi.fn();
+    // Cast through unknown — vitest's fn() type doesn't perfectly match
+    // the real fetch signature, and we only need it for HEAD probes here.
+    (globalThis as unknown as { fetch: unknown }).fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    if (originalFetch) {
+      (globalThis as unknown as { fetch: typeof globalThis.fetch }).fetch =
+        originalFetch;
+    }
+  });
+
+  // Helper: drive any pending HEAD-promise resolutions through React's
+  // effect queue. We need an async `act` so that the `setMissing(...)`
+  // call inside the fetch `.then` is flushed before the assertions run.
+  async function flushPromises() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  it("does NOT render the preview card when the lease has no recorded source PDF", () => {
+    dataState.leases = [buildLease({ notes: "Just a regular note.", clauses: "" })];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    expect(
+      container.querySelector('[data-testid="card-lease-source-pdf-preview"]'),
+    ).toBeNull();
+    // And we should never have probed the asset endpoint either.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the preview card collapsed when a source PDF is recorded — iframe is NOT mounted until expanded", () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    // Card present, iframe absent (collapsed by default).
+    expect(
+      container.querySelector('[data-testid="card-lease-source-pdf-preview"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="iframe-source-pdf"]'),
+    ).toBeNull();
+    // No HEAD request before the operator opens the section.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the iframe (and only then probes HEAD) once the section is expanded with a healthy file", async () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    fetchMock.mockResolvedValue({ ok: true } as Response);
+
+    mountAt("/leases/lease-1");
+
+    const toggle = container.querySelector(
+      '[data-testid="button-toggle-source-pdf-preview"]',
+    ) as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    act(() => toggle.click());
+
+    // HEAD probe fires exactly once, against the asset endpoint.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [calledHref, calledInit] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(calledHref).toBe(
+      "/api/attached-assets/lease-2024-sunset.pdf",
+    );
+    expect(calledInit?.method).toBe("HEAD");
+
+    await flushPromises();
+
+    // After the OK probe resolves, the iframe is mounted.
+    const iframe = container.querySelector(
+      '[data-testid="iframe-source-pdf"]',
+    ) as HTMLIFrameElement | null;
+    expect(iframe).not.toBeNull();
+    expect(iframe!.getAttribute("src")).toBe(
+      "/api/attached-assets/lease-2024-sunset.pdf",
+    );
+    // Missing-file fallback must NOT be rendered when the probe is OK.
+    expect(
+      container.querySelector('[data-testid="text-source-pdf-missing"]'),
+    ).toBeNull();
+  });
+
+  it("renders the missing-file fallback (and skips the iframe) when the HEAD probe returns 404", async () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    fetchMock.mockResolvedValue({ ok: false, status: 404 } as Response);
+
+    mountAt("/leases/lease-1");
+
+    const toggle = container.querySelector(
+      '[data-testid="button-toggle-source-pdf-preview"]',
+    ) as HTMLButtonElement;
+    act(() => toggle.click());
+
+    await flushPromises();
+
+    // Fallback notice present, iframe absent — operators get a clear
+    // "file not on disk" message instead of the api-server's JSON 404
+    // payload rendered inside an iframe.
+    expect(
+      container.querySelector('[data-testid="text-source-pdf-missing"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="iframe-source-pdf"]'),
+    ).toBeNull();
+  });
+});

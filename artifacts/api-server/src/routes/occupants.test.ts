@@ -22,11 +22,16 @@ const insertedRows: unknown[] = [];
 // (Task #330). Tests can override this by mutating `existingByPatchId`.
 const existingByPatchId = new Map<string, { chargeSource: string }>();
 
+// Rows the GET handler should see (Task #416 — boundary normalizer on
+// the read path). Defaults to empty so the existing POST/PATCH suites
+// that never touch GET are unaffected.
+const getStoreRows: Array<Record<string, unknown>> = [];
+
 const fakeDb = {
   select: () => ({
     from: () => {
       const builder = {
-        orderBy: () => [],
+        orderBy: () => getStoreRows,
         where: (pred: { id?: string }) => {
           if (pred?.id && existingByPatchId.has(pred.id)) {
             return [existingByPatchId.get(pred.id)!];
@@ -148,6 +153,46 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
     insertedRows.length = 0;
     updatedRows.length = 0;
     existingByPatchId.clear();
+    getStoreRows.length = 0;
+  });
+
+  // Task #416 — the GET list endpoint must run rows through the
+  // boundary normalizer before the response schema parse, so a legacy
+  // row whose enum values are off-list (e.g. `billingFrequency:
+  // "Annually"` or `shift: "graveyard"`) doesn't 500 the entire list
+  // endpoint.
+  it("coerces a legacy off-list billingFrequency / shift in the store on GET (Task #416)", async () => {
+    getStoreRows.push({
+      id: "o-legacy",
+      name: "Legacy Lou",
+      email: "",
+      phone: "",
+      bedId: null,
+      propertyId: null,
+      moveInDate: "2024-01-01",
+      moveOutDate: null,
+      status: "Pending",
+      chargePerBed: 0,
+      billingFrequency: "Annually",
+      employeeId: "",
+      company: "",
+      chargeSource: "weird-source",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
+      shift: "graveyard",
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    const res = await fetch(`${baseUrl}/api/occupants`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "o-legacy",
+      status: "Active",
+      billingFrequency: "Monthly",
+      chargeSource: "",
+      shift: null,
+    });
   });
 
   it("returns 201 for a body with a clean YYYY-MM-DD moveInDate", async () => {

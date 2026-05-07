@@ -15,10 +15,20 @@ const router: IRouter = Router();
 
 router.get("/occupants", async (_req, res): Promise<void> => {
   const rows = await db.select().from(occupantsTable).orderBy(occupantsTable.id);
-  const serialized = rows.map((r) => ({
-    ...r,
-    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt ?? null,
-  }));
+  // Run each row through the boundary normalizer before the response
+  // schema parse (Task #416) so a legacy off-list value already in the
+  // DB (e.g. an unknown billingFrequency or shift) gets coerced into the
+  // canonical shape instead of 500ing the whole list endpoint.
+  const serialized = rows.map((r) => {
+    const normalized = normalizeOccupantRow(r);
+    return {
+      ...normalized,
+      createdAt:
+        r.createdAt instanceof Date
+          ? r.createdAt.toISOString()
+          : r.createdAt ?? null,
+    };
+  });
   res.json(ListOccupantsResponse.parse(serialized));
 });
 

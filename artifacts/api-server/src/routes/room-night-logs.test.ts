@@ -311,6 +311,30 @@ describe("PATCH /api/room-night-logs/:id (edit)", () => {
   });
 });
 
+describe("GET /api/room-night-logs (boundary normalize on read — Task #416)", () => {
+  // The room-night-log normalizer is a pass-through today (no enum
+  // or date columns on the row shape), so the observable behaviour
+  // for a clean row is unchanged. This test pins the integration
+  // contract: a canonical row in the store round-trips through the
+  // GET response unchanged, proving the normalizer + parse pipeline
+  // is wired up. Any future enum/date column added to the row will
+  // automatically pick up the boundary coercion via the normalizer.
+  it("round-trips a canonical row through the normalize+parse pipeline", async () => {
+    stores.roomNightLogs.set("rnl-1", { ...VALID_CREATE_BODY });
+    const res = await fetch(`${baseUrl}/api/room-night-logs`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "rnl-1",
+      leaseId: "lease-hotel",
+      month: "2026-03",
+      roomNights: 150,
+      notes: "Full occupancy.",
+    });
+  });
+});
+
 describe("DELETE /api/room-night-logs/:id (remove)", () => {
   it("returns 204 and removes the row from the store", async () => {
     stores.roomNightLogs.set("rnl-1", { ...VALID_CREATE_BODY });

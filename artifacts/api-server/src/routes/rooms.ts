@@ -16,8 +16,13 @@ const router: IRouter = Router();
 
 router.get("/rooms", async (_req, res): Promise<void> => {
   const rows = await db.select().from(roomsTable).orderBy(roomsTable.id);
+  // Same boundary defence as the other GET routes (Task #416): pipe
+  // each row through the room normalizer before the per-row safeParse
+  // so any future enum / date columns added to the room shape get the
+  // legacy-row coercion automatically.
   const out: unknown[] = [];
-  for (const row of rows) {
+  for (const raw of rows) {
+    const row = normalizeRoomRow(raw);
     const result = ListRoomsResponseItem.safeParse(row);
     if (result.success) {
       out.push(result.data);

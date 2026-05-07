@@ -137,4 +137,21 @@ describe("GET /rooms — per-row safeParse pass-through (task #376)", () => {
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.monthlyRent === 800)).toBe(true);
   });
+
+  // Task #416 — the GET handler now pipes each row through
+  // `normalizeRoomRow` before the per-row safeParse so the route
+  // stays symmetric with the other resources (occupants/beds/utilities)
+  // whose normalizers actively coerce off-list enum values. The room
+  // normalizer is a pass-through today (no enum/date columns), so the
+  // observable behaviour for a clean row is unchanged — this test
+  // pins that contract: a row that was already canonical round-trips
+  // unchanged through the GET response.
+  it("round-trips a canonical row through normalizeRoomRow on GET (Task #416)", async () => {
+    store.set("r-1", makeRoom({ id: "r-1", name: "Room A" }));
+    const res = await fetch(`${baseUrl}/api/rooms`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as RoomRow[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject(makeRoom({ id: "r-1", name: "Room A" }));
+  });
 });

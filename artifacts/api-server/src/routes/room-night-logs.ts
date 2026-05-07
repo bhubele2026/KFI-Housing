@@ -18,7 +18,13 @@ router.get("/room-night-logs", async (_req, res): Promise<void> => {
     .select()
     .from(roomNightLogsTable)
     .orderBy(roomNightLogsTable.id);
-  res.json(ListRoomNightLogsResponse.parse(rows));
+  // Boundary normalize on the way out (Task #416). The room-night-log
+  // shape is currently free-form-ish, but routing the rows through the
+  // normalizer here keeps the GET symmetric with the other resources
+  // so any future enum/date column added to the row gets the
+  // legacy-row coercion automatically.
+  const normalized = rows.map((r) => normalizeRoomNightLogRow(r));
+  res.json(ListRoomNightLogsResponse.parse(normalized));
 });
 
 router.post("/room-night-logs", async (req, res): Promise<void> => {

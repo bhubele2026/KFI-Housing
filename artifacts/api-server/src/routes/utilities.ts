@@ -15,7 +15,12 @@ const router: IRouter = Router();
 
 router.get("/utilities", async (_req, res): Promise<void> => {
   const rows = await db.select().from(utilitiesTable).orderBy(utilitiesTable.id);
-  res.json(ListUtilitiesResponse.parse(rows));
+  // Boundary normalize on the way out (Task #416) so a legacy utility
+  // row whose `type` is off-list (e.g. a free-form "Sewer" label) gets
+  // coerced to "Other" instead of 500ing the entire list endpoint via
+  // the response schema's enum check.
+  const normalized = rows.map((r) => normalizeUtilityRow(r));
+  res.json(ListUtilitiesResponse.parse(normalized));
 });
 
 router.post("/utilities", async (req, res): Promise<void> => {

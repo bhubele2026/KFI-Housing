@@ -15,7 +15,11 @@ const router: IRouter = Router();
 
 router.get("/beds", async (_req, res): Promise<void> => {
   const rows = await db.select().from(bedsTable).orderBy(bedsTable.id);
-  res.json(ListBedsResponse.parse(rows));
+  // Boundary normalize on the way out (Task #416) so a legacy bed
+  // row whose `status` is off-list (e.g. "Pending") doesn't 500 the
+  // entire list endpoint via the response schema's enum check.
+  const normalized = rows.map((r) => normalizeBedRow(r));
+  res.json(ListBedsResponse.parse(normalized));
 });
 
 router.post("/beds", async (req, res): Promise<void> => {

@@ -581,6 +581,46 @@ export default function PropertyDetail() {
     highlightTimerRef.current = setTimeout(() => setHighlightedBedIds(new Set()), 3000);
   }, [beds]);
 
+  const droppedRoomsForProperty = useMemo(() => {
+    if (!dataIssues) return { droppedRooms: [], droppedBeds: [] };
+    const roomIssue = dataIssues.find(i => i.kind === "rooms");
+    const bedIssue = dataIssues.find(i => i.kind === "beds");
+    const droppedRooms = roomIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    const droppedBeds = bedIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    return { droppedRooms, droppedBeds };
+  }, [dataIssues, id]);
+
+  const propLeases = useMemo(() => leases.filter(l => l.propertyId === id), [leases, id]);
+  const propRooms = useMemo(() => rooms.filter(r => r.propertyId === id), [rooms, id]);
+  const propBeds = useMemo(() => beds.filter(b => b.propertyId === id), [beds, id]);
+  const propOccupants = useMemo(() => occupants.filter(o => o.propertyId === id && o.status === "Active"), [occupants, id]);
+
+  const propertyUnits = useMemo(() => {
+    const byUnit = new Map<string, Lease[]>();
+    for (const l of propLeases) {
+      const u = (l.unit ?? "").trim();
+      if (!u) continue;
+      const list = byUnit.get(u) ?? [];
+      list.push(l);
+      byUnit.set(u, list);
+    }
+    const naturalCompare = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    return Array.from(byUnit.entries())
+      .sort(([a], [b]) => naturalCompare(a, b))
+      .map(([unit, unitLeases]) => {
+        const sortedLeases = sortLeases(unitLeases);
+        const room = propRooms.find(
+          (r) => r.name === `Unit ${unit}` || r.name === unit,
+        );
+        const unitBeds = room ? propBeds.filter((b) => b.roomId === room.id) : [];
+        const unitOccupants = unitBeds
+          .map((b) => propOccupants.find((o) => o.bedId === b.id))
+          .filter((o): o is Occupant => Boolean(o));
+        return { unit, leases: sortedLeases, room, beds: unitBeds, occupants: unitOccupants };
+      });
+  }, [propLeases, propRooms, propBeds, propOccupants]);
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -673,55 +713,7 @@ export default function PropertyDetail() {
     );
   }
 
-  const propRooms = rooms.filter(r => r.propertyId === id);
-  const propBeds = beds.filter(b => b.propertyId === id);
-  const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
-  const propLeases = leases.filter(l => l.propertyId === id);
   const sortedPropLeases = sortLeases(propLeases);
-
-  const droppedRoomsForProperty = useMemo(() => {
-    const roomIssue = dataIssues.find(i => i.kind === "rooms");
-    const bedIssue = dataIssues.find(i => i.kind === "beds");
-    const droppedRooms = roomIssue?.rows.filter(r => r.propertyId === id) ?? [];
-    const droppedBeds = bedIssue?.rows.filter(r => r.propertyId === id) ?? [];
-    return { droppedRooms, droppedBeds };
-  }, [dataIssues, id]);
-
-  // ── Units (task #310) ───────────────────────────────────────────
-  // First-class apartment units inside a multi-unit property. We
-  // derive the list from the new `lease.unit` column (unique,
-  // non-empty values, sorted naturally so "509" sorts before "811"
-  // and before "1010"). For each unit we collect every lease that
-  // belongs to it (active first), then resolve its occupants by
-  // matching the room named "Unit <unit>" → beds → occupants. Park
-  // Place leases live without rooms today, so the occupant list will
-  // simply be empty there until rooms are seeded — that's intentional
-  // and the UI explains it.
-  const propertyUnits = useMemo(() => {
-    const byUnit = new Map<string, Lease[]>();
-    for (const l of propLeases) {
-      const u = (l.unit ?? "").trim();
-      if (!u) continue;
-      const list = byUnit.get(u) ?? [];
-      list.push(l);
-      byUnit.set(u, list);
-    }
-    const naturalCompare = (a: string, b: string) =>
-      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-    return Array.from(byUnit.entries())
-      .sort(([a], [b]) => naturalCompare(a, b))
-      .map(([unit, unitLeases]) => {
-        const sortedLeases = sortLeases(unitLeases);
-        const room = propRooms.find(
-          (r) => r.name === `Unit ${unit}` || r.name === unit,
-        );
-        const unitBeds = room ? propBeds.filter((b) => b.roomId === room.id) : [];
-        const unitOccupants = unitBeds
-          .map((b) => propOccupants.find((o) => o.bedId === b.id))
-          .filter((o): o is Occupant => Boolean(o));
-        return { unit, leases: sortedLeases, room, beds: unitBeds, occupants: unitOccupants };
-      });
-  }, [propLeases, propRooms, propBeds, propOccupants]);
   const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
   const propCerts = insuranceCertificates
     .filter(c => c.propertyId === id)

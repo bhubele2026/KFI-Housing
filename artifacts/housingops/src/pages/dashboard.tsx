@@ -29,7 +29,7 @@ import { computeOverallRating, computeRentPerBed, computeElectricPerBed, compute
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -2335,7 +2335,7 @@ export default function Dashboard() {
                     }}
                   />
                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                  <Tooltip
+                  <RechartsTooltip
                     formatter={(value) => `$${value}`}
                     labelFormatter={(label) => {
                       const row = chartData.find((d) => d.id === label);

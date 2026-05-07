@@ -14,6 +14,7 @@ import {
   startInsuranceExpiryScheduler,
 } from "./lib/insurance-expiry-scheduler";
 import { prewarmThumbnails } from "./routes/attached-assets";
+import { startMasterFileWatcher } from "./lib/master-file-watcher";
 import type {
   DigestLease,
   DigestProperty,
@@ -452,6 +453,10 @@ export async function start(deps: StartDeps): Promise<void> {
       getLastSentWeekKey: deps.getInsuranceExpiryLastSentWeekKey,
       setLastSentWeekKey: deps.setInsuranceExpiryLastSentWeekKey,
       now: () => new Date(),
+      logger: deps.logger,
+    });
+    startMasterFileWatcher({
+      reimport: deps.importDefaultMasterLeasesIfMissing,
       logger: deps.logger,
     });
   } catch (err) {

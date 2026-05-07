@@ -104,18 +104,22 @@ export function defaultMasterFilePath(): string {
 }
 
 /**
- * Returns the modification time of the bundled master workbook, or
- * `null` when the file cannot be stat'd (missing, permission denied,
- * etc.). Surfaced through `GET /leases/import-master/last-auto-import`
- * so the Leases page can flip its indicator to a warning style when
- * the recorded boot-import `ranAt` is older than the workbook on disk
- * — that's the silent-failure case where someone dropped a fresh
- * master file but the api-server hasn't been restarted to pick it up
- * (Task #340).
+ * Returns the modification time of the newest
+ * `Housing_Lease_MASTER_*.xlsx` workbook on disk, or `null` when no
+ * matching file can be stat'd. Surfaced through
+ * `GET /leases/import-master/last-auto-import` so the Leases page can
+ * flip its indicator to a warning style when the recorded boot-import
+ * `ranAt` is older than the workbook on disk — that's the
+ * silent-failure case where someone dropped a fresh master file but
+ * the api-server hasn't picked it up yet (Task #340).
+ *
+ * Uses `latestMasterFilePath()` so its semantics stay aligned with the
+ * file the watcher and boot importer actually read (Task #393).
  */
 export async function getBundledMasterMtime(): Promise<Date | null> {
   try {
-    const stat = await fs.stat(defaultMasterFilePath());
+    const filePath = await latestMasterFilePath();
+    const stat = await fs.stat(filePath);
     return stat.mtime;
   } catch {
     return null;
@@ -789,13 +793,51 @@ export async function importMasterLeases(
 }
 
 /**
+ * Returns the path to the newest `Housing_Lease_MASTER_*.xlsx` file
+ * inside `attached_assets/`, or the hardcoded default when the
+ * directory scan finds nothing. The watcher and the boot-time
+ * importer both use this so a freshly-dropped file with a new
+ * timestamp suffix is picked up automatically (Task #393).
+ */
+export async function latestMasterFilePath(): Promise<string> {
+  const dir = path.resolve(process.cwd(), "..", "..", "attached_assets");
+  try {
+    const entries = await fs.readdir(dir);
+    let best: { name: string; mtimeMs: number } | null = null;
+    for (const entry of entries) {
+      if (
+        !entry.startsWith("Housing_Lease_MASTER_") ||
+        !entry.endsWith(".xlsx")
+      ) {
+        continue;
+      }
+      try {
+        const stat = await fs.stat(path.join(dir, entry));
+        if (best === null || stat.mtimeMs > best.mtimeMs) {
+          best = { name: entry, mtimeMs: stat.mtimeMs };
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (best) return path.join(dir, best.name);
+  } catch {
+    /* directory missing / unreadable — fall through to default */
+  }
+  return defaultMasterFilePath();
+}
+
+/**
  * Convenience wrapper that loads the bundled master file from
- * `attached_assets/` and runs the importer.
+ * `attached_assets/` and runs the importer. When `overrideFilePath`
+ * is supplied (e.g. by the file watcher) that path is used instead
+ * of the latest-file resolver.
  */
 export async function importDefaultMasterLeases(
   deps: Partial<ImportDeps> = {},
+  overrideFilePath?: string,
 ): Promise<ImportSummary> {
-  const filePath = defaultMasterFilePath();
+  const filePath = overrideFilePath ?? (await latestMasterFilePath());
   const rows = await readMasterWorkbook(filePath);
   return importMasterLeases(rows, deps);
 }

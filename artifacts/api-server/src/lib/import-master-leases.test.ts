@@ -145,6 +145,7 @@ const {
   resetLastBootMasterImportForTests,
   getBundledMasterMtime,
   defaultMasterFilePath,
+  latestMasterFilePath,
 } = await import("./import-master-leases");
 
 const silentLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -363,28 +364,38 @@ describe("getBundledMasterMtime", () => {
   // api-server hasn't been restarted to pick it up. The contract that
   // matters here is:
   //
-  //   • a real Date (matching `fs.stat` on the bundled file) when the
-  //     workbook is on disk, so the UI can do an honest mtime > ranAt
-  //     comparison; and
-  //   • a quiet `null` when the file is unreadable, so the indicator
-  //     gracefully degrades to its plain timestamp variant instead of
-  //     showing a false "stale" warning to operators.
-  it("returns the bundled workbook's modification time when the file exists", async () => {
+  //   • a real Date (matching `fs.stat` on the latest matching file)
+  //     when a workbook is on disk, so the UI can do an honest
+  //     mtime > ranAt comparison; and
+  //   • a quiet `null` when no matching file is readable, so the
+  //     indicator gracefully degrades to its plain timestamp variant
+  //     instead of showing a false "stale" warning to operators.
+  //
+  // Task #393: `getBundledMasterMtime` now resolves the newest
+  // `Housing_Lease_MASTER_*.xlsx` via `latestMasterFilePath()` so
+  // stale-warning semantics stay aligned with the file the watcher
+  // and boot importer actually read.
+  it("returns the latest master workbook's modification time when a file exists", async () => {
     const mtime = await getBundledMasterMtime();
     expect(mtime).toBeInstanceOf(Date);
-    const fromStat = await fs.stat(defaultMasterFilePath());
+    const latestPath = await latestMasterFilePath();
+    const fromStat = await fs.stat(latestPath);
     expect(mtime!.getTime()).toBe(fromStat.mtime.getTime());
   });
 
-  it("returns null when the bundled workbook cannot be stat'd, instead of throwing", async () => {
-    const spy = vi.spyOn(fs, "stat").mockRejectedValueOnce(
+  it("returns null when no master workbook can be stat'd, instead of throwing", async () => {
+    const readdirSpy = vi.spyOn(fs, "readdir").mockRejectedValueOnce(
+      Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+    );
+    const statSpy = vi.spyOn(fs, "stat").mockRejectedValueOnce(
       Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
     );
     try {
       const mtime = await getBundledMasterMtime();
       expect(mtime).toBeNull();
     } finally {
-      spy.mockRestore();
+      readdirSpy.mockRestore();
+      statSpy.mockRestore();
     }
   });
 });

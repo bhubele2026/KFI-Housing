@@ -483,6 +483,22 @@ server-side so the dismissal sticks across reloads and
 across users. Added by task #357.
  */
   snoozedUntil?: OptionalLeaseDate;
+  /** ISO-8601 timestamp (UTC) recorded when the most recent
+snooze on this lease was applied. Empty string means "no
+snooze recorded". Cleared back to "" when the alert is
+un-snoozed. Used together with `snoozedBy` to power the
+audit-trail tooltip on the dashboard's snoozed-summary
+line. Added by task #429.
+ */
+  snoozedAt?: string;
+  /** Identifier (email when known) of the operator who applied
+the most recent snooze on this lease. Empty string means
+"no snoozer recorded". Cleared back to "" when the alert
+is un-snoozed. Sourced from the dashboard client (the
+`housingops:operator-email` localStorage value, with
+"unknown" as a fallback). Added by task #429.
+ */
+  snoozedBy?: string;
 }
 
 export type LeaseUpdateStatus =
@@ -526,6 +542,8 @@ export interface LeaseUpdate {
   customerResponsibleForRent?: boolean;
   unit?: string;
   snoozedUntil?: OptionalLeaseDate;
+  snoozedAt?: string;
+  snoozedBy?: string;
 }
 
 export interface RoomNightLog {

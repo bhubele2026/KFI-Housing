@@ -34,4 +34,6 @@ export interface LeaseUpdate {
   customerResponsibleForRent?: boolean;
   unit?: string;
   snoozedUntil?: OptionalLeaseDate;
+  snoozedAt?: string;
+  snoozedBy?: string;
 }

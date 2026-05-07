@@ -1692,7 +1692,14 @@ describe("Dashboard Lease expiry snooze (Task #357)", () => {
     await act(async () => {
       snoozeBtn!.click();
     });
-    expect(updateLeaseMock).toHaveBeenCalledWith("l-crit", { snoozedUntil: "2026-05-13" });
+    expect(updateLeaseMock).toHaveBeenCalledWith(
+      "l-crit",
+      expect.objectContaining({
+        snoozedUntil: "2026-05-13",
+        snoozedAt: expect.any(String),
+        snoozedBy: expect.any(String),
+      }),
+    );
 
     // "Renewal in progress" preset snoozes for ~1 year.
     const renewalBtn = container.querySelector(
@@ -1702,7 +1709,14 @@ describe("Dashboard Lease expiry snooze (Task #357)", () => {
     await act(async () => {
       renewalBtn!.click();
     });
-    expect(updateLeaseMock).toHaveBeenLastCalledWith("l-crit", { snoozedUntil: "2027-05-06" });
+    expect(updateLeaseMock).toHaveBeenLastCalledWith(
+      "l-crit",
+      expect.objectContaining({
+        snoozedUntil: "2027-05-06",
+        snoozedAt: expect.any(String),
+        snoozedBy: expect.any(String),
+      }),
+    );
 
     // "Unsnooze all" clears the future-snoozed rows.
     const unsnoozeAll = container.querySelector(
@@ -1712,7 +1726,11 @@ describe("Dashboard Lease expiry snooze (Task #357)", () => {
     await act(async () => {
       unsnoozeAll!.click();
     });
-    expect(updateLeaseMock).toHaveBeenLastCalledWith("l-warn", { snoozedUntil: "" });
+    expect(updateLeaseMock).toHaveBeenLastCalledWith("l-warn", {
+      snoozedUntil: "",
+      snoozedAt: "",
+      snoozedBy: "",
+    });
   });
 
   it("keeps the card visible when every active alert is snoozed so operators can undo", async () => {
@@ -1743,6 +1761,7 @@ describe("Dashboard Lease expiry snooze (Task #357)", () => {
       container.querySelector('[data-testid="text-snoozed-leases-count"]')?.textContent,
     ).toContain("1");
   });
+
 });
 
 describe("Dashboard Confirm match (low-confidence payroll) tile", () => {

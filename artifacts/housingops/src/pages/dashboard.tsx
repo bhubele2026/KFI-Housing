@@ -5,7 +5,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send, ChevronDown, Eye } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send, ChevronDown, Eye, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { getOperatorIdentity } from "@/lib/operator-identity";
 import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -1037,6 +1039,71 @@ export default function Dashboard() {
                   >
                     Review
                   </Link>
+                  {(() => {
+                    // Surface "who snoozed and when" from the most recent
+                    // snooze action across the visible snoozed rows
+                    // (task #429). We pick the entry with the largest
+                    // `snoozedAt` so the tooltip always points at the
+                    // freshest audit stamp; older snoozes are still
+                    // recorded on the row itself.
+                    const recent = snoozedLeases
+                      .map((s) => s.lease)
+                      .filter((l) => (l.snoozedAt ?? "") !== "")
+                      .sort((a, b) =>
+                        (b.snoozedAt ?? "").localeCompare(a.snoozedAt ?? ""),
+                      )[0];
+                    if (!recent) return null;
+                    const who = recent.snoozedBy?.trim() || "unknown";
+                    const when = recent.snoozedAt ?? "";
+                    let whenLabel = when;
+                    try {
+                      whenLabel = new Date(when).toLocaleString();
+                    } catch {
+                      // Fall back to the raw ISO string if Date can't
+                      // parse it (defensive — server always writes ISO).
+                    }
+                    return (
+                      // Wrap in a local TooltipProvider so this audit
+                      // tooltip works even if the dashboard is mounted
+                      // outside the App-level provider (e.g. unit
+                      // tests). Radix tooltips require an enclosing
+                      // provider to read context.
+                      <TooltipProvider delayDuration={150}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            className="inline-flex items-center"
+                            data-testid="snoozed-leases-audit-trigger"
+                          >
+                            <Info className="h-3.5 w-3.5 cursor-help" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          data-testid="snoozed-leases-audit-tooltip"
+                        >
+                          <div className="text-xs">
+                            <div>
+                              Most recent snooze by{" "}
+                              <span
+                                className="font-medium"
+                                data-testid="snoozed-leases-audit-by"
+                              >
+                                {who}
+                              </span>
+                            </div>
+                            <div
+                              className="text-muted-foreground"
+                              data-testid="snoozed-leases-audit-at"
+                            >
+                              {whenLabel}
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })()}
                   <Button
                     variant="link"
                     size="sm"
@@ -1044,7 +1111,11 @@ export default function Dashboard() {
                     data-testid="button-unsnooze-all-leases"
                     onClick={() => {
                       for (const { lease } of snoozedLeases) {
-                        updateLease(lease.id, { snoozedUntil: "" });
+                        updateLease(lease.id, {
+                          snoozedUntil: "",
+                          snoozedAt: "",
+                          snoozedBy: "",
+                        });
                       }
                       toast({
                         title: "Snoozes cleared",
@@ -1112,7 +1183,18 @@ export default function Dashboard() {
                     const style = expiryBucketStyle[bucket];
                     function snooze(durationDays: number, label: string) {
                       const until = addDaysToToday(durationDays);
-                      updateLease(lease.id, { snoozedUntil: until });
+                      // Audit fields (task #429): record who hid the
+                      // alert and when so a teammate investigating a
+                      // missed renewal can see the full trail. The
+                      // server keeps these alongside `snoozedUntil`
+                      // and we clear them on unsnooze below.
+                      const snoozedAt = new Date().toISOString();
+                      const snoozedBy = getOperatorIdentity();
+                      updateLease(lease.id, {
+                        snoozedUntil: until,
+                        snoozedAt,
+                        snoozedBy,
+                      });
                       toast({
                         title: `Snoozed ${label}`,
                         description: `${propertyName} alert hidden until ${formatYMDPretty(until)}.`,

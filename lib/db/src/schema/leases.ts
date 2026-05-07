@@ -66,6 +66,19 @@ export const leasesTable = pgTable("leases", {
   // "not snoozed". Stored on the lease itself so the state persists
   // across reloads and across users (server-side single source of truth).
   snoozedUntil: text("snoozed_until").notNull().default(""),
+  // Snooze audit fields (task #429). On a multi-operator team a single
+  // `snoozedUntil` end date isn't enough to investigate a missed
+  // renewal — we also need to know who hid the alert and when. Both
+  // fields are written by the dashboard's snooze action alongside
+  // `snoozedUntil` and cleared (back to "") when the alert is
+  // unsnoozed. `snoozedAt` is an ISO-8601 timestamp string (UTC) and
+  // `snoozedBy` is the operator's email / identifier as best-known to
+  // the client (currently sourced from the `housingops:operator-email`
+  // localStorage entry — falls back to "unknown" when not set). Stored
+  // as plain text so legacy rows stay valid; empty string means
+  // "no snooze recorded yet".
+  snoozedAt: text("snoozed_at").notNull().default(""),
+  snoozedBy: text("snoozed_by").notNull().default(""),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

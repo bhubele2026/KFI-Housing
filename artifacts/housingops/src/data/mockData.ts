@@ -323,6 +323,13 @@ export const LeaseSchema = z.object({
   // returns the field on the wire. Treat `undefined` as "not snoozed"
   // (mirrors `unit`).
   snoozedUntil: z.string().optional(),
+  // Snooze audit fields (task #429). ISO-8601 timestamp + operator
+  // identifier captured alongside `snoozedUntil` so the dashboard can
+  // surface "who snoozed this and when" in the audit tooltip. Both
+  // optional so legacy backups, seed literals and pre-task #429 API
+  // clients keep parsing — `undefined`/`""` mean "no snooze recorded".
+  snoozedAt: z.string().optional(),
+  snoozedBy: z.string().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

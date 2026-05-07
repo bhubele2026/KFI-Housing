@@ -319,6 +319,18 @@ export const ImportDataBody = zod.object({
         .describe(
           'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
         ),
+      snoozedAt: zod
+        .string()
+        .optional()
+        .describe(
+          'ISO-8601 timestamp (UTC) recorded when the most recent\nsnooze on this lease was applied. Empty string means \"no\nsnooze recorded\". Cleared back to \"\" when the alert is\nun-snoozed. Used together with `snoozedBy` to power the\naudit-trail tooltip on the dashboard\'s snoozed-summary\nline. Added by task #429.\n',
+        ),
+      snoozedBy: zod
+        .string()
+        .optional()
+        .describe(
+          'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
+        ),
     }),
   ),
   rooms: zod.array(
@@ -1230,6 +1242,18 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
     ),
+  snoozedAt: zod
+    .string()
+    .optional()
+    .describe(
+      'ISO-8601 timestamp (UTC) recorded when the most recent\nsnooze on this lease was applied. Empty string means \"no\nsnooze recorded\". Cleared back to \"\" when the alert is\nun-snoozed. Used together with `snoozedBy` to power the\naudit-trail tooltip on the dashboard\'s snoozed-summary\nline. Added by task #429.\n',
+    ),
+  snoozedBy: zod
+    .string()
+    .optional()
+    .describe(
+      'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1339,6 +1363,18 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
+    ),
+  snoozedAt: zod
+    .string()
+    .optional()
+    .describe(
+      'ISO-8601 timestamp (UTC) recorded when the most recent\nsnooze on this lease was applied. Empty string means \"no\nsnooze recorded\". Cleared back to \"\" when the alert is\nun-snoozed. Used together with `snoozedBy` to power the\naudit-trail tooltip on the dashboard\'s snoozed-summary\nline. Added by task #429.\n',
+    ),
+  snoozedBy: zod
+    .string()
+    .optional()
+    .describe(
+      'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
     ),
 });
 
@@ -1776,6 +1812,8 @@ export const UpdateLeaseBody = zod.object({
     .string()
     .regex(updateLeaseBodySnoozedUntilRegExp)
     .optional(),
+  snoozedAt: zod.string().optional(),
+  snoozedBy: zod.string().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1881,6 +1919,18 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
+    ),
+  snoozedAt: zod
+    .string()
+    .optional()
+    .describe(
+      'ISO-8601 timestamp (UTC) recorded when the most recent\nsnooze on this lease was applied. Empty string means \"no\nsnooze recorded\". Cleared back to \"\" when the alert is\nun-snoozed. Used together with `snoozedBy` to power the\naudit-trail tooltip on the dashboard\'s snoozed-summary\nline. Added by task #429.\n',
+    ),
+  snoozedBy: zod
+    .string()
+    .optional()
+    .describe(
+      'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
     ),
 });
 

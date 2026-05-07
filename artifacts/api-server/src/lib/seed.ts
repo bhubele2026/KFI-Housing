@@ -23,6 +23,11 @@ import {
 } from "@workspace/db";
 import { logger } from "./logger";
 import { HOUSING_DEDUCTION_ROWS } from "./seed-housing-deductions";
+import {
+  normalizeOccupantRow,
+  normalizeBedRow,
+  normalizeUtilityRow,
+} from "./db-row-normalizers";
 
 // Re-exports of post-master-import seeds. Owning these from `seed.ts`
 // keeps the boot-sequence integration point aligned with the rest of
@@ -618,9 +623,26 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
     if (bundle.properties.length > 0) await tx.insert(propertiesTable).values(bundle.properties);
     if (bundle.leases.length > 0) await tx.insert(leasesTable).values(bundle.leases);
     if (bundle.rooms.length > 0) await tx.insert(roomsTable).values(bundle.rooms);
-    if (bundle.occupants.length > 0) await tx.insert(occupantsTable).values(bundle.occupants);
-    if (bundle.beds.length > 0) await tx.insert(bedsTable).values(bundle.beds);
-    if (bundle.utilities.length > 0) await tx.insert(utilitiesTable).values(bundle.utilities);
+    // Defence-in-depth: run bulk-imported occupant/bed/utility rows
+    // through the boundary normalizer (Task #417) so a stray off-list
+    // status / billingFrequency / utility type in a future bundle is
+    // coerced to the canonical contract before it lands in the DB,
+    // matching the API write paths.
+    if (bundle.occupants.length > 0) {
+      await tx
+        .insert(occupantsTable)
+        .values(bundle.occupants.map((r) => normalizeOccupantRow(r)));
+    }
+    if (bundle.beds.length > 0) {
+      await tx
+        .insert(bedsTable)
+        .values(bundle.beds.map((r) => normalizeBedRow(r)));
+    }
+    if (bundle.utilities.length > 0) {
+      await tx
+        .insert(utilitiesTable)
+        .values(bundle.utilities.map((r) => normalizeUtilityRow(r)));
+    }
     // Inserted after leases so a future FK on `lease_id` would already
     // see its parent rows (today the column is a plain `text` ref).
     const logs = bundle.roomNightLogs ?? [];

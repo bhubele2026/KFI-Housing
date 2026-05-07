@@ -15,6 +15,7 @@ import {
   type InsertOccupantRow,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
+import { normalizeOccupantRow, normalizeBedRow } from "./db-row-normalizers";
 import { computeLeaseStatus, todayIso } from "./lease-status";
 import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import {
@@ -537,7 +538,9 @@ export async function seedPatriotBarabooIfMissing(
         // we never overwrite an operator-edited value.
         await tx
           .update(occupantsTable)
-          .set({ shift: spec.shift })
+          // Defence-in-depth (Task #417): mirror the API write path
+          // so a future off-list shift value coerces here too.
+          .set(normalizeOccupantRow({ shift: spec.shift }))
           .where(
             and(
               eq(occupantsTable.id, occupantId),
@@ -548,7 +551,8 @@ export async function seedPatriotBarabooIfMissing(
         const row = { ...buildOccupantRow(spec, propertyId), bedId };
         const inserted = await tx
           .insert(occupantsTable)
-          .values(row)
+          // Defence-in-depth (Task #417).
+          .values(normalizeOccupantRow(row))
           .onConflictDoNothing()
           .returning({ id: occupantsTable.id });
         if (inserted.length > 0) {
@@ -581,7 +585,8 @@ export async function seedPatriotBarabooIfMissing(
         ) {
           await tx
             .update(bedsTable)
-            .set({ occupantId, status: "Occupied" })
+            // Defence-in-depth (Task #417).
+            .set(normalizeBedRow({ occupantId, status: "Occupied" }))
             .where(eq(bedsTable.id, existingBed[0]!.id));
         }
         continue;
@@ -593,7 +598,8 @@ export async function seedPatriotBarabooIfMissing(
       };
       const insertedBed = await tx
         .insert(bedsTable)
-        .values(bedRow)
+        // Defence-in-depth (Task #417).
+        .values(normalizeBedRow(bedRow))
         .onConflictDoNothing()
         .returning({ id: bedsTable.id });
       if (insertedBed.length > 0) bedsInserted += 1;

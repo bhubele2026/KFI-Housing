@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, occupantsTable, propertiesTable } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
+import { normalizeOccupantRow } from "./db-row-normalizers";
 
 export interface HousingDeductionRow {
   customer: string;
@@ -634,19 +635,26 @@ export async function seedHousingDeductions(
 
     await database
       .update(occupantsTable)
-      .set({
-        chargePerBed: row.weekly,
-        billingFrequency: "Weekly",
-        // Stamp provenance so the property page can render a "from
-        // payroll" badge and the dashboard counter can tell auto-
-        // reconciled occupants apart from manually-entered ones.
-        chargeSource: "payroll",
-        chargeSourceCustomer: row.customer,
-        chargeSourcePersonId: row.personId,
-        // Auto-confirmed name-only matches also get employeeId
-        // stamped so the next run takes the strong match path.
-        ...(autoConfirmedNameOnly ? { employeeId: row.personId } : {}),
-      })
+      // Defence-in-depth (Task #417): mirror the API write path by
+      // running the patch through the boundary normalizer so any
+      // future off-list billingFrequency / chargeSource value coming
+      // out of the payroll importer is coerced to the canonical
+      // contract before it lands in the DB.
+      .set(
+        normalizeOccupantRow({
+          chargePerBed: row.weekly,
+          billingFrequency: "Weekly",
+          // Stamp provenance so the property page can render a "from
+          // payroll" badge and the dashboard counter can tell auto-
+          // reconciled occupants apart from manually-entered ones.
+          chargeSource: "payroll",
+          chargeSourceCustomer: row.customer,
+          chargeSourcePersonId: row.personId,
+          // Auto-confirmed name-only matches also get employeeId
+          // stamped so the next run takes the strong match path.
+          ...(autoConfirmedNameOnly ? { employeeId: row.personId } : {}),
+        }),
+      )
       .where(eq(occupantsTable.id, target.id));
     updated++;
   }

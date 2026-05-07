@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
+import { normalizeOccupantRow } from "./db-row-normalizers";
 
 /**
  * Seed the payroll-only people who appear on the weekly housing
@@ -415,7 +416,11 @@ export async function seedPayrollOccupantsIfMissing(
 
       const inserted = await tx
         .insert(occupantsTable)
-        .values(buildOccupantRow(occ, occ.customer, propertyId))
+        // Defence-in-depth (Task #417): mirror the API write path by
+        // running the row through the boundary normalizer so any future
+        // off-list status / billingFrequency / chargeSource value in
+        // `buildOccupantRow` is coerced before it lands in the DB.
+        .values(normalizeOccupantRow(buildOccupantRow(occ, occ.customer, propertyId)))
         .onConflictDoNothing()
         .returning({ id: occupantsTable.id });
       if (inserted.length > 0) occupantsInserted += 1;

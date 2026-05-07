@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ export function AddCertificateDialog({
   onOpenChange: controlledOnOpenChange,
   trigger,
 }: AddCertificateDialogProps) {
+  const { t } = useTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -90,20 +92,20 @@ export function AddCertificateDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" data-testid="button-add-certificate">
-            <Plus className="h-4 w-4 mr-1.5" />Add Certificate
+            <Plus className="h-4 w-4 mr-1.5" />{t("dialogs.addCertificate.triggerLabel")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Add Insurance Certificate</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("dialogs.addCertificate.title")}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-2">
           <div>
-            <Label>Property</Label>
+            <Label>{t("dialogs.addCertificate.property")}</Label>
             <Select
               value={form.propertyId}
               onValueChange={(v) => setForm((f) => ({ ...f, propertyId: v }))}
             >
-              <SelectTrigger data-testid="select-certificate-property"><SelectValue placeholder="Select a property" /></SelectTrigger>
+              <SelectTrigger data-testid="select-certificate-property"><SelectValue placeholder={t("dialogs.addCertificate.selectProperty")} /></SelectTrigger>
               <SelectContent>
                 {properties.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
@@ -115,34 +117,34 @@ export function AddCertificateDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Carrier</Label>
+              <Label>{t("dialogs.addCertificate.carrier")}</Label>
               <Input
                 value={form.carrier}
                 onChange={(e) => setForm((f) => ({ ...f, carrier: e.target.value }))}
-                placeholder="e.g. Philadelphia Indemnity"
+                placeholder={t("dialogs.addCertificate.carrierPlaceholder")}
                 data-testid="input-certificate-carrier"
               />
             </div>
             <div>
-              <Label>Policy #</Label>
+              <Label>{t("dialogs.addCertificate.policyNumber")}</Label>
               <Input
                 value={form.policyNumber}
                 onChange={(e) => setForm((f) => ({ ...f, policyNumber: e.target.value }))}
-                placeholder="Optional"
+                placeholder={t("dialogs.addCertificate.policyOptional")}
                 data-testid="input-certificate-policy"
               />
             </div>
             <div className="col-span-2">
-              <Label>Insured Name</Label>
+              <Label>{t("dialogs.addCertificate.insuredName")}</Label>
               <Input
                 value={form.insuredName}
                 onChange={(e) => setForm((f) => ({ ...f, insuredName: e.target.value }))}
-                placeholder="Named insured on the certificate"
+                placeholder={t("dialogs.addCertificate.insuredPlaceholder")}
                 data-testid="input-certificate-insured"
               />
             </div>
             <div>
-              <Label>Coverage Start</Label>
+              <Label>{t("dialogs.addCertificate.coverageStart")}</Label>
               <Input
                 type="date"
                 value={form.coverageStart}
@@ -151,7 +153,7 @@ export function AddCertificateDialog({
               />
             </div>
             <div>
-              <Label>Coverage End</Label>
+              <Label>{t("dialogs.addCertificate.coverageEnd")}</Label>
               <Input
                 type="date"
                 value={form.coverageEnd}
@@ -160,7 +162,7 @@ export function AddCertificateDialog({
               />
             </div>
             <div className="col-span-2">
-              <Label>Certificate PDF</Label>
+              <Label>{t("dialogs.addCertificate.certificatePdf")}</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -172,7 +174,7 @@ export function AddCertificateDialog({
               {form.documentUrl ? (
                 <div className="flex items-center gap-2 mt-1">
                   <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-sm truncate flex-1">{uploadedFileName || "PDF attached"}</span>
+                  <span className="text-sm truncate flex-1">{uploadedFileName || t("dialogs.addCertificate.pdfAttached")}</span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -194,31 +196,31 @@ export function AddCertificateDialog({
                   data-testid="button-certificate-upload"
                 >
                   {isUploading ? (
-                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Uploading… {progress}%</>
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />{t("dialogs.addCertificate.uploading", { progress })}</>
                   ) : (
-                    <><Upload className="h-4 w-4 mr-1.5" />Upload PDF</>
+                    <><Upload className="h-4 w-4 mr-1.5" />{t("dialogs.addCertificate.uploadPdf")}</>
                   )}
                 </Button>
               )}
             </div>
           </div>
           <div>
-            <Label>Notes</Label>
+            <Label>{t("dialogs.addCertificate.notes")}</Label>
             <Textarea
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Optional notes"
+              placeholder={t("dialogs.addCertificate.notesPlaceholder")}
               data-testid="input-certificate-notes"
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("dialogs.addCertificate.cancel")}</Button>
             <Button
               onClick={submit}
               disabled={!form.propertyId || !form.carrier}
               data-testid="button-certificate-submit"
             >
-              Add Certificate
+              {t("dialogs.addCertificate.submit")}
             </Button>
           </div>
         </div>

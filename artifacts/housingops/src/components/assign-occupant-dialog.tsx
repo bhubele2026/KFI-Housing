@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,7 @@ export function AssignOccupantDialog({
   trigger,
   testIdSuffix,
 }: AssignOccupantDialogProps) {
+  const { t } = useTranslation();
   const { properties, beds, customers } = useData();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(() => buildInitialForm(initial));
@@ -199,19 +201,19 @@ export function AssignOccupantDialog({
             data-testid={`button-assign-occupant${tidSuffix}`}
           >
             <Plus className="h-3 w-3" />
-            Assign occupant
+            {t("dialogs.assignOccupant.triggerDefault")}
           </button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign Occupant to Bed</DialogTitle>
+          <DialogTitle>{t("dialogs.assignOccupant.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-2">
           {!fixedBed && (
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Label>Property *</Label>
+                <Label>{t("dialogs.assignOccupant.propertyRequired")}</Label>
                 <Select
                   value={pickedPropertyId}
                   onValueChange={setPickedPropertyId}
@@ -219,12 +221,12 @@ export function AssignOccupantDialog({
                   <SelectTrigger
                     data-testid={`select-assign-property${tidSuffix}`}
                   >
-                    <SelectValue placeholder="Pick a property with a vacant bed" />
+                    <SelectValue placeholder={t("dialogs.assignOccupant.pickPropertyVacant")} />
                   </SelectTrigger>
                   <SelectContent>
                     {propertyOptions.length === 0 ? (
                       <SelectItem value="__none" disabled>
-                        No properties have a vacant bed
+                        {t("dialogs.assignOccupant.noVacantProperty")}
                       </SelectItem>
                     ) : (
                       propertyOptions.map((p) => {
@@ -243,7 +245,7 @@ export function AssignOccupantDialog({
                 </Select>
               </div>
               <div className="col-span-2">
-                <Label>Vacant Bed *</Label>
+                <Label>{t("dialogs.assignOccupant.vacantBedRequired")}</Label>
                 <Select
                   value={pickedBedId}
                   onValueChange={setPickedBedId}
@@ -253,15 +255,15 @@ export function AssignOccupantDialog({
                     <SelectValue
                       placeholder={
                         pickedPropertyId
-                          ? "Pick a vacant bed"
-                          : "Pick a property first"
+                          ? t("dialogs.assignOccupant.pickVacantBed")
+                          : t("dialogs.assignOccupant.pickPropertyFirst")
                       }
                     />
                   </SelectTrigger>
                   <SelectContent>
                     {vacantBedsForProperty.map((b: Bed) => (
                       <SelectItem key={b.id} value={b.id}>
-                        Bed {b.bedNumber}
+                        {t("dialogs.assignOccupant.bedNumber", { number: b.bedNumber })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -271,34 +273,34 @@ export function AssignOccupantDialog({
           )}
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <Label>Full Name *</Label>
+              <Label>{t("dialogs.assignOccupant.fullNameRequired")}</Label>
               <Input
                 value={form.name}
                 onChange={f("name")}
-                placeholder="Jane Smith"
+                placeholder={t("dialogs.assignOccupant.namePlaceholder")}
                 data-testid={`input-assign-name${tidSuffix}`}
               />
             </div>
             <div>
-              <Label>Employee ID</Label>
+              <Label>{t("dialogs.assignOccupant.employeeId")}</Label>
               <Input
                 value={form.employeeId}
                 onChange={f("employeeId")}
-                placeholder="EMP-001"
+                placeholder={t("dialogs.assignOccupant.employeeIdPlaceholder")}
                 data-testid={`input-assign-employee-id${tidSuffix}`}
               />
             </div>
             <div>
-              <Label>Company</Label>
+              <Label>{t("dialogs.assignOccupant.company")}</Label>
               <Input
                 value={form.company}
                 onChange={f("company")}
-                placeholder="Acme Corp"
+                placeholder={t("dialogs.assignOccupant.companyPlaceholder")}
                 data-testid={`input-assign-company${tidSuffix}`}
               />
             </div>
             <div>
-              <Label>Move-in Date</Label>
+              <Label>{t("dialogs.assignOccupant.moveInDate")}</Label>
               <Input
                 type="date"
                 value={form.moveInDate}
@@ -307,17 +309,17 @@ export function AssignOccupantDialog({
               />
             </div>
             <div>
-              <Label>Charge / Bed ($)</Label>
+              <Label>{t("dialogs.assignOccupant.chargePerBed")}</Label>
               <Input
                 type="number"
                 value={form.chargePerBed}
                 onChange={f("chargePerBed")}
-                placeholder="0.00"
+                placeholder={t("dialogs.assignOccupant.chargePerBedPlaceholder")}
                 data-testid={`input-assign-charge${tidSuffix}`}
               />
             </div>
             <div>
-              <Label>Billing Frequency</Label>
+              <Label>{t("dialogs.assignOccupant.billingFrequency")}</Label>
               <Select
                 value={form.billingFrequency}
                 onValueChange={(v) =>
@@ -342,32 +344,32 @@ export function AssignOccupantDialog({
               </Select>
             </div>
             <div>
-              <Label>Email</Label>
+              <Label>{t("dialogs.assignOccupant.email")}</Label>
               <Input
                 value={form.email}
                 onChange={f("email")}
-                placeholder="jane@company.com"
+                placeholder={t("dialogs.assignOccupant.emailPlaceholder")}
               />
             </div>
             <div>
-              <Label>Phone</Label>
+              <Label>{t("dialogs.assignOccupant.phone")}</Label>
               <Input
                 value={form.phone}
                 onChange={f("phone")}
-                placeholder="555-000-0000"
+                placeholder={t("dialogs.assignOccupant.phonePlaceholder")}
               />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t("dialogs.assignOccupant.cancel")}
             </Button>
             <Button
               onClick={submit}
               disabled={!canSubmit}
               data-testid={`button-assign-submit${tidSuffix}`}
             >
-              Assign
+              {t("dialogs.assignOccupant.submit")}
             </Button>
           </div>
         </div>

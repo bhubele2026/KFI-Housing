@@ -126,13 +126,9 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
   }, [properties, geocodeFailures, geocodeFailureTimestamps]);
   const addressesNeedingFixTooltip = useMemo(() => {
     if (addressesNeedingFixCount === 0) return "";
-    const countLabel = `${addressesNeedingFixCount} ${addressesNeedingFixCount === 1 ? "address needs" : "addresses need"} fixing`;
+    const countLabel = t("nav.addressNeedsFix", { count: addressesNeedingFixCount });
     if (typeof oldestFailureCheckedAt !== "number") return countLabel;
-    // Match the Properties rollup phrasing exactly ("Checked N ago")
-    // so the two surfaces read the same. Prefixed with "Oldest flag"
-    // so the meaning is clear when we're rolling up multiple rows
-    // into a single line of tooltip text.
-    return `${countLabel} — Oldest flag checked ${formatDistanceToNow(oldestFailureCheckedAt, { addSuffix: true })}`;
+    return `${countLabel} — ${t("nav.oldestFlagChecked", { ago: formatDistanceToNow(oldestFailureCheckedAt, { addSuffix: true }) })}`;
     // `now` is in the dep list so each minute-tick recomputes the
     // relative-time suffix off a fresh clock — `formatDistanceToNow`
     // reads `Date.now()` internally, but the memo would otherwise
@@ -181,8 +177,8 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
         // localStorage now (see `lib/google-maps-sdk.ts`).
         clearGeocodeFailures();
         toast({
-          title: "Sample data restored",
-          description: "All saved changes were cleared and the demo data was reloaded.",
+          title: t("toasts.sampleDataRestoredTitle"),
+          description: t("toasts.sampleDataRestoredDescription"),
         });
       },
       onSettled: () => {
@@ -204,8 +200,8 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
         // the next investor walkthrough.
         clearGeocodeFailures();
         toast({
-          title: "Demo data reset",
-          description: "Edits cleared and the demo dataset was reseeded. Ready for the next take.",
+          title: t("toasts.demoResetTitle"),
+          description: t("toasts.demoResetDescription"),
         });
       },
       onSettled: () => {
@@ -231,13 +227,21 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast({
-        title: "Data exported",
-        description: `Saved ${a.download} with ${payload.data.customers.length} customers, ${payload.data.properties.length} properties, ${payload.data.leases.length} leases, ${payload.data.beds.length} beds, ${payload.data.occupants.length} occupants, ${payload.data.utilities.length} utilities.`,
+        title: t("toasts.dataExportedTitle"),
+        description: t("toasts.dataExportedDescription", {
+          file: a.download,
+          customers: payload.data.customers.length,
+          properties: payload.data.properties.length,
+          leases: payload.data.leases.length,
+          beds: payload.data.beds.length,
+          occupants: payload.data.occupants.length,
+          utilities: payload.data.utilities.length,
+        }),
       });
     } catch {
       toast({
-        title: "Export failed",
-        description: "Could not generate the export file. Please try again.",
+        title: t("toasts.exportFailedTitle"),
+        description: t("toasts.exportFailedDescription"),
         variant: "destructive",
       });
     }
@@ -257,8 +261,8 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       parsed = JSON.parse(text);
     } catch {
       toast({
-        title: "Could not read file",
-        description: "That file is not valid JSON. Please choose a HousingOps export file.",
+        title: t("toasts.couldNotReadFileTitle"),
+        description: t("toasts.couldNotReadFileDescription"),
         variant: "destructive",
       });
       return;
@@ -272,9 +276,9 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       const description =
         err instanceof UnsupportedImportError
           ? err.message
-          : "That file doesn't look like a HousingOps export. No changes were made.";
+          : t("toasts.cantImportFallback");
       toast({
-        title: "Can't import this file",
+        title: t("toasts.cantImportTitle"),
         description,
         variant: "destructive",
       });
@@ -299,9 +303,9 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       const description =
         err instanceof UnsupportedImportError
           ? err.message
-          : "Something went wrong while importing. No changes were made.";
+          : t("toasts.importFailedFallback");
       toast({
-        title: "Import failed",
+        title: t("toasts.importFailedTitle"),
         description,
         variant: "destructive",
       });
@@ -312,7 +316,15 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     setImportOpen(false);
     setPendingImport(null);
     const summary = result.summary;
-    const counts = `${summary.customers} customers, ${summary.properties} properties, ${summary.leases} leases, ${summary.beds} beds, ${summary.occupants} occupants, ${summary.utilities} utilities, ${summary.roomNightLogs} room-night logs`;
+    const counts = t("toasts.importCounts", {
+      customers: summary.customers,
+      properties: summary.properties,
+      leases: summary.leases,
+      beds: summary.beds,
+      occupants: summary.occupants,
+      utilities: summary.utilities,
+      roomNightLogs: summary.roomNightLogs,
+    });
     // Same Undo action attached to both the merge and replace success toasts
     // — both modes are destructive (rows are overwritten by-id) so an
     // operator who confirmed by mistake gets the same one-click recovery.
@@ -320,11 +332,11 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     // after that the snapshot is dropped and click reports it expired.
     const undoAction = (
       <ToastAction
-        altText="Undo this import"
+        altText={t("toasts.undoAlt")}
         onClick={handleUndoImport}
         data-testid="button-undo-import"
       >
-        Undo
+        {t("common.undo")}
       </ToastAction>
     );
     if (result.mode === "merge" && result.added && result.updated) {
@@ -333,25 +345,21 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       const unchanged =
         totalImportSummary(summary) - addedTotal - updatedTotal;
       const unchangedNote =
-        unchanged > 0 ? ` ${unchanged} were already up to date.` : "";
+        unchanged > 0 ? t("toasts.unchangedNote", { count: unchanged }) : "";
       toast({
-        title: "Data merged",
+        title: t("toasts.dataMergedTitle"),
         description: preview.migratedFromV1
-          ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer for the migrated properties. ${addedTotal} added, ${updatedTotal} updated.${unchangedNote}`
-          : `From ${fileName}: ${addedTotal} added, ${updatedTotal} updated.${unchangedNote} Existing records not in the file were kept.`,
+          ? t("toasts.dataMergedDescriptionLegacy", { file: fileName, added: addedTotal, updated: updatedTotal, unchangedNote })
+          : t("toasts.dataMergedDescription", { file: fileName, added: addedTotal, updated: updatedTotal, unchangedNote }),
         action: undoAction,
-        // Hold the toast open for the full undo window so the Undo
-        // button is reachable for as long as the snapshot is alive.
-        // Without this, Radix's ~5s default would auto-dismiss the
-        // toast (and its action) long before the 30s window expires.
         duration: UNDO_IMPORT_WINDOW_MS,
       });
     } else {
       toast({
-        title: preview.migratedFromV1 ? "Older backup imported" : "Data imported",
+        title: preview.migratedFromV1 ? t("toasts.olderBackupImportedTitle") : t("toasts.dataImportedTitle"),
         description: preview.migratedFromV1
-          ? `${fileName} was made before Customers existed. We created a "Legacy Properties" customer and assigned all ${summary.properties} imported properties to it. Loaded ${counts}.`
-          : `Loaded ${counts}.`,
+          ? t("toasts.dataImportedDescriptionLegacy", { file: fileName, count: summary.properties, counts })
+          : t("toasts.dataImportedDescription", { counts }),
         action: undoAction,
         duration: UNDO_IMPORT_WINDOW_MS,
       });
@@ -362,16 +370,13 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     const restored = undoLastImport();
     if (restored) {
       toast({
-        title: "Import undone",
-        description: "Your previous data was restored.",
+        title: t("toasts.importUndone"),
+        description: t("toasts.importUndoneDescription"),
       });
     } else {
-      // Either the operator waited past the undo window or already
-      // clicked Undo once — in both cases the snapshot is gone, so
-      // explain that rather than silently no-op.
       toast({
-        title: "Can't undo this import",
-        description: "The undo window has expired. Re-import your previous backup file to restore that data.",
+        title: t("toasts.cantUndoImport"),
+        description: t("toasts.cantUndoImportDescription"),
         variant: "destructive",
       });
     }
@@ -471,7 +476,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                   type="button"
                   onClick={() => setCustomerId(ALL_CUSTOMERS)}
                   className="relative flex h-8 w-8 items-center justify-center rounded-md bg-sidebar-accent/40 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                  aria-label={`Filtered by customer: ${activeScopedCustomer.name}. Click to clear.`}
+                  aria-label={t("nav.filteredByCustomerAria", { name: activeScopedCustomer.name })}
                   data-testid="button-sidebar-clear-customer"
                 >
                   <Briefcase className="h-4 w-4 text-primary" />
@@ -479,7 +484,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                Filtered: {activeScopedCustomer.name} — click to clear
+                {t("nav.filteredByCustomerTooltip", { name: activeScopedCustomer.name })}
               </TooltipContent>
             </Tooltip>
           </div>
@@ -624,19 +629,19 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               "rounded-full bg-sidebar-primary flex items-center justify-center text-sidebar-primary-foreground font-semibold shadow-sm ring-2 ring-sidebar-primary-foreground/10",
               collapsed ? "h-8 w-8 text-xs" : "h-9 w-9 text-sm",
             )}
-            title={collapsed ? "Admin Manager — admin@housingops.app" : undefined}
+            title={collapsed ? `${t("sidebar.userRoleAdmin")} — admin@housingops.app` : undefined}
           >
             AM
           </div>
           {!collapsed && (
             <div className="ml-3 min-w-0">
-              <p className="text-sm font-semibold leading-tight truncate">Admin Manager</p>
+              <p className="text-sm font-semibold leading-tight truncate">{t("sidebar.userRoleAdmin")}</p>
               <p className="text-[11px] text-sidebar-foreground/55 truncate">admin@housingops.app</p>
             </div>
           )}
         </div>
         {wrapTip(
-          "Export data",
+          t("sidebar.exportData"),
           <Button
             variant="outline"
             size={collapsed ? "icon" : "default"}
@@ -645,15 +650,15 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               collapsed ? "h-9 w-9" : "w-full justify-start",
             )}
             onClick={handleExport}
-            aria-label="Export data"
+            aria-label={t("sidebar.exportData")}
             data-testid="button-export-data"
           >
             <Download className={cn("h-4 w-4", !collapsed && "mr-2")} />
-            {!collapsed && "Export data"}
+            {!collapsed && t("sidebar.exportData")}
           </Button>,
         )}
         {wrapTip(
-          "Import data",
+          t("sidebar.importData"),
           <Button
             variant="outline"
             size={collapsed ? "icon" : "default"}
@@ -662,11 +667,11 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               collapsed ? "h-9 w-9" : "w-full justify-start",
             )}
             onClick={handlePickImportFile}
-            aria-label="Import data"
+            aria-label={t("sidebar.importData")}
             data-testid="button-import-data"
           >
             <Upload className={cn("h-4 w-4", !collapsed && "mr-2")} />
-            {!collapsed && "Import data"}
+            {!collapsed && t("sidebar.importData")}
           </Button>,
         )}
         <input
@@ -678,7 +683,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           data-testid="input-import-file"
         />
         {wrapTip(
-          "Reset to sample data",
+          t("sidebar.resetSampleData"),
           <Button
             variant="outline"
             size={collapsed ? "icon" : "default"}
@@ -687,16 +692,16 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               collapsed ? "h-9 w-9" : "w-full justify-start",
             )}
             onClick={() => setResetOpen(true)}
-            aria-label="Reset to sample data"
+            aria-label={t("sidebar.resetSampleData")}
             data-testid="button-reset-sample-data"
           >
             <RotateCcw className={cn("h-4 w-4", !collapsed && "mr-2")} />
-            {!collapsed && "Reset to sample data"}
+            {!collapsed && t("sidebar.resetSampleData")}
           </Button>,
         )}
         {isDevBuild ? (
           wrapTip(
-            "Reset demo data (dev)",
+            t("sidebar.resetDemoData"),
             <Button
               variant="outline"
               size={collapsed ? "icon" : "default"}
@@ -705,12 +710,12 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 collapsed ? "h-9 w-9" : "w-full justify-start",
               )}
               onClick={() => setDemoResetOpen(true)}
-              aria-label="Reset demo data (dev)"
+              aria-label={t("sidebar.resetDemoData")}
               data-testid="button-reset-demo-data"
-              title={collapsed ? undefined : "Visible in development builds only"}
+              title={collapsed ? undefined : t("sidebar.resetDemoTooltip")}
             >
               <RotateCcw className={cn("h-4 w-4", !collapsed && "mr-2")} />
-              {!collapsed && "Reset demo data (dev)"}
+              {!collapsed && t("sidebar.resetDemoData")}
             </Button>,
           )
         ) : null}
@@ -735,20 +740,19 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       <AlertDialog open={demoResetOpen} onOpenChange={setDemoResetOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset demo data?</AlertDialogTitle>
+            <AlertDialogTitle>{t("sidebar.resetDemoConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Wipes every edit in this browser and reseeds the demo dataset so you can re-run the
-              demo cleanly between investor takes. This action cannot be undone.
+              {t("sidebar.resetDemoConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-reset-demo-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-reset-demo-cancel">{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDemoReset}
               data-testid="button-reset-demo-confirm"
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Reset demo data
+              {t("sidebar.resetDemoData")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -757,20 +761,19 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset to sample data?</AlertDialogTitle>
+            <AlertDialogTitle>{t("sidebar.resetDataConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This clears every saved change in this browser — customers, properties, leases, beds,
-              occupants, and utilities — and reloads the original demo data. This action cannot be undone.
+              {t("sidebar.resetDataConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-reset-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-reset-cancel">{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmReset}
               data-testid="button-reset-confirm"
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Reset data
+              {t("sidebar.resetData")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -787,16 +790,17 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           <AlertDialogHeader>
             <AlertDialogTitle>
               {importMode === "merge"
-                ? "Merge import into current data?"
+                ? t("sidebar.importTitleMerge")
                 : pendingImport?.preview.migratedFromV1
-                  ? "Import older backup?"
-                  : "Replace current data with import?"}
+                  ? t("sidebar.importTitleLegacy")
+                  : t("sidebar.importTitleReplace")}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Importing <span className="font-medium">{pendingImport?.fileName ?? "this file"}</span>.
-                  Choose how it should be applied to your current data.
+                  {t("sidebar.importingFilePrefix")}
+                  <span className="font-medium">{pendingImport?.fileName ?? t("sidebar.importingThisFile")}</span>
+                  {t("sidebar.importingFileSuffix")}
                 </p>
                 {pendingImport ? (
                   <ImportSummaryList summary={pendingImport.preview.summary} />
@@ -819,12 +823,10 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                         htmlFor="import-mode-replace"
                         className="font-medium cursor-pointer"
                       >
-                        Replace all data
+                        {t("sidebar.importModeReplaceLabel")}
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Wipe every customer, property, lease, bed, occupant, and utility in this
-                        browser and load only what&apos;s in the file. Use this to restore a backup
-                        or move to a new browser.
+                        {t("sidebar.importModeReplaceDescription")}
                       </p>
                     </div>
                   </div>
@@ -840,19 +842,17 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                         htmlFor="import-mode-merge"
                         className="font-medium cursor-pointer"
                       >
-                        Merge into current data
+                        {t("sidebar.importModeMergeLabel")}
                       </Label>
                       <p className="text-sm text-muted-foreground">
-                        Add records from the file as new entries, update any existing records that
-                        share the same id, and keep everything else you already have. Use this to
-                        combine data from another teammate&apos;s export.
+                        {t("sidebar.importModeMergeDescription")}
                       </p>
                     </div>
                   </div>
                 </RadioGroup>
                 {importMode === "replace" ? (
                   <p className="text-sm text-muted-foreground">
-                    Your current data will be lost. Consider exporting first if you want a backup.
+                    {t("sidebar.importReplaceWarning")}
                   </p>
                 ) : null}
                 {importMode === "merge" && mergeDryRun ? (
@@ -863,11 +863,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                     className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
                     data-testid="text-import-legacy-warning"
                   >
-                    This backup was made before Customers existed. We&apos;ll create a single
-                    &quot;Legacy Properties&quot; customer and assign all{" "}
-                    {pendingImport.preview.summary.properties} imported{" "}
-                    {pendingImport.preview.summary.properties === 1 ? "property" : "properties"} to it.
-                    You can re-assign them on the Properties page afterwards.
+                    {t("sidebar.importLegacyNote", { count: pendingImport.preview.summary.properties })}
                   </p>
                 ) : null}
               </div>
@@ -875,7 +871,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="button-import-cancel" onClick={handleCancelImport}>
-              Cancel
+              {t("common.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmImport}
@@ -887,10 +883,10 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               }
             >
               {importMode === "merge"
-                ? "Merge data"
+                ? t("sidebar.importMergeButton")
                 : pendingImport?.preview.migratedFromV1
-                  ? "Import and migrate"
-                  : "Replace data"}
+                  ? t("sidebar.importMigrateButton")
+                  : t("sidebar.importReplaceButton")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -899,15 +895,15 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
   );
 }
 
-const IMPORT_SUMMARY_TYPES: Array<{ key: keyof ImportSummary; label: string }> = [
-  { key: "customers", label: "Customers" },
-  { key: "properties", label: "Properties" },
-  { key: "leases", label: "Leases" },
-  { key: "rooms", label: "Rooms" },
-  { key: "beds", label: "Beds" },
-  { key: "occupants", label: "Occupants" },
-  { key: "utilities", label: "Utilities" },
-  { key: "roomNightLogs", label: "Room-night logs" },
+const IMPORT_SUMMARY_TYPES: Array<{ key: keyof ImportSummary; labelKey: string }> = [
+  { key: "customers", labelKey: "sidebar.summaryCustomers" },
+  { key: "properties", labelKey: "sidebar.summaryProperties" },
+  { key: "leases", labelKey: "sidebar.summaryLeases" },
+  { key: "rooms", labelKey: "sidebar.summaryRooms" },
+  { key: "beds", labelKey: "sidebar.summaryBeds" },
+  { key: "occupants", labelKey: "sidebar.summaryOccupants" },
+  { key: "utilities", labelKey: "sidebar.summaryUtilities" },
+  { key: "roomNightLogs", labelKey: "sidebar.summaryRoomNightLogs" },
 ];
 
 /**
@@ -917,20 +913,21 @@ const IMPORT_SUMMARY_TYPES: Array<{ key: keyof ImportSummary; label: string }> =
  * added/updated/unchanged breakdown on top.
  */
 function ImportSummaryList({ summary }: { summary: ImportSummary }) {
+  const { t } = useTranslation();
   return (
     <div
       className="rounded-md border border-border bg-muted/40 p-3 space-y-1"
       data-testid="import-preview-summary"
     >
-      <p className="text-sm font-medium">What&apos;s in this file</p>
+      <p className="text-sm font-medium">{t("sidebar.summaryTitle")}</p>
       <ul className="text-sm text-muted-foreground space-y-0.5">
-        {IMPORT_SUMMARY_TYPES.map(({ key, label }) => (
+        {IMPORT_SUMMARY_TYPES.map(({ key, labelKey }) => (
           <li
             key={key}
             className="flex justify-between gap-2 tabular-nums"
             data-testid={`import-preview-summary-row-${key}`}
           >
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
             <span>{summary[key]}</span>
           </li>
         ))}
@@ -939,15 +936,15 @@ function ImportSummaryList({ summary }: { summary: ImportSummary }) {
   );
 }
 
-const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; label: string }> = [
-  { key: "customers", label: "Customers" },
-  { key: "properties", label: "Properties" },
-  { key: "leases", label: "Leases" },
-  { key: "rooms", label: "Rooms" },
-  { key: "beds", label: "Beds" },
-  { key: "occupants", label: "Occupants" },
-  { key: "utilities", label: "Utilities" },
-  { key: "roomNightLogs", label: "Room-night logs" },
+const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; labelKey: string }> = [
+  { key: "customers", labelKey: "sidebar.summaryCustomers" },
+  { key: "properties", labelKey: "sidebar.summaryProperties" },
+  { key: "leases", labelKey: "sidebar.summaryLeases" },
+  { key: "rooms", labelKey: "sidebar.summaryRooms" },
+  { key: "beds", labelKey: "sidebar.summaryBeds" },
+  { key: "occupants", labelKey: "sidebar.summaryOccupants" },
+  { key: "utilities", labelKey: "sidebar.summaryUtilities" },
+  { key: "roomNightLogs", labelKey: "sidebar.summaryRoomNightLogs" },
 ];
 
 /**
@@ -956,9 +953,10 @@ const MERGE_PREVIEW_TYPES: Array<{ key: keyof MergeDryRun; label: string }> = [
  * Lets operators spot accidental overwrites BEFORE confirming the merge.
  */
 function MergePreview({ dryRun }: { dryRun: MergeDryRun }) {
+  const { t } = useTranslation();
   const totals = totalMergeDryRun(dryRun);
   const hasAnyUpdate = MERGE_PREVIEW_TYPES.some(
-    (t) => dryRun[t.key].updatedItems.length > 0,
+    (m) => dryRun[m.key].updatedItems.length > 0,
   );
   return (
     <div
@@ -966,28 +964,28 @@ function MergePreview({ dryRun }: { dryRun: MergeDryRun }) {
       data-testid="merge-import-preview"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">What this merge will do</p>
+        <p className="text-sm font-medium">{t("sidebar.mergePreviewTitle")}</p>
         <p className="text-xs text-muted-foreground tabular-nums" data-testid="merge-import-preview-totals">
-          {totals.added} added · {totals.updated} updated · {totals.unchanged} unchanged
+          {t("sidebar.mergePreviewTotals", { added: totals.added, updated: totals.updated, unchanged: totals.unchanged })}
         </p>
       </div>
       <ul className="text-sm text-muted-foreground space-y-0.5">
-        {MERGE_PREVIEW_TYPES.map(({ key, label }) => {
+        {MERGE_PREVIEW_TYPES.map(({ key, labelKey }) => {
           const cat = dryRun[key];
           if (cat.added === 0 && cat.updated === 0 && cat.unchanged === 0) {
             return null;
           }
           return (
             <li key={key} className="flex justify-between gap-2 tabular-nums" data-testid={`merge-preview-row-${key}`}>
-              <span>{label}</span>
+              <span>{t(labelKey)}</span>
               <span>
-                <span className="text-emerald-700 dark:text-emerald-400">{cat.added} added</span>
+                <span className="text-emerald-700 dark:text-emerald-400">{t("sidebar.mergeAdded", { count: cat.added })}</span>
                 {", "}
                 <span className={cn(cat.updated > 0 && "text-amber-700 dark:text-amber-400 font-medium")}>
-                  {cat.updated} updated
+                  {t("sidebar.mergeUpdated", { count: cat.updated })}
                 </span>
                 {", "}
-                <span>{cat.unchanged} unchanged</span>
+                <span>{t("sidebar.mergeUnchanged", { count: cat.unchanged })}</span>
               </span>
             </li>
           );
@@ -1000,17 +998,16 @@ function MergePreview({ dryRun }: { dryRun: MergeDryRun }) {
             data-testid="merge-preview-overwrites-toggle"
           >
             <ChevronRight className="h-3 w-3 transition-transform group-data-[state=open]:rotate-90" />
-            Show records that would be overwritten ({totals.updated})
+            {t("sidebar.mergeOverwritesToggle", { count: totals.updated })}
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2">
             <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               <p className="mb-1">
-                These existing records share an id with the file and will be replaced. Any local
-                edits to them will be lost.
+                {t("sidebar.mergeOverwritesWarning")}
               </p>
               <ul className="space-y-1">
-                {MERGE_PREVIEW_TYPES.map(({ key, label }) => (
-                  <MergeOverwriteList key={key} label={label} category={dryRun[key]} typeKey={key} />
+                {MERGE_PREVIEW_TYPES.map(({ key, labelKey }) => (
+                  <MergeOverwriteList key={key} label={t(labelKey)} category={dryRun[key]} typeKey={key} />
                 ))}
               </ul>
             </div>

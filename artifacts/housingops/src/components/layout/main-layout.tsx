@@ -1,5 +1,5 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Briefcase, Copy, Menu, Receipt, X } from "lucide-react";
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { Briefcase, Copy, Menu, X } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
 import { Link, Redirect, useLocation } from "wouter";
@@ -112,7 +112,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => setDrawerOpen(true)}
                 className="flex min-w-0 items-center gap-1.5 text-left"
-                aria-label={`Filtered by customer: ${activeScopedCustomer.name}. Open navigation.`}
+                aria-label={t("nav.filteredByCustomerAriaOpenNav", { name: activeScopedCustomer.name })}
               >
                 <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                 <span
@@ -172,16 +172,14 @@ function DataIssuesBanner({
 }: {
   issues: { kind: string; label: string; dropped: number; rows: DroppedRow[] }[];
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const copyId = async (id: string) => {
     try {
       await navigator.clipboard.writeText(id);
-      toast({ title: "Copied", description: `Copied id ${id} to clipboard.` });
+      toast({ title: t("toasts.copiedTitle"), description: t("toasts.copiedIdDescription", { id }) });
     } catch {
-      // Older browsers / restrictive contexts may block writeText. Fall
-      // back to a textarea + execCommand so the operator still gets the
-      // id onto their clipboard instead of a silent failure.
       try {
         const ta = document.createElement("textarea");
         ta.value = id;
@@ -191,11 +189,11 @@ function DataIssuesBanner({
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
-        toast({ title: "Copied", description: `Copied id ${id} to clipboard.` });
+        toast({ title: t("toasts.copiedTitle"), description: t("toasts.copiedIdDescription", { id }) });
       } catch {
         toast({
-          title: "Could not copy",
-          description: `Select and copy manually: ${id}`,
+          title: t("toasts.couldNotCopyTitle"),
+          description: t("toasts.couldNotCopyDescription", { id }),
           variant: "destructive",
         });
       }
@@ -209,8 +207,7 @@ function DataIssuesBanner({
       className="mx-4 mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
     >
       <div data-testid="banner-data-issues-summary">
-        {issues.map((i) => `${i.dropped} ${i.label}`).join(", ")} hidden — see
-        console for details.
+        {t("mainLayout.dataIssuesHidden", { summary: issues.map((i) => `${i.dropped} ${i.label}`).join(", ") })}
       </div>
       <ul className="mt-1.5 space-y-0.5">
         {issues.flatMap((issue) =>
@@ -246,7 +243,7 @@ function DataIssuesBanner({
                   </code>
                 ) : (
                   <span className="italic text-amber-800/80 dark:text-amber-300/80">
-                    (no id — see console)
+                    {t("mainLayout.dataIssueNoId")}
                   </span>
                 )}
                 {row.id && row.href ? (
@@ -256,7 +253,7 @@ function DataIssuesBanner({
                     data-issue-kind={issue.kind}
                     className="underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
                   >
-                    Open
+                    {t("mainLayout.dataIssueOpen")}
                   </Link>
                 ) : row.id ? (
                   <button
@@ -265,10 +262,10 @@ function DataIssuesBanner({
                     data-testid={`data-issue-row-copy-${rowSuffix}`}
                     data-issue-kind={issue.kind}
                     className="inline-flex items-center gap-1 rounded border border-amber-300 px-1.5 py-0.5 text-[10px] hover:bg-amber-100 dark:border-amber-700/60 dark:hover:bg-amber-900/40"
-                    aria-label={`Copy ${singular} id ${row.id}`}
+                    aria-label={t("mainLayout.dataIssueCopyAria", { type: singular, id: row.id })}
                   >
                     <Copy className="h-3 w-3" />
-                    Copy id
+                    {t("mainLayout.dataIssueCopyId")}
                   </button>
                 ) : null}
               </li>

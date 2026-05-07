@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,19 +10,11 @@ import { Plus } from "lucide-react";
 import type { Customer, Lease, Property } from "@/data/mockData";
 
 export interface AddLeaseDialogProps {
-  /**
-   * Pre-bind the dialog to a property (Property Detail tab). When omitted,
-   * the dialog renders a property picker (global Leases page).
-   */
   propertyId?: string;
-  /** All properties — used to populate the picker when {@link propertyId} is omitted. */
   properties?: readonly Property[];
-  /** All customers — used to annotate property options with the owning customer's name. */
   customers?: readonly Customer[];
   onAdd: (lease: Lease) => void;
-  /** Override the trigger; defaults to a "Add Lease" button. */
   trigger?: React.ReactNode;
-  /** Optional controlled-open mode (used by the Upload-PDF flow). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
@@ -55,6 +48,7 @@ export function AddLeaseDialog({
   open: controlledOpen,
   onOpenChange,
 }: AddLeaseDialogProps) {
+  const { t } = useTranslation();
   const customerNameById = new Map((customers ?? []).map((c) => [c.id, c.name] as const));
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -65,14 +59,12 @@ export function AddLeaseDialog({
 
   const [form, setForm] = useState<DraftState>({ ...EMPTY_DRAFT, propertyId: propertyId ?? "" });
 
-  // Keep the bound propertyId in sync if it changes while the dialog is open.
   useEffect(() => {
     if (propertyId) {
       setForm((f) => ({ ...f, propertyId }));
     }
   }, [propertyId]);
 
-  // Reset whenever the dialog closes so reopening doesn't show stale input.
   useEffect(() => {
     if (!open) {
       setForm({ ...EMPTY_DRAFT, propertyId: propertyId ?? "" });
@@ -99,8 +91,6 @@ export function AddLeaseDialog({
       securityDeposit: parseFloat(form.securityDeposit) || 0,
       status: form.status,
       notes: form.notes,
-      // Extended fields default empty here — operators fill them in from the
-      // dedicated lease detail page after creation.
       clauses: "",
       buyoutAvailable: false,
       buyoutCost: null,
@@ -117,41 +107,39 @@ export function AddLeaseDialog({
   const triggerEl = trigger ?? (
     <Button size="sm" data-testid="button-add-lease">
       <Plus className="h-4 w-4 mr-1.5" />
-      Add Lease
+      {t("dialogs.addLease.triggerLabel")}
     </Button>
   );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {/* When controlled externally we skip the trigger entirely. */}
       {controlledOpen === undefined && (
         <DialogTrigger asChild>{triggerEl}</DialogTrigger>
       )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Lease</DialogTitle>
+          <DialogTitle>{t("dialogs.addLease.title")}</DialogTitle>
           {showPicker && (
             <DialogDescription>
-              Pick the property this lease covers, then fill in the dates and
-              amounts.
+              {t("dialogs.addLease.description")}
             </DialogDescription>
           )}
         </DialogHeader>
         <div className="space-y-3 pt-2">
           {showPicker && (
             <div>
-              <Label htmlFor="add-lease-property">Property *</Label>
+              <Label htmlFor="add-lease-property">{t("dialogs.addLease.propertyRequired")}</Label>
               <Select
                 value={form.propertyId}
                 onValueChange={(v) => setForm((f) => ({ ...f, propertyId: v }))}
               >
                 <SelectTrigger id="add-lease-property" data-testid="select-add-lease-property">
-                  <SelectValue placeholder="Choose a property" />
+                  <SelectValue placeholder={t("dialogs.addLease.chooseProperty")} />
                 </SelectTrigger>
                 <SelectContent>
                   {propertyList.length === 0 ? (
                     <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                      No properties yet. Add one first.
+                      {t("dialogs.addLease.noPropertiesYet")}
                     </div>
                   ) : (
                     propertyList.map((p) => {
@@ -172,7 +160,7 @@ export function AddLeaseDialog({
           )}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Start Date *</Label>
+              <Label>{t("dialogs.addLease.startDateRequired")}</Label>
               <Input
                 type="date"
                 value={form.startDate}
@@ -181,7 +169,7 @@ export function AddLeaseDialog({
               />
             </div>
             <div>
-              <Label>End Date *</Label>
+              <Label>{t("dialogs.addLease.endDateRequired")}</Label>
               <Input
                 type="date"
                 value={form.endDate}
@@ -190,7 +178,7 @@ export function AddLeaseDialog({
               />
             </div>
             <div>
-              <Label>Monthly Rent ($) *</Label>
+              <Label>{t("dialogs.addLease.monthlyRentRequired")}</Label>
               <Input
                 type="number"
                 value={form.monthlyRent}
@@ -199,7 +187,7 @@ export function AddLeaseDialog({
               />
             </div>
             <div>
-              <Label>Security Deposit ($)</Label>
+              <Label>{t("dialogs.addLease.securityDeposit")}</Label>
               <Input
                 type="number"
                 value={form.securityDeposit}
@@ -209,7 +197,7 @@ export function AddLeaseDialog({
             </div>
           </div>
           <div>
-            <Label>Status</Label>
+            <Label>{t("dialogs.addLease.status")}</Label>
             <Select
               value={form.status}
               onValueChange={(v) => setForm((f) => ({ ...f, status: v as Lease["status"] }))}
@@ -218,14 +206,14 @@ export function AddLeaseDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-                <SelectItem value="Upcoming">Upcoming</SelectItem>
+                <SelectItem value="Active">{t("dialogs.addLease.statusActive")}</SelectItem>
+                <SelectItem value="Expired">{t("dialogs.addLease.statusExpired")}</SelectItem>
+                <SelectItem value="Upcoming">{t("dialogs.addLease.statusUpcoming")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Notes</Label>
+            <Label>{t("dialogs.addLease.notes")}</Label>
             <Textarea
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -234,9 +222,9 @@ export function AddLeaseDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>{t("dialogs.addLease.cancel")}</Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="button-save-lease">
-            Add Lease
+            {t("dialogs.addLease.submit")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -275,6 +275,32 @@ describe("GET /leases — dynamic status derivation (task #309 / #327)", () => {
     },
   );
 
+  // Task #376 — per-row safeParse pass-through. When a row has a field
+  // that fails Zod validation entirely (e.g. monthlyRent is null
+  // instead of a number, which happens when PostgreSQL stores NaN and
+  // JSON.stringify serialises it as null), the route must still return
+  // 200 and include the malformed row in the response so the frontend's
+  // safeParseList can drop it and show the data-issues banner.
+  it("passes through a row with null monthlyRent (Zod-invalid) alongside clean rows (task #376)", async () => {
+    store.set(
+      "l-bad",
+      makeLease({
+        id: "l-bad",
+        monthlyRent: null as unknown as number,
+      }),
+    );
+    store.set("l-clean", makeLease({ id: "l-clean" }));
+
+    const res = await fetch(`${baseUrl}/api/leases`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as LeaseRow[];
+    expect(rows).toHaveLength(2);
+    const ids = rows.map((r) => r.id).sort();
+    expect(ids).toEqual(["l-bad", "l-clean"]);
+    const bad = rows.find((r) => r.id === "l-bad")!;
+    expect(bad.monthlyRent).toBeNull();
+  });
+
   // Task #365 — single normalizer at the DB ↔ API boundary. A lease
   // row that somehow landed in the DB with an off-list `status` or
   // `rateType` (legacy import, hand-edited row, future enum value

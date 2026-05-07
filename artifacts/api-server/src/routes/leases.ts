@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, leasesTable, type LeaseRow } from "@workspace/db";
 import {
   ListLeasesResponse,
+  ListLeasesResponseItem,
   CreateLeaseBody,
   UpdateLeaseParams,
   UpdateLeaseBody,
@@ -26,16 +27,23 @@ function withDerivedStatus(row: LeaseRow): LeaseRow {
 
 router.get("/leases", async (_req, res): Promise<void> => {
   const rows = await db.select().from(leasesTable).orderBy(leasesTable.id);
-  // Normalize each row at the DB ↔ API boundary (Task #365) so legacy
-  // values — datetime-style date strings, unknown enum members — are
-  // coerced to the canonical shape before `ListLeasesResponse.parse`
-  // sees them. One bad row used to 500 the whole list because zod
-  // validates the entire array atomically.
-  res.json(
-    ListLeasesResponse.parse(
-      rows.map((r) => withDerivedStatus(normalizeLeaseRow(r) as LeaseRow)),
-    ),
+  const normalized = rows.map((r) =>
+    withDerivedStatus(normalizeLeaseRow(r) as LeaseRow),
   );
+  const out: unknown[] = [];
+  for (const row of normalized) {
+    const result = ListLeasesResponseItem.safeParse(row);
+    if (result.success) {
+      out.push(result.data);
+    } else {
+      console.warn(
+        `[leases] Passing through malformed row ${(row as Record<string, unknown>).id ?? "??"} for client-side handling:`,
+        result.error.issues,
+      );
+      out.push(row);
+    }
+  }
+  res.json(out);
 });
 
 // Note on date validation: the lease `startDate` / `endDate` fields are

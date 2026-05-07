@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, roomsTable, bedsTable } from "@workspace/db";
 import {
   ListRoomsResponse,
+  ListRoomsResponseItem,
   CreateRoomBody,
   UpdateRoomParams,
   UpdateRoomBody,
@@ -15,7 +16,20 @@ const router: IRouter = Router();
 
 router.get("/rooms", async (_req, res): Promise<void> => {
   const rows = await db.select().from(roomsTable).orderBy(roomsTable.id);
-  res.json(ListRoomsResponse.parse(rows));
+  const out: unknown[] = [];
+  for (const row of rows) {
+    const result = ListRoomsResponseItem.safeParse(row);
+    if (result.success) {
+      out.push(result.data);
+    } else {
+      console.warn(
+        `[rooms] Passing through malformed row ${(row as Record<string, unknown>).id ?? "??"} for client-side handling:`,
+        result.error.issues,
+      );
+      out.push(row);
+    }
+  }
+  res.json(out);
 });
 
 router.post("/rooms", async (req, res): Promise<void> => {

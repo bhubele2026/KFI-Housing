@@ -132,21 +132,24 @@ function pdfFormData(
 describe("POST /api/leases/import-pdf", () => {
   it("returns the parsed lease + ranked candidates on a happy-path upload", async () => {
     vi.mocked(extractLeaseFromText).mockResolvedValue({
-      propertyName: "Maple Court Apartments",
-      propertyAddress: "123 Maple St",
-      city: "Austin",
-      state: "TX",
-      zip: "78701",
-      landlordName: "ACME Properties LLC",
-      startDate: "2026-01-01",
-      endDate: "2026-12-31",
-      monthlyRent: 4800,
-      securityDeposit: 4800,
-      notes: "12-month residential lease.",
-      clauses: "",
-      buyoutAvailable: false,
-      buyoutCost: null,
-      confidence: "high",
+      extracted: {
+        propertyName: "Maple Court Apartments",
+        propertyAddress: "123 Maple St",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        landlordName: "ACME Properties LLC",
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        monthlyRent: 4800,
+        securityDeposit: 4800,
+        notes: "12-month residential lease.",
+        clauses: "",
+        buyoutAvailable: false,
+        buyoutCost: null,
+        confidence: "high",
+      },
+      fixups: [],
     });
 
     // Two .from() calls (properties, customers) in the route — return the
@@ -274,23 +277,64 @@ describe("POST /api/leases/import-pdf", () => {
     expect(body.error).toMatch(/extract/i);
   });
 
+  it("propagates non-empty fixups from extractLeaseFromText into the response (Task #372)", async () => {
+    // Simulate the boundary normaliser having coerced a stray date format
+    // — operator should see this in the review dialog rather than silently
+    // get a rewritten value in the DB.
+    vi.mocked(extractLeaseFromText).mockResolvedValue({
+      extracted: {
+        propertyName: "Maple Court Apartments",
+        propertyAddress: "123 Maple St",
+        city: "Austin",
+        state: "TX",
+        zip: "78701",
+        landlordName: "ACME Properties LLC",
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        monthlyRent: 4800,
+        securityDeposit: 4800,
+        notes: "",
+        clauses: "",
+        buyoutAvailable: false,
+        buyoutCost: null,
+        confidence: "high",
+      },
+      fixups: [
+        { field: "lease.startDate", before: "2026-01-01 00:00:00", after: "2026-01-01" },
+      ],
+    });
+    dbSelectMock.mockResolvedValue([]);
+
+    const res = await postPdf(pdfFormData(makeTestPdfBuffer()));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      fixups: Array<{ field: string; before: string; after: string }>;
+    };
+    expect(body.fixups).toEqual([
+      { field: "lease.startDate", before: "2026-01-01 00:00:00", after: "2026-01-01" },
+    ]);
+  });
+
   it("returns topMatch=null when no candidate clears the noise floor", async () => {
     vi.mocked(extractLeaseFromText).mockResolvedValue({
-      propertyName: "Some Random Building",
-      propertyAddress: "Some Random Address",
-      city: "Phoenix",
-      state: "AZ",
-      zip: "85001",
-      landlordName: null,
-      startDate: null,
-      endDate: null,
-      monthlyRent: null,
-      securityDeposit: null,
-      notes: "",
-      clauses: "",
-      buyoutAvailable: false,
-      buyoutCost: null,
-      confidence: "low",
+      extracted: {
+        propertyName: "Some Random Building",
+        propertyAddress: "Some Random Address",
+        city: "Phoenix",
+        state: "AZ",
+        zip: "85001",
+        landlordName: null,
+        startDate: null,
+        endDate: null,
+        monthlyRent: null,
+        securityDeposit: null,
+        notes: "",
+        clauses: "",
+        buyoutAvailable: false,
+        buyoutCost: null,
+        confidence: "low",
+      },
+      fixups: [],
     });
 
     // A property that won't share enough tokens to clear 0.6.

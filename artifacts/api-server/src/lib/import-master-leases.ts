@@ -23,7 +23,20 @@ import {
   normalizeCustomerRow,
   normalizePropertyRow,
   normalizeLeaseRow,
+  type NormalizerFixup,
 } from "./db-row-normalizers";
+
+/**
+ * One coercion the boundary normalizer applied while writing a row.
+ * `field` is prefixed with the target table (`customer.state`,
+ * `property.paymentMethod`, `lease.startDate`, …) so the operator can
+ * tell which value in the source spreadsheet needs cleaning up.
+ */
+export interface RowFixup {
+  field: string;
+  before: string;
+  after: string;
+}
 
 /** Per-row outcome surfaced in the import summary. */
 export interface RowDecision {
@@ -39,6 +52,12 @@ export interface RowDecision {
   leaseId?: string;
   needsReview: boolean;
   reviewReasons: string[];
+  /**
+   * Fix-ups the boundary normalizer applied to this row's
+   * customer/property/lease values on the way into the DB (Task #372).
+   * Empty when every cell already matched the canonical contract.
+   */
+  fixups: RowFixup[];
 }
 
 export interface ImportSummary {
@@ -56,6 +75,13 @@ export interface ImportSummary {
     distance: number;
   }>;
   decisions: RowDecision[];
+  /**
+   * Subset of `decisions` whose row had at least one normaliser fix-up
+   * applied (Task #372). Operators use this list to find source-file
+   * cells that should be cleaned up upstream so future imports stop
+   * needing the boundary coercion.
+   */
+  rowsWithFixups: RowDecision[];
 }
 
 export interface ImportDeps {
@@ -218,7 +244,30 @@ export async function importMasterLeases(
     rowsNeedingReview: [],
     fuzzyCustomerMatches: [],
     decisions: [],
+    rowsWithFixups: [],
   };
+
+  // Helper used by the per-table upsert helpers below: runs the
+  // boundary normaliser with a fresh local collector, then folds the
+  // resulting fix-ups into the supplied per-row collector with the
+  // table prefix so the operator can tell `lease.startDate` from
+  // `property.paymentMethod`.
+  function withFixups<T>(
+    rowFixups: RowFixup[],
+    target: "customer" | "property" | "lease",
+    fn: (collector: NormalizerFixup[]) => T,
+  ): T {
+    const local: NormalizerFixup[] = [];
+    const result = fn(local);
+    for (const f of local) {
+      rowFixups.push({
+        field: `${target}.${f.field}`,
+        before: f.before,
+        after: f.after,
+      });
+    }
+    return result;
+  }
 
   await database.transaction(async (tx) => {
     // ── Pre-flight scan: load every existing customer/property/lease so
@@ -327,7 +376,10 @@ export async function importMasterLeases(
       return `${prefix}-${slug || Date.now().toString(36)}`;
     }
 
-    async function upsertCustomer(row: MasterRow): Promise<{
+    async function upsertCustomer(
+      row: MasterRow,
+      rowFixups: RowFixup[],
+    ): Promise<{
       id: string;
       action: "created" | "updated" | "matched";
       reason: string;
@@ -338,7 +390,11 @@ export async function importMasterLeases(
         if (row.state && found.match.state !== row.state) {
           await tx
             .update(customersTable)
-            .set(normalizeCustomerRow({ state: row.state }))
+            .set(
+              withFixups(rowFixups, "customer", (f) =>
+                normalizeCustomerRow({ state: row.state }, f),
+              ),
+            )
             .where(eq(customersTable.id, found.match.id));
           found.match.state = row.state;
           summary.customersUpdated += 1;
@@ -358,7 +414,11 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(customersTable)
-        .values(normalizeCustomerRow(insert))
+        .values(
+          withFixups(rowFixups, "customer", (f) =>
+            normalizeCustomerRow(insert, f),
+          ),
+        )
         .onConflictDoNothing()
         .returning({ id: customersTable.id });
       if (inserted.length === 0) {
@@ -401,6 +461,7 @@ export async function importMasterLeases(
       addr: NonNullable<MasterRow["primary"]>,
       complexName: string,
       units: string,
+      rowFixups: RowFixup[],
     ): Promise<{
       id: string;
       action: "created" | "updated" | "matched";
@@ -430,7 +491,11 @@ export async function importMasterLeases(
         if (Object.keys(updates).length > 0) {
           await tx
             .update(propertiesTable)
-            .set(normalizePropertyRow(updates))
+            .set(
+              withFixups(rowFixups, "property", (f) =>
+                normalizePropertyRow(updates, f),
+              ),
+            )
             .where(eq(propertiesTable.id, found.match.id));
           summary.propertiesUpdated += 1;
           return { id: found.match.id, action: "updated", reason: found.reason };
@@ -452,7 +517,11 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(propertiesTable)
-        .values(normalizePropertyRow(insert))
+        .values(
+          withFixups(rowFixups, "property", (f) =>
+            normalizePropertyRow(insert, f),
+          ),
+        )
         .onConflictDoNothing()
         .returning({ id: propertiesTable.id });
       if (inserted.length > 0) {
@@ -494,6 +563,7 @@ export async function importMasterLeases(
       customerId: string,
       propertyId: string,
       row: MasterRow,
+      rowFixups: RowFixup[],
     ): Promise<{
       id: string | undefined;
       action: "created" | "updated" | "skipped";
@@ -557,7 +627,11 @@ export async function importMasterLeases(
         if (monthly > 0) updates.monthlyRent = monthly;
         await tx
           .update(leasesTable)
-          .set(normalizeLeaseRow(updates))
+          .set(
+            withFixups(rowFixups, "lease", (f) =>
+              normalizeLeaseRow(updates, f),
+            ),
+          )
           .where(eq(leasesTable.id, match.id));
         summary.leasesUpdated += 1;
         return { id: match.id, action: "updated" };
@@ -590,7 +664,11 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(leasesTable)
-        .values(normalizeLeaseRow(insert))
+        .values(
+          withFixups(rowFixups, "lease", (f) =>
+            normalizeLeaseRow(insert, f),
+          ),
+        )
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length === 0) {
@@ -609,7 +687,8 @@ export async function importMasterLeases(
     }
 
     for (const row of parsed) {
-      const cust = await upsertCustomer(row);
+      const rowFixups: RowFixup[] = [];
+      const cust = await upsertCustomer(row, rowFixups);
 
       let primaryPropertyId: string | undefined;
       let primaryAction: RowDecision["propertyAction"] = "skipped";
@@ -623,6 +702,7 @@ export async function importMasterLeases(
           row.primary,
           complex,
           units,
+          rowFixups,
         );
         primaryPropertyId = up.id;
         primaryAction = up.action;
@@ -637,6 +717,7 @@ export async function importMasterLeases(
           row.secondary.address,
           row.secondary.complexName,
           row.secondary.address.units,
+          rowFixups,
         );
       }
 
@@ -645,7 +726,7 @@ export async function importMasterLeases(
         action: "created" | "updated" | "skipped";
       } = { id: undefined, action: "skipped" };
       if (primaryPropertyId) {
-        leaseRes = await upsertLease(cust.id, primaryPropertyId, row);
+        leaseRes = await upsertLease(cust.id, primaryPropertyId, row, rowFixups);
       }
 
       const decision: RowDecision = {
@@ -661,9 +742,11 @@ export async function importMasterLeases(
         leaseId: leaseRes.id,
         needsReview: row.reviewReasons.length > 0 || row.weeklyCost === null,
         reviewReasons: row.reviewReasons,
+        fixups: rowFixups,
       };
       summary.decisions.push(decision);
       if (decision.needsReview) summary.rowsNeedingReview.push(decision);
+      if (rowFixups.length > 0) summary.rowsWithFixups.push(decision);
     }
   });
 
@@ -678,6 +761,7 @@ export async function importMasterLeases(
       leasesSkipped: summary.leasesSkipped,
       needsReview: summary.rowsNeedingReview.length,
       fuzzyMatches: summary.fuzzyCustomerMatches.length,
+      rowsWithFixups: summary.rowsWithFixups.length,
     },
     "Master lease import complete.",
   );

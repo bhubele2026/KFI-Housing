@@ -213,6 +213,25 @@ describe("importMasterLeases", () => {
     }
   });
 
+  // Task #372: every decision carries a `fixups` list (empty when the
+  // boundary normaliser had nothing to coerce), and the summary
+  // exposes `rowsWithFixups` as a quick filter the UI can render. The
+  // real master file's importer-owned fields are all canonical, so
+  // `rowsWithFixups` is empty in practice — but the plumbing must
+  // still be present so future bad cells surface to the operator.
+  it("exposes a per-row fixups list and a rowsWithFixups summary", async () => {
+    const rows = await loadRealRows();
+    const summary = await importMasterLeases(rows, { logger: silentLogger });
+    expect(summary.decisions.length).toBeGreaterThan(0);
+    for (const d of summary.decisions) {
+      expect(Array.isArray(d.fixups)).toBe(true);
+    }
+    expect(Array.isArray(summary.rowsWithFixups)).toBe(true);
+    for (const d of summary.rowsWithFixups) {
+      expect(d.fixups.length).toBeGreaterThan(0);
+    }
+  });
+
   it("matches an existing Adient customer by natural-key (no duplicate)", async () => {
     // Pre-seed the DB with an Adient customer from task #283 (different id).
     stores.customers.set("operator-adient", {

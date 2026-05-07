@@ -1,6 +1,38 @@
 import { z } from "zod";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import type { PropertyRow, CustomerRow } from "@workspace/db";
+import {
+  normalizeLeaseRow,
+  type NormalizerFixup,
+} from "./db-row-normalizers";
+
+/**
+ * One coercion the boundary normaliser applied while preparing the
+ * extracted lease for the operator-facing review dialog (Task #372).
+ * `field` is prefixed with the target table (`lease.startDate`, …)
+ * so the operator can tell which extracted value was rewritten before
+ * it would land in the DB.
+ */
+export interface LeasePdfFixup {
+  field: string;
+  before: string;
+  after: string;
+}
+
+/** Public return shape of `extractLeaseFromText`. */
+export interface ExtractLeaseResult {
+  extracted: ExtractedLease;
+  /**
+   * Fix-ups the boundary normaliser would apply when this extracted
+   * lease is committed to the DB. Empty when the LLM extraction
+   * already matched the canonical contract — which is the common case
+   * because `ExtractedLeaseSchema` validates dates with a strict
+   * regex. The plumbing is in place so future stricter columns
+   * (e.g. an enum on rate type) automatically surface coercions to
+   * the operator at import time rather than silently in the DB.
+   */
+  fixups: LeasePdfFixup[];
+}
 
 // ---------------------------------------------------------------------------
 // LLM extraction
@@ -78,7 +110,9 @@ Rules:
   are null.
 - Output JSON only.`;
 
-export async function extractLeaseFromText(text: string): Promise<ExtractedLease> {
+export async function extractLeaseFromText(
+  text: string,
+): Promise<ExtractLeaseResult> {
   // Guard against absurdly long PDFs — Claude can take 200k tokens but
   // there is no need to send a whole novel. ~20k chars is plenty for any
   // real-world residential lease.
@@ -131,7 +165,25 @@ export async function extractLeaseFromText(text: string): Promise<ExtractedLease
     result.buyoutCost = null;
   }
 
-  return result;
+  // Run the boundary normaliser over the projection of the extracted
+  // lease that would actually be written to the DB, and surface any
+  // resulting fix-ups so the operator sees them in the review dialog
+  // — not silently after the row lands in the DB (Task #372).
+  const normFixups: NormalizerFixup[] = [];
+  normalizeLeaseRow(
+    {
+      startDate: result.startDate ?? "",
+      endDate: result.endDate ?? "",
+    },
+    normFixups,
+  );
+  const fixups: LeasePdfFixup[] = normFixups.map((f) => ({
+    field: `lease.${f.field}`,
+    before: f.before,
+    after: f.after,
+  }));
+
+  return { extracted: result, fixups };
 }
 
 // ---------------------------------------------------------------------------

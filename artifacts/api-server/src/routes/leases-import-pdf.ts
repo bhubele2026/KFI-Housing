@@ -157,9 +157,9 @@ router.post(
         return;
       }
 
-      let extracted;
+      let extractResult;
       try {
-        extracted = await extractLeaseFromText(text);
+        extractResult = await extractLeaseFromText(text);
       } catch (err) {
         logger.error({ err }, "Lease LLM extraction failed");
         res.status(502).json({
@@ -167,6 +167,7 @@ router.post(
         });
         return;
       }
+      const { extracted, fixups } = extractResult;
 
       const [properties, customers] = await Promise.all([
         db.select().from(propertiesTable),
@@ -182,6 +183,12 @@ router.post(
         extracted,
         topMatch,
         candidates,
+        // Boundary-normaliser fix-ups applied to the extracted lease
+        // (Task #372). Empty in the common case; the reviewer dialog
+        // surfaces non-empty entries so the operator can clean up the
+        // source PDF rather than silently re-importing the same bad
+        // value next time.
+        fixups,
       });
     } finally {
       releaseImportSlot();

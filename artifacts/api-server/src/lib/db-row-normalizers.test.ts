@@ -4,6 +4,7 @@ import {
   normalizeLeaseRow,
   normalizePropertyRow,
   normalizeCustomerRow,
+  type NormalizerFixup,
 } from "./db-row-normalizers";
 
 describe("normalizeLeaseDate", () => {
@@ -118,5 +119,98 @@ describe("normalizeCustomerRow", () => {
     const out = normalizeCustomerRow(input);
     expect(out).toEqual(input);
     expect(out).not.toBe(input);
+  });
+});
+
+// --- Task #372: fix-up collector ---------------------------------------
+//
+// The normalisers optionally append a `{ field, before, after }` entry
+// to a caller-supplied collector for every coercion that actually
+// rewrote a non-empty caller-supplied value. Coercions of missing /
+// blank inputs to a default (null -> "", undefined -> "Active") are
+// NOT recorded — those aren't fix-ups, they're just defaults.
+describe("normalizer fixup collector", () => {
+  it("records property paymentMethod / status / rentFrequency coercions", () => {
+    const fixups: NormalizerFixup[] = [];
+    normalizePropertyRow(
+      {
+        paymentMethod: "Cash",
+        status: "Pending" as never,
+        rentFrequency: "Annually" as never,
+      },
+      fixups,
+    );
+    expect(fixups).toEqual([
+      { field: "paymentMethod", before: "Cash", after: "" },
+      { field: "status", before: "Pending", after: "Active" },
+      { field: "rentFrequency", before: "Annually", after: "Monthly" },
+    ]);
+  });
+
+  it("does NOT record fix-ups for known property values", () => {
+    const fixups: NormalizerFixup[] = [];
+    normalizePropertyRow(
+      { paymentMethod: "ACH", status: "Inactive", rentFrequency: "Weekly" },
+      fixups,
+    );
+    expect(fixups).toEqual([]);
+  });
+
+  it("does NOT record fix-ups when the input is missing / blank", () => {
+    // `null` paymentMethod -> "" is a default, not a coercion of
+    // operator-supplied data, so the operator shouldn't see it.
+    const fixups: NormalizerFixup[] = [];
+    normalizePropertyRow(
+      { paymentMethod: null as unknown as string, status: undefined as never },
+      fixups,
+    );
+    expect(fixups).toEqual([]);
+  });
+
+  it("records lease date / status / rateType coercions", () => {
+    const fixups: NormalizerFixup[] = [];
+    normalizeLeaseRow(
+      {
+        startDate: "2026-05-31 00:00:00",
+        endDate: "2027-05-31T00:00:00.000Z",
+        status: "pending" as never,
+        rateType: "annual" as never,
+      },
+      fixups,
+    );
+    expect(fixups).toEqual([
+      { field: "startDate", before: "2026-05-31 00:00:00", after: "2026-05-31" },
+      { field: "endDate", before: "2027-05-31T00:00:00.000Z", after: "2027-05-31" },
+      { field: "status", before: "pending", after: "Active" },
+      { field: "rateType", before: "annual", after: "monthly" },
+    ]);
+  });
+
+  it("does NOT record fix-ups for null lease dates (defaulted, not coerced)", () => {
+    const fixups: NormalizerFixup[] = [];
+    normalizeLeaseRow(
+      {
+        startDate: null as unknown as string,
+        endDate: null as unknown as string,
+      },
+      fixups,
+    );
+    expect(fixups).toEqual([]);
+  });
+
+  it("does NOT record a fix-up for an unrecognised date that is passed through unchanged", () => {
+    // `normalizeLeaseDate` deliberately passes through unrecognised
+    // strings so the schema's regex still surfaces them — the
+    // collector must mirror that decision and stay silent.
+    const fixups: NormalizerFixup[] = [];
+    normalizeLeaseRow({ startDate: "not-a-date" }, fixups);
+    expect(fixups).toEqual([]);
+  });
+
+  it("works without a collector (back-compat)", () => {
+    expect(() =>
+      normalizePropertyRow({ paymentMethod: "Cash" }),
+    ).not.toThrow();
+    expect(() => normalizeLeaseRow({ status: "pending" as never })).not.toThrow();
   });
 });

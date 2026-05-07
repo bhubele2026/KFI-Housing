@@ -9,6 +9,7 @@ import {
   UpdateBedResponse,
   DeleteBedParams,
 } from "@workspace/api-zod";
+import { normalizeBedRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,7 @@ router.post("/beds", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(bedsTable).values(body.data).returning();
+  const [row] = await db.insert(bedsTable).values(normalizeBedRow(body.data)).returning();
   res.status(201).json(UpdateBedResponse.parse(row));
 });
 
@@ -40,7 +41,7 @@ router.patch("/beds/:id", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .update(bedsTable)
-    .set(body.data)
+    .set(normalizeBedRow(body.data))
     .where(eq(bedsTable.id, params.data.id))
     .returning();
   if (!row) {

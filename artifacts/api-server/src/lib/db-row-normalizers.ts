@@ -40,6 +40,16 @@ import type {
   InsertLeaseRow,
   CustomerRow,
   InsertCustomerRow,
+  OccupantRow,
+  InsertOccupantRow,
+  RoomRow,
+  InsertRoomRow,
+  BedRow,
+  InsertBedRow,
+  RoomNightLogRow,
+  InsertRoomNightLogRow,
+  UtilityRow,
+  InsertUtilityRow,
 } from "@workspace/db";
 
 /**
@@ -249,4 +259,171 @@ export function normalizeCustomerRow<
   T extends Partial<CustomerRow> | Partial<InsertCustomerRow>,
 >(row: T, _fixups?: NormalizerFixup[]): T {
   return { ...row };
+}
+
+// ---------------------------------------------------------------------------
+// Occupants
+// ---------------------------------------------------------------------------
+
+const OCCUPANT_STATUSES = new Set<string>(["Active", "Former"]);
+const OCCUPANT_BILLING_FREQUENCIES = new Set<string>([
+  "Weekly",
+  "Biweekly",
+  "Monthly",
+]);
+const OCCUPANT_CHARGE_SOURCES = new Set<string>([
+  "",
+  "payroll",
+  "manual_override",
+]);
+const OCCUPANT_SHIFTS = new Set<string>(["1st", "2nd"]);
+
+function normalizeOccupantStatus(value: unknown): "Active" | "Former" {
+  if (typeof value === "string" && OCCUPANT_STATUSES.has(value)) {
+    return value as "Active" | "Former";
+  }
+  return "Active";
+}
+
+function normalizeOccupantBillingFrequency(
+  value: unknown,
+): "Weekly" | "Biweekly" | "Monthly" {
+  if (
+    typeof value === "string" &&
+    OCCUPANT_BILLING_FREQUENCIES.has(value)
+  ) {
+    return value as "Weekly" | "Biweekly" | "Monthly";
+  }
+  return "Monthly";
+}
+
+function normalizeChargeSource(
+  value: unknown,
+): "" | "payroll" | "manual_override" {
+  if (typeof value === "string" && OCCUPANT_CHARGE_SOURCES.has(value)) {
+    return value as "" | "payroll" | "manual_override";
+  }
+  return "";
+}
+
+function normalizeOccupantShift(value: unknown): "1st" | "2nd" | null {
+  if (typeof value === "string" && OCCUPANT_SHIFTS.has(value)) {
+    return value as "1st" | "2nd";
+  }
+  return null;
+}
+
+export function normalizeOccupantRow<
+  T extends Partial<OccupantRow> | Partial<InsertOccupantRow>,
+>(row: T, fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  if ("status" in row) {
+    const after = normalizeOccupantStatus(row.status);
+    recordFixup(fixups, "status", row.status, after);
+    out.status = after;
+  }
+  if ("billingFrequency" in row) {
+    const after = normalizeOccupantBillingFrequency(row.billingFrequency);
+    recordFixup(fixups, "billingFrequency", row.billingFrequency, after);
+    out.billingFrequency = after;
+  }
+  if ("chargeSource" in row) {
+    const after = normalizeChargeSource(row.chargeSource);
+    recordFixup(fixups, "chargeSource", row.chargeSource, after);
+    out.chargeSource = after;
+  }
+  if ("shift" in row) {
+    const after = normalizeOccupantShift(row.shift);
+    recordFixup(fixups, "shift", row.shift, after);
+    out.shift = after;
+  }
+  if ("moveInDate" in row) {
+    const after = normalizeLeaseDate(row.moveInDate as string | null);
+    recordFixup(fixups, "moveInDate", row.moveInDate, after);
+    out.moveInDate = after;
+  }
+  if ("moveOutDate" in row) {
+    const after = normalizeLeaseDate(row.moveOutDate as string | null);
+    recordFixup(fixups, "moveOutDate", row.moveOutDate, after);
+    out.moveOutDate = after;
+  }
+  return out as T;
+}
+
+// ---------------------------------------------------------------------------
+// Rooms
+// ---------------------------------------------------------------------------
+
+export function normalizeRoomRow<
+  T extends Partial<RoomRow> | Partial<InsertRoomRow>,
+>(row: T, _fixups?: NormalizerFixup[]): T {
+  return { ...row };
+}
+
+// ---------------------------------------------------------------------------
+// Beds
+// ---------------------------------------------------------------------------
+
+const BED_STATUSES = new Set<string>(["Occupied", "Vacant"]);
+
+function normalizeBedStatus(value: unknown): "Occupied" | "Vacant" {
+  if (typeof value === "string" && BED_STATUSES.has(value)) {
+    return value as "Occupied" | "Vacant";
+  }
+  return "Vacant";
+}
+
+export function normalizeBedRow<
+  T extends Partial<BedRow> | Partial<InsertBedRow>,
+>(row: T, fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  if ("status" in row) {
+    const after = normalizeBedStatus(row.status);
+    recordFixup(fixups, "status", row.status, after);
+    out.status = after;
+  }
+  return out as T;
+}
+
+// ---------------------------------------------------------------------------
+// Room-night logs
+// ---------------------------------------------------------------------------
+
+export function normalizeRoomNightLogRow<
+  T extends Partial<RoomNightLogRow> | Partial<InsertRoomNightLogRow>,
+>(row: T, _fixups?: NormalizerFixup[]): T {
+  return { ...row };
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+
+const UTILITY_TYPES = new Set<string>([
+  "Electric",
+  "Gas",
+  "Propane",
+  "Water",
+  "Garbage",
+  "Internet",
+  "Other",
+]);
+
+function normalizeUtilityType(value: unknown): string {
+  if (typeof value === "string" && UTILITY_TYPES.has(value)) {
+    return value;
+  }
+  return "Other";
+}
+
+export function normalizeUtilityRow<
+  T extends Partial<UtilityRow> | Partial<InsertUtilityRow>,
+>(row: T, fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  if ("type" in row) {
+    const after = normalizeUtilityType(row.type);
+    recordFixup(fixups, "type", row.type, after);
+    out.type = after;
+  }
+  return out as T;
 }

@@ -9,6 +9,7 @@ import {
   UpdateRoomNightLogResponse,
   DeleteRoomNightLogParams,
 } from "@workspace/api-zod";
+import { normalizeRoomNightLogRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -28,7 +29,7 @@ router.post("/room-night-logs", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .insert(roomNightLogsTable)
-    .values(body.data)
+    .values(normalizeRoomNightLogRow(body.data))
     .returning();
   res.status(201).json(UpdateRoomNightLogResponse.parse(row));
 });
@@ -46,7 +47,7 @@ router.patch("/room-night-logs/:id", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .update(roomNightLogsTable)
-    .set(body.data)
+    .set(normalizeRoomNightLogRow(body.data))
     .where(eq(roomNightLogsTable.id, params.data.id))
     .returning();
   if (!row) {

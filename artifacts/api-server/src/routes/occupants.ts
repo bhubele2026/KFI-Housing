@@ -9,6 +9,7 @@ import {
   UpdateOccupantResponse,
   DeleteOccupantParams,
 } from "@workspace/api-zod";
+import { normalizeOccupantRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -30,25 +31,22 @@ router.post("/occupants", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  if (!STRICT_DATE_RE.test(body.data.moveInDate)) {
+  const normalized = normalizeOccupantRow({
+    chargeSource: "",
+    chargeSourceCustomer: "",
+    chargeSourcePersonId: "",
+    ...body.data,
+  });
+  if (!STRICT_DATE_RE.test(normalized.moveInDate as string)) {
     res.status(400).json({
       error:
         "moveInDate is required when creating an occupant and must be in YYYY-MM-DD format.",
     });
     return;
   }
-  // Mirror the DB column defaults explicitly so the response always
-  // carries the chargeSource* provenance fields, even before the seeder
-  // has touched the row. New occupants created via this endpoint are
-  // manual entries by definition (the seeder uses `db.update` directly).
   const [row] = await db
     .insert(occupantsTable)
-    .values({
-      chargeSource: "",
-      chargeSourceCustomer: "",
-      chargeSourcePersonId: "",
-      ...body.data,
-    })
+    .values(normalized)
     .returning();
   res.status(201).json(UpdateOccupantResponse.parse(row));
 });
@@ -78,7 +76,7 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
   // The seeder is the only writer that should ever set chargeSource
   // back to "payroll", so when the caller explicitly sets any of the
   // chargeSource* fields we trust them and don't intervene.
-  const updates = { ...body.data };
+  const updates = normalizeOccupantRow({ ...body.data });
   const touchesCharge =
     Object.prototype.hasOwnProperty.call(updates, "chargePerBed") ||
     Object.prototype.hasOwnProperty.call(updates, "billingFrequency");

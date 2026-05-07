@@ -9,6 +9,7 @@ import {
   UpdateUtilityResponse,
   DeleteUtilityParams,
 } from "@workspace/api-zod";
+import { normalizeUtilityRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,7 @@ router.post("/utilities", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(utilitiesTable).values(body.data).returning();
+  const [row] = await db.insert(utilitiesTable).values(normalizeUtilityRow(body.data)).returning();
   res.status(201).json(UpdateUtilityResponse.parse(row));
 });
 
@@ -40,7 +41,7 @@ router.patch("/utilities/:id", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .update(utilitiesTable)
-    .set(body.data)
+    .set(normalizeUtilityRow(body.data))
     .where(eq(utilitiesTable.id, params.data.id))
     .returning();
   if (!row) {

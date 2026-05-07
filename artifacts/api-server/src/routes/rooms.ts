@@ -9,6 +9,7 @@ import {
   UpdateRoomResponse,
   DeleteRoomParams,
 } from "@workspace/api-zod";
+import { normalizeRoomRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -23,7 +24,7 @@ router.post("/rooms", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
-  const [row] = await db.insert(roomsTable).values(body.data).returning();
+  const [row] = await db.insert(roomsTable).values(normalizeRoomRow(body.data)).returning();
   res.status(201).json(UpdateRoomResponse.parse(row));
 });
 
@@ -40,7 +41,7 @@ router.patch("/rooms/:id", async (req, res): Promise<void> => {
   }
   const [row] = await db
     .update(roomsTable)
-    .set(body.data)
+    .set(normalizeRoomRow(body.data))
     .where(eq(roomsTable.id, params.data.id))
     .returning();
   if (!row) {

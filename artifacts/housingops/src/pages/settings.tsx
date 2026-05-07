@@ -118,14 +118,12 @@ export default function Settings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              Weekly Lease Digest Recipients
+              {t("pages.settings.digestRecipientsTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              These email addresses receive the weekly lease-expiry digest.
-              Changes take effect on the next scheduled send — no redeploy
-              required.
+              {t("pages.settings.digestRecipientsDescription")}
             </p>
 
             <div className="flex gap-2">
@@ -150,7 +148,7 @@ export default function Settings() {
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                <span className="ml-1">Add</span>
+                <span className="ml-1">{t("pages.settings.addRecipient")}</span>
               </Button>
             </div>
 

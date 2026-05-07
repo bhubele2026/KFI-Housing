@@ -205,7 +205,10 @@
       "description": "Track renter's and liability insurance certificates across all properties"
     },
     "settings": {
-      "title": "Settings"
+      "title": "Settings",
+      "digestRecipientsTitle": "Weekly Lease Digest Recipients",
+      "digestRecipientsDescription": "These email addresses receive the weekly lease-expiry digest. Changes take effect on the next scheduled send — no redeploy required.",
+      "addRecipient": "Add"
     },
     "customerDetail": {
       "breadcrumbCustomers": "Customers",

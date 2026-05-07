@@ -205,7 +205,10 @@
       "description": "Controla certificados de seguro de inquilino y responsabilidad en todas las propiedades"
     },
     "settings": {
-      "title": "Ajustes"
+      "title": "Ajustes",
+      "digestRecipientsTitle": "Destinatarios del resumen semanal de contratos",
+      "digestRecipientsDescription": "Estos correos reciben el resumen semanal de vencimientos de contratos. Los cambios surten efecto en el próximo envío programado — no se requiere redespliegue.",
+      "addRecipient": "Añadir"
     },
     "customerDetail": {
       "breadcrumbCustomers": "Clientes",

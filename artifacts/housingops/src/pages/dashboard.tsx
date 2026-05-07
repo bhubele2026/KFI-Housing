@@ -22,7 +22,7 @@ import {
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { StarRating } from "@/components/star-rating";
@@ -760,35 +760,26 @@ export default function Dashboard() {
     { title: "Properties", value: totalProperties, icon: Building2, trend: "+2 this year" },
     { title: "Total Beds", value: totalBeds, icon: BedDouble, trend: `${occupiedBeds} occupied` },
     { title: "Occupancy", value: `${occupancyRate.toFixed(1)}%`, icon: Users, trend: `${vacantBeds} vacant` },
-    { title: "Monthly Revenue", value: `$${totalMonthlyRevenue.toLocaleString()}`, icon: TrendingUp, trend: "Target: $45k" },
-    { title: "Monthly Costs", value: `$${totalMonthlyCosts.toLocaleString()}`, icon: DollarSign, trend: "Leases + Utilities" },
-    { title: "Net Profit", value: `$${netProfit.toLocaleString()}`, icon: Zap, trend: netProfit >= 0 ? "+12% vs last month" : "Needs attention" },
+    { title: "Monthly Revenue", value: formatUsdWhole(totalMonthlyRevenue), icon: TrendingUp, trend: "Target: $45k" },
+    { title: "Monthly Costs", value: formatUsdWhole(totalMonthlyCosts), icon: DollarSign, trend: "Leases + Utilities" },
+    { title: "Net Profit", value: formatUsdWhole(netProfit), icon: Zap, trend: netProfit >= 0 ? "+12% vs last month" : "Needs attention" },
     {
       title: "Rent / Bed",
-      value:
-        portfolioRentPerBed === null
-          ? "—"
-          : `$${portfolioRentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: portfolioRentPerBed === null ? "—" : formatUsdWhole(portfolioRentPerBed),
       icon: BedDouble,
-      trend: `$${portfolioMonthlyRent.toLocaleString()} ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: `${formatUsdWhole(portfolioMonthlyRent)} ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
     },
     {
       title: "Electric / Bed",
-      value:
-        portfolioElectricPerBed === null
-          ? "—"
-          : `$${portfolioElectricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: portfolioElectricPerBed === null ? "—" : formatUsdWhole(portfolioElectricPerBed),
       icon: Zap,
-      trend: `$${portfolioMonthlyElectric.toLocaleString()} electric ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: `${formatUsdWhole(portfolioMonthlyElectric)} electric ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
     },
     {
       title: "Rent + Electric / Bed",
-      value:
-        portfolioRentPlusElectricPerBed === null
-          ? "—"
-          : `$${portfolioRentPlusElectricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      value: portfolioRentPlusElectricPerBed === null ? "—" : formatUsdWhole(portfolioRentPlusElectricPerBed),
       icon: DollarSign,
-      trend: `(Rent + $${portfolioMonthlyElectric.toLocaleString()} electric) ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
+      trend: `(Rent + ${formatUsdWhole(portfolioMonthlyElectric)} electric) ÷ ${totalBeds} bed${totalBeds === 1 ? "" : "s"}`,
     },
   ];
 
@@ -950,15 +941,15 @@ export default function Dashboard() {
           {cards.map((card, i) => (
             <motion.div key={card.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
               <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between space-y-0 pb-2">
-                    <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
-                    <card.icon className="h-4 w-4 text-muted-foreground" />
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">{card.title}</p>
+                      <p className="text-lg font-bold mt-0.5 leading-tight whitespace-nowrap">{card.value}</p>
+                    </div>
+                    <div className="p-1 rounded-md bg-muted shrink-0"><card.icon className="h-3 w-3 text-muted-foreground" /></div>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-2xl font-bold">{card.value}</span>
-                    <span className="text-xs text-muted-foreground mt-1">{card.trend}</span>
-                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{card.trend}</p>
                 </CardContent>
               </Card>
             </motion.div>

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2, Send } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2, Send } from "lucide-react";
 import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -429,43 +429,6 @@ export default function Dashboard() {
   // - Occupants: falsy moveInDate (mirrors the inline badge in occupants.tsx)
   // - Leases:    importer-flagged needsReview (ambiguous source cell)
   // - Properties: monthlyRent of 0 / unset (property missing rent)
-  // Pending-placement buckets (Task #348). Synthetic
-  // "Roster — Pending Placement (<Customer>)" properties hold payroll-only
-  // people who haven't been placed in a real bed yet. Surface them on
-  // the dashboard so the operator doesn't have to scroll the Properties
-  // list to find each bucket. Counts use Active occupants pinned to the
-  // bucket — mirrors what the per-property board shows.
-  const pendingPlacementBuckets = useMemo(() => {
-    const now = Date.now();
-    return scopedProperties
-      .filter((p) => isPendingPlacementProperty(p.name))
-      .map((p) => {
-        const bucketOccupants = scopedOccupants.filter(
-          (o) => o.propertyId === p.id && o.status === "Active",
-        );
-        let oldestCreatedAt: number | null = null;
-        for (const o of bucketOccupants) {
-          if (o.createdAt) {
-            const ts = new Date(o.createdAt).getTime();
-            if (!Number.isNaN(ts) && (oldestCreatedAt === null || ts < oldestCreatedAt)) {
-              oldestCreatedAt = ts;
-            }
-          }
-        }
-        const oldestWaitingDays =
-          oldestCreatedAt !== null
-            ? Math.floor((now - oldestCreatedAt) / (1000 * 60 * 60 * 24))
-            : null;
-        return { property: p, count: bucketOccupants.length, oldestWaitingDays };
-      })
-      .sort((a, b) => {
-        const aAge = a.oldestWaitingDays ?? -1;
-        const bAge = b.oldestWaitingDays ?? -1;
-        if (bAge !== aAge) return bAge - aAge;
-        return b.count - a.count || a.property.name.localeCompare(b.property.name);
-      });
-  }, [scopedProperties, scopedOccupants]);
-
   const needsReviewOccupantCount = useMemo(
     () => scopedOccupants.filter((o) => !o.moveInDate).length,
     [scopedOccupants],
@@ -1102,77 +1065,6 @@ export default function Dashboard() {
             </motion.div>
           ))}
         </div>
-
-        {pendingPlacementBuckets.length > 0 && (
-          <Card
-            className="border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-950/20"
-            data-testid="card-pending-placement"
-          >
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <UserCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <CardTitle>Pending placement</CardTitle>
-                <span
-                  className="text-xs text-muted-foreground ml-auto tabular-nums"
-                  data-testid="text-pending-placement-total-count"
-                >
-                  {pendingPlacementBuckets.reduce((s, b) => s + b.count, 0)} pending ·{" "}
-                  {pendingPlacementBuckets.length} bucket
-                  {pendingPlacementBuckets.length === 1 ? "" : "s"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                People on the weekly housing-deduction roster who haven't been
-                placed in a real bed yet. Open a bucket to move each person to
-                a property + bed. Empty buckets are listed too so they can be
-                cleared away.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {pendingPlacementBuckets.map(({ property, count, oldestWaitingDays }) => (
-                <Link
-                  key={property.id}
-                  href={`/properties/${property.id}`}
-                  className="flex items-center justify-between rounded-md border bg-card/60 px-4 py-3 hover:bg-accent/40 transition-colors"
-                  data-testid={`row-pending-placement-${property.id}`}
-                >
-                  <div className="min-w-0 flex-1 mr-4">
-                    <p
-                      className="text-sm font-medium truncate"
-                      data-testid={`text-pending-placement-${property.id}-name`}
-                    >
-                      {property.name}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {oldestWaitingDays !== null && (
-                      <span
-                        className={
-                          "text-xs tabular-nums " +
-                          (oldestWaitingDays >= 30
-                            ? "text-red-600 dark:text-red-400 font-semibold"
-                            : oldestWaitingDays >= 14
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-muted-foreground")
-                        }
-                        data-testid={`text-pending-placement-${property.id}-oldest`}
-                      >
-                        oldest waiting {oldestWaitingDays} day{oldestWaitingDays === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    <span
-                      className="text-sm font-semibold tabular-nums"
-                      data-testid={`text-pending-placement-${property.id}-count`}
-                    >
-                      {count} {count === 1 ? "person" : "people"} pending
-                    </span>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </Link>
-              ))}
-            </CardContent>
-          </Card>
-        )}
 
         {needsReviewItems.length > 0 && (
           <Card

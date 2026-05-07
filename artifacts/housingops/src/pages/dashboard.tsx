@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send, ChevronDown, Eye } from "lucide-react";
 import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -214,9 +214,23 @@ export default function Dashboard() {
   const [sendingDigestPreview, setSendingDigestPreview] = useState(false);
   const [digestSecretDialogOpen, setDigestSecretDialogOpen] = useState(false);
   const [digestSecret, setDigestSecret] = useState("");
+  // `digestMode` toggles between actually dispatching the digest
+  // ("send") and the dry-run preview that only renders the email
+  // payload server-side without invoking the webhook ("dry-run").
+  // The same secret-prompt dialog is reused for both flows so the
+  // operator only sees one entry point.
+  const [digestMode, setDigestMode] = useState<"send" | "dry-run">("send");
+  // Holds the rendered DigestEmail payload returned by a successful
+  // dry-run so we can show subject/body/recipients in a modal. Null
+  // when no preview is being shown.
+  const [digestDryRunResult, setDigestDryRunResult] = useState<{
+    email: { to: string[]; subject: string; text: string; html: string };
+    total: number;
+  } | null>(null);
 
   const handleSendDigestPreview = async () => {
     if (!digestSecret.trim()) return;
+    const mode = digestMode;
     setSendingDigestPreview(true);
     setDigestSecretDialogOpen(false);
     try {
@@ -224,15 +238,30 @@ export default function Dashboard() {
       const res = await fetch(`${baseUrl}api/lease-digest/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret: digestSecret.trim() }),
+        body: JSON.stringify({
+          secret: digestSecret.trim(),
+          dryRun: mode === "dry-run",
+        }),
       });
       const body = await res.json();
       if (!res.ok) {
         toast({
-          title: "Digest preview failed",
+          title: mode === "dry-run" ? "Preview render failed" : "Digest preview failed",
           description: body.error ?? `Server returned ${res.status}`,
           variant: "destructive",
         });
+        return;
+      }
+      if (mode === "dry-run") {
+        if (body.email) {
+          setDigestDryRunResult({ email: body.email, total: body.total ?? 0 });
+        } else {
+          toast({
+            title: "Preview render failed",
+            description: "Server did not return an email payload.",
+            variant: "destructive",
+          });
+        }
         return;
       }
       toast({
@@ -241,7 +270,7 @@ export default function Dashboard() {
       });
     } catch (err) {
       toast({
-        title: "Digest preview failed",
+        title: mode === "dry-run" ? "Preview render failed" : "Digest preview failed",
         description: "Could not reach the server. Try again.",
         variant: "destructive",
       });
@@ -249,6 +278,11 @@ export default function Dashboard() {
       setSendingDigestPreview(false);
       setDigestSecret("");
     }
+  };
+
+  const openDigestDialog = (mode: "send" | "dry-run") => {
+    setDigestMode(mode);
+    setDigestSecretDialogOpen(true);
   };
 
   const [undoingReconciliationIds, setUndoingReconciliationIds] = useState<Set<string>>(new Set());
@@ -929,17 +963,37 @@ export default function Dashboard() {
                   {expiringLeases.length === 1 ? "" : "s"}
                 </span>
                 {digestPreviewEnabled && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1 text-xs"
-                    disabled={sendingDigestPreview}
-                    onClick={() => setDigestSecretDialogOpen(true)}
-                    data-testid="button-send-digest-preview"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    {sendingDigestPreview ? "Sending…" : "Send preview"}
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1 text-xs"
+                        disabled={sendingDigestPreview}
+                        data-testid="button-send-digest-preview"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {sendingDigestPreview ? "Sending…" : "Send preview"}
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onSelect={() => openDigestDialog("send")}
+                        data-testid="menuitem-send-digest-now"
+                      >
+                        <Send className="h-3.5 w-3.5 mr-2" />
+                        Send now to recipients
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => openDigestDialog("dry-run")}
+                        data-testid="menuitem-preview-digest-dryrun"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-2" />
+                        Preview without sending
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -2112,9 +2166,13 @@ export default function Dashboard() {
       <Dialog open={digestSecretDialogOpen} onOpenChange={(open) => { setDigestSecretDialogOpen(open); if (!open) setDigestSecret(""); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Send digest preview</DialogTitle>
+            <DialogTitle>
+              {digestMode === "dry-run" ? "Preview digest (dry-run)" : "Send digest preview"}
+            </DialogTitle>
             <DialogDescription>
-              Enter the admin secret to send the weekly lease digest email now.
+              {digestMode === "dry-run"
+                ? "Enter the admin secret to render the weekly lease digest email without sending it. The recipients won't receive anything."
+                : "Enter the admin secret to send the weekly lease digest email now."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-4">
@@ -2133,8 +2191,82 @@ export default function Dashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDigestSecretDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSendDigestPreview} disabled={!digestSecret.trim()} data-testid="button-confirm-digest-preview">
+              {digestMode === "dry-run" ? (
+                <>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Render preview
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send now
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={digestDryRunResult !== null}
+        onOpenChange={(open) => { if (!open) setDigestDryRunResult(null); }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" data-testid="dialog-digest-dryrun-preview">
+          <DialogHeader>
+            <DialogTitle>Digest email preview</DialogTitle>
+            <DialogDescription>
+              This is exactly what would be POSTed to the digest webhook.
+              Nothing was sent — close to discard, or use "Send now to
+              recipients" if it looks right.
+            </DialogDescription>
+          </DialogHeader>
+          {digestDryRunResult && (
+            <div className="grid gap-3 py-2 overflow-y-auto pr-1">
+              <div className="grid gap-1 text-sm">
+                <Label className="text-xs text-muted-foreground">To</Label>
+                <div className="font-mono text-xs break-all" data-testid="text-digest-preview-to">
+                  {digestDryRunResult.email.to.join(", ")}
+                </div>
+              </div>
+              <div className="grid gap-1 text-sm">
+                <Label className="text-xs text-muted-foreground">Subject</Label>
+                <div className="font-medium" data-testid="text-digest-preview-subject">
+                  {digestDryRunResult.email.subject}
+                </div>
+              </div>
+              <div className="grid gap-1 text-sm">
+                <Label className="text-xs text-muted-foreground">
+                  Rendered HTML ({digestDryRunResult.total} expiring lease
+                  {digestDryRunResult.total === 1 ? "" : "s"})
+                </Label>
+                <div
+                  className="rounded-md border bg-muted/30 p-3 text-sm prose prose-sm max-w-none [&_a]:text-primary"
+                  data-testid="text-digest-preview-html"
+                  dangerouslySetInnerHTML={{ __html: digestDryRunResult.email.html }}
+                />
+              </div>
+              <div className="grid gap-1 text-sm">
+                <Label className="text-xs text-muted-foreground">Plain-text body</Label>
+                <pre
+                  className="rounded-md border bg-muted/30 p-3 text-xs whitespace-pre-wrap font-mono"
+                  data-testid="text-digest-preview-text"
+                >{digestDryRunResult.email.text}</pre>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDigestDryRunResult(null)} data-testid="button-close-digest-preview">
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                setDigestDryRunResult(null);
+                openDigestDialog("send");
+              }}
+              data-testid="button-send-after-preview"
+            >
               <Send className="h-4 w-4 mr-2" />
-              Send now
+              Send now to recipients
             </Button>
           </DialogFooter>
         </DialogContent>

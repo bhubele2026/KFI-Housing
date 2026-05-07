@@ -52,8 +52,12 @@ router.post("/lease-digest/preview", async (req, res): Promise<void> => {
   }
 
   const config = readDigestConfig(process.env);
+  const dryRun = req.body?.dryRun === true;
 
-  if (!config.webhookUrl) {
+  // The webhook URL is only required when we plan to POST. A dry-run
+  // caller just wants the rendered payload back so they can inspect
+  // subject/body/recipients before actually dispatching the digest.
+  if (!dryRun && !config.webhookUrl) {
     res.status(422).json({
       error:
         "LEASE_DIGEST_WEBHOOK_URL is not configured — cannot send a preview.",
@@ -94,12 +98,19 @@ router.post("/lease-digest/preview", async (req, res): Promise<void> => {
         },
         now: () => new Date(),
       },
+      { dryRun },
     );
 
     res.json({
       sent: result.sent,
+      dryRun,
       total: result.total ?? 0,
       recipients: config.recipients.length,
+      // On a dry-run the email payload is the whole point of the
+      // request — surface it so the dashboard can render it for the
+      // operator. On a real send we still echo it back for parity so
+      // the UI can show what was actually dispatched.
+      email: result.email,
     });
   } catch (err) {
     logger.error({ err }, "Lease digest preview failed");

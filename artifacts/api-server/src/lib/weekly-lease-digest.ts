@@ -201,6 +201,24 @@ export interface SendDigestResult {
   sent: boolean;
   reason?: string;
   total?: number;
+  /**
+   * The rendered digest payload. Always populated on a successful
+   * send; also returned (without `sent: true`) when the caller passes
+   * `{ dryRun: true }` so operators can inspect the email content
+   * without actually invoking the webhook.
+   */
+  email?: DigestEmail;
+}
+
+export interface SendDigestOptions {
+  /**
+   * When true, build the digest email but skip the webhook POST.
+   * Useful for "preview without sending" flows where an operator
+   * wants to inspect subject / body / recipients before dispatching
+   * to real recipients. The returned `SendDigestResult` includes the
+   * rendered `email` payload and `sent: false`.
+   */
+  dryRun?: boolean;
 }
 
 export interface WeeklyDigestDeps {
@@ -228,11 +246,15 @@ export interface WeeklyDigestConfig {
 export async function sendWeeklyLeaseDigest(
   config: WeeklyDigestConfig,
   deps: WeeklyDigestDeps,
+  options: SendDigestOptions = {},
 ): Promise<SendDigestResult> {
   if (config.recipients.length === 0) {
     return { sent: false, reason: "no recipients configured" };
   }
-  if (!config.webhookUrl) {
+  // The webhook URL is only strictly required when we actually plan
+  // to POST. A `dryRun` caller is asking for the rendered payload, so
+  // it's fine to skip this check and still hand back the email body.
+  if (!options.dryRun && !config.webhookUrl) {
     return { sent: false, reason: "no webhook URL configured" };
   }
   const today = todayIso(deps.now());
@@ -247,6 +269,10 @@ export async function sendWeeklyLeaseDigest(
     appBaseUrl: config.appBaseUrl,
     today,
   });
+  const total = totalExpiring(buckets);
+  if (options.dryRun) {
+    return { sent: false, reason: "dry run", total, email };
+  }
   const response = await deps.fetch(config.webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -257,7 +283,7 @@ export async function sendWeeklyLeaseDigest(
       `Lease digest webhook responded with HTTP ${response.status}`,
     );
   }
-  return { sent: true, total: totalExpiring(buckets) };
+  return { sent: true, total, email };
 }
 
 /**

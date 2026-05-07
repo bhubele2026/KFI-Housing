@@ -186,6 +186,52 @@ describe("sendWeeklyLeaseDigest", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("returns the rendered email payload without POSTing when dryRun is true", async () => {
+    const fetchMock = vi.fn();
+    const result = await sendWeeklyLeaseDigest(
+      {
+        webhookUrl: "https://hooks.example.com/digest",
+        recipients: ["ops@example.com"],
+        appBaseUrl: "https://housingops.example.com",
+      },
+      {
+        fetch: fetchMock,
+        loadLeases: async () => [lease({ id: "l1", endDate: "2026-05-25" })],
+        loadProperties: async () => PROPERTIES,
+        now: () => new Date(`${TODAY}T13:00:00Z`),
+      },
+      { dryRun: true },
+    );
+    expect(result.sent).toBe(false);
+    expect(result.reason).toBe("dry run");
+    expect(result.total).toBe(1);
+    expect(result.email).toBeDefined();
+    expect(result.email?.to).toEqual(["ops@example.com"]);
+    expect(result.email?.subject).toContain("1 lease expiring soon");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("dryRun does not require a webhook URL", async () => {
+    const fetchMock = vi.fn();
+    const result = await sendWeeklyLeaseDigest(
+      {
+        webhookUrl: "",
+        recipients: ["ops@example.com"],
+        appBaseUrl: "https://housingops.example.com",
+      },
+      {
+        fetch: fetchMock,
+        loadLeases: async () => [],
+        loadProperties: async () => [],
+        now: () => new Date(`${TODAY}T13:00:00Z`),
+      },
+      { dryRun: true },
+    );
+    expect(result.sent).toBe(false);
+    expect(result.email).toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("throws when the webhook responds non-2xx", async () => {
     const fetchMock = vi
       .fn()

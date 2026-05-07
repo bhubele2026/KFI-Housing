@@ -10,6 +10,7 @@ import {
   DeleteLeaseParams,
 } from "@workspace/api-zod";
 import { deriveLeaseStatus } from "../lib/lease-status";
+import { normalizeLeaseRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
@@ -23,33 +24,16 @@ function withDerivedStatus(row: LeaseRow): LeaseRow {
   return { ...row, status: deriveLeaseStatus(row) };
 }
 
-// Coerce datetime-style date strings (e.g. `"2026-05-31 00:00:00"` or
-// `"2026-05-31T00:00:00.000Z"`) down to the canonical `YYYY-MM-DD`
-// form the shared schema accepts. Without this, a single legacy /
-// imported row whose date carries a stray time suffix would 500 the
-// whole list because `ListLeasesResponse.parse` fails on the entire
-// array. Anything we can't recognise is passed through unchanged so
-// the schema's regex still surfaces it as a real bug rather than
-// quietly papering over it. See task #364.
-function normalizeLeaseDate(value: string): string {
-  if (!value) return value;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const m = value.match(/^(\d{4}-\d{2}-\d{2})[T ]/);
-  return m ? m[1] : value;
-}
-
-function withNormalizedDates(row: LeaseRow): LeaseRow {
-  const startDate = normalizeLeaseDate(row.startDate);
-  const endDate = normalizeLeaseDate(row.endDate);
-  if (startDate === row.startDate && endDate === row.endDate) return row;
-  return { ...row, startDate, endDate };
-}
-
 router.get("/leases", async (_req, res): Promise<void> => {
   const rows = await db.select().from(leasesTable).orderBy(leasesTable.id);
+  // Normalize each row at the DB ↔ API boundary (Task #365) so legacy
+  // values — datetime-style date strings, unknown enum members — are
+  // coerced to the canonical shape before `ListLeasesResponse.parse`
+  // sees them. One bad row used to 500 the whole list because zod
+  // validates the entire array atomically.
   res.json(
     ListLeasesResponse.parse(
-      rows.map((r) => withDerivedStatus(withNormalizedDates(r))),
+      rows.map((r) => withDerivedStatus(normalizeLeaseRow(r) as LeaseRow)),
     ),
   );
 });

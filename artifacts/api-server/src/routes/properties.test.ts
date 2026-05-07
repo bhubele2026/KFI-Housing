@@ -750,4 +750,54 @@ describe("properties route — server-side geocoding (Task #152)", () => {
       expect(legacy?.paymentMethod).toBe(value);
     },
   );
+
+  // Task #365 — single normalizer at the DB ↔ API boundary. A
+  // property row whose `status`, `rentFrequency`, or `paymentMethod`
+  // is off-list (e.g. legacy "Pending" status, "Annually" frequency,
+  // free-form "Cash" payment label) must not 500 GET /properties.
+  // The normalizer coerces it to the canonical default so the rest
+  // of the array still round-trips through `ListPropertiesResponse.parse`.
+  it.each([
+    [
+      "off-list status",
+      { status: "Pending" as unknown as PropertyRow["status"] },
+    ],
+    [
+      "off-list rentFrequency",
+      {
+        rentFrequency: "Annually" as unknown as PropertyRow["rentFrequency"],
+      },
+    ],
+    [
+      "off-list paymentMethod",
+      {
+        paymentMethod: "Cash" as unknown as PropertyRow["paymentMethod"],
+      },
+    ],
+  ])(
+    "GET /properties stays 200 when a row has an %s, alongside clean rows (task #365)",
+    async (_label, badShape) => {
+      store.set("p-clean", { ...makeCreateBody({ id: "p-clean" }) });
+      store.set("p-bad", { ...makeCreateBody({ id: "p-bad" }), ...badShape });
+
+      const res = await fetch(`${baseUrl}/api/properties`);
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as PropertyRow[];
+      expect(rows.map((r) => r.id).sort()).toEqual(["p-bad", "p-clean"]);
+      const bad = rows.find((r) => r.id === "p-bad")!;
+      expect(["Active", "Inactive"]).toContain(bad.status);
+      if (bad.rentFrequency !== undefined) {
+        expect(["Weekly", "Bi-Weekly", "Monthly"]).toContain(bad.rentFrequency);
+      }
+      expect([
+        "",
+        "ACH",
+        "Check",
+        "Wire",
+        "Online Portal",
+        "Money Order",
+        "Invoice",
+      ]).toContain(bad.paymentMethod);
+    },
+  );
 });

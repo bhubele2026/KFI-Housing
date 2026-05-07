@@ -9,12 +9,18 @@ import {
   UpdateCustomerResponse,
   DeleteCustomerParams,
 } from "@workspace/api-zod";
+import { normalizeCustomerRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
 router.get("/customers", async (_req, res): Promise<void> => {
   const rows = await db.select().from(customersTable).orderBy(customersTable.id);
-  res.json(ListCustomersResponse.parse(rows));
+  // Normalize each row at the DB ↔ API boundary (Task #365). Customer
+  // is currently a pass-through (every field is a free-form string),
+  // but the call is wired in so any future field with a stricter
+  // contract automatically gets the same boundary treatment as
+  // properties / leases.
+  res.json(ListCustomersResponse.parse(rows.map((r) => normalizeCustomerRow(r))));
 });
 
 router.post("/customers", async (req, res): Promise<void> => {

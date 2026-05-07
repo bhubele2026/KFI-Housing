@@ -10,6 +10,11 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import {
+  normalizeCustomerRow,
+  normalizePropertyRow,
+  normalizeLeaseRow,
+} from "./db-row-normalizers";
 import type { Logger } from "pino";
 
 /**
@@ -430,7 +435,7 @@ export async function seedAttachedLeasesIfMissing(
       }
       const inserted = await tx
         .insert(customersTable)
-        .values(buildCustomerRow(spec))
+        .values(normalizeCustomerRow(buildCustomerRow(spec)))
         .onConflictDoNothing()
         .returning({ id: customersTable.id });
       if (inserted.length > 0) {
@@ -500,12 +505,14 @@ export async function seedAttachedLeasesIfMissing(
         ) {
           await tx
             .update(propertiesTable)
-            .set({
-              address: spec.address,
-              city: spec.city,
-              state: spec.state,
-              zip: spec.zip,
-            })
+            .set(
+              normalizePropertyRow({
+                address: spec.address,
+                city: spec.city,
+                state: spec.state,
+                zip: spec.zip,
+              }),
+            )
             .where(eq(propertiesTable.id, row.id));
         }
         propertyIdByKey.set(spec.id, row.id);
@@ -513,7 +520,7 @@ export async function seedAttachedLeasesIfMissing(
       }
       const inserted = await tx
         .insert(propertiesTable)
-        .values(buildPropertyRow(spec, customerId))
+        .values(normalizePropertyRow(buildPropertyRow(spec, customerId)))
         .onConflictDoNothing()
         .returning({ id: propertiesTable.id });
       if (inserted.length > 0) {
@@ -572,7 +579,7 @@ export async function seedAttachedLeasesIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(spec, propertyId, today))
+        .values(normalizeLeaseRow(buildLeaseRow(spec, propertyId, today)))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) leasesInserted += 1;

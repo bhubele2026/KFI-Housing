@@ -274,4 +274,33 @@ describe("GET /leases — dynamic status derivation (task #309 / #327)", () => {
       expect(clean?.id).toBe("l-clean");
     },
   );
+
+  // Task #365 — single normalizer at the DB ↔ API boundary. A lease
+  // row that somehow landed in the DB with an off-list `status` or
+  // `rateType` (legacy import, hand-edited row, future enum value
+  // rolled back) must not 500 the entire list. The normalizer
+  // coerces it to a safe default so the rest of the array still
+  // round-trips through `ListLeasesResponse.parse`.
+  it.each([
+    ["off-list status", { status: "pending" as unknown as LeaseRow["status"] }],
+    [
+      "off-list rateType",
+      { rateType: "annual" as unknown as LeaseRow["rateType"] },
+    ],
+  ])(
+    "GET /leases stays 200 when a row has an %s, alongside clean rows (task #365)",
+    async (_label, badShape) => {
+      store.set("l-bad", makeLease({ id: "l-bad", ...badShape }));
+      store.set("l-clean", makeLease({ id: "l-clean" }));
+
+      const res = await fetch(`${baseUrl}/api/leases`);
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as LeaseRow[];
+      expect(rows.map((r) => r.id).sort()).toEqual(["l-bad", "l-clean"]);
+      const bad = rows.find((r) => r.id === "l-bad")!;
+      // Coerced to canonical defaults — not the bad value.
+      expect(["Active", "Expired", "Upcoming"]).toContain(bad.status);
+      expect(["monthly", "room-night"]).toContain(bad.rateType);
+    },
+  );
 });

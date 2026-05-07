@@ -12,6 +12,11 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import {
+  normalizeCustomerRow,
+  normalizePropertyRow,
+  normalizeLeaseRow,
+} from "./db-row-normalizers";
 import type { Logger } from "pino";
 
 export const CHATEAU_KNOLL_CUSTOMER_ID = "cust-kfi-corporate";
@@ -384,7 +389,7 @@ export async function seedChateauKnollIfMissing(
       // operator edits to other fields are preserved.
       const updated = await tx
         .update(propertiesTable)
-        .set({ totalBeds: CHATEAU_TOTAL_BEDS })
+        .set(normalizePropertyRow({ totalBeds: CHATEAU_TOTAL_BEDS }))
         .where(
           and(
             eq(propertiesTable.id, propertyId),
@@ -408,7 +413,7 @@ export async function seedChateauKnollIfMissing(
       ) {
         await tx
           .update(propertiesTable)
-          .set({ customerId: endClientId })
+          .set(normalizePropertyRow({ customerId: endClientId }))
           .where(eq(propertiesTable.id, propertyId));
         customerId = endClientId;
         repointedToEndClient = true;
@@ -420,7 +425,7 @@ export async function seedChateauKnollIfMissing(
       propertyId = CHATEAU_KNOLL_PROPERTY_ID;
       const insertedProp = await tx
         .insert(propertiesTable)
-        .values(buildPropertyRow(propertyId, customerId))
+        .values(normalizePropertyRow(buildPropertyRow(propertyId, customerId)))
         .onConflictDoNothing()
         .returning({ id: propertiesTable.id });
       propertyInserted = insertedProp.length > 0;
@@ -455,7 +460,7 @@ export async function seedChateauKnollIfMissing(
         customerId = CHATEAU_KNOLL_CUSTOMER_ID;
         const inserted = await tx
           .insert(customersTable)
-          .values(buildCustomerRow(customerId))
+          .values(normalizeCustomerRow(buildCustomerRow(customerId)))
           .onConflictDoNothing()
           .returning({ id: customersTable.id });
         customerInserted = inserted.length > 0;
@@ -472,7 +477,7 @@ export async function seedChateauKnollIfMissing(
       propertyId = CHATEAU_KNOLL_PROPERTY_ID;
       const insertedProp = await tx
         .insert(propertiesTable)
-        .values(buildPropertyRow(propertyId, customerId))
+        .values(normalizePropertyRow(buildPropertyRow(propertyId, customerId)))
         .onConflictDoNothing()
         .returning({ id: propertiesTable.id });
       propertyInserted = insertedProp.length > 0;
@@ -544,7 +549,11 @@ export async function seedChateauKnollIfMissing(
 
       const inserted = await tx
         .insert(leasesTable)
-        .values(buildLeaseRow(chateauKnollLeaseId(spec.unit), propertyId, spec, today))
+        .values(
+          normalizeLeaseRow(
+            buildLeaseRow(chateauKnollLeaseId(spec.unit), propertyId, spec, today),
+          ),
+        )
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length > 0) {

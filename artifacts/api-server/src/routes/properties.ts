@@ -14,12 +14,18 @@ import {
   getGeocoder,
   type GeoPoint,
 } from "../lib/geocode-property";
+import { normalizePropertyRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
 router.get("/properties", async (_req, res): Promise<void> => {
   const rows = await db.select().from(propertiesTable).orderBy(propertiesTable.id);
-  res.json(ListPropertiesResponse.parse(rows));
+  // Normalize each row at the DB ↔ API boundary (Task #365) so legacy
+  // values — blank or unknown `paymentMethod`, off-list `status` /
+  // `rentFrequency` — are coerced to canonical shape before
+  // `ListPropertiesResponse.parse` sees them. One bad row used to 500
+  // the entire list and blank the Customers / Properties pages.
+  res.json(ListPropertiesResponse.parse(rows.map((r) => normalizePropertyRow(r))));
 });
 
 /**

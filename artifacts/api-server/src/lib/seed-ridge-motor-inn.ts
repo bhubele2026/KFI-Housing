@@ -10,6 +10,7 @@ import {
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
 import { normalizeCustomerName } from "./master-lease-parser";
+import { normalizePropertyRow, normalizeLeaseRow } from "./db-row-normalizers";
 
 export const RIDGE_PROPERTY_ID = "prop-ridge-motor-inn-portage";
 export const ridgeLeaseId = (slug: "penda" | "trienda"): string =>
@@ -274,7 +275,7 @@ export async function seedRidgeMotorInnIfMissing(
         const merged = Array.from(new Set([...existingShared, ...additions]));
         await tx
           .update(propertiesTable)
-          .set({ sharedWithCustomerIds: merged })
+          .set(normalizePropertyRow({ sharedWithCustomerIds: merged }))
           .where(eq(propertiesTable.id, propertyId));
         propertyUpdated = true;
         log.info(
@@ -298,11 +299,13 @@ export async function seedRidgeMotorInnIfMissing(
       const inserted = await tx
         .insert(propertiesTable)
         .values(
-          buildPropertyRow(
-            propertyId,
-            primaryCustomer.id,
-            sharedIds,
-            sharedLabel,
+          normalizePropertyRow(
+            buildPropertyRow(
+              propertyId,
+              primaryCustomer.id,
+              sharedIds,
+              sharedLabel,
+            ),
           ),
         )
         .onConflictDoNothing()
@@ -383,11 +386,13 @@ export async function seedRidgeMotorInnIfMissing(
       const inserted = await tx
         .insert(leasesTable)
         .values(
-          buildLeaseRow(
-            ridgeLeaseId(spec.slug),
-            propertyId,
-            spec.customer.id,
-            spec.label,
+          normalizeLeaseRow(
+            buildLeaseRow(
+              ridgeLeaseId(spec.slug),
+              propertyId,
+              spec.customer.id,
+              spec.label,
+            ),
           ),
         )
         .onConflictDoNothing()

@@ -19,6 +19,11 @@ import {
   normalizeCustomerName,
   levenshtein,
 } from "./master-lease-parser";
+import {
+  normalizeCustomerRow,
+  normalizePropertyRow,
+  normalizeLeaseRow,
+} from "./db-row-normalizers";
 
 /** Per-row outcome surfaced in the import summary. */
 export interface RowDecision {
@@ -333,7 +338,7 @@ export async function importMasterLeases(
         if (row.state && found.match.state !== row.state) {
           await tx
             .update(customersTable)
-            .set({ state: row.state })
+            .set(normalizeCustomerRow({ state: row.state }))
             .where(eq(customersTable.id, found.match.id));
           found.match.state = row.state;
           summary.customersUpdated += 1;
@@ -353,7 +358,7 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(customersTable)
-        .values(insert)
+        .values(normalizeCustomerRow(insert))
         .onConflictDoNothing()
         .returning({ id: customersTable.id });
       if (inserted.length === 0) {
@@ -425,7 +430,7 @@ export async function importMasterLeases(
         if (Object.keys(updates).length > 0) {
           await tx
             .update(propertiesTable)
-            .set(updates)
+            .set(normalizePropertyRow(updates))
             .where(eq(propertiesTable.id, found.match.id));
           summary.propertiesUpdated += 1;
           return { id: found.match.id, action: "updated", reason: found.reason };
@@ -447,7 +452,7 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(propertiesTable)
-        .values(insert)
+        .values(normalizePropertyRow(insert))
         .onConflictDoNothing()
         .returning({ id: propertiesTable.id });
       if (inserted.length > 0) {
@@ -552,7 +557,7 @@ export async function importMasterLeases(
         if (monthly > 0) updates.monthlyRent = monthly;
         await tx
           .update(leasesTable)
-          .set(updates)
+          .set(normalizeLeaseRow(updates))
           .where(eq(leasesTable.id, match.id));
         summary.leasesUpdated += 1;
         return { id: match.id, action: "updated" };
@@ -585,7 +590,7 @@ export async function importMasterLeases(
       };
       const inserted = await tx
         .insert(leasesTable)
-        .values(insert)
+        .values(normalizeLeaseRow(insert))
         .onConflictDoNothing()
         .returning({ id: leasesTable.id });
       if (inserted.length === 0) {

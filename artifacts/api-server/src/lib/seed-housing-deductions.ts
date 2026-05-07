@@ -94,6 +94,11 @@ export interface SeedHousingDeductionsDeps {
   // back to "payroll". Defaults to false so the seeder is safe to run
   // on every boot without silently undoing manual corrections.
   reclaimOverridden: boolean;
+  // When non-empty, only reclaim overrides for the listed occupant IDs
+  // (Task #381). Requires `reclaimOverridden` to also be true. This
+  // lets the dashboard offer a per-row "Re-claim from payroll" button
+  // without forcibly overwriting every other override in the portfolio.
+  reclaimOccupantIds?: string[];
 }
 
 // Source of truth: payroll export
@@ -412,6 +417,9 @@ export async function seedHousingDeductions(
   const log = deps.logger ?? defaultLogger;
   const rows = deps.rows ?? HOUSING_DEDUCTION_ROWS;
   const reclaimOverridden = deps.reclaimOverridden ?? false;
+  const reclaimOccupantIdSet = deps.reclaimOccupantIds?.length
+    ? new Set(deps.reclaimOccupantIds)
+    : null;
 
   // Pull the entire occupants table once. The volume is small (hundreds),
   // and pre-loading lets us do both lookups (by employeeId, by
@@ -543,7 +551,10 @@ export async function seedHousingDeductions(
     // (chargeSourceCustomer + chargeSourcePersonId) so accounting can
     // still trace the source — we just don't clobber the human's
     // chosen charge value. `reclaimOverridden: true` opts back in.
-    if (target.chargeSource === "manual_override" && !reclaimOverridden) {
+    const shouldReclaim =
+      reclaimOverridden &&
+      (!reclaimOccupantIdSet || reclaimOccupantIdSet.has(target.id));
+    if (target.chargeSource === "manual_override" && !shouldReclaim) {
       skippedOverridden++;
       continue;
     }

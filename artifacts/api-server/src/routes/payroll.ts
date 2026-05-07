@@ -28,7 +28,15 @@ router.get("/payroll/unplaced", async (req, res): Promise<void> => {
   const reclaimOverridden =
     typeof req.query.reclaimOverridden === "string" &&
     req.query.reclaimOverridden.toLowerCase() === "true";
-  const result = await seedHousingDeductions({ logger, reclaimOverridden });
+  const reclaimOccupantIds =
+    typeof req.query.reclaimOccupantIds === "string" && req.query.reclaimOccupantIds.trim()
+      ? req.query.reclaimOccupantIds.split(",").map((id) => id.trim()).filter(Boolean)
+      : undefined;
+  const result = await seedHousingDeductions({
+    logger,
+    reclaimOverridden,
+    reclaimOccupantIds,
+  });
   res.json(
     ListUnplacedPayrollResponse.parse({
       unmatched: result.unmatched,

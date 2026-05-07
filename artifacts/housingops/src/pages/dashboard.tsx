@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2 } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator,
@@ -201,6 +201,105 @@ export default function Dashboard() {
     rows.sort((a, b) => b.rent - a.rent || a.customerName.localeCompare(b.customerName));
     return { rows, total: portfolioTotal };
   }, [customers, scopedLeases, scopedProperties]);
+
+  interface OverriddenOccupant {
+    occupant: Occupant;
+    propertyName: string;
+    propertyId: string | null;
+  }
+  const overriddenOccupants = useMemo<OverriddenOccupant[]>(() => {
+    const out: OverriddenOccupant[] = [];
+    for (const o of activeOccupants) {
+      if (o.chargeSource !== "manual_override") continue;
+      const prop = o.propertyId
+        ? scopedProperties.find((p) => p.id === o.propertyId)
+        : null;
+      out.push({
+        occupant: o,
+        propertyName: prop?.name ?? "—",
+        propertyId: o.propertyId,
+      });
+    }
+    out.sort((a, b) => a.occupant.name.localeCompare(b.occupant.name));
+    return out;
+  }, [activeOccupants, scopedProperties]);
+
+  const overriddenByCustomer = useMemo(() => {
+    const map = new Map<
+      string,
+      { customer: string; rows: OverriddenOccupant[] }
+    >();
+    for (const entry of overriddenOccupants) {
+      const cust = entry.occupant.chargeSourceCustomer || entry.occupant.company || "Unknown";
+      const existing = map.get(cust) ?? { customer: cust, rows: [] };
+      existing.rows.push(entry);
+      map.set(cust, existing);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.rows.length - a.rows.length || a.customer.localeCompare(b.customer),
+    );
+  }, [overriddenOccupants]);
+
+  const [reclaimingIds, setReclaimingIds] = useState<Set<string>>(new Set());
+  const [reclaimingAll, setReclaimingAll] = useState(false);
+
+  const handleReclaimSingle = async (occupantId: string) => {
+    setReclaimingIds((prev) => new Set(prev).add(occupantId));
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(
+        `${baseUrl}api/payroll/unplaced?reclaimOverridden=true&reclaimOccupantIds=${encodeURIComponent(occupantId)}`,
+      );
+      if (!res.ok) {
+        toast({
+          title: "Re-claim failed",
+          description: `Server returned ${res.status}. Try again or re-claim all.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      await queryClient.invalidateQueries({
+        queryKey: getListUnplacedPayrollQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+      toast({
+        title: "Re-claimed from payroll",
+        description: "The occupant's charge has been reset to the payroll value.",
+      });
+    } finally {
+      setReclaimingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(occupantId);
+        return next;
+      });
+    }
+  };
+
+  const handleReclaimAll = async () => {
+    setReclaimingAll(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(`${baseUrl}api/payroll/unplaced?reclaimOverridden=true`);
+      if (!res.ok) {
+        toast({
+          title: "Re-claim failed",
+          description: `Server returned ${res.status}. Try again later.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      await queryClient.invalidateQueries({
+        queryKey: getListUnplacedPayrollQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+      toast({
+        title: "All overrides re-claimed",
+        description: `${overriddenOccupants.length} occupant${overriddenOccupants.length === 1 ? "" : "s"} reset to payroll values.`,
+      });
+    } finally {
+      setReclaimingAll(false);
+    }
+  };
 
   // "Needs review" mirrors the per-page filters that the dashboard tiles
   // deep-link into. Each predicate matches what the corresponding page
@@ -1476,6 +1575,140 @@ export default function Dashboard() {
                   </Table>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {overriddenOccupants.length > 0 && (
+          <Card id="card-payroll-mismatches" data-testid="card-payroll-mismatches">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <RotateCcw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <CardTitle>Review payroll mismatches</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-payroll-mismatches-count"
+                >
+                  {overriddenOccupants.length} override{overriddenOccupants.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Occupants whose payroll-set charge was manually edited. Compare
+                against the latest payroll run — if the override now agrees with
+                payroll, re-claim to let the seeder manage it again.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {overriddenOccupants.length > 1 && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={reclaimingAll}
+                    onClick={handleReclaimAll}
+                    data-testid="button-reclaim-all-overrides"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    {reclaimingAll ? "Re-claiming…" : "Re-claim all from payroll"}
+                  </Button>
+                </div>
+              )}
+              {overriddenByCustomer.map((group) => (
+                <div
+                  key={group.customer}
+                  data-testid={`group-overridden-${group.customer}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">{group.customer}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {group.rows.length} override{group.rows.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="text-right">Current charge</TableHead>
+                        <TableHead>Payroll source</TableHead>
+                        <TableHead>Property</TableHead>
+                        <TableHead className="w-40" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.rows.map(({ occupant: o, propertyName, propertyId }) => (
+                        <TableRow
+                          key={o.id}
+                          data-testid={`row-overridden-${o.id}`}
+                        >
+                          <TableCell className="font-medium">
+                            {o.name}
+                            <Badge
+                              variant="outline"
+                              className="ml-2 text-[10px] bg-amber-100 text-amber-800 border-amber-200"
+                              data-testid={`badge-overridden-${o.id}`}
+                            >
+                              overridden
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            ${o.chargePerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            <span className="text-xs text-muted-foreground ml-1">
+                              /{o.billingFrequency === "Weekly" ? "wk" : "mo"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {o.chargeSourceCustomer && o.chargeSourcePersonId ? (
+                              <div>
+                                <div data-testid={`text-overridden-source-customer-${o.id}`}>
+                                  {o.chargeSourceCustomer}
+                                </div>
+                                <div
+                                  className="text-xs tabular-nums"
+                                  data-testid={`text-overridden-source-person-${o.id}`}
+                                >
+                                  Person {o.chargeSourcePersonId}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="italic">No payroll link</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {propertyId ? (
+                              <Link
+                                href={`/properties/${propertyId}`}
+                                className="text-primary hover:underline text-sm"
+                                data-testid={`link-overridden-property-${o.id}`}
+                              >
+                                <PropertyNameCell
+                                  name={propertyName}
+                                  primaryClassName="text-primary"
+                                />
+                              </Link>
+                            ) : (
+                              <span className="text-sm text-muted-foreground italic">
+                                unassigned
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={reclaimingIds.has(o.id)}
+                              onClick={() => handleReclaimSingle(o.id)}
+                              data-testid={`button-reclaim-${o.id}`}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              {reclaimingIds.has(o.id) ? "Re-claiming…" : "Re-claim"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}

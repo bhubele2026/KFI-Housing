@@ -82,6 +82,16 @@ export function AddLeaseDialog({
 
   const submit = () => {
     if (!canSubmit) return;
+    // Task #492: a brand-new lease inherits its parent property's
+    // `defaultNoticePeriodDays` at creation time, so the value is
+    // pinned on the lease row even if the property default later
+    // changes. Operators can still override (or clear back to null) on
+    // the lease detail page. When the property has no default
+    // configured, the lease starts at null and the alert simply skips
+    // it — same null-means-skip semantics the digest uses.
+    const selectedProperty = propertyList.find((p) => p.id === form.propertyId);
+    const inheritedNoticePeriodDays =
+      selectedProperty?.defaultNoticePeriodDays ?? null;
     onAdd({
       id: `l-${Date.now()}`,
       propertyId: form.propertyId,
@@ -100,6 +110,7 @@ export function AddLeaseDialog({
       monthlyRoomNightMin: 0,
       longStayTaxExempt: false,
       customerResponsibleForRent: false,
+      noticePeriodDays: inheritedNoticePeriodDays,
     });
     setOpen(false);
   };

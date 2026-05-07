@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leasesTable, propertiesTable } from "@workspace/db";
+import { db, leasesTable, propertiesTable, customersTable, bedsTable } from "@workspace/db";
 import { sendWeeklyLeaseDigest } from "../lib/weekly-lease-digest";
 import { readDigestConfig } from "../lib/lease-digest-scheduler";
 import { timingSafeEqual } from "crypto";
@@ -78,6 +78,8 @@ router.post("/lease-digest/preview", async (req, res): Promise<void> => {
         webhookUrl: config.webhookUrl,
         recipients: config.recipients,
         appBaseUrl: config.appBaseUrl,
+        noticeLeadDays: config.noticeLeadDays,
+        lowOccupancyThresholdPct: config.lowOccupancyThresholdPct,
       },
       {
         fetch: globalThis.fetch,
@@ -90,11 +92,29 @@ router.post("/lease-digest/preview", async (req, res): Promise<void> => {
             endDate: r.endDate,
             status: r.status,
             vendor: r.vendor,
+            noticePeriodDays: r.noticePeriodDays,
           }));
         },
         loadProperties: async () => {
           const rows = await db.select().from(propertiesTable);
+          return rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            defaultNoticePeriodDays: r.defaultNoticePeriodDays,
+            customerId: r.customerId,
+            sharedWithCustomerIds: r.sharedWithCustomerIds,
+          }));
+        },
+        loadCustomers: async () => {
+          const rows = await db.select().from(customersTable);
           return rows.map((r) => ({ id: r.id, name: r.name }));
+        },
+        loadBeds: async () => {
+          const rows = await db.select().from(bedsTable);
+          return rows.map((r) => ({
+            propertyId: r.propertyId,
+            status: r.status,
+          }));
         },
         now: () => new Date(),
       },

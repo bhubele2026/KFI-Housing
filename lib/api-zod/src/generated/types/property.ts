@@ -74,6 +74,17 @@ instead of the canonical `monthlyRent`, and the
 without the field default to `false`.
  */
   rentFree?: boolean;
+  /**
+   * Default termination / renewal notice period in days for
+leases on this property (Task #492). Used as the seed value
+for new leases and as the fallback when a lease has no
+`noticePeriodDays` of its own. `null` disables notice
+tracking on the property.
+
+   * @minimum 0
+   * @nullable
+   */
+  defaultNoticePeriodDays?: number | null;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time

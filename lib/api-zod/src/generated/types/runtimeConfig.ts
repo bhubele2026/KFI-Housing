@@ -32,4 +32,26 @@ the portfolio map falls back to Google's built-in
    * @nullable
    */
   googleMapsMapId: string | null;
+  /**
+   * Lead window (in days) for the "Notice deadline approaching"
+dashboard alert and weekly digest section (Task #492).
+Server-side default is 30; operators can override it via the
+`NOTICE_LEAD_DAYS` env var. Exposing it here keeps the live
+dashboard alert and the weekly digest in lockstep — there is
+one source of truth.
+
+   * @minimum 0
+   */
+  noticeLeadDays: number;
+  /**
+   * Combined-occupancy threshold (as a percentage) below which a
+customer is flagged in the "Low combined occupancy" dashboard
+alert and weekly digest section (Task #492). Server-side
+default is 80; operators can override it via the
+`LOW_OCCUPANCY_THRESHOLD_PCT` env var.
+
+   * @minimum 0
+   * @maximum 100
+   */
+  lowOccupancyThresholdPct: number;
 }

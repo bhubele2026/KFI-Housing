@@ -52,4 +52,13 @@ PATCH bodies so partial updates that don't touch this
 field keep working.
  */
   rentFree?: boolean;
+  /**
+   * Default termination / renewal notice period in days for
+leases on this property. See `Property.defaultNoticePeriodDays`
+for the full contract.
+
+   * @minimum 0
+   * @nullable
+   */
+  defaultNoticePeriodDays?: number | null;
 }

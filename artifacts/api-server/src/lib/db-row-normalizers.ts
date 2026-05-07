@@ -158,6 +158,26 @@ function normalizeRentFrequency(
 }
 
 /**
+ * Coerce a notice-period day count into either a non-negative integer
+ * or `null`. The schema allows `null` (no notice tracking) so anything
+ * we can't read as a non-negative integer collapses to `null` rather
+ * than persisting a junk value (Task #492).
+ */
+export function normalizeNoticePeriodDays(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(n)) return null;
+  const i = Math.trunc(n);
+  if (i < 0) return null;
+  return i;
+}
+
+/**
  * Normalize a property row (or insert payload) into the canonical
  * shape the openapi `Property` schema accepts. Only fields that have
  * historically caused trouble are touched; everything else is passed
@@ -181,6 +201,16 @@ export function normalizePropertyRow<
     const after = normalizeRentFrequency(row.rentFrequency);
     recordFixup(fixups, "rentFrequency", row.rentFrequency, after);
     out.rentFrequency = after;
+  }
+  if ("defaultNoticePeriodDays" in row) {
+    const after = normalizeNoticePeriodDays(row.defaultNoticePeriodDays);
+    recordFixup(
+      fixups,
+      "defaultNoticePeriodDays",
+      row.defaultNoticePeriodDays,
+      after,
+    );
+    out.defaultNoticePeriodDays = after;
   }
   return out as T;
 }
@@ -246,6 +276,11 @@ export function normalizeLeaseRow<
     const after = normalizeLeaseDate(row.snoozedUntil as string | null);
     recordFixup(fixups, "snoozedUntil", row.snoozedUntil, after);
     out.snoozedUntil = after;
+  }
+  if ("noticePeriodDays" in row) {
+    const after = normalizeNoticePeriodDays(row.noticePeriodDays);
+    recordFixup(fixups, "noticePeriodDays", row.noticePeriodDays, after);
+    out.noticePeriodDays = after;
   }
   return out as T;
 }

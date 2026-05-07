@@ -79,6 +79,14 @@ export const leasesTable = pgTable("leases", {
   // "no snooze recorded yet".
   snoozedAt: text("snoozed_at").notNull().default(""),
   snoozedBy: text("snoozed_by").notNull().default(""),
+  // Termination / renewal notice period in days (Task #492). Used to
+  // derive the notice deadline (= endDate − noticePeriodDays) so the
+  // dashboard can fire a "Notice deadline approaching" alert in
+  // addition to the existing end-date buckets. Nullable: `null` means
+  // "no notice tracking on this lease" (legacy rows + leases the
+  // operator hasn't filled in yet). New leases inherit the parent
+  // property's `defaultNoticePeriodDays` when present.
+  noticePeriodDays: integer("notice_period_days"),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

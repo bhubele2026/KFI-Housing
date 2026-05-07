@@ -54,6 +54,28 @@ the portfolio map falls back to Google's built-in
    * @nullable
    */
   googleMapsMapId: string | null;
+  /**
+   * Lead window (in days) for the "Notice deadline approaching"
+dashboard alert and weekly digest section (Task #492).
+Server-side default is 30; operators can override it via the
+`NOTICE_LEAD_DAYS` env var. Exposing it here keeps the live
+dashboard alert and the weekly digest in lockstep — there is
+one source of truth.
+
+   * @minimum 0
+   */
+  noticeLeadDays: number;
+  /**
+   * Combined-occupancy threshold (as a percentage) below which a
+customer is flagged in the "Low combined occupancy" dashboard
+alert and weekly digest section (Task #492). Server-side
+default is 80; operators can override it via the
+`LOW_OCCUPANCY_THRESHOLD_PCT` env var.
+
+   * @minimum 0
+   * @maximum 100
+   */
+  lowOccupancyThresholdPct: number;
 }
 
 /**
@@ -271,6 +293,17 @@ instead of the canonical `monthlyRent`, and the
 without the field default to `false`.
  */
   rentFree?: boolean;
+  /**
+   * Default termination / renewal notice period in days for
+leases on this property (Task #492). Used as the seed value
+for new leases and as the fallback when a lease has no
+`noticePeriodDays` of its own. `null` disables notice
+tracking on the property.
+
+   * @minimum 0
+   * @nullable
+   */
+  defaultNoticePeriodDays?: number | null;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time
@@ -361,6 +394,15 @@ PATCH bodies so partial updates that don't touch this
 field keep working.
  */
   rentFree?: boolean;
+  /**
+   * Default termination / renewal notice period in days for
+leases on this property. See `Property.defaultNoticePeriodDays`
+for the full contract.
+
+   * @minimum 0
+   * @nullable
+   */
+  defaultNoticePeriodDays?: number | null;
 }
 
 /**
@@ -499,6 +541,19 @@ is un-snoozed. Sourced from the dashboard client (the
 "unknown" as a fallback). Added by task #429.
  */
   snoozedBy?: string;
+  /**
+   * Termination / renewal notice period in days (Task #492).
+The "Notice deadline approaching" dashboard alert fires
+when today is within `NOTICE_LEAD_DAYS` (default 30) of
+`endDate − noticePeriodDays`. `null` disables notice
+tracking on this lease — legacy rows and rows the operator
+hasn't filled in yet stay quiet. New leases inherit the
+parent property's `defaultNoticePeriodDays` when present.
+
+   * @minimum 0
+   * @nullable
+   */
+  noticePeriodDays?: number | null;
 }
 
 export type LeaseUpdateStatus =
@@ -544,6 +599,14 @@ export interface LeaseUpdate {
   snoozedUntil?: OptionalLeaseDate;
   snoozedAt?: string;
   snoozedBy?: string;
+  /**
+   * Termination / renewal notice period in days. See
+`Lease.noticePeriodDays` for the full contract.
+
+   * @minimum 0
+   * @nullable
+   */
+  noticePeriodDays?: number | null;
 }
 
 export interface RoomNightLog {

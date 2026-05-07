@@ -1123,6 +1123,29 @@ export default function LeaseDetail() {
                   testId="inline-lease-deposit"
                 />
               </div>
+              {/* Task #492: explicit per-lease override; blank/null falls back
+                  to the property's defaultNoticePeriodDays so this card stays
+                  readable when an operator hasn't customised the lease. */}
+              <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                <span className="text-sm text-muted-foreground w-40 shrink-0">Notice (days)</span>
+                <InlineEdit
+                  value={lease.noticePeriodDays ?? ""}
+                  type="number"
+                  placeholder="—"
+                  onSave={(v) => {
+                    const trimmed = v.trim();
+                    if (trimmed === "") {
+                      applyUpdate({ noticePeriodDays: null });
+                      return;
+                    }
+                    const n = parseInt(trimmed, 10);
+                    applyUpdate({
+                      noticePeriodDays: Number.isFinite(n) && n >= 0 ? n : null,
+                    });
+                  }}
+                  testId="inline-lease-notice-period-days"
+                />
+              </div>
               <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                 <span className="text-sm text-muted-foreground w-40 shrink-0">Status</span>
                 <Select

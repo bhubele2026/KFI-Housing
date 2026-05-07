@@ -1144,7 +1144,7 @@ components:
 
     RuntimeConfig:
       type: object
-      required: [googleMapsApiKey, googleMapsMapId]
+      required: [googleMapsApiKey, googleMapsMapId, noticeLeadDays, lowOccupancyThresholdPct]
       description: |
         Runtime config the web app fetches once on mount. The Google Maps
         Embed API key is intentionally exposed (the embed URL puts it on
@@ -1165,6 +1165,26 @@ components:
             requires a Map ID to render at all, so when this is `null`
             the portfolio map falls back to Google's built-in
             `DEMO_MAP_ID` so a fresh workspace still renders pins.
+        noticeLeadDays:
+          type: integer
+          minimum: 0
+          description: |
+            Lead window (in days) for the "Notice deadline approaching"
+            dashboard alert and weekly digest section (Task #492).
+            Server-side default is 30; operators can override it via the
+            `NOTICE_LEAD_DAYS` env var. Exposing it here keeps the live
+            dashboard alert and the weekly digest in lockstep — there is
+            one source of truth.
+        lowOccupancyThresholdPct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: |
+            Combined-occupancy threshold (as a percentage) below which a
+            customer is flagged in the "Low combined occupancy" dashboard
+            alert and weekly digest section (Task #492). Server-side
+            default is 80; operators can override it via the
+            `LOW_OCCUPANCY_THRESHOLD_PCT` env var.
 
     Customer:
       type: object
@@ -1321,6 +1341,15 @@ components:
             "missing rent" review filter excludes the row. See task
             #497. Optional for backward compatibility — older payloads
             without the field default to `false`.
+        defaultNoticePeriodDays:
+          type: ["integer", "null"]
+          minimum: 0
+          description: |
+            Default termination / renewal notice period in days for
+            leases on this property (Task #492). Used as the seed value
+            for new leases and as the fallback when a lease has no
+            `noticePeriodDays` of its own. `null` disables notice
+            tracking on the property.
         geocodeStatus:
           type: string
           enum: [ok, no_result, skipped]
@@ -1406,6 +1435,13 @@ components:
             See `Property.rentFree` for the full contract. Optional on
             PATCH bodies so partial updates that don't touch this
             field keep working.
+        defaultNoticePeriodDays:
+          type: ["integer", "null"]
+          minimum: 0
+          description: |
+            Default termination / renewal notice period in days for
+            leases on this property. See `Property.defaultNoticePeriodDays`
+            for the full contract.
 
     Ratings:
       type: object
@@ -1575,6 +1611,17 @@ components:
             is un-snoozed. Sourced from the dashboard client (the
             `housingops:operator-email` localStorage value, with
             "unknown" as a fallback). Added by task #429.
+        noticePeriodDays:
+          type: ["integer", "null"]
+          minimum: 0
+          description: |
+            Termination / renewal notice period in days (Task #492).
+            The "Notice deadline approaching" dashboard alert fires
+            when today is within `NOTICE_LEAD_DAYS` (default 30) of
+            `endDate − noticePeriodDays`. `null` disables notice
+            tracking on this lease — legacy rows and rows the operator
+            hasn't filled in yet stay quiet. New leases inherit the
+            parent property's `defaultNoticePeriodDays` when present.
     LeaseUpdate:
       type: object
       properties:
@@ -1603,6 +1650,12 @@ components:
         snoozedUntil: { $ref: "#/components/schemas/OptionalLeaseDate" }
         snoozedAt: { type: string }
         snoozedBy: { type: string }
+        noticePeriodDays:
+          type: ["integer", "null"]
+          minimum: 0
+          description: |
+            Termination / renewal notice period in days. See
+            `Lease.noticePeriodDays` for the full contract.
 
     RoomNightLog:
       type: object

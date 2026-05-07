@@ -591,6 +591,15 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
           ? parsedBuyoutCost
           : null;
 
+      // Task #492: inherit `noticePeriodDays` from the parent property
+      // at creation time so the new lease is immediately eligible for
+      // the notice-deadline alert (and the value is pinned even if the
+      // property default later changes). PDF import never tries to
+      // parse a notice period out of free text — operators can edit
+      // the inherited value on the lease detail page if needed.
+      const parentProperty = properties.find((p) => p.id === propertyId);
+      const inheritedNoticePeriodDays =
+        parentProperty?.defaultNoticePeriodDays ?? null;
       const newLease: Lease = {
         id: `l-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         propertyId,
@@ -600,6 +609,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         securityDeposit: parseFloat(reviewingItem.leaseDraft.securityDeposit) || 0,
         status: reviewingItem.leaseDraft.status,
         notes: reviewingItem.leaseDraft.notes,
+        noticePeriodDays: inheritedNoticePeriodDays,
         // Auto-extracted from the PDF and confirmed by the operator in the
         // reviewer dialog (task #121). Operators can still tweak anything
         // further on the lease detail page after import.

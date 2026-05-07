@@ -36,4 +36,12 @@ export interface LeaseUpdate {
   snoozedUntil?: OptionalLeaseDate;
   snoozedAt?: string;
   snoozedBy?: string;
+  /**
+   * Termination / renewal notice period in days. See
+`Lease.noticePeriodDays` for the full contract.
+
+   * @minimum 0
+   * @nullable
+   */
+  noticePeriodDays?: number | null;
 }

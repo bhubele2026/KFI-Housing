@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { GetRuntimeConfigResponse } from "@workspace/api-zod";
+import { readAlertThresholds } from "../lib/weekly-lease-digest";
 
 const router: IRouter = Router();
 
@@ -34,9 +35,16 @@ function readRuntimeConfig() {
   const googleMapsApiKey =
     trim(process.env.GOOGLE_MAPS_API_KEY) ??
     trim(process.env.VITE_GOOGLE_MAPS_API_KEY);
+  // Task #492: expose the notice-deadline lead window and low-occupancy
+  // threshold so the dashboard alert cards and the weekly digest share a
+  // single source of truth. Reusing `readAlertThresholds` here means the
+  // env-var fallback / sanitization logic lives in exactly one place.
+  const thresholds = readAlertThresholds(process.env);
   return GetRuntimeConfigResponse.parse({
     googleMapsApiKey,
     googleMapsMapId: trim(process.env.GOOGLE_MAPS_MAP_ID),
+    noticeLeadDays: thresholds.noticeLeadDays,
+    lowOccupancyThresholdPct: thresholds.lowOccupancyThresholdPct,
   });
 }
 

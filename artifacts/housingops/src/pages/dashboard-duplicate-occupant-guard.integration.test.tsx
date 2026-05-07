@@ -151,6 +151,13 @@ vi.mock("@/components/property-location-map", () => ({
   PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
 }));
 
+// Task #492: dashboard reads /api/config for alert thresholds; stub
+// the hook so this integration test doesn't need to wire it up.
+vi.mock("@/hooks/use-runtime-config", () => ({
+  useRuntimeConfigQuery: () => ({ data: undefined }),
+  useRuntimeConfigStream: () => undefined,
+}));
+
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
   useListUnplacedPayroll: () => ({

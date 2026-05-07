@@ -20,6 +20,7 @@ import type { Logger } from "pino";
 import {
   isoWeekKey,
   parseRecipients,
+  readAlertThresholds,
   sendWeeklyLeaseDigest,
   shouldSendDigestNow,
   type WeeklyDigestDeps,
@@ -31,9 +32,14 @@ export interface SchedulerConfig {
   appBaseUrl: string;
   weekday: number;
   hourUtc: number;
+  /** Lead time in days for "Notice deadline approaching" alerts (Task #492). */
+  noticeLeadDays: number;
+  /** Combined-occupancy floor (percent) for low-occupancy alerts (Task #492). */
+  lowOccupancyThresholdPct: number;
 }
 
 export function readDigestConfig(env: NodeJS.ProcessEnv): SchedulerConfig {
+  const thresholds = readAlertThresholds(env);
   return {
     webhookUrl: (env["LEASE_DIGEST_WEBHOOK_URL"] ?? "").trim(),
     recipients: parseRecipients(env["LEASE_DIGEST_RECIPIENTS"]),
@@ -44,6 +50,8 @@ export function readDigestConfig(env: NodeJS.ProcessEnv): SchedulerConfig {
     ).trim(),
     weekday: parseIntOr(env["LEASE_DIGEST_WEEKDAY"], 1), // Monday
     hourUtc: parseIntOr(env["LEASE_DIGEST_HOUR_UTC"], 13), // 8am US Central
+    noticeLeadDays: thresholds.noticeLeadDays,
+    lowOccupancyThresholdPct: thresholds.lowOccupancyThresholdPct,
   };
 }
 
@@ -116,6 +124,8 @@ export function startWeeklyLeaseDigestScheduler(
           webhookUrl: config.webhookUrl,
           recipients: merged,
           appBaseUrl: config.appBaseUrl,
+          noticeLeadDays: config.noticeLeadDays,
+          lowOccupancyThresholdPct: config.lowOccupancyThresholdPct,
         },
         deps,
       );

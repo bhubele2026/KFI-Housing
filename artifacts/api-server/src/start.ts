@@ -18,6 +18,8 @@ import { startMasterFileWatcher } from "./lib/master-file-watcher";
 import type {
   DigestLease,
   DigestProperty,
+  DigestCustomer,
+  DigestBed,
 } from "./lib/weekly-lease-digest";
 import type {
   ReminderLease,
@@ -81,6 +83,11 @@ export interface StartDeps {
   // Injected so tests can use fakes without touching the DB module.
   loadLeasesForDigest: () => Promise<DigestLease[]>;
   loadPropertiesForDigest: () => Promise<DigestProperty[]>;
+  // Task #492: roll-up sources for the notice-deadline + low
+  // combined-occupancy alerts in the weekly digest. Optional so legacy
+  // wiring (and tests) keep working without the new sections.
+  loadCustomersForDigest?: () => Promise<DigestCustomer[]>;
+  loadBedsForDigest?: () => Promise<DigestBed[]>;
   // Live data loaders for the monthly room-night reminder (Task #378).
   loadLeasesForReminder: () => Promise<ReminderLease[]>;
   loadPropertiesForReminder: () => Promise<ReminderProperty[]>;
@@ -490,6 +497,8 @@ export async function start(deps: StartDeps): Promise<void> {
       fetch: deps.digestFetch,
       loadLeases: deps.loadLeasesForDigest,
       loadProperties: deps.loadPropertiesForDigest,
+      loadCustomers: deps.loadCustomersForDigest,
+      loadBeds: deps.loadBedsForDigest,
       loadDbRecipients: deps.loadDigestRecipientsFromDb,
       now: () => new Date(),
       logger: deps.logger,

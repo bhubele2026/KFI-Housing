@@ -126,6 +126,12 @@ export const PropertySchema = z.object({
   // Optional so older payloads / fixtures keep parsing; treat
   // missing/undefined as `false` at the call site.
   rentFree: z.boolean().optional(),
+  // Default termination / renewal notice period in days (Task #492).
+  // Optional/nullable so legacy backups, seed literals and pre-task
+  // #492 API clients keep parsing — `null`/`undefined` mean "no notice
+  // tracking on this property". Used as the seed/fallback for the
+  // matching `Lease.noticePeriodDays`.
+  defaultNoticePeriodDays: z.number().int().min(0).nullable().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 
@@ -330,6 +336,11 @@ export const LeaseSchema = z.object({
   // clients keep parsing — `undefined`/`""` mean "no snooze recorded".
   snoozedAt: z.string().optional(),
   snoozedBy: z.string().optional(),
+  // Termination / renewal notice period in days (Task #492). Optional/
+  // nullable so legacy backups and pre-task #492 API clients keep
+  // parsing — `null`/`undefined` mean "no notice tracking on this
+  // lease". Drives the dashboard "Notice deadline approaching" alert.
+  noticePeriodDays: z.number().int().min(0).nullable().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

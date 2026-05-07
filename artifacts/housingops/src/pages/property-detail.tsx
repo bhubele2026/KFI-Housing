@@ -1650,6 +1650,31 @@ export default function PropertyDetail() {
                       <span className="text-sm text-muted-foreground w-40 shrink-0">Due Day of Month</span>
                       <InlineEdit value={property.paymentDueDay} type="number" onSave={v => updateProperty(id, { paymentDueDay: parseInt(v) })} />
                     </div>
+                    {/* Task #492: property-level default notice period; each
+                        lease can still override per-lease. Empty/null means
+                        "no notice configured" — alerts simply won't fire for
+                        that property until either field is set. */}
+                    <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                      <span className="text-sm text-muted-foreground w-40 shrink-0">Default Notice (days)</span>
+                      <InlineEdit
+                        value={property.defaultNoticePeriodDays ?? ""}
+                        type="number"
+                        placeholder="—"
+                        testId="inline-property-default-notice-period-days"
+                        onSave={v => {
+                          const trimmed = v.trim();
+                          if (trimmed === "") {
+                            updateProperty(id, { defaultNoticePeriodDays: null });
+                            return;
+                          }
+                          const n = parseInt(trimmed, 10);
+                          updateProperty(id, {
+                            defaultNoticePeriodDays:
+                              Number.isFinite(n) && n >= 0 ? n : null,
+                          });
+                        }}
+                      />
+                    </div>
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                       <div className="flex items-center gap-2 w-40 shrink-0">
                         <Select

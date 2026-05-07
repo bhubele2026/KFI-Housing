@@ -26,6 +26,11 @@ only when they are already safe to ship to the browser.
 
  * @summary Read non-secret runtime config the web app needs at boot
  */
+export const getRuntimeConfigResponseNoticeLeadDaysMin = 0;
+
+export const getRuntimeConfigResponseLowOccupancyThresholdPctMin = 0;
+export const getRuntimeConfigResponseLowOccupancyThresholdPctMax = 100;
+
 export const GetRuntimeConfigResponse = zod
   .object({
     googleMapsApiKey: zod
@@ -39,6 +44,19 @@ export const GetRuntimeConfigResponse = zod
       .nullable()
       .describe(
         "Google Cloud Map ID for the portfolio map's branded vector\nstyle (custom palette + reduced POI clutter), or `null` when\nthe operator hasn't configured one yet. AdvancedMarkerElement\nrequires a Map ID to render at all, so when this is `null`\nthe portfolio map falls back to Google's built-in\n`DEMO_MAP_ID` so a fresh workspace still renders pins.\n",
+      ),
+    noticeLeadDays: zod
+      .number()
+      .min(getRuntimeConfigResponseNoticeLeadDaysMin)
+      .describe(
+        'Lead window (in days) for the \"Notice deadline approaching\"\ndashboard alert and weekly digest section (Task #492).\nServer-side default is 30; operators can override it via the\n`NOTICE_LEAD_DAYS` env var. Exposing it here keeps the live\ndashboard alert and the weekly digest in lockstep — there is\none source of truth.\n',
+      ),
+    lowOccupancyThresholdPct: zod
+      .number()
+      .min(getRuntimeConfigResponseLowOccupancyThresholdPctMin)
+      .max(getRuntimeConfigResponseLowOccupancyThresholdPctMax)
+      .describe(
+        'Combined-occupancy threshold (as a percentage) below which a\ncustomer is flagged in the \"Low combined occupancy\" dashboard\nalert and weekly digest section (Task #492). Server-side\ndefault is 80; operators can override it via the\n`LOW_OCCUPANCY_THRESHOLD_PCT` env var.\n',
       ),
   })
   .describe(
@@ -73,6 +91,8 @@ export const importDataBodyPropertiesItemRatingsLocationMax = 5;
 export const importDataBodyPropertiesItemRatingsValueForMoneyMin = 0;
 export const importDataBodyPropertiesItemRatingsValueForMoneyMax = 5;
 
+export const importDataBodyPropertiesItemDefaultNoticePeriodDaysMin = 0;
+
 export const importDataBodyLeasesItemStartDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
@@ -82,6 +102,8 @@ export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
 export const importDataBodyLeasesItemSnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const importDataBodyLeasesItemNoticePeriodDaysMin = 0;
+
 export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
@@ -216,6 +238,13 @@ export const ImportDataBody = zod.object({
         .describe(
           'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
         ),
+      defaultNoticePeriodDays: zod
+        .number()
+        .min(importDataBodyPropertiesItemDefaultNoticePeriodDaysMin)
+        .nullish()
+        .describe(
+          "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+        ),
       geocodeStatus: zod
         .enum(["ok", "no_result", "skipped"])
         .optional()
@@ -330,6 +359,13 @@ export const ImportDataBody = zod.object({
         .optional()
         .describe(
           'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
+        ),
+      noticePeriodDays: zod
+        .number()
+        .min(importDataBodyLeasesItemNoticePeriodDaysMin)
+        .nullish()
+        .describe(
+          "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
         ),
     }),
   ),
@@ -636,6 +672,8 @@ export const listPropertiesResponseRatingsLocationMax = 5;
 export const listPropertiesResponseRatingsValueForMoneyMin = 0;
 export const listPropertiesResponseRatingsValueForMoneyMax = 5;
 
+export const listPropertiesResponseDefaultNoticePeriodDaysMin = 0;
+
 export const ListPropertiesResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -731,6 +769,13 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
     ),
+  defaultNoticePeriodDays: zod
+    .number()
+    .min(listPropertiesResponseDefaultNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -760,6 +805,8 @@ export const createPropertyBodyRatingsLocationMax = 5;
 
 export const createPropertyBodyRatingsValueForMoneyMin = 0;
 export const createPropertyBodyRatingsValueForMoneyMax = 5;
+
+export const createPropertyBodyDefaultNoticePeriodDaysMin = 0;
 
 export const CreatePropertyBody = zod.object({
   id: zod.string(),
@@ -856,6 +903,13 @@ export const CreatePropertyBody = zod.object({
     .describe(
       'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
     ),
+  defaultNoticePeriodDays: zod
+    .number()
+    .min(createPropertyBodyDefaultNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -918,6 +972,8 @@ export const updatePropertyBodyRatingsLocationMax = 5;
 
 export const updatePropertyBodyRatingsValueForMoneyMin = 0;
 export const updatePropertyBodyRatingsValueForMoneyMax = 5;
+
+export const updatePropertyBodyDefaultNoticePeriodDaysMin = 0;
 
 export const UpdatePropertyBody = zod.object({
   name: zod.string().optional(),
@@ -1005,6 +1061,13 @@ export const UpdatePropertyBody = zod.object({
     .describe(
       "See `Property.rentFree` for the full contract. Optional on\nPATCH bodies so partial updates that don't touch this\nfield keep working.\n",
     ),
+  defaultNoticePeriodDays: zod
+    .number()
+    .min(updatePropertyBodyDefaultNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Default termination \/ renewal notice period in days for\nleases on this property. See `Property.defaultNoticePeriodDays`\nfor the full contract.\n",
+    ),
 });
 
 export const updatePropertyResponseRatingsLandlordMin = 0;
@@ -1024,6 +1087,8 @@ export const updatePropertyResponseRatingsLocationMax = 5;
 
 export const updatePropertyResponseRatingsValueForMoneyMin = 0;
 export const updatePropertyResponseRatingsValueForMoneyMax = 5;
+
+export const updatePropertyResponseDefaultNoticePeriodDaysMin = 0;
 
 export const UpdatePropertyResponse = zod.object({
   id: zod.string(),
@@ -1120,6 +1185,13 @@ export const UpdatePropertyResponse = zod.object({
     .describe(
       'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
     ),
+  defaultNoticePeriodDays: zod
+    .number()
+    .min(updatePropertyResponseDefaultNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -1147,6 +1219,7 @@ export const listLeasesResponseEndDateRegExp = new RegExp(
 export const listLeasesResponseSnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const listLeasesResponseNoticePeriodDaysMin = 0;
 
 export const ListLeasesResponseItem = zod.object({
   id: zod.string(),
@@ -1254,6 +1327,13 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
     ),
+  noticePeriodDays: zod
+    .number()
+    .min(listLeasesResponseNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1269,6 +1349,7 @@ export const createLeaseBodyEndDateRegExp = new RegExp(
 export const createLeaseBodySnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const createLeaseBodyNoticePeriodDaysMin = 0;
 
 export const CreateLeaseBody = zod.object({
   id: zod.string(),
@@ -1375,6 +1456,13 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
+    ),
+  noticePeriodDays: zod
+    .number()
+    .min(createLeaseBodyNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
     ),
 });
 
@@ -1785,6 +1873,7 @@ export const updateLeaseBodyEndDateRegExp = new RegExp(
 export const updateLeaseBodySnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const updateLeaseBodyNoticePeriodDaysMin = 0;
 
 export const UpdateLeaseBody = zod.object({
   propertyId: zod.string().optional(),
@@ -1814,6 +1903,13 @@ export const UpdateLeaseBody = zod.object({
     .optional(),
   snoozedAt: zod.string().optional(),
   snoozedBy: zod.string().optional(),
+  noticePeriodDays: zod
+    .number()
+    .min(updateLeaseBodyNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Termination \/ renewal notice period in days. See\n`Lease.noticePeriodDays` for the full contract.\n",
+    ),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -1825,6 +1921,7 @@ export const updateLeaseResponseEndDateRegExp = new RegExp(
 export const updateLeaseResponseSnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const updateLeaseResponseNoticePeriodDaysMin = 0;
 
 export const UpdateLeaseResponse = zod.object({
   id: zod.string(),
@@ -1931,6 +2028,13 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       'Identifier (email when known) of the operator who applied\nthe most recent snooze on this lease. Empty string means\n\"no snoozer recorded\". Cleared back to \"\" when the alert\nis un-snoozed. Sourced from the dashboard client (the\n`housingops:operator-email` localStorage value, with\n\"unknown\" as a fallback). Added by task #429.\n',
+    ),
+  noticePeriodDays: zod
+    .number()
+    .min(updateLeaseResponseNoticePeriodDaysMin)
+    .nullish()
+    .describe(
+      "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
     ),
 });
 

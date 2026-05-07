@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 import {
   useListUnplacedPayroll,
   getListUnplacedPayrollQueryKey,
@@ -618,6 +619,117 @@ export default function Dashboard() {
     for (const e of expiringLeases) counts[e.bucket] += 1;
     return counts;
   }, [expiringLeases]);
+
+  // ── Notice deadline approaching (Task #492) ─────────────────────────
+  // Surface leases whose `noticePeriodDays` (with property fallback)
+  // makes their non-renewal notice deadline land within the next
+  // NOTICE_LEAD_DAYS days. Reuses the same `snoozedUntil` plumbing as
+  // the lease-expiry panel above so an operator who snoozes a row
+  // there also silences the notice-deadline reminder for the same
+  // lease — there is intentionally no second snooze surface.
+  //
+  // Both thresholds flow from `/api/config` so the dashboard alert
+  // cards and the weekly digest agree on what counts as "approaching"
+  // and "low" — operators set `NOTICE_LEAD_DAYS` /
+  // `LOW_OCCUPANCY_THRESHOLD_PCT` once on the api-server and the
+  // override lights up in both surfaces. The literal fallbacks here
+  // are the documented defaults the api-server itself uses when the
+  // env vars are unset, so a tab that mounts before the config query
+  // resolves still uses the same numbers.
+  const runtimeConfig = useRuntimeConfigQuery(true).data;
+  useRuntimeConfigStream(true);
+  const NOTICE_LEAD_DAYS = runtimeConfig?.noticeLeadDays ?? 30;
+  const LOW_OCCUPANCY_THRESHOLD_PCT =
+    runtimeConfig?.lowOccupancyThresholdPct ?? 80;
+  interface NoticeDeadline {
+    lease: Lease;
+    propertyName: string;
+    noticePeriodDays: number;
+    daysUntilDeadline: number;
+    noticeDeadline: string; // YYYY-MM-DD
+  }
+  const noticeDeadlineLeases = useMemo<NoticeDeadline[]>(() => {
+    const out: NoticeDeadline[] = [];
+    for (const l of scopedLeases) {
+      if (!l.endDate || l.status === "Upcoming") continue;
+      const snz = l.snoozedUntil ?? "";
+      if (snz && snz > todayYMD) continue;
+      const property = scopedProperties.find((p) => p.id === l.propertyId);
+      const notice =
+        l.noticePeriodDays != null
+          ? l.noticePeriodDays
+          : property?.defaultNoticePeriodDays ?? null;
+      if (notice == null) continue;
+      const daysToEnd = daysUntil(l.endDate);
+      const daysUntilDeadline = daysToEnd - notice;
+      if (daysUntilDeadline < 0 || daysUntilDeadline > NOTICE_LEAD_DAYS) continue;
+      out.push({
+        lease: l,
+        propertyName: property?.name ?? "—",
+        noticePeriodDays: notice,
+        daysUntilDeadline,
+        noticeDeadline: addDaysToToday(daysUntilDeadline),
+      });
+    }
+    out.sort((a, b) => a.daysUntilDeadline - b.daysUntilDeadline);
+    return out;
+  }, [scopedLeases, scopedProperties, todayYMD]);
+
+  // ── Low combined-occupancy customers (Task #492) ────────────────────
+  // For each customer in scope, sum total/occupied beds across every
+  // property they own OR are listed on `sharedWithCustomerIds` for, and
+  // flag those below LOW_OCCUPANCY_THRESHOLD_PCT. Mirrors the
+  // computation on customer-detail.tsx so the dashboard alert and the
+  // detail page agree on what "low" means.
+  interface LowOccupancyEntry {
+    customerId: string;
+    customerName: string;
+    totalBeds: number;
+    occupiedBeds: number;
+    occupancyPct: number;
+  }
+  const lowOccupancyCustomers = useMemo<LowOccupancyEntry[]>(() => {
+    const bedsByProperty = new Map<
+      string,
+      { total: number; occupied: number }
+    >();
+    for (const b of scopedBeds) {
+      const entry = bedsByProperty.get(b.propertyId) ?? {
+        total: 0,
+        occupied: 0,
+      };
+      entry.total += 1;
+      if (b.status === "Occupied") entry.occupied += 1;
+      bedsByProperty.set(b.propertyId, entry);
+    }
+    const out: LowOccupancyEntry[] = [];
+    for (const c of customers) {
+      let total = 0;
+      let occupied = 0;
+      for (const p of scopedProperties) {
+        const owns =
+          p.customerId === c.id ||
+          (p.sharedWithCustomerIds ?? []).includes(c.id);
+        if (!owns) continue;
+        const bed = bedsByProperty.get(p.id);
+        if (!bed) continue;
+        total += bed.total;
+        occupied += bed.occupied;
+      }
+      if (total === 0) continue;
+      const pct = (occupied / total) * 100;
+      if (pct >= LOW_OCCUPANCY_THRESHOLD_PCT) continue;
+      out.push({
+        customerId: c.id,
+        customerName: c.name,
+        totalBeds: total,
+        occupiedBeds: occupied,
+        occupancyPct: pct,
+      });
+    }
+    out.sort((a, b) => a.occupancyPct - b.occupancyPct);
+    return out;
+  }, [customers, scopedProperties, scopedBeds]);
 
   // ── Expiring insurance certificates (Task #333, enhanced Task #398) ─
   // Surface every certificate whose `coverageEnd` is within the next 90
@@ -1283,6 +1395,131 @@ export default function Dashboard() {
                       </TableRow>
                     );
                   })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Task #492: Notice deadline approaching */}
+        {noticeDeadlineLeases.length > 0 && (
+          <Card data-testid="card-notice-deadline-approaching">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Notice deadline approaching</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-notice-deadline-count"
+                >
+                  {noticeDeadlineLeases.length} lease
+                  {noticeDeadlineLeases.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leases whose non-renewal notice deadline lands in the
+                next {NOTICE_LEAD_DAYS} days. Snoozing the lease in the
+                expiry panel above also hides it here.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Notice by</TableHead>
+                    <TableHead>Ends</TableHead>
+                    <TableHead className="text-right">Notice</TableHead>
+                    <TableHead className="text-right">When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {noticeDeadlineLeases.map((e) => (
+                    <TableRow
+                      key={e.lease.id}
+                      data-testid={`row-notice-deadline-${e.lease.id}`}
+                    >
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/leases/${e.lease.id}`}
+                          className="hover:underline text-primary"
+                        >
+                          {e.propertyName}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatYMDPretty(e.noticeDeadline)}
+                      </TableCell>
+                      <TableCell className="tabular-nums">
+                        {formatYMDPretty(e.lease.endDate)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {e.noticePeriodDays}d
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {e.daysUntilDeadline === 0
+                          ? "today"
+                          : `${e.daysUntilDeadline}d`}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Task #492: Low combined occupancy */}
+        {lowOccupancyCustomers.length > 0 && (
+          <Card data-testid="card-low-combined-occupancy">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Low combined occupancy</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-low-occupancy-count"
+                >
+                  {lowOccupancyCustomers.length} customer
+                  {lowOccupancyCustomers.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Customers below {LOW_OCCUPANCY_THRESHOLD_PCT}% combined
+                bed occupancy across owned + shared properties.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="text-right">Beds</TableHead>
+                    <TableHead className="text-right">Occupancy</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lowOccupancyCustomers.map((c) => (
+                    <TableRow
+                      key={c.customerId}
+                      data-testid={`row-low-occupancy-${c.customerId}`}
+                    >
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/customers/${c.customerId}`}
+                          className="hover:underline text-primary"
+                        >
+                          {c.customerName}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {c.occupiedBeds}/{c.totalBeds}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {c.occupancyPct.toFixed(1)}%
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>

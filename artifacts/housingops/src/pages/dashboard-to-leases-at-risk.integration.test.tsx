@@ -141,6 +141,13 @@ vi.mock("@/components/assign-occupant-dialog", () => ({
   AssignOccupantDialog: () => null,
 }));
 
+// Task #492: dashboard reads /api/config for alert thresholds; stub
+// the hook so this integration test doesn't need to wire it up.
+vi.mock("@/hooks/use-runtime-config", () => ({
+  useRuntimeConfigQuery: () => ({ data: undefined }),
+  useRuntimeConfigStream: () => undefined,
+}));
+
 vi.mock("@workspace/api-client-react", () => ({
   // Empty logs → every hotel-rate lease is `missing` for the current
   // month, which is exactly the at-risk case under test.

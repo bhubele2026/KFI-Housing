@@ -113,4 +113,17 @@ is un-snoozed. Sourced from the dashboard client (the
 "unknown" as a fallback). Added by task #429.
  */
   snoozedBy?: string;
+  /**
+   * Termination / renewal notice period in days (Task #492).
+The "Notice deadline approaching" dashboard alert fires
+when today is within `NOTICE_LEAD_DAYS` (default 30) of
+`endDate − noticePeriodDays`. `null` disables notice
+tracking on this lease — legacy rows and rows the operator
+hasn't filled in yet stay quiet. New leases inherit the
+parent property's `defaultNoticePeriodDays` when present.
+
+   * @minimum 0
+   * @nullable
+   */
+  noticePeriodDays?: number | null;
 }

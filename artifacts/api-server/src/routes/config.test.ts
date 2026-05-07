@@ -58,7 +58,18 @@ describe("GET /api/config", () => {
   type ConfigBody = {
     googleMapsApiKey: string | null;
     googleMapsMapId: string | null;
+    noticeLeadDays: number;
+    lowOccupancyThresholdPct: number;
   };
+
+  // Task #492 added two integer threshold fields to /api/config. Every
+  // existing assertion below cares only about the maps fields, so we
+  // expose the defaults the unset env produces and let each test reuse
+  // them in `toEqual` without duplicating the literals everywhere.
+  const DEFAULT_THRESHOLDS = {
+    noticeLeadDays: 30,
+    lowOccupancyThresholdPct: 80,
+  } as const;
 
   it("returns the current GOOGLE_MAPS_API_KEY when one is configured", async () => {
     process.env.GOOGLE_MAPS_API_KEY = "live-key-123";
@@ -69,6 +80,7 @@ describe("GET /api/config", () => {
     expect(body).toEqual({
       googleMapsApiKey: "live-key-123",
       googleMapsMapId: null,
+      ...DEFAULT_THRESHOLDS,
     });
   });
 
@@ -81,6 +93,7 @@ describe("GET /api/config", () => {
     expect(body).toEqual({
       googleMapsApiKey: null,
       googleMapsMapId: "branded-map-id-xyz",
+      ...DEFAULT_THRESHOLDS,
     });
   });
 
@@ -94,6 +107,7 @@ describe("GET /api/config", () => {
     expect(body).toEqual({
       googleMapsApiKey: "live-key-123",
       googleMapsMapId: "branded-map-id-xyz",
+      ...DEFAULT_THRESHOLDS,
     });
   });
 
@@ -104,6 +118,54 @@ describe("GET /api/config", () => {
     expect(body).toEqual({
       googleMapsApiKey: null,
       googleMapsMapId: null,
+      ...DEFAULT_THRESHOLDS,
+    });
+  });
+
+  // Task #492: the alert thresholds for the dashboard cards and the
+  // weekly digest both flow from `/api/config` so the live UI and the
+  // emailed digest can never disagree about what counts as "approaching"
+  // or "low". The dashboard reads these values, falling back to the
+  // same defaults the api-server would use, so an env override on the
+  // server lights up identically in both surfaces.
+  describe("Task #492 alert thresholds", () => {
+    const originalNoticeLeadDays = process.env.NOTICE_LEAD_DAYS;
+    const originalLowOccPct = process.env.LOW_OCCUPANCY_THRESHOLD_PCT;
+    afterEach(() => {
+      if (originalNoticeLeadDays === undefined) {
+        delete process.env.NOTICE_LEAD_DAYS;
+      } else {
+        process.env.NOTICE_LEAD_DAYS = originalNoticeLeadDays;
+      }
+      if (originalLowOccPct === undefined) {
+        delete process.env.LOW_OCCUPANCY_THRESHOLD_PCT;
+      } else {
+        process.env.LOW_OCCUPANCY_THRESHOLD_PCT = originalLowOccPct;
+      }
+    });
+
+    it("returns the documented defaults (30 / 80) when neither env override is set", async () => {
+      delete process.env.NOTICE_LEAD_DAYS;
+      delete process.env.LOW_OCCUPANCY_THRESHOLD_PCT;
+      const body = (await (await fetch(`${baseUrl}/api/config`)).json()) as ConfigBody;
+      expect(body.noticeLeadDays).toBe(30);
+      expect(body.lowOccupancyThresholdPct).toBe(80);
+    });
+
+    it("reflects NOTICE_LEAD_DAYS / LOW_OCCUPANCY_THRESHOLD_PCT env overrides on the very next request", async () => {
+      process.env.NOTICE_LEAD_DAYS = "14";
+      process.env.LOW_OCCUPANCY_THRESHOLD_PCT = "65";
+      const body = (await (await fetch(`${baseUrl}/api/config`)).json()) as ConfigBody;
+      expect(body.noticeLeadDays).toBe(14);
+      expect(body.lowOccupancyThresholdPct).toBe(65);
+    });
+
+    it("falls back to the defaults when the env overrides are garbage (so a typo can't silently disable the alerts)", async () => {
+      process.env.NOTICE_LEAD_DAYS = "nope";
+      process.env.LOW_OCCUPANCY_THRESHOLD_PCT = "-1";
+      const body = (await (await fetch(`${baseUrl}/api/config`)).json()) as ConfigBody;
+      expect(body.noticeLeadDays).toBe(30);
+      expect(body.lowOccupancyThresholdPct).toBe(80);
     });
   });
 
@@ -166,6 +228,7 @@ describe("GET /api/config", () => {
     expect(body).toEqual({
       googleMapsApiKey: "legacy-vite-key",
       googleMapsMapId: null,
+      ...DEFAULT_THRESHOLDS,
     });
   });
 
@@ -356,6 +419,7 @@ describe("GET /api/config", () => {
         expect(events[0]).toEqual({
           googleMapsApiKey: "live-key-123",
           googleMapsMapId: "branded-map",
+          ...DEFAULT_THRESHOLDS,
         });
       } finally {
         await stream.stop();
@@ -443,6 +507,8 @@ describe("GET /api/config", () => {
       expect(Object.keys(body).sort()).toEqual([
         "googleMapsApiKey",
         "googleMapsMapId",
+        "lowOccupancyThresholdPct",
+        "noticeLeadDays",
       ]);
       expect(JSON.stringify(body)).not.toContain("must-not-leak");
     } finally {

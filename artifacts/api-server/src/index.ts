@@ -1,4 +1,4 @@
-import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable, insuranceCertificatesTable, digestRecipientsTable } from "@workspace/db";
+import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable, insuranceCertificatesTable, digestRecipientsTable, customersTable, bedsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -90,11 +90,26 @@ void start({
       endDate: r.endDate,
       status: r.status,
       vendor: r.vendor,
+      noticePeriodDays: r.noticePeriodDays,
     }));
   },
   loadPropertiesForDigest: async () => {
     const rows = await db.select().from(propertiesTable);
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      defaultNoticePeriodDays: r.defaultNoticePeriodDays,
+      customerId: r.customerId,
+      sharedWithCustomerIds: r.sharedWithCustomerIds,
+    }));
+  },
+  loadCustomersForDigest: async () => {
+    const rows = await db.select().from(customersTable);
     return rows.map((r) => ({ id: r.id, name: r.name }));
+  },
+  loadBedsForDigest: async () => {
+    const rows = await db.select().from(bedsTable);
+    return rows.map((r) => ({ propertyId: r.propertyId, status: r.status }));
   },
   loadLeasesForReminder: async () => {
     const rows = await db.select().from(leasesTable);

@@ -253,6 +253,18 @@ vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
 }));
 
+// Task #492: the dashboard subscribes to /api/config so its alert-card
+// thresholds (notice-deadline lead window + low-occupancy %) match the
+// weekly digest. The tests don't exercise the runtime-config wiring;
+// stubbing the two hooks here keeps them off the network and out of
+// react-query's machinery, and the component's documented fallbacks
+// (30 / 80 — same as the api-server defaults) keep the alert math
+// stable when `data` is undefined.
+vi.mock("@/hooks/use-runtime-config", () => ({
+  useRuntimeConfigQuery: () => ({ data: undefined }),
+  useRuntimeConfigStream: () => undefined,
+}));
+
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
     "@tanstack/react-query",

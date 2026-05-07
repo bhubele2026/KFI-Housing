@@ -78,6 +78,12 @@ export const propertiesTable = pgTable("properties", {
   // "missing rent" review alert and swaps the Lease Rent stat / list
   // columns / finance roll-up for the other-costs total. See task #497.
   rentFree: boolean("rent_free").notNull().default(false),
+  // Default termination / renewal notice period in days (Task #492).
+  // Used as the seed value for new leases on this property and as the
+  // fallback when a lease has no `noticePeriodDays` set. Nullable so
+  // the operator can leave it blank — leases without a notice period
+  // simply skip the "Notice deadline approaching" alerts.
+  defaultNoticePeriodDays: integer("default_notice_period_days"),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

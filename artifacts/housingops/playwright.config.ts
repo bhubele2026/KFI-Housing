@@ -14,9 +14,5 @@ export default defineConfig({
       use: { browserName: "chromium" },
     },
   ],
-  webServer: {
-    command: "echo 'Expecting the dev server to already be running'",
-    port: Number(process.env.PORT ?? 80),
-    reuseExistingServer: true,
-  },
+  webServer: undefined,
 });

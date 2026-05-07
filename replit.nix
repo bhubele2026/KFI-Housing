@@ -1,5 +1,9 @@
 {pkgs}: {
   deps = [
+    pkgs.systemd
+    pkgs.libxkbcommon
+    pkgs.dbus-glib
+    pkgs.gtk3
     pkgs.chromium
     pkgs.xorg.libxshmfence
     pkgs.at-spi2-core

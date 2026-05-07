@@ -161,7 +161,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
 }
 
 function PayrollReviewBar() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { customerId } = useCustomerScope();
   const { customers } = useData();
   const { data: unplacedPayrollResult } = useListUnplacedPayroll();
@@ -193,8 +193,6 @@ function PayrollReviewBar() {
     scopedUnplacedCount > 0
       ? "card-unplaced-payroll"
       : "card-low-confidence-payroll";
-
-  const [location] = useLocation();
 
   const handleClick = () => {
     const alreadyOnDashboard = location === "/dashboard" || location === "/";

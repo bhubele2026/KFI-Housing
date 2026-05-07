@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldCheck, Briefcase, X, Download, AlertTriangle, ExternalLink, Home } from "lucide-react";
+import { ShieldCheck, Briefcase, X, Download, AlertTriangle, Home, FileText, Upload, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { daysUntil } from "@/data/mockData";
@@ -19,6 +19,7 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { EmptyStateRow } from "@/components/empty-state";
 import { InlineEdit } from "@/pages/property-detail";
 import { Trash2 } from "lucide-react";
+import { useUpload } from "@workspace/object-storage-web";
 
 type StatusFilter = "All" | "Active" | "Expiring" | "Expired" | "NoDates";
 type SortKey = "carrier" | "coverageEnd" | "property";
@@ -473,25 +474,22 @@ export default function InsuranceCertificates() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="max-w-[12rem]">
+                      <TableCell className="max-w-[14rem]">
                         {c.documentUrl ? (
-                          <a
-                            href={c.documentUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary hover:underline text-sm inline-flex items-center gap-1"
-                            data-testid={`link-certificate-${c.id}-doc`}
-                          >
-                            View PDF
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={certPdfHref(c.documentUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline text-sm inline-flex items-center gap-1"
+                              data-testid={`link-certificate-${c.id}-doc`}
+                            >
+                              <FileText className="h-3.5 w-3.5" />View PDF
+                            </a>
+                            <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Replace" />
+                          </div>
                         ) : (
-                          <InlineEdit
-                            value={c.documentUrl}
-                            onSave={(v) => updateInsuranceCertificate(c.id, { documentUrl: v })}
-                            placeholder="Add URL"
-                            testId={`edit-doc-${c.id}`}
-                          />
+                          <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Upload" />
                         )}
                       </TableCell>
                       <TableCell>
@@ -537,5 +535,47 @@ export default function InsuranceCertificates() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+function certPdfHref(documentUrl: string): string {
+  if (documentUrl.startsWith("/api/")) return documentUrl;
+  if (documentUrl.startsWith("http://") || documentUrl.startsWith("https://")) return documentUrl;
+  return `/api/attached-assets/${encodeURIComponent(documentUrl)}`;
+}
+
+function CertUploadButton({ certId, onUploaded, label = "Upload" }: { certId: string; onUploaded: (url: string) => void; label?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading } = useUpload({
+    basePath: "/api/storage",
+    onSuccess: (response) => {
+      onUploaded(`/api/storage${response.objectPath}`);
+    },
+  });
+  return (
+    <>
+      <input
+        ref={ref}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) await uploadFile(file);
+          if (ref.current) ref.current.value = "";
+        }}
+        data-testid={`input-certificate-${certId}-upload`}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        disabled={isUploading}
+        onClick={() => ref.current?.click()}
+        data-testid={`button-certificate-${certId}-upload`}
+      >
+        {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Upload className="h-3 w-3 mr-1" />{label}</>}
+      </Button>
+    </>
   );
 }

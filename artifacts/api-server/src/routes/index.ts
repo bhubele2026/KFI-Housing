@@ -18,11 +18,13 @@ import payrollRouter from "./payroll";
 import attachedAssetsRouter from "./attached-assets";
 import leaseDigestRouter from "./lease-digest";
 import digestRecipientsRouter from "./digest-recipients";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(configRouter);
+router.use(storageRouter);
 router.use(resetRouter);
 router.use(importRouter);
 router.use(customersRouter);

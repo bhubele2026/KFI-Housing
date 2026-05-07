@@ -9,6 +9,7 @@ import {
   UpdateInsuranceCertificateResponse,
   DeleteInsuranceCertificateParams,
 } from "@workspace/api-zod";
+import { ObjectStorageService } from "../lib/objectStorage";
 
 /**
  * CRUD for the `insurance_certificates` table — the manual intake path
@@ -87,9 +88,24 @@ router.delete(
       res.status(400).json({ error: params.error.message });
       return;
     }
+
+    const [existing] = await db
+      .select({ documentUrl: insuranceCertificatesTable.documentUrl })
+      .from(insuranceCertificatesTable)
+      .where(eq(insuranceCertificatesTable.id, params.data.id));
+
     await db
       .delete(insuranceCertificatesTable)
       .where(eq(insuranceCertificatesTable.id, params.data.id));
+
+    if (existing?.documentUrl?.includes("/api/storage/objects/")) {
+      const objectPath = existing.documentUrl.replace("/api/storage", "");
+      const storageService = new ObjectStorageService();
+      storageService.deleteObjectEntity(objectPath).catch((err) => {
+        console.error("Failed to delete certificate PDF from storage", err);
+      });
+    }
+
     res.sendStatus(204);
   },
 );

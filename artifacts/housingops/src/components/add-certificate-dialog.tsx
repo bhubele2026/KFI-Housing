@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, Upload, FileText, Loader2, X } from "lucide-react";
+import { useUpload } from "@workspace/object-storage-web";
 import type { InsuranceCertificate, Property, Customer } from "@/data/mockData";
 
 export interface AddCertificateDialogProps {
@@ -41,6 +42,25 @@ export function AddCertificateDialog({
     notes: "",
   });
 
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const { uploadFile, isUploading, progress } = useUpload({
+    basePath: "/api/storage",
+    onSuccess: (response) => {
+      const servingUrl = `/api/storage${response.objectPath}`;
+      setForm(f => ({ ...f, documentUrl: servingUrl }));
+      setUploadedFileName(response.metadata?.name ?? "Uploaded");
+    },
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await uploadFile(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const customerById = new Map(customers.map((c) => [c.id, c.name]));
 
   const submit = () => {
@@ -62,6 +82,7 @@ export function AddCertificateDialog({
       propertyId: "", carrier: "", policyNumber: "", insuredName: "",
       coverageStart: "", coverageEnd: "", documentUrl: "", notes: "",
     });
+    setUploadedFileName("");
   };
 
   return (
@@ -139,13 +160,46 @@ export function AddCertificateDialog({
               />
             </div>
             <div className="col-span-2">
-              <Label>Document URL</Label>
-              <Input
-                value={form.documentUrl}
-                onChange={(e) => setForm((f) => ({ ...f, documentUrl: e.target.value }))}
-                placeholder="Link to the source PDF (optional)"
-                data-testid="input-certificate-doc"
+              <Label>Certificate PDF</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFileSelect}
+                data-testid="input-certificate-file"
               />
+              {form.documentUrl ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate flex-1">{uploadedFileName || "PDF attached"}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => { setForm(f => ({ ...f, documentUrl: "" })); setUploadedFileName(""); }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-1"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-certificate-upload"
+                >
+                  {isUploading ? (
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Uploading… {progress}%</>
+                  ) : (
+                    <><Upload className="h-4 w-4 mr-1.5" />Upload PDF</>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
           <div>

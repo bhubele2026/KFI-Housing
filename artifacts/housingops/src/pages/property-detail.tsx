@@ -41,6 +41,8 @@ import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { computeShiftPairs, roomHasAnyShift } from "@/lib/shift-pairs";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
+import { useUpload } from "@workspace/object-storage-web";
+import { Upload, FileText, Loader2 } from "lucide-react";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -2500,19 +2502,22 @@ export default function PropertyDetail() {
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[12rem] truncate">
+                          <TableCell className="max-w-[14rem]">
                             {c.documentUrl ? (
-                              <a
-                                href={c.documentUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-primary hover:underline text-sm"
-                                data-testid={`link-insurance-${c.id}-doc`}
-                              >
-                                View PDF
-                              </a>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={certPdfHref(c.documentUrl)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary hover:underline text-sm inline-flex items-center gap-1"
+                                  data-testid={`link-insurance-${c.id}-doc`}
+                                >
+                                  <FileText className="h-3.5 w-3.5" />View PDF
+                                </a>
+                                <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Replace" />
+                              </div>
                             ) : (
-                              <InlineEdit value={c.documentUrl} onSave={v => updateInsuranceCertificate(c.id, { documentUrl: v })} />
+                              <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Upload" />
                             )}
                           </TableCell>
                           <TableCell>
@@ -2696,6 +2701,48 @@ function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; 
   );
 }
 
+function certPdfHref(documentUrl: string): string {
+  if (documentUrl.startsWith("/api/")) return documentUrl;
+  if (documentUrl.startsWith("http://") || documentUrl.startsWith("https://")) return documentUrl;
+  return `/api/attached-assets/${encodeURIComponent(documentUrl)}`;
+}
+
+function InlineCertUpload({ certId, onUploaded, label = "Upload" }: { certId: string; onUploaded: (url: string) => void; label?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const { uploadFile, isUploading } = useUpload({
+    basePath: "/api/storage",
+    onSuccess: (response) => {
+      onUploaded(`/api/storage${response.objectPath}`);
+    },
+  });
+  return (
+    <>
+      <input
+        ref={ref}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) await uploadFile(file);
+          if (ref.current) ref.current.value = "";
+        }}
+        data-testid={`input-insurance-${certId}-upload`}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-xs"
+        disabled={isUploading}
+        onClick={() => ref.current?.click()}
+        data-testid={`button-insurance-${certId}-upload`}
+      >
+        {isUploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Upload className="h-3 w-3 mr-1" />{label}</>}
+      </Button>
+    </>
+  );
+}
+
 function AddInsuranceCertificateDialog({
   propertyId,
   leases,
@@ -2721,6 +2768,24 @@ function AddInsuranceCertificateDialog({
     notes: "",
     leaseId: NO_LEASE,
   });
+  const [uploadedFileName, setUploadedFileName] = useState("");
+  const { uploadFile, isUploading, progress } = useUpload({
+    basePath: "/api/storage",
+    onSuccess: (response) => {
+      const servingUrl = `/api/storage${response.objectPath}`;
+      setForm(f => ({ ...f, documentUrl: servingUrl }));
+      setUploadedFileName(response.metadata?.name ?? "Uploaded");
+    },
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await uploadFile(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const submit = () => {
     if (!form.carrier) return;
@@ -2742,6 +2807,7 @@ function AddInsuranceCertificateDialog({
       coverageStart: "", coverageEnd: "", documentUrl: "", notes: "",
       leaseId: NO_LEASE,
     });
+    setUploadedFileName("");
   };
 
   return (
@@ -2803,13 +2869,46 @@ function AddInsuranceCertificateDialog({
               />
             </div>
             <div className="col-span-2">
-              <Label>Document URL</Label>
-              <Input
-                value={form.documentUrl}
-                onChange={e => setForm(f => ({ ...f, documentUrl: e.target.value }))}
-                placeholder="Link to the source PDF (optional)"
-                data-testid="input-insurance-doc"
+              <Label>Certificate PDF</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFileSelect}
+                data-testid="input-insurance-file"
               />
+              {form.documentUrl ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm truncate flex-1">{uploadedFileName || "PDF attached"}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => { setForm(f => ({ ...f, documentUrl: "" })); setUploadedFileName(""); }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-1"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-insurance-upload"
+                >
+                  {isUploading ? (
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Uploading… {progress}%</>
+                  ) : (
+                    <><Upload className="h-4 w-4 mr-1.5" />Upload PDF</>
+                  )}
+                </Button>
+              )}
             </div>
             {leases.length > 0 && (
               <div className="col-span-2">

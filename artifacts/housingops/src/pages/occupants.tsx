@@ -25,6 +25,7 @@ export default function Occupants() {
   const [search, setSearch] = useState("");
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">("All");
   // Move-in filter is URL-driven so the dashboard "Needs review" card can deep
   // link straight into the missing-move-in subset (`?needsReview=1`). We seed
   // state from the search string and write back on change so refresh/back work.
@@ -59,8 +60,24 @@ export default function Occupants() {
     const matchesStatus = statusFilter === "All" || o.status === statusFilter;
     const matchesMoveIn =
       moveInFilter === "All" ? true : !o.moveInDate;
-    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn;
+    const matchesShift =
+      shiftFilter === "All"
+        ? true
+        : shiftFilter === "Unassigned"
+          ? !o.shift
+          : o.shift === shiftFilter;
+    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift;
   });
+
+  const shiftCounts = occupants.reduce(
+    (acc, o) => {
+      if (o.shift === "1st") acc["1st"]++;
+      else if (o.shift === "2nd") acc["2nd"]++;
+      else acc.Unassigned++;
+      return acc;
+    },
+    { "1st": 0, "2nd": 0, Unassigned: 0 },
+  );
 
   const handleDownloadCsv = () => {
     const csv = toCsv(filteredOccupants, [
@@ -156,6 +173,23 @@ export default function Occupants() {
                   <SelectItem value="All">All Statuses</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Former">Former</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={shiftFilter}
+                onValueChange={(v) => setShiftFilter(v as "All" | "1st" | "2nd" | "Unassigned")}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-44"
+                  data-testid="select-shift-filter"
+                >
+                  <SelectValue placeholder="Shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Shifts</SelectItem>
+                  <SelectItem value="1st">1st shift ({shiftCounts["1st"]})</SelectItem>
+                  <SelectItem value="2nd">2nd shift ({shiftCounts["2nd"]})</SelectItem>
+                  <SelectItem value="Unassigned">Unassigned ({shiftCounts.Unassigned})</SelectItem>
                 </SelectContent>
               </Select>
               <Select

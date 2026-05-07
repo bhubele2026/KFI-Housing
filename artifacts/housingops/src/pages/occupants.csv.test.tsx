@@ -286,6 +286,69 @@ describe("Occupants CSV download", () => {
     expect(capturedBlobText).toBeNull();
   });
 
+  it("filters by shift and exports the shift value in the CSV", async () => {
+    mockData.occupants = [
+      { ...mockData.occupants[0], shift: "1st" },
+      { ...mockData.occupants[1], shift: "2nd", status: "Active" },
+      {
+        id: "o3",
+        propertyId: "p1",
+        bedId: null,
+        name: "Carol Day",
+        email: "carol@example.com",
+        phone: "555-0000",
+        company: "Acme",
+        employeeId: "E-300",
+        moveInDate: "2024-05-01",
+        moveOutDate: null,
+        chargePerBed: 1500,
+        billingFrequency: "Monthly",
+        status: "Active",
+        shift: null,
+      },
+    ] as MockData["occupants"];
+
+    await renderPage();
+
+    // Narrow to only "1st" shift via the shift filter.
+    const shiftHandler = selectHandlers.get("select-shift-filter");
+    if (!shiftHandler) throw new Error("shift filter not registered");
+    await act(async () => {
+      shiftHandler.onValueChange("1st");
+    });
+
+    await clickDownload();
+    const lines = readCsvLines();
+    // 1 header + 1 matching occupant (Alice on 1st shift).
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain(",Shift,");
+    expect(lines[1]).toContain("Alice Johnson");
+    expect(lines[1]).toMatch(/,1st,Active$/);
+    expect(capturedBlobText!).not.toContain("Bob Lee");
+    expect(capturedBlobText!).not.toContain("Carol Day");
+  });
+
+  it("filters by Unassigned shift", async () => {
+    mockData.occupants = [
+      { ...mockData.occupants[0], shift: "1st" },
+      { ...mockData.occupants[1], shift: null, status: "Active" },
+    ] as MockData["occupants"];
+
+    await renderPage();
+
+    const shiftHandler = selectHandlers.get("select-shift-filter");
+    if (!shiftHandler) throw new Error("shift filter not registered");
+    await act(async () => {
+      shiftHandler.onValueChange("Unassigned");
+    });
+
+    await clickDownload();
+    const lines = readCsvLines();
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("Bob Lee");
+    expect(capturedBlobText!).not.toContain("Alice Johnson");
+  });
+
   it("disables the Download button when active filters hide every occupant", async () => {
     await renderPage();
 

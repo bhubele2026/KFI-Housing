@@ -109,6 +109,7 @@ export function AddLeaseDialog({
       guaranteedRooms: 0,
       monthlyRoomNightMin: 0,
       longStayTaxExempt: false,
+      utilitiesIncludedInRent: false,
       customerResponsibleForRent: false,
       noticePeriodDays: inheritedNoticePeriodDays,
     });

@@ -45,6 +45,7 @@ interface LeaseRow {
   longStayTaxExempt: boolean;
   customerId: string;
   customerResponsibleForRent: boolean;
+  utilitiesIncludedInRent: boolean;
 }
 
 const store = new Map<string, LeaseRow>();
@@ -122,6 +123,7 @@ function makeLease(overrides: Partial<LeaseRow> = {}): LeaseRow {
     longStayTaxExempt: false,
     customerId: "",
     customerResponsibleForRent: false,
+    utilitiesIncludedInRent: false,
     ...overrides,
   };
 }

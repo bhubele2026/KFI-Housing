@@ -130,7 +130,22 @@ export default function Finance() {
     const { contractCost, hotelRateCost, hasHotelRateLease } = sumActiveRentBreakdown(leases, roomNightLogs, p.id);
     const leaseCost = contractCost + hotelRateCost;
     const propUtils = utilities.filter(u => u.propertyId === p.id);
-    const utilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
+    const rawUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
+    // Utilities-included-in-rent exclusion (task #518). Pro-rate the
+    // tracked utility expense by the share of this property's active
+    // leases whose rent already bundles utilities — those dollars are
+    // already netted in the lease cost above, so subtracting them from
+    // utilities too would double-count. When every active lease is
+    // flagged, utilities drop out entirely; when none are flagged the
+    // existing total is unchanged.
+    const propActiveLeases = leases.filter(
+      (l) => l.propertyId === p.id && l.status === "Active",
+    );
+    const utilitiesIncludedShare = propActiveLeases.length > 0
+      ? propActiveLeases.filter((l) => l.utilitiesIncludedInRent).length /
+        propActiveLeases.length
+      : 0;
+    const utilCost = rawUtilCost * (1 - utilitiesIncludedShare);
     // Per-property recurring non-rent line items (task #497). Surfaced as
     // a distinct rollup so they aren't silently merged into rent — the
     // Finance table can label them "Other Costs" alongside Lease Cost.

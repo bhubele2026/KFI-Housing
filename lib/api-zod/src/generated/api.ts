@@ -378,6 +378,12 @@ export const ImportDataBody = zod.object({
         .describe(
           "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
         ),
+      utilitiesIncludedInRent: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
+        ),
     }),
   ),
   rooms: zod.array(
@@ -1387,6 +1393,12 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
     ),
+  utilitiesIncludedInRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1516,6 +1528,12 @@ export const CreateLeaseBody = zod.object({
     .nullish()
     .describe(
       "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
+    ),
+  utilitiesIncludedInRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
     ),
 });
 
@@ -1963,6 +1981,7 @@ export const UpdateLeaseBody = zod.object({
     .describe(
       "Termination \/ renewal notice period in days. See\n`Lease.noticePeriodDays` for the full contract.\n",
     ),
+  utilitiesIncludedInRent: zod.boolean().optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -2088,6 +2107,12 @@ export const UpdateLeaseResponse = zod.object({
     .nullish()
     .describe(
       "Termination \/ renewal notice period in days (Task #492).\nThe \"Notice deadline approaching\" dashboard alert fires\nwhen today is within `NOTICE_LEAD_DAYS` (default 30) of\n`endDate − noticePeriodDays`. `null` disables notice\ntracking on this lease — legacy rows and rows the operator\nhasn't filled in yet stay quiet. New leases inherit the\nparent property's `defaultNoticePeriodDays` when present.\n",
+    ),
+  utilitiesIncludedInRent: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
     ),
 });
 

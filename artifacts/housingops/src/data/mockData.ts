@@ -321,6 +321,13 @@ export const LeaseSchema = z.object({
   guaranteedRooms: z.number().optional().default(0),
   monthlyRoomNightMin: z.number().optional().default(0),
   longStayTaxExempt: z.boolean().optional().default(false),
+  // Utilities-included-in-rent flag (task #518). When true the
+  // dashboard / finance P&L pages skip subtracting this property's
+  // tracked utility expenses for this lease so the same dollars
+  // aren't double-counted (the rent already bundles them). Optional
+  // with a safe default so legacy backups and ordinary leases parse
+  // unchanged.
+  utilitiesIncludedInRent: z.boolean().optional().default(false),
   // Customer this lease is billed to. Optional / nullable so legacy
   // backups, seed literals, and API rows that come back as `null`
   // (Task #439 — empty string is no longer the "fall back" sentinel,
@@ -1292,6 +1299,7 @@ const LEASE_EXTENDED_DEFAULTS = {
   monthlyRoomNightMin: 0,
   longStayTaxExempt: false,
   customerResponsibleForRent: false,
+  utilitiesIncludedInRent: false,
 };
 
 export const MOCK_LEASES: Lease[] = [

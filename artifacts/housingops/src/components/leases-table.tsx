@@ -5,7 +5,7 @@ import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock, Zap } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -973,8 +973,18 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
   // Surfaced as a pill so operators can scan the table for which rows
   // their customer must invoice or chase up directly.
   const isCustomerResponsible = lease.customerResponsibleForRent ?? false;
+  // Utilities-included flag (task #518) — surfaced as a small pill so
+  // operators can see at a glance which leases bundle utility costs
+  // into the rent (and so won't double-count utilities on the P&L).
+  const utilitiesIncluded = lease.utilitiesIncludedInRent ?? false;
 
-  if (!hasBuyout && !hasClauses && !isRateBased && !isCustomerResponsible) {
+  if (
+    !hasBuyout &&
+    !hasClauses &&
+    !isRateBased &&
+    !isCustomerResponsible &&
+    !utilitiesIncluded
+  ) {
     return (
       <span
         className="text-sm text-muted-foreground"
@@ -1020,6 +1030,17 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
         >
           <Briefcase className="h-3 w-3" />
           Customer pays
+        </Badge>
+      )}
+      {utilitiesIncluded && (
+        <Badge
+          variant="outline"
+          className="gap-1 text-[11px] font-medium border-amber-300 bg-amber-50 text-amber-800"
+          title="Rent already includes utility costs — Finance / Dashboard P&L skip this property's utilities for this lease."
+          data-testid={`badge-lease-utilities-included-${lease.id}`}
+        >
+          <Zap className="h-3 w-3" />
+          Utils incl.
         </Badge>
       )}
       {hasClauses && (

@@ -863,7 +863,24 @@ export default function Dashboard() {
   const totalMonthlyLeaseCosts = scopedLeases
     .filter((l) => l.status === "Active")
     .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
-  const currentMonthUtilities = scopedUtilities.reduce((acc, u) => acc + u.monthlyCost, 0);
+  // Per-property utilities-included-in-rent share (task #518). For
+  // each property, compute the fraction of active leases whose rent
+  // already bundles utilities, then pro-rate that property's tracked
+  // utility expense by `(1 - share)` so dollars already netted into
+  // the lease cost above aren't subtracted a second time as utilities.
+  const utilitiesIncludedShareByProp = new Map<string, number>();
+  for (const p of scopedProperties) {
+    const propActive = scopedLeases.filter(
+      (l) => l.propertyId === p.id && l.status === "Active",
+    );
+    if (propActive.length === 0) continue;
+    const flagged = propActive.filter((l) => l.utilitiesIncludedInRent).length;
+    utilitiesIncludedShareByProp.set(p.id, flagged / propActive.length);
+  }
+  const currentMonthUtilities = scopedUtilities.reduce((acc, u) => {
+    const share = utilitiesIncludedShareByProp.get(u.propertyId) ?? 0;
+    return acc + u.monthlyCost * (1 - share);
+  }, 0);
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
 
@@ -913,7 +930,12 @@ export default function Dashboard() {
       scopedProperties.map((p) => {
         const revenue = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
         const leaseCost = sumActiveRentEstimated(scopedLeases, roomNightLogs, p.id);
-        const utilCost = scopedUtilities.filter((u) => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
+        const rawUtilCost = scopedUtilities.filter((u) => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
+        // Apply the same utilities-included-in-rent pro-rate (task
+        // #518) used by the Monthly Costs / Net Profit tiles above so
+        // the bar chart agrees with the headline numbers.
+        const utilShare = utilitiesIncludedShareByProp.get(p.id) ?? 0;
+        const utilCost = rawUtilCost * (1 - utilShare);
         return {
           id: p.id,
           name: p.name,
@@ -922,6 +944,10 @@ export default function Dashboard() {
           Profit: revenue - (leaseCost + utilCost),
         };
       }),
+    // `utilitiesIncludedShareByProp` is rebuilt every render from the
+    // same `scopedLeases` + `scopedProperties` inputs already listed
+    // here, so listing those upstream inputs keeps the chart in sync
+    // without needing the map's identity in the dep array.
     [scopedProperties, scopedBeds, scopedLeases, scopedUtilities, roomNightLogs],
   );
 

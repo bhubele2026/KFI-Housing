@@ -4,6 +4,7 @@ import * as schema from "./schema";
 import { backfillRoomsIfNeeded } from "./migrations/backfill-rooms";
 import { dropLeaseIncludedItemsIfNeeded } from "./migrations/drop-lease-included-items";
 import { migrateLeasesCustomerIdNullableIfNeeded } from "./migrations/leases-customer-id-nullable";
+import { backfillUtilitiesIncludedInRent } from "./migrations/backfill-utilities-included-in-rent";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -96,6 +97,12 @@ export async function pushSchemaIfNeeded(
   });
   await apply();
   log("Schema changes applied.");
+
+  // Back-fill `leases.utilities_included_in_rent` from existing
+  // notes/clauses text now that the column exists (Task #518). Safe to
+  // re-run; only flips rows whose free-form text mentions utilities are
+  // bundled into rent.
+  await backfillUtilitiesIncludedInRent(pool, log);
 
   return {
     applied: true,

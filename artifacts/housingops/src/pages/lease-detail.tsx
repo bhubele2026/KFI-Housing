@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ChevronLeft, KeyRound, Calendar, AlertTriangle, Briefcase,
   Building2, FileText, CalendarPlus, DollarSign, Trash2,
-  Save, Hotel, Plus, ExternalLink, CheckCircle2, ChevronDown,
+  Save, Hotel, Plus, ExternalLink, CheckCircle2, ChevronDown, Zap,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -139,6 +139,7 @@ function makeCreateDraft(propertyId: string): Lease {
     monthlyRoomNightMin: 0,
     longStayTaxExempt: false,
     customerResponsibleForRent: false,
+    utilitiesIncludedInRent: false,
   };
 }
 
@@ -1480,6 +1481,47 @@ export default function LeaseDetail() {
                   />
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* ── Utilities ──
+              Mirrors the buyout / long-stay-tax toggles above so an
+              operator can mark "rent already includes utilities" from
+              the lease detail page (task #518). When on, the dashboard
+              and finance P&L pages skip subtracting this property's
+              tracked utility expenses for this lease so the same
+              dollars aren't counted twice. */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Zap className="h-4 w-4" />
+                Utilities
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <Label
+                    htmlFor="utilities-included-in-rent"
+                    className="text-sm"
+                  >
+                    Utilities included in rent
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    The monthly rent already bundles utility costs —
+                    Finance / Dashboard P&amp;L will skip this property's
+                    utility expenses for this lease.
+                  </span>
+                </div>
+                <Switch
+                  id="utilities-included-in-rent"
+                  checked={lease.utilitiesIncludedInRent ?? false}
+                  onCheckedChange={(checked) =>
+                    applyUpdate({ utilitiesIncludedInRent: checked })
+                  }
+                  data-testid="switch-utilities-included-in-rent"
+                />
+              </div>
             </CardContent>
           </Card>
         </div>

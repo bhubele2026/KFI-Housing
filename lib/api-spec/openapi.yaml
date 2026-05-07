@@ -1713,6 +1713,15 @@ components:
             tracking on this lease — legacy rows and rows the operator
             hasn't filled in yet stay quiet. New leases inherit the
             parent property's `defaultNoticePeriodDays` when present.
+        utilitiesIncludedInRent:
+          type: boolean
+          description: |
+            True when the rent on this lease already bundles utility
+            costs (e.g. master-lease note reads "utilities included in
+            lease except internet"). When true, the dashboard and
+            finance P&L pages skip subtracting the property's tracked
+            utility expenses for this lease so the same dollars aren't
+            counted twice. Defaults to false. Added by task #518.
     LeaseUpdate:
       type: object
       properties:
@@ -1747,6 +1756,7 @@ components:
           description: |
             Termination / renewal notice period in days. See
             `Lease.noticePeriodDays` for the full contract.
+        utilitiesIncludedInRent: { type: boolean }
 
     RoomNightLog:
       type: object

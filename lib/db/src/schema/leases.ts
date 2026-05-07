@@ -92,6 +92,18 @@ export const leasesTable = pgTable("leases", {
   // operator hasn't filled in yet). New leases inherit the parent
   // property's `defaultNoticePeriodDays` when present.
   noticePeriodDays: integer("notice_period_days"),
+  // Utilities-included-in-rent flag (task #518). True when the
+  // associate deductions (revenue side) for this lease already bundle
+  // utility costs into the per-bed charge — common for properties
+  // whose master agreement reads "utilities included" / "util incl"
+  // / "utilities included in lease except internet". The finance and
+  // dashboard P&L pages skip adding the property's utility expenses
+  // for leases flagged here so the same dollars aren't subtracted
+  // twice. Defaults to false so legacy rows / ordinary leases are
+  // unchanged.
+  utilitiesIncludedInRent: boolean("utilities_included_in_rent")
+    .notNull()
+    .default(false),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

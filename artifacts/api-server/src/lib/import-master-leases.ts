@@ -10,6 +10,7 @@ import {
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
+  detectsUtilitiesIncludedInRent,
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
@@ -637,6 +638,21 @@ export async function importMasterLeases(
         );
       }
 
+      // Master-file rows occasionally call out that utilities are
+      // bundled into the rent (Task #518) — usually in the leaseTerms /
+      // earlyTerminationTerms / noticePeriodUtilities cells, sometimes
+      // in the constructed lease notes. Detect those phrases up front
+      // so both insert and update paths flip the new column the same
+      // way. We never flip it back to `false` here — operators may
+      // have set it explicitly in the UI and we don't want a re-import
+      // to silently un-flag a lease.
+      const utilitiesIncludedInRent = detectsUtilitiesIncludedInRent(
+        desiredNotes,
+        row.leaseTerms,
+        row.earlyTerminationTerms,
+        row.noticePeriodUtilities,
+      );
+
       if (match) {
         // Update only the importer-owned fields.
         const updates: Partial<InsertLeaseRow> = {
@@ -646,6 +662,11 @@ export async function importMasterLeases(
           needsReview,
           unit: unitTokens[0] ?? "",
         };
+        if (utilitiesIncludedInRent) {
+          // One-way flip: only set when detected so an operator who
+          // toggled it off in the UI isn't overridden by a re-import.
+          updates.utilitiesIncludedInRent = true;
+        }
         // Don't clobber existing rent if the existing value is non-zero
         // and we have nothing better to offer.
         if (monthly > 0) updates.monthlyRent = monthly;
@@ -690,6 +711,7 @@ export async function importMasterLeases(
         // Explicit null (rather than the legacy "" default) per Task #439
         // so `getCustomerResponsibleLeases`'s `??` fallback works.
         customerId: null,
+        utilitiesIncludedInRent,
       };
       const inserted = await tx
         .insert(leasesTable)

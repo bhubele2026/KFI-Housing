@@ -124,6 +124,22 @@ vi.mock("@workspace/db", () => ({
     __table: "lastBootMasterImport" as const,
     id: { __col: "id" },
   },
+  // Re-export the same lightweight regex helper the importer uses to
+  // detect "utilities included in rent" phrases (Task #518). The mock
+  // returns the real implementation so the importer's flag-setting
+  // behavior is exercised by these tests.
+  detectsUtilitiesIncludedInRent: (
+    ...texts: Array<string | null | undefined>
+  ): boolean => {
+    for (const raw of texts) {
+      if (!raw) continue;
+      const t = String(raw).toLowerCase();
+      if (/\butilit(y|ies)\s+(are\s+|is\s+)?included\b/.test(t)) return true;
+      if (/\butilit(y|ies)\s+(are\s+|is\s+)?in\s+(the\s+)?(rent|lease)\b/.test(t)) return true;
+      if (/\butil(s|ities)?\.?\s+incl(\.|uded)?\b/.test(t)) return true;
+    }
+    return false;
+  },
 }));
 vi.mock("./logger", () => ({
   logger: { info: () => undefined, warn: () => undefined, error: () => undefined },

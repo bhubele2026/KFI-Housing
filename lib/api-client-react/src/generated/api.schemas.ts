@@ -600,6 +600,14 @@ parent property's `defaultNoticePeriodDays` when present.
    * @nullable
    */
   noticePeriodDays?: number | null;
+  /** True when the rent on this lease already bundles utility
+costs (e.g. master-lease note reads "utilities included in
+lease except internet"). When true, the dashboard and
+finance P&L pages skip subtracting the property's tracked
+utility expenses for this lease so the same dollars aren't
+counted twice. Defaults to false. Added by task #518.
+ */
+  utilitiesIncludedInRent?: boolean;
 }
 
 export type LeaseUpdateStatus =
@@ -653,6 +661,7 @@ export interface LeaseUpdate {
    * @nullable
    */
   noticePeriodDays?: number | null;
+  utilitiesIncludedInRent?: boolean;
 }
 
 export interface RoomNightLog {

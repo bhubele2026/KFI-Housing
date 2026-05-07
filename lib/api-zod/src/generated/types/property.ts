@@ -7,6 +7,7 @@
  */
 import type { PropertyGeocodeStatus } from "./propertyGeocodeStatus";
 import type { PropertyPaymentMethod } from "./propertyPaymentMethod";
+import type { PropertyPropertyType } from "./propertyPropertyType";
 import type { PropertyRentFrequency } from "./propertyRentFrequency";
 import type { PropertyStatus } from "./propertyStatus";
 import type { Ratings } from "./ratings";
@@ -85,6 +86,13 @@ tracking on the property.
    * @nullable
    */
   defaultNoticePeriodDays?: number | null;
+  /** Physical property classification (task #501). Nullable —
+existing properties created before this field existed
+default to `null`, and the UI hides the type badge when
+no value is set. Operators pick from a fixed list of
+three options.
+ */
+  propertyType?: PropertyPropertyType;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time

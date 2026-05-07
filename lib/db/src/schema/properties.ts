@@ -84,6 +84,12 @@ export const propertiesTable = pgTable("properties", {
   // the operator can leave it blank — leases without a notice period
   // simply skip the "Notice deadline approaching" alerts.
   defaultNoticePeriodDays: integer("default_notice_period_days"),
+  // Physical property classification (task #501): one of
+  // "Town house", "Apartment", "Motel". Nullable because existing
+  // properties were created before this field existed and operators
+  // backfill it lazily — the UI hides the badge when null/blank
+  // rather than guessing a default.
+  propertyType: text("property_type"),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

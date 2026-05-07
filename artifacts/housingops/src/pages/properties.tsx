@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, type Property, type Customer, type RatingCategoryKey } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, PROPERTY_TYPE_OPTIONS, type Property, type Customer, type RatingCategoryKey, type PropertyType } from "@/data/mockData";
 import { isBlankYMD, formatYMDPretty } from "@/lib/lease-dates";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -219,6 +219,10 @@ interface PropertyDraft {
   city: string;
   state: string;
   zip: string;
+  // Optional classification (task #501). `null` = "no type chosen yet";
+  // we don't force a default at create time so the badge stays hidden
+  // until the operator picks one.
+  propertyType: PropertyType | null;
 }
 
 const EMPTY_PROPERTY_DRAFT: PropertyDraft = {
@@ -228,7 +232,13 @@ const EMPTY_PROPERTY_DRAFT: PropertyDraft = {
   city: "",
   state: "",
   zip: "",
+  propertyType: null,
 };
+
+// Sentinel used by the "Type" Select to represent the optional/empty
+// state. shadcn's <Select> can't carry an actual empty string as an
+// item value, so we map "" ↔ null at the boundary.
+const NO_PROPERTY_TYPE_VALUE = "__none__";
 
 interface NewCustomerDraft {
   name: string;
@@ -738,6 +748,7 @@ export default function Properties() {
         portalUrl: "",
         notes: "",
         furnishings: [],
+        propertyType: draft.propertyType,
       };
 
       try {
@@ -2210,9 +2221,20 @@ export default function Properties() {
                           <span className={`text-sm font-medium ${vacant > 0 ? "text-amber-500" : "text-muted-foreground"}`}>{vacant}</span>
                         </td>
                         <td className="p-4 text-center">
-                          <Badge variant={property.status === "Active" ? "default" : "secondary"}>
-                            {property.status}
-                          </Badge>
+                          <div className="inline-flex items-center gap-1.5">
+                            <Badge variant={property.status === "Active" ? "default" : "secondary"}>
+                              {property.status}
+                            </Badge>
+                            {property.propertyType ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[11px] font-medium"
+                                data-testid={`badge-property-type-${property.id}`}
+                              >
+                                {property.propertyType}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="p-4" data-testid={`cell-rating-${property.id}`}>
                           {overallRating === null ? null : (
@@ -2437,6 +2459,32 @@ export default function Properties() {
                 </div>
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="prop-type">Type</Label>
+              <Select
+                value={draft.propertyType ?? NO_PROPERTY_TYPE_VALUE}
+                onValueChange={(v) =>
+                  setDraft({
+                    ...draft,
+                    propertyType:
+                      v === NO_PROPERTY_TYPE_VALUE ? null : (v as PropertyType),
+                  })
+                }
+              >
+                <SelectTrigger id="prop-type" data-testid="select-property-type">
+                  <SelectValue placeholder="No type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PROPERTY_TYPE_VALUE}>No type</SelectItem>
+                  {PROPERTY_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="prop-address">Address</Label>

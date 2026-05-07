@@ -1350,6 +1350,16 @@ components:
             for new leases and as the fallback when a lease has no
             `noticePeriodDays` of its own. `null` disables notice
             tracking on the property.
+        propertyType:
+          type: string
+          nullable: true
+          enum: ["Town house", "Apartment", "Motel", null]
+          description: |
+            Physical property classification (task #501). Nullable —
+            existing properties created before this field existed
+            default to `null`, and the UI hides the type badge when
+            no value is set. Operators pick from a fixed list of
+            three options.
         geocodeStatus:
           type: string
           enum: [ok, no_result, skipped]
@@ -1442,6 +1452,12 @@ components:
             Default termination / renewal notice period in days for
             leases on this property. See `Property.defaultNoticePeriodDays`
             for the full contract.
+        propertyType:
+          type: string
+          nullable: true
+          enum: ["Town house", "Apartment", "Motel", null]
+          description: |
+            See `Property.propertyType` for the full contract.
 
     Ratings:
       type: object

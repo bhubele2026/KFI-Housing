@@ -52,6 +52,7 @@ function makeProperty(overrides: Partial<PropertyRow> = {}): PropertyRow {
     coordsVerified: false,
     rentFree: false,
     defaultNoticePeriodDays: null,
+    propertyType: null,
     ...overrides,
   };
 }

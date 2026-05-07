@@ -166,6 +166,24 @@ export const PropertyRentFrequency = {
 } as const;
 
 /**
+ * Physical property classification (task #501). Nullable —
+existing properties created before this field existed
+default to `null`, and the UI hides the type badge when
+no value is set. Operators pick from a fixed list of
+three options.
+
+ */
+export type PropertyPropertyType =
+  | (typeof PropertyPropertyType)[keyof typeof PropertyPropertyType]
+  | null;
+
+export const PropertyPropertyType = {
+  Town_house: "Town house",
+  Apartment: "Apartment",
+  Motel: "Motel",
+} as const;
+
+/**
  * Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time
@@ -304,6 +322,13 @@ tracking on the property.
    * @nullable
    */
   defaultNoticePeriodDays?: number | null;
+  /** Physical property classification (task #501). Nullable —
+existing properties created before this field existed
+default to `null`, and the UI hides the type badge when
+no value is set. Operators pick from a fixed list of
+three options.
+ */
+  propertyType?: PropertyPropertyType;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time
@@ -350,6 +375,20 @@ export const PropertyUpdateRentFrequency = {
   Weekly: "Weekly",
   "Bi-Weekly": "Bi-Weekly",
   Monthly: "Monthly",
+} as const;
+
+/**
+ * See `Property.propertyType` for the full contract.
+
+ */
+export type PropertyUpdatePropertyType =
+  | (typeof PropertyUpdatePropertyType)[keyof typeof PropertyUpdatePropertyType]
+  | null;
+
+export const PropertyUpdatePropertyType = {
+  Town_house: "Town house",
+  Apartment: "Apartment",
+  Motel: "Motel",
 } as const;
 
 export interface PropertyUpdate {
@@ -403,6 +442,9 @@ for the full contract.
    * @nullable
    */
   defaultNoticePeriodDays?: number | null;
+  /** See `Property.propertyType` for the full contract.
+   */
+  propertyType?: PropertyUpdatePropertyType;
 }
 
 /**

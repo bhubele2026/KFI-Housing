@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, UTILITY_TYPES, BILLING_FREQUENCIES, PROPERTY_TYPE_OPTIONS, type PropertyType, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
@@ -865,6 +865,15 @@ export default function PropertyDetail() {
             <Badge variant={property.status === "Active" ? "default" : "secondary"} className="ml-2">
               {property.status}
             </Badge>
+            {property.propertyType ? (
+              <Badge
+                variant="outline"
+                className="ml-1 text-xs font-medium"
+                data-testid="badge-property-type"
+              >
+                {property.propertyType}
+              </Badge>
+            ) : null}
             {(() => {
               const overall = computeOverallRating(property.ratings);
               if (overall === null) return null;
@@ -1472,6 +1481,33 @@ export default function PropertyDetail() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
+                    <span className="text-sm text-muted-foreground w-36 shrink-0">Type</span>
+                    <Select
+                      value={property.propertyType ?? "__none__"}
+                      onValueChange={(v) =>
+                        updateProperty(id, {
+                          propertyType:
+                            v === "__none__" ? null : (v as PropertyType),
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        className="h-7 text-sm w-36"
+                        data-testid="select-property-type"
+                      >
+                        <SelectValue placeholder="No type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No type</SelectItem>
+                        {PROPERTY_TYPE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                     <span className="text-sm text-muted-foreground w-36 shrink-0">Status</span>

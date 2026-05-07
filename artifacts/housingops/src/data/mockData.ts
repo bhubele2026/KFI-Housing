@@ -132,8 +132,20 @@ export const PropertySchema = z.object({
   // tracking on this property". Used as the seed/fallback for the
   // matching `Lease.noticePeriodDays`.
   defaultNoticePeriodDays: z.number().int().min(0).nullable().optional(),
+  // Physical property classification (task #501). Nullable / optional
+  // because existing rows predate the field — the UI hides the badge
+  // when missing or null. Operators pick from a fixed three-option
+  // dropdown; off-list values are coerced to `null` at the API
+  // boundary by `normalizePropertyRow`.
+  propertyType: z.enum(["Town house", "Apartment", "Motel"]).nullable().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
+export const PROPERTY_TYPE_OPTIONS = [
+  "Town house",
+  "Apartment",
+  "Motel",
+] as const;
+export type PropertyType = (typeof PROPERTY_TYPE_OPTIONS)[number];
 
 // ── Furnishings catalogue ──────────────────────────────────────────────
 // Each item is identified by its label string (stored on Property.furnishings).

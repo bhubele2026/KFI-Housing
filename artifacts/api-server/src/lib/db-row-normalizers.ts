@@ -134,6 +134,22 @@ const PROPERTY_RENT_FREQUENCIES = new Set<string>([
   "Monthly",
 ]);
 
+const PROPERTY_TYPES = new Set<string>(["Town house", "Apartment", "Motel"]);
+
+/**
+ * Coerce the operator-picked property classification (task #501) down
+ * to the canonical enum. Anything outside the known set — and any
+ * blank string — collapses to `null`, which means "no type recorded
+ * yet". Existing rows created before this field existed are stored
+ * as `null` and the UI hides the badge accordingly.
+ */
+function normalizePropertyType(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  return PROPERTY_TYPES.has(trimmed) ? trimmed : null;
+}
+
 function normalizePaymentMethod(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim();
@@ -211,6 +227,11 @@ export function normalizePropertyRow<
       after,
     );
     out.defaultNoticePeriodDays = after;
+  }
+  if ("propertyType" in row) {
+    const after = normalizePropertyType(row.propertyType);
+    recordFixup(fixups, "propertyType", row.propertyType, after);
+    out.propertyType = after;
   }
   return out as T;
 }

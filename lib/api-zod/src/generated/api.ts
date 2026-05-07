@@ -245,6 +245,17 @@ export const ImportDataBody = zod.object({
         .describe(
           "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
         ),
+      propertyType: zod
+        .union([
+          zod.literal("Town house"),
+          zod.literal("Apartment"),
+          zod.literal("Motel"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe(
+          "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
+        ),
       geocodeStatus: zod
         .enum(["ok", "no_result", "skipped"])
         .optional()
@@ -776,6 +787,17 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
     ),
+  propertyType: zod
+    .union([
+      zod.literal("Town house"),
+      zod.literal("Apartment"),
+      zod.literal("Motel"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -909,6 +931,17 @@ export const CreatePropertyBody = zod.object({
     .nullish()
     .describe(
       "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+    ),
+  propertyType: zod
+    .union([
+      zod.literal("Town house"),
+      zod.literal("Apartment"),
+      zod.literal("Motel"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
     ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
@@ -1068,6 +1101,15 @@ export const UpdatePropertyBody = zod.object({
     .describe(
       "Default termination \/ renewal notice period in days for\nleases on this property. See `Property.defaultNoticePeriodDays`\nfor the full contract.\n",
     ),
+  propertyType: zod
+    .union([
+      zod.literal("Town house"),
+      zod.literal("Apartment"),
+      zod.literal("Motel"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe("See `Property.propertyType` for the full contract.\n"),
 });
 
 export const updatePropertyResponseRatingsLandlordMin = 0;
@@ -1191,6 +1233,17 @@ export const UpdatePropertyResponse = zod.object({
     .nullish()
     .describe(
       "Default termination \/ renewal notice period in days for\nleases on this property (Task #492). Used as the seed value\nfor new leases and as the fallback when a lease has no\n`noticePeriodDays` of its own. `null` disables notice\ntracking on the property.\n",
+    ),
+  propertyType: zod
+    .union([
+      zod.literal("Town house"),
+      zod.literal("Apartment"),
+      zod.literal("Motel"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
     ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])

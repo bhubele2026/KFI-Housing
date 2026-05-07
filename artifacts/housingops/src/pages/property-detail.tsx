@@ -438,6 +438,96 @@ export function NotesEditor({ value, onSave, className }: { value: string; onSav
   );
 }
 
+/**
+ * Compact inline editor for an occupant's `responsibilities` list
+ * (task #500). Renders the current entries as small removable chips
+ * and exposes a tiny "+ add" affordance that flips into a one-line
+ * input. Stays out of a separate drawer so operators can edit per
+ * item without leaving the beds-tab table — the chips wrap inside
+ * the occupant's name cell beneath the lead/keys badges.
+ */
+function ResponsibilitiesEditor({
+  occupantId,
+  values,
+  onChange,
+}: {
+  occupantId: string;
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      setAdding(false);
+      setDraft("");
+      return;
+    }
+    onChange([...(values ?? []), trimmed]);
+    setDraft("");
+    setAdding(false);
+  };
+  const remove = (idx: number) => {
+    const next = (values ?? []).filter((_, i) => i !== idx);
+    onChange(next);
+  };
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1"
+      data-testid={`responsibilities-${occupantId}`}
+    >
+      {(values ?? []).map((item, idx) => (
+        <Badge
+          key={`${item}-${idx}`}
+          variant="secondary"
+          className="h-5 px-1.5 text-[10px] font-normal gap-1 bg-slate-100 text-slate-700 border-slate-200"
+          data-testid={`responsibility-${occupantId}-${idx}`}
+        >
+          <span>{item}</span>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => remove(idx)}
+            data-testid={`responsibility-remove-${occupantId}-${idx}`}
+            title="Remove responsibility"
+          >
+            <X className="h-2.5 w-2.5" />
+          </button>
+        </Badge>
+      ))}
+      {adding ? (
+        <Input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") {
+              setDraft("");
+              setAdding(false);
+            }
+          }}
+          placeholder="e.g. Take out trash on Mondays"
+          className="h-6 text-[11px] py-0 w-56"
+          data-testid={`responsibility-input-${occupantId}`}
+        />
+      ) : (
+        <button
+          type="button"
+          className="text-[10px] text-muted-foreground hover:text-foreground italic flex items-center gap-0.5"
+          onClick={() => setAdding(true)}
+          data-testid={`responsibility-add-${occupantId}`}
+        >
+          <Plus className="h-2.5 w-2.5" />
+          {(values ?? []).length === 0 ? "Add responsibility" : "Add"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function InlineEdit({
   value, onSave, type = "text", prefix,
   placeholder, displayClassName, inputClassName, testId, displayValue,
@@ -859,6 +949,16 @@ export default function PropertyDetail() {
   )[0];
 
   const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;
+  // Vacant beds split by cleaning workflow (task #500). Only "ready"
+  // beds count as actually available for a new placement; the rest
+  // are mid-turnover and surface as a separate "Needs cleaning"
+  // signal so operators can chase them down.
+  const availableBeds = propBeds.filter(
+    (b) => b.status === "Vacant" && (b.cleaningStatus ?? "ready") === "ready",
+  ).length;
+  const bedsNeedsCleaning = propBeds.filter(
+    (b) => b.status === "Vacant" && (b.cleaningStatus ?? "ready") !== "ready",
+  ).length;
   const vacantBeds = propBeds.length - occupiedBeds;
   const monthlyRevenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
   const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
@@ -1183,7 +1283,26 @@ export default function PropertyDetail() {
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
           <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
           <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
-          <StatCard label="Vacant" value={vacantBeds} icon={BedDouble} color={vacantBeds > 0 ? "text-amber-500" : "text-muted-foreground"} />
+          <StatCard
+            testId="stat-available-beds"
+            label="Available"
+            value={availableBeds}
+            icon={BedDouble}
+            color={availableBeds > 0 ? "text-amber-500" : "text-muted-foreground"}
+            sub={
+              bedsNeedsCleaning > 0 ? (
+                <span
+                  className="inline-flex items-center gap-1 text-amber-700"
+                  data-testid="stat-needs-cleaning-sub"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {bedsNeedsCleaning} needs cleaning
+                </span>
+              ) : (
+                `${vacantBeds} vacant total`
+              )
+            }
+          />
           <StatCard label="Monthly Revenue" value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
           <StatCard
             testId="stat-lease-rent"
@@ -2441,6 +2560,11 @@ export default function PropertyDetail() {
                                     // coverage badges so the per-row bedroom
                                     // tag stays opt-in.
                                     const showBedroomTag = roomHasAnyShift(roomBeds, occupants);
+                                    // Lead-tenant designation only makes sense for *shared*
+                                    // rooms — a single-bed room implicitly has its sole
+                                    // occupant as the lead, so the explicit Make/Demote
+                                    // affordance would just be noise (task #500).
+                                    const isSharedRoom = roomBeds.length > 1;
                                     return roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map((bed, idx) => {
                                     const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
                                     const isOccupied = bed.status === "Occupied";
@@ -2478,36 +2602,160 @@ export default function PropertyDetail() {
                                           </div>
                                         </TableCell>
                                         <TableCell>
-                                          <Select value={bed.status} onValueChange={handleStatusChange}>
-                                            <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="Occupied">Occupied</SelectItem>
-                                              <SelectItem value="Vacant">Vacant</SelectItem>
-                                            </SelectContent>
-                                          </Select>
+                                          <div className="flex flex-col gap-1">
+                                            <Select value={bed.status} onValueChange={handleStatusChange}>
+                                              <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="Occupied">Occupied</SelectItem>
+                                                <SelectItem value="Vacant">Vacant</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            {/* Cleaning workflow chip (task #500). Hidden for
+                                                occupied beds — those are always paired with the
+                                                "occupied" cleaning state and have nothing to advance. */}
+                                            {!isOccupied && (() => {
+                                              const cs = bed.cleaningStatus ?? "ready";
+                                              const next: Record<string, { label: string; status: string } | null> = {
+                                                needs_cleaning: { label: "Start cleaning", status: "in_progress" },
+                                                in_progress: { label: "Mark ready", status: "ready" },
+                                                ready: null,
+                                                occupied: null,
+                                              };
+                                              const nextStep = next[cs];
+                                              const chipStyle =
+                                                cs === "ready"
+                                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                  : cs === "in_progress"
+                                                    ? "bg-sky-50 text-sky-700 border-sky-200"
+                                                    : "bg-amber-50 text-amber-700 border-amber-200";
+                                              const chipLabel =
+                                                cs === "ready"
+                                                  ? "Ready"
+                                                  : cs === "in_progress"
+                                                    ? "Cleaning…"
+                                                    : "Needs cleaning";
+                                              return (
+                                                <div className="flex items-center gap-1">
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={`h-5 px-1.5 text-[10px] font-medium gap-1 ${chipStyle}`}
+                                                    data-testid={`bed-${bed.id}-cleaning-status`}
+                                                  >
+                                                    <Sparkles className="h-3 w-3" />
+                                                    {chipLabel}
+                                                  </Badge>
+                                                  {nextStep && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      className="h-5 px-1.5 text-[10px]"
+                                                      onClick={() =>
+                                                        updateBed(bed.id, {
+                                                          cleaningStatus:
+                                                            nextStep.status as
+                                                              | "needs_cleaning"
+                                                              | "in_progress"
+                                                              | "ready"
+                                                              | "occupied",
+                                                        })
+                                                      }
+                                                      data-testid={`bed-${bed.id}-cleaning-advance`}
+                                                    >
+                                                      {nextStep.label}
+                                                    </Button>
+                                                  )}
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
                                         </TableCell>
                                         {occ ? (
                                           <>
                                             <TableCell className="font-medium">
-                                              <div className="flex items-center gap-1">
-                                                <InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} />
-                                                <ConfirmDeleteButton
-                                                  title={`Delete ${occ.name}?`}
-                                                  description="This permanently removes the occupant record and frees up the bed. You can't undo this."
-                                                  onConfirm={() => deleteOccupant(occ.id)}
-                                                  testId={`dialog-confirm-delete-occupant-${occ.id}`}
-                                                  trigger={
-                                                    <Button
-                                                      size="icon"
-                                                      variant="ghost"
-                                                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                                      data-testid={`button-delete-occupant-${occ.id}`}
-                                                      title="Delete occupant"
+                                              <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1 flex-wrap">
+                                                  <InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} />
+                                                  {/* Lead-tenant badge + key count (task #500).
+                                                      Only meaningful in shared (multi-bed) rooms;
+                                                      single-bed rooms hide the affordance entirely
+                                                      so operators don't think they need to flag a
+                                                      sole occupant as "lead". */}
+                                                  {isSharedRoom && occ.isLead && (
+                                                    <Badge
+                                                      variant="outline"
+                                                      className="h-5 px-1.5 text-[10px] font-medium gap-1 bg-amber-50 text-amber-700 border-amber-200"
+                                                      data-testid={`badge-lead-${occ.id}`}
+                                                      title="Lead tenant / key holder"
                                                     >
-                                                      <Trash2 className="h-3 w-3" />
+                                                      <KeyRound className="h-3 w-3" />
+                                                      Lead · {occ.keysIssued ?? 0} key{(occ.keysIssued ?? 0) === 1 ? "" : "s"}
+                                                    </Badge>
+                                                  )}
+                                                  {isSharedRoom && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                                                      onClick={() =>
+                                                        updateOccupant(occ.id, {
+                                                          isLead: !occ.isLead,
+                                                          // Default the lead's keys to 1 the
+                                                          // first time they're promoted so the
+                                                          // badge has something meaningful to
+                                                          // render.
+                                                          keysIssued:
+                                                            !occ.isLead && (occ.keysIssued ?? 0) === 0
+                                                              ? 1
+                                                              : occ.keysIssued ?? 0,
+                                                        })
+                                                      }
+                                                      data-testid={`button-toggle-lead-${occ.id}`}
+                                                      title={occ.isLead ? "Demote from lead" : "Make lead tenant"}
+                                                    >
+                                                      {occ.isLead ? "Demote" : "Make lead"}
                                                     </Button>
+                                                  )}
+                                                  {isSharedRoom && occ.isLead && (
+                                                    <InlineEdit
+                                                      value={String(occ.keysIssued ?? 0)}
+                                                      type="number"
+                                                      inputClassName="w-14"
+                                                      onSave={(v) => {
+                                                        const n = parseInt(v, 10);
+                                                        if (!Number.isFinite(n) || n < 0) return;
+                                                        updateOccupant(occ.id, { keysIssued: n });
+                                                      }}
+                                                    />
+                                                  )}
+                                                  <ConfirmDeleteButton
+                                                    title={`Delete ${occ.name}?`}
+                                                    description="This permanently removes the occupant record and frees up the bed. You can't undo this."
+                                                    onConfirm={() => deleteOccupant(occ.id)}
+                                                    testId={`dialog-confirm-delete-occupant-${occ.id}`}
+                                                    trigger={
+                                                      <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                        data-testid={`button-delete-occupant-${occ.id}`}
+                                                        title="Delete occupant"
+                                                      >
+                                                        <Trash2 className="h-3 w-3" />
+                                                      </Button>
+                                                    }
+                                                  />
+                                                </div>
+                                                {/* Responsibilities list (task #500). Shown
+                                                    inline as small chips with an "Add" affordance —
+                                                    avoids a separate drawer while still letting
+                                                    operators edit per-item. */}
+                                                <ResponsibilitiesEditor
+                                                  occupantId={occ.id}
+                                                  values={occ.responsibilities ?? []}
+                                                  onChange={(next) =>
+                                                    updateOccupant(occ.id, { responsibilities: next })
                                                   }
                                                 />
                                               </div>
@@ -2604,13 +2852,31 @@ export default function PropertyDetail() {
                                         ) : (
                                           <>
                                             <TableCell colSpan={10}>
-                                              <AssignOccupantDialog
-                                                bed={{ id: bed.id, propertyId: id }}
-                                                onAssign={(occ, b) => {
-                                                  addOccupant(occ);
-                                                  updateBed(b.id, { status: "Occupied", occupantId: occ.id });
-                                                }}
-                                              />
+                                              {/* Cleaning workflow gate (task #500). Only beds
+                                                  in the "ready" state expose the assign action.
+                                                  Beds still being cleaned show a non-actionable
+                                                  status hint so operators know to advance the
+                                                  cleaning workflow first — matches the API guard
+                                                  in routes/occupants.ts + routes/beds.ts. */}
+                                              {(bed.cleaningStatus ?? "ready") === "ready" ? (
+                                                <AssignOccupantDialog
+                                                  bed={{ id: bed.id, propertyId: id }}
+                                                  onAssign={(occ, b) => {
+                                                    addOccupant(occ);
+                                                    updateBed(b.id, { status: "Occupied", occupantId: occ.id });
+                                                  }}
+                                                />
+                                              ) : (
+                                                <div
+                                                  className="flex items-center gap-2 text-xs text-muted-foreground italic"
+                                                  data-testid={`bed-${bed.id}-not-assignable`}
+                                                >
+                                                  <Sparkles className="h-3 w-3" />
+                                                  {bed.cleaningStatus === "in_progress"
+                                                    ? "Cleaning in progress — finish to assign"
+                                                    : "Needs cleaning — start workflow to assign"}
+                                                </div>
+                                              )}
                                             </TableCell>
                                             <TableCell className="text-right text-muted-foreground/40 text-sm">—</TableCell>
                                             <TableCell />

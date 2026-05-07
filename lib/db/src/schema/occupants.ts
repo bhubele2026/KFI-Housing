@@ -1,4 +1,12 @@
-import { pgTable, text, doublePrecision, timestamp, boolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  doublePrecision,
+  timestamp,
+  boolean,
+  integer,
+  jsonb,
+} from "drizzle-orm/pg-core";
 
 export const occupantsTable = pgTable("occupants", {
   id: text("id").primaryKey(),
@@ -39,17 +47,20 @@ export const occupantsTable = pgTable("occupants", {
   // historical occupant rows that pre-date the columns continue to
   // parse, and the Assign-Occupant dialog can leave them blank for
   // associates whose details aren't on file yet.
-  //   - language: one of "Bilingual", "English only", "Spanish only",
-  //     "French only", "Other only"
-  //   - gender:   one of "Female", "Male"
-  //   - title:    one of "Onsite Supervisor", "Onsite Lead",
-  //     "Driver + Associate", "Driver ONLY", "Associate", "Mentor"
-  //   - kfisAuthorizedToDrive: holds a valid driver's license AND is
-  //     KFIS-cleared to drive a company vehicle.
   language: text("language"),
   gender: text("gender"),
   title: text("title"),
   kfisAuthorizedToDrive: boolean("kfis_authorized_to_drive"),
+  // Operator-assigned day-to-day responsibilities for this occupant
+  // (task #500). Free-form short strings stored as a JSON array.
+  responsibilities: jsonb("responsibilities")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  // True for the lead tenant / key holder of the room (task #500).
+  isLead: boolean("is_lead").notNull().default(false),
+  // Number of physical keys this occupant has been issued (task #500).
+  keysIssued: integer("keys_issued").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

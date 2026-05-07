@@ -812,6 +812,25 @@ export const BedStatus = {
   Vacant: "Vacant",
 } as const;
 
+/**
+ * Cleaning workflow state for this bed (task #500). Set
+automatically to "needs_cleaning" when an occupant moves
+out and advanced by operators. Only "ready" beds may
+accept a new placement. Optional in the schema so legacy
+payloads continue to round-trip; the API normaliser
+backfills "occupied" or "ready" from `status` when missing.
+
+ */
+export type BedCleaningStatus =
+  (typeof BedCleaningStatus)[keyof typeof BedCleaningStatus];
+
+export const BedCleaningStatus = {
+  occupied: "occupied",
+  needs_cleaning: "needs_cleaning",
+  in_progress: "in_progress",
+  ready: "ready",
+} as const;
+
 export interface Bed {
   id: string;
   propertyId: string;
@@ -820,6 +839,14 @@ export interface Bed {
   status: BedStatus;
   /** @nullable */
   occupantId: string | null;
+  /** Cleaning workflow state for this bed (task #500). Set
+automatically to "needs_cleaning" when an occupant moves
+out and advanced by operators. Only "ready" beds may
+accept a new placement. Optional in the schema so legacy
+payloads continue to round-trip; the API normaliser
+backfills "occupied" or "ready" from `status` when missing.
+ */
+  cleaningStatus?: BedCleaningStatus;
 }
 
 export type BedUpdateStatus =
@@ -830,6 +857,16 @@ export const BedUpdateStatus = {
   Vacant: "Vacant",
 } as const;
 
+export type BedUpdateCleaningStatus =
+  (typeof BedUpdateCleaningStatus)[keyof typeof BedUpdateCleaningStatus];
+
+export const BedUpdateCleaningStatus = {
+  occupied: "occupied",
+  needs_cleaning: "needs_cleaning",
+  in_progress: "in_progress",
+  ready: "ready",
+} as const;
+
 export interface BedUpdate {
   propertyId?: string;
   bedNumber?: number;
@@ -837,6 +874,7 @@ export interface BedUpdate {
   status?: BedUpdateStatus;
   /** @nullable */
   occupantId?: string | null;
+  cleaningStatus?: BedUpdateCleaningStatus;
 }
 
 export type OccupantStatus =
@@ -993,6 +1031,23 @@ Null when their driver status hasn't been recorded.
    * @nullable
    */
   kfisAuthorizedToDrive?: boolean | null;
+  /** Operator-assigned day-to-day responsibilities for this
+occupant (task #500). Free-form short strings — e.g.
+"Take out trash on Mondays". Optional in the schema so
+legacy payloads keep parsing; the boundary normaliser
+defaults a missing value to an empty array.
+ */
+  responsibilities?: string[];
+  /** True for the lead tenant / key holder of the room (task
+#500). The API enforces at most one lead per room — when
+this is set true, any prior lead in the same room is
+demoted to false.
+ */
+  isLead?: boolean;
+  /** Number of physical keys this occupant has been issued
+(task #500). Validated as a non-negative integer.
+ */
+  keysIssued?: number;
   /**
    * ISO-8601 timestamp of when this occupant record was created.
 Null for legacy rows inserted before the column existed.
@@ -1114,6 +1169,9 @@ export interface OccupantCreate {
   title?: OccupantCreateTitle;
   /** @nullable */
   kfisAuthorizedToDrive?: boolean | null;
+  responsibilities?: string[];
+  isLead?: boolean;
+  keysIssued?: number;
 }
 
 export type OccupantUpdateStatus =
@@ -1225,6 +1283,9 @@ export interface OccupantUpdate {
   title?: OccupantUpdateTitle;
   /** @nullable */
   kfisAuthorizedToDrive?: boolean | null;
+  responsibilities?: string[];
+  isLead?: boolean;
+  keysIssued?: number;
 }
 
 export type UtilityType = (typeof UtilityType)[keyof typeof UtilityType];

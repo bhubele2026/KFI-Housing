@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { db, occupantsTable, bedsTable } from "@workspace/db";
 import {
   ListOccupantsResponse,
@@ -13,22 +13,25 @@ import { normalizeOccupantRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
+function serializeOccupant<R extends { createdAt: Date | string | null }>(row: R) {
+  return {
+    ...row,
+    createdAt:
+      row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : row.createdAt ?? null,
+  };
+}
+
 router.get("/occupants", async (_req, res): Promise<void> => {
   const rows = await db.select().from(occupantsTable).orderBy(occupantsTable.id);
   // Run each row through the boundary normalizer before the response
   // schema parse (Task #416) so a legacy off-list value already in the
   // DB (e.g. an unknown billingFrequency or shift) gets coerced into the
-  // canonical shape instead of 500ing the whole list endpoint.
-  const serialized = rows.map((r) => {
-    const normalized = normalizeOccupantRow(r);
-    return {
-      ...normalized,
-      createdAt:
-        r.createdAt instanceof Date
-          ? r.createdAt.toISOString()
-          : r.createdAt ?? null,
-    };
-  });
+  // canonical shape instead of 500ing the whole list endpoint. The
+  // normaliser also backfills the task #500 fields (responsibilities /
+  // isLead / keysIssued) on legacy rows.
+  const serialized = rows.map((r) => serializeOccupant(normalizeOccupantRow(r)));
   res.json(ListOccupantsResponse.parse(serialized));
 });
 
@@ -39,12 +42,50 @@ router.get("/occupants", async (_req, res): Promise<void> => {
 // move-in date at creation time").
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Resolve the `roomId` for the bed an occupant is currently sitting on.
+ * Returns null when the occupant is unplaced or the bed has been
+ * deleted out from under them. Used by the lead-tenant guard so a
+ * `isLead: true` patch can demote any prior lead in the same room.
+ */
+async function roomIdForBed(bedId: string | null | undefined): Promise<string | null> {
+  if (!bedId) return null;
+  const [bed] = await db
+    .select({ roomId: bedsTable.roomId })
+    .from(bedsTable)
+    .where(eq(bedsTable.id, bedId));
+  return bed?.roomId ?? null;
+}
+
+/**
+ * Strict guard for the `keysIssued` field (task #500). The OpenAPI
+ * contract types it as `integer`, but the generated zod schema only
+ * checks `number`, so we belt-and-braces it here: bad values get a
+ * 400 instead of being silently floored/clamped by the row normaliser.
+ */
+function rejectInvalidKeysIssued(
+  body: { keysIssued?: unknown },
+  res: import("express").Response,
+): boolean {
+  if (!Object.prototype.hasOwnProperty.call(body, "keysIssued")) return false;
+  const v = body.keysIssued;
+  if (v === undefined || v === null) return false;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    res.status(400).json({
+      error: "keysIssued must be a non-negative integer.",
+    });
+    return true;
+  }
+  return false;
+}
+
 router.post("/occupants", async (req, res): Promise<void> => {
   const body = CreateOccupantBody.safeParse(req.body);
   if (!body.success) {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  if (rejectInvalidKeysIssued(req.body, res)) return;
   const normalized = normalizeOccupantRow({
     chargeSource: "",
     chargeSourceCustomer: "",
@@ -58,16 +99,75 @@ router.post("/occupants", async (req, res): Promise<void> => {
     });
     return;
   }
+  // Cleaning workflow guard (task #500). When a fresh occupant is
+  // created already attached to a bed, the bed must be "ready" — same
+  // contract the bed PATCH route enforces for re-assignment.
+  if (typeof normalized.bedId === "string" && normalized.bedId) {
+    const [bed] = await db
+      .select({
+        cleaningStatus: bedsTable.cleaningStatus,
+        status: bedsTable.status,
+        occupantId: bedsTable.occupantId,
+      })
+      .from(bedsTable)
+      .where(eq(bedsTable.id, normalized.bedId));
+    if (!bed) {
+      res.status(400).json({ error: "Target bed does not exist." });
+      return;
+    }
+    if (bed.status === "Occupied" && bed.occupantId) {
+      res.status(409).json({
+        error:
+          "Bed is currently occupied by another occupant — vacate it first.",
+      });
+      return;
+    }
+    if (bed.cleaningStatus !== "ready") {
+      res.status(409).json({
+        error:
+          "Bed is not ready for a new occupant — finish the cleaning workflow first.",
+        cleaningStatus: bed.cleaningStatus,
+      });
+      return;
+    }
+  }
   const [row] = await db
     .insert(occupantsTable)
     .values(normalized)
     .returning();
-  const serializedRow = {
-    ...row,
-    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt ?? null,
-  };
-  res.status(201).json(UpdateOccupantResponse.parse(serializedRow));
+  // Lead-tenant guard: when a fresh occupant is flagged as the lead
+  // for a room, demote any other lead currently sitting in the same
+  // room so the "exactly one lead per room" invariant holds.
+  if (row.isLead) {
+    const roomId = await roomIdForBed(row.bedId);
+    if (roomId) await demoteOtherLeads(row.id, roomId);
+  }
+  res.status(201).json(UpdateOccupantResponse.parse(serializeOccupant(row)));
 });
+
+/**
+ * Set `isLead = false` on every occupant currently sitting in a bed
+ * inside `roomId`, except for the one we just promoted (`keepId`).
+ * Implemented as one SQL update per other-occupant rather than a
+ * sub-select so it works against the route-test fake `db` shim too.
+ */
+async function demoteOtherLeads(keepId: string, roomId: string): Promise<void> {
+  const bedsInRoom = await db
+    .select({ id: bedsTable.id })
+    .from(bedsTable)
+    .where(eq(bedsTable.roomId, roomId));
+  for (const b of bedsInRoom) {
+    await db
+      .update(occupantsTable)
+      .set({ isLead: false })
+      .where(
+        and(
+          eq(occupantsTable.bedId, b.id),
+          ne(occupantsTable.id, keepId),
+        ),
+      );
+  }
+}
 
 router.patch("/occupants/:id", async (req, res): Promise<void> => {
   const params = UpdateOccupantParams.safeParse(req.params);
@@ -80,6 +180,7 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  if (rejectInvalidKeysIssued(req.body, res)) return;
   // A manual edit to chargePerBed or billingFrequency means the value
   // no longer matches what payroll said — but we don't want to lose the
   // breadcrumb to the original payroll row (Task #330). Behaviour:
@@ -102,22 +203,112 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     Object.prototype.hasOwnProperty.call(updates, "chargeSource") ||
     Object.prototype.hasOwnProperty.call(updates, "chargeSourceCustomer") ||
     Object.prototype.hasOwnProperty.call(updates, "chargeSourcePersonId");
+  let existingRow:
+    | { chargeSource: string; bedId: string | null; isLead: boolean }
+    | undefined;
   if (touchesCharge && !setsSource) {
     const [existing] = await db
-      .select({ chargeSource: occupantsTable.chargeSource })
+      .select({
+        chargeSource: occupantsTable.chargeSource,
+        bedId: occupantsTable.bedId,
+        isLead: occupantsTable.isLead,
+      })
       .from(occupantsTable)
       .where(eq(occupantsTable.id, params.data.id));
     if (!existing) {
       res.status(404).json({ error: "Occupant not found" });
       return;
     }
+    existingRow = existing;
     if (existing.chargeSource === "payroll") {
       updates.chargeSource = "manual_override";
       // Intentionally do NOT touch chargeSourceCustomer /
       // chargeSourcePersonId — those carry the original payroll link.
     }
-    // "" or "manual_override": leave provenance fields untouched.
   }
+
+  // Move-out / transfer / status→Former side effect (task #500). The
+  // bed an occupant is leaving needs a cleaning turnover regardless of
+  // whether the patch:
+  //   * detaches the bed entirely (bedId→null),
+  //   * marks the occupant Former (which implicitly detaches), or
+  //   * transfers them onto a *different* bed (bedId→someOtherBed).
+  // We always look up the prior bedId, then if the post-patch bedId
+  // differs from it (or the occupant goes Former), we flip the prior
+  // bed to Vacant + needs_cleaning. The destination bed, if any, is
+  // independently validated as "ready" further down — same contract as
+  // the bed PATCH route enforces.
+  const patchTouchesBed = Object.prototype.hasOwnProperty.call(
+    updates,
+    "bedId",
+  );
+  const goingFormer = updates.status === "Former";
+  if (goingFormer && !patchTouchesBed) {
+    updates.bedId = null;
+  }
+  let priorBedId: string | null = null;
+  if (patchTouchesBed || goingFormer) {
+    if (!existingRow) {
+      const [existing] = await db
+        .select({
+          chargeSource: occupantsTable.chargeSource,
+          bedId: occupantsTable.bedId,
+          isLead: occupantsTable.isLead,
+        })
+        .from(occupantsTable)
+        .where(eq(occupantsTable.id, params.data.id));
+      existingRow = existing;
+    }
+    priorBedId = existingRow?.bedId ?? null;
+  }
+  // If the patch points the occupant at a brand-new bed, the
+  // destination bed must be "ready" — same gate the bed PATCH route
+  // enforces. We allow targeting the *same* bed an occupant is already
+  // on (no-op transfer), and we skip the check when the occupant is
+  // being detached entirely (bedId→null) or marked Former.
+  const destBedId =
+    patchTouchesBed && typeof updates.bedId === "string" && updates.bedId
+      ? updates.bedId
+      : null;
+  if (destBedId && destBedId !== priorBedId) {
+    const [destBed] = await db
+      .select({
+        cleaningStatus: bedsTable.cleaningStatus,
+        status: bedsTable.status,
+        occupantId: bedsTable.occupantId,
+      })
+      .from(bedsTable)
+      .where(eq(bedsTable.id, destBedId));
+    if (!destBed) {
+      res.status(400).json({ error: "Target bed does not exist." });
+      return;
+    }
+    if (destBed.status === "Occupied" && destBed.occupantId) {
+      res.status(409).json({
+        error:
+          "Bed is currently occupied by another occupant — vacate it first.",
+      });
+      return;
+    }
+    if (destBed.cleaningStatus !== "ready") {
+      res.status(409).json({
+        error:
+          "Bed is not ready for a new occupant — finish the cleaning workflow first.",
+        cleaningStatus: destBed.cleaningStatus,
+      });
+      return;
+    }
+  }
+  // Only fire the freed-bed cleaning side effect when the prior bed is
+  // actually being vacated — i.e. the post-patch bedId differs from
+  // the prior one (or the occupant went Former, in which case we set
+  // bedId to null above).
+  const freesPriorBed =
+    priorBedId !== null &&
+    (goingFormer ||
+      (patchTouchesBed &&
+        (updates.bedId === null || updates.bedId !== priorBedId)));
+
   const [row] = await db
     .update(occupantsTable)
     .set(updates)
@@ -127,11 +318,26 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Occupant not found" });
     return;
   }
-  const serializedPatch = {
-    ...row,
-    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt ?? null,
-  };
-  res.json(UpdateOccupantResponse.parse(serializedPatch));
+
+  if (freesPriorBed && priorBedId) {
+    await db
+      .update(bedsTable)
+      .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
+      .where(eq(bedsTable.id, priorBedId));
+  }
+
+  // Lead-tenant guard (task #500). When the patch promotes this
+  // occupant to lead, demote any other lead currently sitting in the
+  // same room. We re-resolve the roomId from the post-update bedId so
+  // a patch that simultaneously moves the occupant and promotes them
+  // still demotes peers in the *new* room (the room the lead claim
+  // applies to).
+  if (row.isLead) {
+    const roomId = await roomIdForBed(row.bedId);
+    if (roomId) await demoteOtherLeads(row.id, roomId);
+  }
+
+  res.json(UpdateOccupantResponse.parse(serializeOccupant(row)));
 });
 
 router.delete("/occupants/:id", async (req, res): Promise<void> => {
@@ -142,10 +348,12 @@ router.delete("/occupants/:id", async (req, res): Promise<void> => {
   }
   // Mirror the inverse cleanup the bed delete pathway implies: any bed
   // pointing at this occupant gets its occupantId cleared so we don't
-  // leave dangling references behind.
+  // leave dangling references behind, AND its cleaning workflow flips
+  // to "needs_cleaning" so the turnover task lands in the operator's
+  // queue (task #500).
   await db
     .update(bedsTable)
-    .set({ occupantId: null })
+    .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
     .where(eq(bedsTable.occupantId, params.data.id));
   await db.delete(occupantsTable).where(eq(occupantsTable.id, params.data.id));
   res.sendStatus(204);

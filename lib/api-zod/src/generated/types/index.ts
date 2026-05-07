@@ -8,8 +8,10 @@
 
 export * from "./backfillPropertyCoords200";
 export * from "./bed";
+export * from "./bedCleaningStatus";
 export * from "./bedStatus";
 export * from "./bedUpdate";
+export * from "./bedUpdateCleaningStatus";
 export * from "./bedUpdateStatus";
 export * from "./createDigestRecipient409";
 export * from "./customer";

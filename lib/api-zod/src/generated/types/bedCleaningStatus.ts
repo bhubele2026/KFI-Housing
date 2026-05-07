@@ -5,23 +5,22 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { BedCleaningStatus } from "./bedCleaningStatus";
-import type { BedStatus } from "./bedStatus";
 
-export interface Bed {
-  id: string;
-  propertyId: string;
-  bedNumber: number;
-  roomId: string;
-  status: BedStatus;
-  /** @nullable */
-  occupantId: string | null;
-  /** Cleaning workflow state for this bed (task #500). Set
+/**
+ * Cleaning workflow state for this bed (task #500). Set
 automatically to "needs_cleaning" when an occupant moves
 out and advanced by operators. Only "ready" beds may
 accept a new placement. Optional in the schema so legacy
 payloads continue to round-trip; the API normaliser
 backfills "occupied" or "ready" from `status` when missing.
+
  */
-  cleaningStatus?: BedCleaningStatus;
-}
+export type BedCleaningStatus =
+  (typeof BedCleaningStatus)[keyof typeof BedCleaningStatus];
+
+export const BedCleaningStatus = {
+  occupied: "occupied",
+  needs_cleaning: "needs_cleaning",
+  in_progress: "in_progress",
+  ready: "ready",
+} as const;

@@ -17,7 +17,9 @@ router.get("/beds", async (_req, res): Promise<void> => {
   const rows = await db.select().from(bedsTable).orderBy(bedsTable.id);
   // Boundary normalize on the way out (Task #416) so a legacy bed
   // row whose `status` is off-list (e.g. "Pending") doesn't 500 the
-  // entire list endpoint via the response schema's enum check.
+  // entire list endpoint via the response schema's enum check. The
+  // normaliser also backfills `cleaningStatus` (task #500) so legacy
+  // rows missing that column still satisfy the response schema.
   const normalized = rows.map((r) => normalizeBedRow(r));
   res.json(ListBedsResponse.parse(normalized));
 });
@@ -43,9 +45,81 @@ router.patch("/beds/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: body.error.message });
     return;
   }
+  // Cleaning workflow guard (task #500). Two cases the route enforces
+  // beyond the normaliser:
+  //   1. Reject any patch that tries to flip the bed to Occupied (or
+  //      attach a new occupantId) while the bed is not yet "ready" —
+  //      operators must finish the cleaning workflow first.
+  //   2. When a patch moves the occupant off the bed (status→Vacant
+  //      and/or occupantId→null), default the cleaningStatus to
+  //      "needs_cleaning" so the turnover task lands in the operator's
+  //      queue automatically. The caller can override by sending a
+  //      cleaningStatus explicitly.
+  const updates = { ...body.data } as Record<string, unknown>;
+  const wantsOccupy =
+    updates.status === "Occupied" ||
+    (typeof updates.occupantId === "string" && updates.occupantId.length > 0);
+  if (wantsOccupy) {
+    const [existing] = await db
+      .select({
+        cleaningStatus: bedsTable.cleaningStatus,
+        status: bedsTable.status,
+        occupantId: bedsTable.occupantId,
+      })
+      .from(bedsTable)
+      .where(eq(bedsTable.id, params.data.id));
+    if (!existing) {
+      res.status(404).json({ error: "Bed not found" });
+      return;
+    }
+    // A "new placement" means we're attaching an occupant the bed
+    // doesn't already hold. A no-op self-PATCH (same occupantId, already
+    // Occupied) doesn't count and is allowed regardless of cleaning
+    // status — useful for housekeeping flows that re-PATCH a bed for
+    // unrelated reasons. (task #500)
+    const incomingOccupant =
+      typeof updates.occupantId === "string" && updates.occupantId.length > 0
+        ? updates.occupantId
+        : null;
+    const isNoOp =
+      existing.status === "Occupied" &&
+      incomingOccupant !== null &&
+      existing.occupantId === incomingOccupant;
+    if (!isNoOp) {
+      // Reject placing an occupant on top of someone else.
+      if (
+        existing.status === "Occupied" &&
+        incomingOccupant !== null &&
+        existing.occupantId !== incomingOccupant
+      ) {
+        res.status(409).json({
+          error:
+            "Bed is currently occupied by another occupant — vacate it first.",
+        });
+        return;
+      }
+      // Reject if the bed is not in the ready state (covers
+      // needs_cleaning / in_progress / occupied-but-empty edge cases).
+      if (existing.cleaningStatus !== "ready") {
+        res.status(409).json({
+          error:
+            "Bed is not ready for a new occupant — finish the cleaning workflow first.",
+          cleaningStatus: existing.cleaningStatus,
+        });
+        return;
+      }
+    }
+  }
+  const wantsVacate =
+    updates.status === "Vacant" ||
+    (Object.prototype.hasOwnProperty.call(updates, "occupantId") &&
+      updates.occupantId === null);
+  if (wantsVacate && !Object.prototype.hasOwnProperty.call(updates, "cleaningStatus")) {
+    updates.cleaningStatus = "needs_cleaning";
+  }
   const [row] = await db
     .update(bedsTable)
-    .set(normalizeBedRow(body.data))
+    .set(normalizeBedRow(updates))
     .where(eq(bedsTable.id, params.data.id))
     .returning();
   if (!row) {

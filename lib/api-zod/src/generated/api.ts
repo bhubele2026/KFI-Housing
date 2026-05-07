@@ -404,6 +404,12 @@ export const ImportDataBody = zod.object({
       roomId: zod.string(),
       status: zod.enum(["Occupied", "Vacant"]),
       occupantId: zod.string().nullable(),
+      cleaningStatus: zod
+        .enum(["occupied", "needs_cleaning", "in_progress", "ready"])
+        .optional()
+        .describe(
+          'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+        ),
     }),
   ),
   occupants: zod.array(
@@ -457,6 +463,9 @@ export const ImportDataBody = zod.object({
         ])
         .nullish(),
       kfisAuthorizedToDrive: zod.boolean().nullish(),
+      responsibilities: zod.array(zod.string()).optional(),
+      isLead: zod.boolean().optional(),
+      keysIssued: zod.number().optional(),
     }),
   ),
   utilities: zod.array(
@@ -2534,6 +2543,12 @@ export const ListBedsResponseItem = zod.object({
   roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
+  cleaningStatus: zod
+    .enum(["occupied", "needs_cleaning", "in_progress", "ready"])
+    .optional()
+    .describe(
+      'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+    ),
 });
 export const ListBedsResponse = zod.array(ListBedsResponseItem);
 
@@ -2547,6 +2562,12 @@ export const CreateBedBody = zod.object({
   roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
+  cleaningStatus: zod
+    .enum(["occupied", "needs_cleaning", "in_progress", "ready"])
+    .optional()
+    .describe(
+      'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+    ),
 });
 
 /**
@@ -2562,6 +2583,9 @@ export const UpdateBedBody = zod.object({
   roomId: zod.string().optional(),
   status: zod.enum(["Occupied", "Vacant"]).optional(),
   occupantId: zod.string().nullish(),
+  cleaningStatus: zod
+    .enum(["occupied", "needs_cleaning", "in_progress", "ready"])
+    .optional(),
 });
 
 export const UpdateBedResponse = zod.object({
@@ -2571,6 +2595,12 @@ export const UpdateBedResponse = zod.object({
   roomId: zod.string(),
   status: zod.enum(["Occupied", "Vacant"]),
   occupantId: zod.string().nullable(),
+  cleaningStatus: zod
+    .enum(["occupied", "needs_cleaning", "in_progress", "ready"])
+    .optional()
+    .describe(
+      'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+    ),
 });
 
 /**
@@ -2653,6 +2683,24 @@ export const ListOccupantsResponseItem = zod.object({
     .describe(
       "True when the associate holds a valid driver's license AND\nis KFIS-cleared to drive a company vehicle (Task #502).\nNull when their driver status hasn't been recorded.\n",
     ),
+  responsibilities: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Operator-assigned day-to-day responsibilities for this\noccupant (task #500). Free-form short strings — e.g.\n\"Take out trash on Mondays\". Optional in the schema so\nlegacy payloads keep parsing; the boundary normaliser\ndefaults a missing value to an empty array.\n',
+    ),
+  isLead: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True for the lead tenant \/ key holder of the room (task\n#500). The API enforces at most one lead per room — when\nthis is set true, any prior lead in the same room is\ndemoted to false.\n",
+    ),
+  keysIssued: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of physical keys this occupant has been issued\n(task #500). Validated as a non-negative integer.\n",
+    ),
   createdAt: zod.coerce
     .date()
     .nullish()
@@ -2720,6 +2768,9 @@ export const CreateOccupantBody = zod.object({
     ])
     .nullish(),
   kfisAuthorizedToDrive: zod.boolean().nullish(),
+  responsibilities: zod.array(zod.string()).optional(),
+  isLead: zod.boolean().optional(),
+  keysIssued: zod.number().optional(),
 });
 
 /**
@@ -2785,6 +2836,9 @@ export const UpdateOccupantBody = zod.object({
     ])
     .nullish(),
   kfisAuthorizedToDrive: zod.boolean().nullish(),
+  responsibilities: zod.array(zod.string()).optional(),
+  isLead: zod.boolean().optional(),
+  keysIssued: zod.number().optional(),
 });
 
 export const updateOccupantResponseMoveInDateRegExp = new RegExp(
@@ -2856,6 +2910,24 @@ export const UpdateOccupantResponse = zod.object({
     .nullish()
     .describe(
       "True when the associate holds a valid driver's license AND\nis KFIS-cleared to drive a company vehicle (Task #502).\nNull when their driver status hasn't been recorded.\n",
+    ),
+  responsibilities: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      'Operator-assigned day-to-day responsibilities for this\noccupant (task #500). Free-form short strings — e.g.\n\"Take out trash on Mondays\". Optional in the schema so\nlegacy payloads keep parsing; the boundary normaliser\ndefaults a missing value to an empty array.\n',
+    ),
+  isLead: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True for the lead tenant \/ key holder of the room (task\n#500). The API enforces at most one lead per room — when\nthis is set true, any prior lead in the same room is\ndemoted to false.\n",
+    ),
+  keysIssued: zod
+    .number()
+    .optional()
+    .describe(
+      "Number of physical keys this occupant has been issued\n(task #500). Validated as a non-negative integer.\n",
     ),
   createdAt: zod.coerce
     .date()

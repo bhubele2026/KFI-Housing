@@ -43,4 +43,7 @@ export interface OccupantCreate {
   title?: OccupantCreateTitle;
   /** @nullable */
   kfisAuthorizedToDrive?: boolean | null;
+  responsibilities?: string[];
+  isLead?: boolean;
+  keysIssued?: number;
 }

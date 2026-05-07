@@ -663,6 +663,14 @@ export function computeRentPlusElectricPerBed(
   return Math.round(((monthlyRent + monthlyElectricCost) / bedCount) * 100) / 100;
 }
 
+export const BED_CLEANING_STATUSES = [
+  "occupied",
+  "needs_cleaning",
+  "in_progress",
+  "ready",
+] as const;
+export type BedCleaningStatus = typeof BED_CLEANING_STATUSES[number];
+
 export const BedSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
@@ -670,6 +678,11 @@ export const BedSchema = z.object({
   roomId: z.string(),
   status: z.enum(["Occupied", "Vacant"]),
   occupantId: z.string().nullable(),
+  // Cleaning workflow state (task #500). Defaulted on the client so
+  // legacy export bundles and pre-deploy API responses keep parsing —
+  // missing values collapse to "ready" for vacant beds and the server
+  // re-derives the correct value from `status` on next round-trip.
+  cleaningStatus: z.enum(BED_CLEANING_STATUSES).optional(),
 });
 export type Bed = z.infer<typeof BedSchema>;
 
@@ -729,15 +742,17 @@ export const OccupantSchema = z.object({
   // where shift assignments don't apply. Surfaced for hot-bedded units like
   // 1850 W. Pine St. Baraboo (task #315).
   shift: z.enum(["1st", "2nd"]).nullable().default(null),
-  // Workforce profile (Task #502). All four are nullable + defaulted
-  // so older API payloads (and existing test fixtures) continue to
-  // parse without each one having to be updated. The XLSX importer
-  // and PATCH route normalise unrecognised values to `null` rather
-  // than throwing, matching the rest of the boundary normaliser.
+  // Workforce profile (Task #502).
   language: z.enum(OCCUPANT_LANGUAGES).nullable().optional().default(null),
   gender: z.enum(OCCUPANT_GENDERS).nullable().optional().default(null),
   title: z.enum(OCCUPANT_TITLES).nullable().optional().default(null),
   kfisAuthorizedToDrive: z.boolean().nullable().optional().default(null),
+  // Operator-assigned day-to-day responsibilities (task #500).
+  responsibilities: z.array(z.string()).optional(),
+  // Lead tenant / key-holder flag (task #500).
+  isLead: z.boolean().optional(),
+  // Number of physical keys issued to this occupant (task #500).
+  keysIssued: z.number().int().min(0).optional(),
   createdAt: z.string().nullable().optional().default(null),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;

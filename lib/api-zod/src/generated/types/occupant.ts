@@ -72,6 +72,23 @@ Null when their driver status hasn't been recorded.
    * @nullable
    */
   kfisAuthorizedToDrive?: boolean | null;
+  /** Operator-assigned day-to-day responsibilities for this
+occupant (task #500). Free-form short strings — e.g.
+"Take out trash on Mondays". Optional in the schema so
+legacy payloads keep parsing; the boundary normaliser
+defaults a missing value to an empty array.
+ */
+  responsibilities?: string[];
+  /** True for the lead tenant / key holder of the room (task
+#500). The API enforces at most one lead per room — when
+this is set true, any prior lead in the same room is
+demoted to false.
+ */
+  isLead?: boolean;
+  /** Number of physical keys this occupant has been issued
+(task #500). Validated as a non-negative integer.
+ */
+  keysIssued?: number;
   /**
    * ISO-8601 timestamp of when this occupant record was created.
 Null for legacy rows inserted before the column existed.

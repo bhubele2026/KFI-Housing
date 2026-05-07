@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { BedUpdateCleaningStatus } from "./bedUpdateCleaningStatus";
 import type { BedUpdateStatus } from "./bedUpdateStatus";
 
 export interface BedUpdate {
@@ -14,4 +15,5 @@ export interface BedUpdate {
   status?: BedUpdateStatus;
   /** @nullable */
   occupantId?: string | null;
+  cleaningStatus?: BedUpdateCleaningStatus;
 }

@@ -133,13 +133,19 @@ function makeDelete(table: unknown) {
   return thenable;
 }
 
-const fakeDb = {
+interface FakeDb {
+  select: typeof makeSelect;
+  insert: typeof makeInsert;
+  update: typeof makeUpdate;
+  delete: typeof makeDelete;
+  transaction: <T>(cb: (tx: FakeDb) => Promise<T>) => Promise<T>;
+}
+const fakeDb: FakeDb = {
   select: makeSelect,
   insert: makeInsert,
   update: makeUpdate,
   delete: makeDelete,
-  transaction: <T,>(cb: (tx: typeof fakeDb) => Promise<T>): Promise<T> =>
-    cb(fakeDb),
+  transaction: <T,>(cb: (tx: FakeDb) => Promise<T>): Promise<T> => cb(fakeDb),
 };
 
 function makeColumns(name: TableName, cols: string[]) {

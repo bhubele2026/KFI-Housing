@@ -536,7 +536,48 @@ export function normalizeOccupantRow<
     );
     out.kfisAuthorizedToDrive = after;
   }
+  if ("responsibilities" in row) {
+    const after = normalizeResponsibilities(
+      (row as Record<string, unknown>).responsibilities,
+    );
+    recordFixup(
+      fixups,
+      "responsibilities",
+      (row as Record<string, unknown>).responsibilities,
+      after,
+    );
+    out.responsibilities = after;
+  }
+  if ("isLead" in row) {
+    const after = Boolean((row as Record<string, unknown>).isLead);
+    out.isLead = after;
+  }
+  if ("keysIssued" in row) {
+    const raw = (row as Record<string, unknown>).keysIssued;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    const after = Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+    recordFixup(fixups, "keysIssued", raw, after);
+    out.keysIssued = after;
+  }
   return out as T;
+}
+
+/**
+ * Coerce a `responsibilities` field to a clean array of non-empty
+ * trimmed strings (task #500). Anything that isn't an array becomes
+ * `[]`. Individual non-string entries are dropped, blank entries are
+ * dropped, and duplicates are preserved (order matters to operators).
+ */
+function normalizeResponsibilities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const v of value) {
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (trimmed === "") continue;
+    out.push(trimmed);
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -554,12 +595,30 @@ export function normalizeRoomRow<
 // ---------------------------------------------------------------------------
 
 const BED_STATUSES = new Set<string>(["Occupied", "Vacant"]);
+const BED_CLEANING_STATUSES = new Set<string>([
+  "occupied",
+  "needs_cleaning",
+  "in_progress",
+  "ready",
+]);
+export type BedCleaningStatus =
+  | "occupied"
+  | "needs_cleaning"
+  | "in_progress"
+  | "ready";
 
 function normalizeBedStatus(value: unknown): "Occupied" | "Vacant" {
   if (typeof value === "string" && BED_STATUSES.has(value)) {
     return value as "Occupied" | "Vacant";
   }
   return "Vacant";
+}
+
+function normalizeBedCleaningStatus(value: unknown): BedCleaningStatus | null {
+  if (typeof value === "string" && BED_CLEANING_STATUSES.has(value)) {
+    return value as BedCleaningStatus;
+  }
+  return null;
 }
 
 export function normalizeBedRow<
@@ -570,6 +629,41 @@ export function normalizeBedRow<
     const after = normalizeBedStatus(row.status);
     recordFixup(fixups, "status", row.status, after);
     out.status = after;
+  }
+  // Cleaning workflow (task #500). When the caller didn't supply a
+  // value, derive a sensible default from `status` so a freshly
+  // imported / freshly created bed always has a meaningful cleaning
+  // state — Occupied → "occupied", Vacant → "ready". Off-list values
+  // collapse to that same paired-with-status default so a corrupt
+  // row never poisons the response schema's enum check.
+  const statusForDerive = (out.status ?? row.status) as
+    | "Occupied"
+    | "Vacant"
+    | undefined;
+  const derivedDefault: BedCleaningStatus =
+    statusForDerive === "Occupied" ? "occupied" : "ready";
+  if ("cleaningStatus" in row) {
+    const coerced = normalizeBedCleaningStatus(
+      (row as Record<string, unknown>).cleaningStatus,
+    );
+    const after = coerced ?? derivedDefault;
+    recordFixup(
+      fixups,
+      "cleaningStatus",
+      (row as Record<string, unknown>).cleaningStatus,
+      after,
+    );
+    out.cleaningStatus = after;
+  } else if (statusForDerive !== undefined) {
+    out.cleaningStatus = derivedDefault;
+  }
+  // An occupied bed should never sit at a vacancy-side cleaning state
+  // (and vice versa). Keep the two columns in lock-step on the way
+  // through so the UI's "advance cleaning" buttons can rely on the
+  // pairing without re-deriving it.
+  if (out.status === "Occupied") out.cleaningStatus = "occupied";
+  if (out.status === "Vacant" && out.cleaningStatus === "occupied") {
+    out.cleaningStatus = "needs_cleaning";
   }
   return out as T;
 }

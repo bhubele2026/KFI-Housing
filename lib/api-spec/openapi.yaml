@@ -1929,6 +1929,16 @@ components:
         status: { type: string, enum: [Occupied, Vacant] }
         occupantId:
           type: ["string", "null"]
+        cleaningStatus:
+          type: string
+          enum: [occupied, needs_cleaning, in_progress, ready]
+          description: |
+            Cleaning workflow state for this bed (task #500). Set
+            automatically to "needs_cleaning" when an occupant moves
+            out and advanced by operators. Only "ready" beds may
+            accept a new placement. Optional in the schema so legacy
+            payloads continue to round-trip; the API normaliser
+            backfills "occupied" or "ready" from `status` when missing.
     BedUpdate:
       type: object
       properties:
@@ -1938,6 +1948,9 @@ components:
         status: { type: string, enum: [Occupied, Vacant] }
         occupantId:
           type: ["string", "null"]
+        cleaningStatus:
+          type: string
+          enum: [occupied, needs_cleaning, in_progress, ready]
 
     Occupant:
       type: object
@@ -2023,6 +2036,27 @@ components:
             True when the associate holds a valid driver's license AND
             is KFIS-cleared to drive a company vehicle (Task #502).
             Null when their driver status hasn't been recorded.
+        responsibilities:
+          type: array
+          items: { type: string }
+          description: |
+            Operator-assigned day-to-day responsibilities for this
+            occupant (task #500). Free-form short strings — e.g.
+            "Take out trash on Mondays". Optional in the schema so
+            legacy payloads keep parsing; the boundary normaliser
+            defaults a missing value to an empty array.
+        isLead:
+          type: boolean
+          description: |
+            True for the lead tenant / key holder of the room (task
+            #500). The API enforces at most one lead per room — when
+            this is set true, any prior lead in the same room is
+            demoted to false.
+        keysIssued:
+          type: integer
+          description: |
+            Number of physical keys this occupant has been issued
+            (task #500). Validated as a non-negative integer.
         createdAt:
           type: ["string", "null"]
           format: date-time
@@ -2086,6 +2120,11 @@ components:
           enum: ["Onsite Supervisor", "Onsite Lead", "Driver + Associate", "Driver ONLY", "Associate", "Mentor", null]
         kfisAuthorizedToDrive:
           type: ["boolean", "null"]
+        responsibilities:
+          type: array
+          items: { type: string }
+        isLead: { type: boolean }
+        keysIssued: { type: integer }
     OccupantUpdate:
       type: object
       properties:
@@ -2123,6 +2162,11 @@ components:
           enum: ["Onsite Supervisor", "Onsite Lead", "Driver + Associate", "Driver ONLY", "Associate", "Mentor", null]
         kfisAuthorizedToDrive:
           type: ["boolean", "null"]
+        responsibilities:
+          type: array
+          items: { type: string }
+        isLead: { type: boolean }
+        keysIssued: { type: integer }
 
     Utility:
       type: object

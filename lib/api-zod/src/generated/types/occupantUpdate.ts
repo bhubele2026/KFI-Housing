@@ -42,4 +42,7 @@ export interface OccupantUpdate {
   title?: OccupantUpdateTitle;
   /** @nullable */
   kfisAuthorizedToDrive?: boolean | null;
+  responsibilities?: string[];
+  isLead?: boolean;
+  keysIssued?: number;
 }

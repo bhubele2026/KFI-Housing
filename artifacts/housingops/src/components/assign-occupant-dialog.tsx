@@ -157,9 +157,14 @@ export function AssignOccupantDialog({
 
   const propertyOptions = useMemo(() => {
     if (fixedBed) return [];
-    // Only properties that have at least one vacant bed are worth picking.
+    // Only properties that have at least one *ready* vacant bed are worth
+    // picking. A vacant bed mid-cleaning (needs_cleaning / in_progress)
+    // is not assignable yet — task #500's cleaning workflow gates new
+    // placements on the bed reaching "ready" first.
     const propertyIdsWithVacancy = new Set(
-      beds.filter((b) => b.status === "Vacant").map((b) => b.propertyId),
+      beds
+        .filter((b) => b.status === "Vacant" && b.cleaningStatus === "ready")
+        .map((b) => b.propertyId),
     );
     return properties
       .filter((p) => propertyIdsWithVacancy.has(p.id))
@@ -170,7 +175,12 @@ export function AssignOccupantDialog({
     if (fixedBed) return [];
     if (!pickedPropertyId) return [];
     return beds
-      .filter((b) => b.propertyId === pickedPropertyId && b.status === "Vacant")
+      .filter(
+        (b) =>
+          b.propertyId === pickedPropertyId &&
+          b.status === "Vacant" &&
+          b.cleaningStatus === "ready",
+      )
       .sort((a, b) => a.bedNumber - b.bedNumber);
   }, [fixedBed, beds, pickedPropertyId]);
 

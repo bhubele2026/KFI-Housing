@@ -164,13 +164,10 @@ export default function Dashboard() {
       count: hotelRateAtRiskCount,
       label: `Hotel-rate leases at risk this month (${currentMonth})`,
       cta: "Review hotel-rate leases",
-      // No dedicated filter on /leases for at-risk yet — the tile lives
-      // at the top of that page, so a plain deep-link lands the operator
-      // on it. Customer scope is preserved so the count matches.
-      href:
-        customerFilter === ALL_CUSTOMERS
-          ? "/leases"
-          : `/leases?customer=${encodeURIComponent(customerFilter)}`,
+      // `?atRisk=1` (task #358) narrows the leases table itself to just
+      // the at-risk rows so the dashboard count and the filtered table
+      // line up. Customer scope is preserved so the two counts match.
+      href: `/leases?atRisk=1${customerQuerySuffix}`,
       testId: "needs-review-hotel-rate-at-risk",
     },
   ].filter((item) => item.count > 0);

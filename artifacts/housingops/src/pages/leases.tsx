@@ -37,6 +37,8 @@ type BuyoutFilter = "All" | "Yes" | "No";
 
 type NeedsReviewFilter = "All" | "NeedsReview";
 
+type AtRiskFilter = "All" | "AtRisk";
+
 type ViewMode = "flat" | "by-customer";
 
 export default function Leases() {
@@ -70,6 +72,30 @@ export default function Leases() {
     const qs = params.toString();
     navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
   };
+  // URL-driven so the dashboard hotel-rate "at risk" tile can deep-link
+  // straight to the matching rows (`?atRisk=1`), mirroring the
+  // needsReview pattern above.
+  const [atRiskFilter, setAtRiskFilter] = useState<AtRiskFilter>(
+    () =>
+      new URLSearchParams(searchString).get("atRisk") === "1"
+        ? "AtRisk"
+        : "All",
+  );
+  useEffect(() => {
+    const next: AtRiskFilter =
+      new URLSearchParams(searchString).get("atRisk") === "1"
+        ? "AtRisk"
+        : "All";
+    setAtRiskFilter((prev) => (prev === next ? prev : next));
+  }, [searchString]);
+  const updateAtRiskFilter = (value: AtRiskFilter) => {
+    setAtRiskFilter(value);
+    const params = new URLSearchParams(window.location.search);
+    if (value === "AtRisk") params.set("atRisk", "1");
+    else params.delete("atRisk");
+    const qs = params.toString();
+    navigate(qs ? `/leases?${qs}` : "/leases", { replace: true });
+  };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
@@ -85,6 +111,11 @@ export default function Leases() {
   // When the PDF import fails (parse/AI error), we hand off to the manual
   // Add Lease dialog so the user can keep going without re-clicking.
   const [pdfFallbackOpen, setPdfFallbackOpen] = useState(false);
+
+  // Anchor month for hotel-rate "at risk" checks. Computed once per
+  // render so the filter, the tile, and the row badges all agree on
+  // the same calendar month even across midnight.
+  const currentMonth = currentMonthKey();
 
   const customerById = useMemo(() => {
     const map = new Map<string, string>();
@@ -117,6 +148,13 @@ export default function Leases() {
           // import quality use this to find the exact rows that need a
           // weekly cost / vendor cleanup pass.
           if (needsReviewFilter === "NeedsReview" && !l.needsReview) return false;
+          // At-risk = hotel-rate lease whose current month is missing a
+          // log or below the negotiated minimum. Mirrors the same check
+          // powering the tile above and the dashboard counter.
+          if (atRiskFilter === "AtRisk") {
+            if (l.status !== "Active" && l.status !== "Upcoming") return false;
+            if (getHotelRateMonthRisk(l, roomNightLogs, currentMonth) === null) return false;
+          }
           if (customerFilter === ALL_CUSTOMERS) return true;
           // Lease's tenant: explicit `lease.customerId` (set on shared-
           // housing leases — task #295) takes precedence over the
@@ -131,7 +169,7 @@ export default function Leases() {
           return tenantId === customerFilter;
         }),
       ),
-    [leases, statusFilter, buyoutFilter, needsReviewFilter, customerFilter, propertyById],
+    [leases, statusFilter, buyoutFilter, needsReviewFilter, atRiskFilter, customerFilter, propertyById, roomNightLogs, currentMonth],
   );
 
   // Placeholder rows: every property in the active customer scope that has no
@@ -156,7 +194,8 @@ export default function Leases() {
   const showPlaceholders =
     statusFilter === "All" &&
     buyoutFilter === "All" &&
-    needsReviewFilter === "All";
+    needsReviewFilter === "All" &&
+    atRiskFilter === "All";
   const visiblePlaceholderProperties = showPlaceholders ? placeholderProperties : [];
 
   // By-customer view: one group per customer with ≥1 Active lease in
@@ -230,7 +269,6 @@ export default function Leases() {
   // tile so operators don't have to open each lease detail page (task
   // #319). Only Active / Upcoming leases count — Expired ones can't
   // void a rate that no longer applies.
-  const currentMonth = currentMonthKey();
   const hotelRateAtRisk = useMemo(() => {
     return leases
       .filter((l) => l.status === "Active" || l.status === "Upcoming")
@@ -330,21 +368,42 @@ export default function Leases() {
           }}
         />
 
-        {activeCustomerName && (
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
-              <Briefcase className="h-3 w-3" />
-              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
-              <button
-                type="button"
-                onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
-                className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                aria-label="Clear customer filter"
-                data-testid="button-clear-customer-filter"
+        {(activeCustomerName || atRiskFilter === "AtRisk") && (
+          <div className="flex flex-wrap items-center gap-2">
+            {activeCustomerName && (
+              <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
+                <Briefcase className="h-3 w-3" />
+                Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+                <button
+                  type="button"
+                  onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
+                  className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                  aria-label="Clear customer filter"
+                  data-testid="button-clear-customer-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
+            {atRiskFilter === "AtRisk" && (
+              <Badge
+                variant="secondary"
+                className="gap-1.5 px-2 py-1 bg-rose-100 text-rose-900 hover:bg-rose-100"
+                data-testid="badge-at-risk-filter"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+                <Hotel className="h-3 w-3" />
+                Hotel-rate at risk this month
+                <button
+                  type="button"
+                  onClick={() => updateAtRiskFilter("All")}
+                  className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
+                  aria-label="Clear at-risk filter"
+                  data-testid="button-clear-at-risk-filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
           </div>
         )}
 
@@ -545,6 +604,21 @@ export default function Leases() {
                   <SelectContent>
                     <SelectItem value="All">All Leases</SelectItem>
                     <SelectItem value="NeedsReview">Needs review</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={atRiskFilter}
+                  onValueChange={(v) => updateAtRiskFilter(v as AtRiskFilter)}
+                >
+                  <SelectTrigger
+                    className="w-full sm:w-52"
+                    data-testid="select-at-risk-filter"
+                  >
+                    <SelectValue placeholder="Hotel-rate risk" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Leases</SelectItem>
+                    <SelectItem value="AtRisk">At risk this month</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

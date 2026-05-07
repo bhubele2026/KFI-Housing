@@ -17,8 +17,9 @@ import {
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, type RatingCategoryKey, type Lease } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty } from "@/lib/lease-dates";
+import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -29,7 +30,6 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
-import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -476,6 +476,32 @@ export default function Dashboard() {
     if (!customerName) return [];
     return rows.filter((r) => r.customer === customerName);
   }, [unplacedPayroll, customerFilter, customers]);
+
+  // Map of normalised employeeId → existing occupant. Used by the
+  // "Assign to bed" cell below to detect when a payroll row already
+  // has a live occupant — typically one seeded into a pending-placement
+  // bucket by Task #305 — so the click routes the operator to that
+  // bucket instead of calling addOccupant and producing a duplicate
+  // (Task #349). Built across ALL occupants, not just scoped ones, so
+  // the guard still fires when the dashboard is filtered to a single
+  // customer and the matching pending row lives elsewhere in the list.
+  const existingOccupantByEmployeeId = useMemo(() => {
+    const map = new Map<string, Occupant>();
+    for (const o of occupants) {
+      if (!o.employeeId) continue;
+      const key = o.employeeId.trim().toLowerCase();
+      if (!key) continue;
+      // First write wins — payroll personIds are supposed to be unique
+      // but if two occupants share one we prefer the earliest match
+      // (insertion order) for stability across renders.
+      if (!map.has(key)) map.set(key, o);
+    }
+    return map;
+  }, [occupants]);
+  const propertyById = useMemo(
+    () => new Map(properties.map((p) => [p.id, p] as const)),
+    [properties],
+  );
 
   const unplacedByCustomer = useMemo(() => {
     const map = new Map<string, { customer: string; rows: UnplacedPayrollRow[]; weeklyTotal: number }>();
@@ -1049,37 +1075,101 @@ export default function Dashboard() {
                             ${row.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                           </TableCell>
                           <TableCell className="text-right">
-                            <AssignOccupantDialog
-                              testIdSuffix={row.personId}
-                              initial={{
-                                name: row.name,
-                                company: row.customer,
-                                employeeId: row.personId,
-                                chargePerBed: row.weekly,
-                                billingFrequency: "Weekly",
-                              }}
-                              trigger={
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  data-testid={`button-assign-unplaced-${row.personId}`}
-                                >
-                                  Assign to bed
-                                </Button>
+                            {(() => {
+                              // Task #349: if a live occupant already
+                              // owns this employeeId — typically the
+                              // pending-placement row seeded by Task
+                              // #305 — never offer the "create new
+                              // occupant" dialog from here. Doing so
+                              // would orphan the pending twin and
+                              // double-count the person. Route the
+                              // operator to the bucket page (where the
+                              // proven Move-to-bed flow updates the
+                              // EXISTING row) or, for occupants
+                              // already in a real bed, link to that
+                              // property so the operator can sort it
+                              // out without spawning a duplicate.
+                              const key = row.personId
+                                ? row.personId.trim().toLowerCase()
+                                : "";
+                              const existing = key
+                                ? existingOccupantByEmployeeId.get(key)
+                                : undefined;
+                              const existingProperty =
+                                existing && existing.propertyId
+                                  ? propertyById.get(existing.propertyId) ?? null
+                                  : null;
+                              if (existing) {
+                                // Strict no-duplicate guard: any match
+                                // by employeeId disables the create-new
+                                // path. If we can resolve the existing
+                                // property we deep-link to it; otherwise
+                                // (orphaned propertyId or missing row)
+                                // fall back to the occupants page so the
+                                // operator can still find/clean up the
+                                // existing record without spawning a
+                                // duplicate from this card.
+                                const isPending = existingProperty
+                                  ? isPendingPlacementProperty(
+                                      existingProperty.name,
+                                    )
+                                  : false;
+                                const href = existingProperty
+                                  ? `/properties/${existingProperty.id}`
+                                  : `/occupants?focus=${encodeURIComponent(existing.id)}`;
+                                const label = !existingProperty
+                                  ? "Open occupant"
+                                  : isPending
+                                    ? "Open pending bucket"
+                                    : "Open occupant";
+                                return (
+                                  <Button
+                                    asChild
+                                    size="sm"
+                                    variant="outline"
+                                    data-testid={`button-open-existing-unplaced-${row.personId}`}
+                                    data-existing-occupant-id={existing.id}
+                                    data-existing-pending={isPending ? "1" : "0"}
+                                  >
+                                    <Link href={href}>{label}</Link>
+                                  </Button>
+                                );
                               }
-                              onAssign={(occ, bed) => {
-                                addOccupant(occ);
-                                updateBed(bed.id, {
-                                  status: "Occupied",
-                                  occupantId: occ.id,
-                                });
-                                // Re-run the seeder server-side and refetch
-                                // the unplaced list so this row drops off.
-                                queryClient.invalidateQueries({
-                                  queryKey: getListUnplacedPayrollQueryKey(),
-                                });
-                              }}
-                            />
+                              return (
+                                <AssignOccupantDialog
+                                  testIdSuffix={row.personId}
+                                  initial={{
+                                    name: row.name,
+                                    company: row.customer,
+                                    employeeId: row.personId,
+                                    chargePerBed: row.weekly,
+                                    billingFrequency: "Weekly",
+                                  }}
+                                  trigger={
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      data-testid={`button-assign-unplaced-${row.personId}`}
+                                    >
+                                      Assign to bed
+                                    </Button>
+                                  }
+                                  onAssign={(occ, bed) => {
+                                    addOccupant(occ);
+                                    updateBed(bed.id, {
+                                      status: "Occupied",
+                                      occupantId: occ.id,
+                                    });
+                                    // Re-run the seeder server-side and
+                                    // refetch the unplaced list so this
+                                    // row drops off.
+                                    queryClient.invalidateQueries({
+                                      queryKey: getListUnplacedPayrollQueryKey(),
+                                    });
+                                  }}
+                                />
+                              );
+                            })()}
                           </TableCell>
                         </TableRow>
                       ))}

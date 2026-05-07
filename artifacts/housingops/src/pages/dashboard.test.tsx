@@ -825,6 +825,8 @@ describe("Dashboard Unplaced payroll tile", () => {
     unplacedPayrollState.rows = [];
     unplacedPayrollState.lowConfidenceMatches = [];
     mockData.isLoading = false;
+    mockData.properties = [];
+    mockData.occupants = [];
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/dashboard");
     container = document.createElement("div");
@@ -1081,6 +1083,128 @@ describe("Dashboard Unplaced payroll tile", () => {
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Suggestion applied" }),
     );
+  });
+
+  it("routes the row to the pending-placement bucket page (and skips the create-new dialog) when an existing occupant already owns this employeeId — Task #349 duplicate guard", async () => {
+    mockData.properties = [
+      {
+        id: "prop-pending-acme",
+        name: "Roster — Pending Placement (Acme Co)",
+        customerId: "c1",
+        monthlyRent: 0,
+        totalBeds: 0,
+        ratings: {},
+        paymentNotes: "",
+        notes: "",
+      },
+    ];
+    mockData.occupants = [
+      {
+        id: "occ-pending-emp1",
+        name: "Jane Smith",
+        employeeId: "EMP1",
+        company: "Acme Co",
+        propertyId: "prop-pending-acme",
+        bedId: null,
+        status: "Active",
+      },
+    ];
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Jane Smith", personId: "EMP1", weekly: 100, suggestions: [] },
+    ];
+
+    await render();
+
+    // The create-new dialog must NOT render for this row — that's the
+    // exact path that would call addOccupant and produce a duplicate.
+    expect(
+      container.querySelector('[data-testid="assign-dialog-stub-EMP1"]'),
+    ).toBeNull();
+    // Instead, a link to the pending-placement bucket is shown.
+    const link = container.querySelector(
+      '[data-testid="button-open-existing-unplaced-EMP1"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe("/properties/prop-pending-acme");
+    expect(link?.getAttribute("data-existing-pending")).toBe("1");
+    expect(link?.textContent ?? "").toContain("Open pending bucket");
+  });
+
+  it("links to the existing occupant's property (not the bucket label) when the matched occupant lives in a real property", async () => {
+    mockData.properties = [
+      {
+        id: "prop-real",
+        name: "Maple Court",
+        customerId: "c1",
+        monthlyRent: 1000,
+        totalBeds: 4,
+        ratings: {},
+        paymentNotes: "",
+        notes: "",
+      },
+    ];
+    mockData.occupants = [
+      {
+        id: "occ-emp2",
+        name: "John Doe",
+        employeeId: "EMP2",
+        company: "Acme Co",
+        propertyId: "prop-real",
+        bedId: "bed-1",
+        status: "Active",
+      },
+    ];
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "John Doe", personId: "EMP2", weekly: 75, suggestions: [] },
+    ];
+
+    await render();
+
+    expect(
+      container.querySelector('[data-testid="assign-dialog-stub-EMP2"]'),
+    ).toBeNull();
+    const link = container.querySelector(
+      '[data-testid="button-open-existing-unplaced-EMP2"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe("/properties/prop-real");
+    expect(link?.getAttribute("data-existing-pending")).toBe("0");
+    expect(link?.textContent ?? "").toContain("Open occupant");
+  });
+
+  it("blocks the create-new dialog even when the matched occupant has a missing/orphaned propertyId — strict no-duplicate guard (Task #349)", async () => {
+    // No matching property in mockData.properties — propertyById lookup
+    // returns undefined. The guard must STILL skip the create-new dialog
+    // and offer a fallback link to the occupants page.
+    mockData.properties = [];
+    mockData.occupants = [
+      {
+        id: "occ-orphan",
+        name: "Orphan Person",
+        employeeId: "EMP9",
+        company: "Acme Co",
+        propertyId: "prop-missing",
+        bedId: null,
+        status: "Active",
+      },
+    ];
+    unplacedPayrollState.rows = [
+      { customer: "Acme Co", name: "Orphan Person", personId: "EMP9", weekly: 50, suggestions: [] },
+    ];
+
+    await render();
+
+    expect(
+      container.querySelector('[data-testid="assign-dialog-stub-EMP9"]'),
+    ).toBeNull();
+    const link = container.querySelector(
+      '[data-testid="button-open-existing-unplaced-EMP9"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toBe(
+      `/occupants?focus=${encodeURIComponent("occ-orphan")}`,
+    );
+    expect(link?.getAttribute("data-existing-pending")).toBe("0");
   });
 
   it("on assign: writes occupant + bed and invalidates the unplaced list so the row drops off", async () => {

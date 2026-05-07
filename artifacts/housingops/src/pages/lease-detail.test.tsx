@@ -1083,4 +1083,77 @@ describe("LeaseDetail — source PDF inline preview (task #325)", () => {
       container.querySelector('[data-testid="iframe-source-pdf"]'),
     ).toBeNull();
   });
+
+  it("auto-expands the preview card on mount when the URL carries ?focus=preview (thumbnail jump, task #384)", async () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    fetchMock.mockResolvedValue({ ok: true } as Response);
+
+    mountAt("/leases/lease-1?focus=preview");
+
+    const toggle = container.querySelector(
+      '[data-testid="button-toggle-source-pdf-preview"]',
+    ) as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await flushPromises();
+
+    expect(
+      container.querySelector('[data-testid="iframe-source-pdf"]'),
+    ).not.toBeNull();
+  });
+
+  it("auto-expands with ?focus=preview and shows the missing-file fallback when the PDF is gone (task #384)", async () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    fetchMock.mockResolvedValue({ ok: false, status: 404 } as Response);
+
+    mountAt("/leases/lease-1?focus=preview");
+
+    const toggle = container.querySelector(
+      '[data-testid="button-toggle-source-pdf-preview"]',
+    ) as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    await flushPromises();
+
+    expect(
+      container.querySelector('[data-testid="text-source-pdf-missing"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="iframe-source-pdf"]'),
+    ).toBeNull();
+  });
+
+  it("stays collapsed when the URL has NO ?focus=preview even though a source PDF exists (task #384)", () => {
+    dataState.leases = [
+      buildLease({ notes: "Source: lease-2024-sunset.pdf", clauses: "" }),
+    ];
+    dataState.properties = [buildProperty()];
+    dataState.customers = [{ id: "cust-1", name: "Acme PM" }];
+
+    mountAt("/leases/lease-1");
+
+    const toggle = container.querySelector(
+      '[data-testid="button-toggle-source-pdf-preview"]',
+    ) as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="iframe-source-pdf"]'),
+    ).toBeNull();
+  });
 });

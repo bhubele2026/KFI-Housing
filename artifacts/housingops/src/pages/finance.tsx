@@ -5,7 +5,8 @@ import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { sumActiveRent, toMonthlyCharge } from "@/data/mockData";
+import { sumActiveRentEstimated, toMonthlyCharge } from "@/data/mockData";
+import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,6 +24,12 @@ export default function Finance() {
   const { properties, beds, leases, utilities, occupants, customers } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
+  // Room-night logs power the hotel-rate revenue estimate so corporate
+  // agreements (Ridge Motor Inn, Comfort Suites Madison, etc.) show up
+  // in Lease Cost / Net Profit / Total Costs instead of being silently
+  // treated as $0. Mirrors property-detail / dashboard behaviour.
+  const { data: roomNightLogsData } = useListRoomNightLogs();
+  const roomNightLogs = useMemo(() => roomNightLogsData ?? [], [roomNightLogsData]);
 
   const customerById = useMemo(() => {
     const map = new Map<string, string>();
@@ -41,7 +48,7 @@ export default function Finance() {
     // Sum across every Active lease for the property — a property can hold
     // more than one (e.g. overlapping renewals or multi-room agreements).
     // Picking just the first match silently under-reports rent and profit.
-    const leaseCost = sumActiveRent(leases, p.id);
+    const leaseCost = sumActiveRentEstimated(leases, roomNightLogs, p.id);
     const propUtils = utilities.filter(u => u.propertyId === p.id);
     const utilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
     // Per-bed "electric" specifically excludes water/internet/etc, matching

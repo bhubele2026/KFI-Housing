@@ -17,7 +17,7 @@ import {
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRent, daysUntil, type RatingCategoryKey, type Lease } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, type RatingCategoryKey, type Lease } from "@/data/mockData";
 import { formatYMDPretty } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -345,9 +345,14 @@ export default function Dashboard() {
     return acc + occupied.length * p.monthlyRent;
   }, 0);
 
+  // Use the hotel-rate–aware estimator so corporate-rate agreements
+  // (nightly × room-nights from the latest logged month) contribute to
+  // the dashboard's Monthly Costs / Net Profit tiles instead of being
+  // silently treated as $0. Monthly leases are unchanged because
+  // `estimateLeaseMonthlyRent` returns their stored `monthlyRent` as-is.
   const totalMonthlyLeaseCosts = scopedLeases
     .filter((l) => l.status === "Active")
-    .reduce((acc, l) => acc + l.monthlyRent, 0);
+    .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
   const currentMonthUtilities = scopedUtilities.reduce((acc, u) => acc + u.monthlyCost, 0);
   const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
   const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
@@ -397,7 +402,7 @@ export default function Dashboard() {
     () =>
       scopedProperties.map((p) => {
         const revenue = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied").length * p.monthlyRent;
-        const leaseCost = sumActiveRent(scopedLeases, p.id);
+        const leaseCost = sumActiveRentEstimated(scopedLeases, roomNightLogs, p.id);
         const utilCost = scopedUtilities.filter((u) => u.propertyId === p.id).reduce((acc, u) => acc + u.monthlyCost, 0);
         return {
           id: p.id,
@@ -407,7 +412,7 @@ export default function Dashboard() {
           Profit: revenue - (leaseCost + utilCost),
         };
       }),
-    [scopedProperties, scopedBeds, scopedLeases, scopedUtilities],
+    [scopedProperties, scopedBeds, scopedLeases, scopedUtilities, roomNightLogs],
   );
 
   const cards = [

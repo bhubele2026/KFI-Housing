@@ -191,6 +191,10 @@ vi.mock("@/context/data-store", () => ({
   useData: () => mockData,
 }));
 
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 import Finance from "./finance";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 

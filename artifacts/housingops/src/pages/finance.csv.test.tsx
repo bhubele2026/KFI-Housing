@@ -123,6 +123,10 @@ const baseMockData = () => ({
 type MockData = ReturnType<typeof baseMockData>;
 const mockData: MockData = baseMockData();
 
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 vi.mock("@/context/data-store", () => ({
   useData: () => mockData,
 }));

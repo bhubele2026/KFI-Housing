@@ -325,9 +325,9 @@ export const ImportDataBody = zod.object({
         ),
       customerId: zod
         .string()
-        .optional()
+        .nullish()
         .describe(
-          'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+          'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. `null` (or absent) means \"fall back to property\'s\ncustomerId\" — Task #439 collapsed the legacy empty-string\nsentinel down to `null` so the API + DB agree on a single\n\"no override\" representation. The API normalises blank\nstrings on write, so older clients sending `\"\"` continue\nto round-trip as `null`.\n',
         ),
       customerResponsibleForRent: zod
         .boolean()
@@ -1292,9 +1292,9 @@ export const ListLeasesResponseItem = zod.object({
     ),
   customerId: zod
     .string()
-    .optional()
+    .nullish()
     .describe(
-      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. `null` (or absent) means \"fall back to property\'s\ncustomerId\" — Task #439 collapsed the legacy empty-string\nsentinel down to `null` so the API + DB agree on a single\n\"no override\" representation. The API normalises blank\nstrings on write, so older clients sending `\"\"` continue\nto round-trip as `null`.\n',
     ),
   customerResponsibleForRent: zod
     .boolean()
@@ -1422,9 +1422,9 @@ export const CreateLeaseBody = zod.object({
     ),
   customerId: zod
     .string()
-    .optional()
+    .nullish()
     .describe(
-      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. `null` (or absent) means \"fall back to property\'s\ncustomerId\" — Task #439 collapsed the legacy empty-string\nsentinel down to `null` so the API + DB agree on a single\n\"no override\" representation. The API normalises blank\nstrings on write, so older clients sending `\"\"` continue\nto round-trip as `null`.\n',
     ),
   customerResponsibleForRent: zod
     .boolean()
@@ -1894,7 +1894,7 @@ export const UpdateLeaseBody = zod.object({
   guaranteedRooms: zod.number().optional(),
   monthlyRoomNightMin: zod.number().optional(),
   longStayTaxExempt: zod.boolean().optional(),
-  customerId: zod.string().optional(),
+  customerId: zod.string().nullish(),
   customerResponsibleForRent: zod.boolean().optional(),
   unit: zod.string().optional(),
   snoozedUntil: zod
@@ -1994,9 +1994,9 @@ export const UpdateLeaseResponse = zod.object({
     ),
   customerId: zod
     .string()
-    .optional()
+    .nullish()
     .describe(
-      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. Empty string means \"fall back to property\'s\ncustomerId\".\n',
+      'Optional override for the tenant on this lease. Leases\nnormally inherit the tenant from the property\'s\n`customerId`; this field is set only for shared-housing\nproperties used by multiple customers (e.g. Ridge Motor Inn\nshared by Penda + Trienda KFI crews — task #295) so the\nLeases \"By customer\" view can show one lease under each\ncustomer. `null` (or absent) means \"fall back to property\'s\ncustomerId\" — Task #439 collapsed the legacy empty-string\nsentinel down to `null` so the API + DB agree on a single\n\"no override\" representation. The API normalises blank\nstrings on write, so older clients sending `\"\"` continue\nto round-trip as `null`.\n',
     ),
   customerResponsibleForRent: zod
     .boolean()

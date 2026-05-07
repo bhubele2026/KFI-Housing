@@ -685,6 +685,11 @@ export async function importMasterLeases(
         vendor: row.vendor,
         needsReview,
         unit: unitTokens[0] ?? "",
+        // Master-file rows don't carry a lease-level customer override;
+        // the lease inherits its tenant from the property's customerId.
+        // Explicit null (rather than the legacy "" default) per Task #439
+        // so `getCustomerResponsibleLeases`'s `??` fallback works.
+        customerId: null,
       };
       const inserted = await tx
         .insert(leasesTable)

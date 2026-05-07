@@ -111,6 +111,49 @@ describe("normalizeLeaseRow", () => {
       notes: "hi",
     });
   });
+
+  // Task #439: the lease-level customer override is supposed to be
+  // either "set to a customer id" or "fall back to the property's
+  // customerId". The legacy empty-string sentinel collided with `??`
+  // fallbacks elsewhere (notably `getCustomerResponsibleLeases` —
+  // `"" ?? property.customerId` returns "" instead of falling back),
+  // so the canonical "no override" representation is now `null`
+  // end-to-end. The normalizer collapses every flavor of "no value"
+  // (`""`, blank-only string, explicit `null`) down to `null` so the
+  // DB column never sees `""` again.
+  describe("customerId blank-to-null collapse (Task #439)", () => {
+    it("coerces empty-string customerId to null", () => {
+      expect(normalizeLeaseRow({ customerId: "" })).toEqual({
+        customerId: null,
+      });
+    });
+
+    it("coerces whitespace-only customerId to null", () => {
+      expect(normalizeLeaseRow({ customerId: "   " })).toEqual({
+        customerId: null,
+      });
+    });
+
+    it("coerces explicit null customerId to null", () => {
+      expect(
+        normalizeLeaseRow({ customerId: null as unknown as string }),
+      ).toEqual({ customerId: null });
+    });
+
+    it("preserves a real customerId verbatim", () => {
+      expect(normalizeLeaseRow({ customerId: "cust-penda" })).toEqual({
+        customerId: "cust-penda",
+      });
+    });
+
+    it("does not touch the field when it isn't on the input row", () => {
+      // PATCH payloads only carry the fields the operator changed —
+      // a missing customerId must stay missing so drizzle doesn't
+      // overwrite an existing value with null.
+      const out = normalizeLeaseRow({ monthlyRent: 1200 });
+      expect("customerId" in out).toBe(false);
+    });
+  });
 });
 
 describe("normalizeCustomerRow", () => {

@@ -309,10 +309,12 @@ export const LeaseSchema = z.object({
   guaranteedRooms: z.number().optional().default(0),
   monthlyRoomNightMin: z.number().optional().default(0),
   longStayTaxExempt: z.boolean().optional().default(false),
-  // Customer this lease is billed to. Optional so legacy backups and seed
-  // literals parse cleanly; the API populates it on the wire. Callers
-  // fall back to the parent property's customerId when absent.
-  customerId: z.string().optional(),
+  // Customer this lease is billed to. Optional / nullable so legacy
+  // backups, seed literals, and API rows that come back as `null`
+  // (Task #439 — empty string is no longer the "fall back" sentinel,
+  // `null` is) all parse cleanly. Callers fall back to the parent
+  // property's customerId when this is absent / null / blank.
+  customerId: z.string().nullish(),
   // Corporate-responsibility flag (task #313). True when the customer
   // (e.g. KFI Staffing per the 01/22/2026 Chateau Knoll LOI) is on the
   // hook for rent, utilities, and damages on this unit. Optional with a

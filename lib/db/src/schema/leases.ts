@@ -40,9 +40,14 @@ export const leasesTable = pgTable("leases", {
   // shared-housing properties used by multiple customers (e.g. the
   // Ridge Motor Inn shared by Penda + Trienda KFI crews — task #295)
   // each lease points at the specific customer it belongs to so the
-  // Leases "By customer" view can show one lease under each. Empty
-  // string ("") means "fall back to the property's customerId".
-  customerId: text("customer_id").notNull().default(""),
+  // Leases "By customer" view can show one lease under each.
+  // `NULL` means "fall back to the property's customerId" — the column
+  // was historically `notNull().default("")` but legacy empty strings
+  // tripped up `getCustomerResponsibleLeases` (the `??` fallback only
+  // catches null, not ""); Task #439 made the column nullable and
+  // backfills "" → NULL via `migrate-leases-customer-id-nullable.ts`,
+  // and the API/seeder normalisers now coerce blank → NULL on write.
+  customerId: text("customer_id"),
   // Corporate-responsibility flag (task #313). True when the customer
   // (e.g. KFI Staffing per the 01/22/2026 Chateau Knoll LOI) is on the
   // hook for rent, utilities, and damages on this unit — i.e. the

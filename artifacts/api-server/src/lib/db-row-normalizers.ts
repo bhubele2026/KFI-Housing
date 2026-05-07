@@ -269,6 +269,23 @@ export function normalizeLeaseRow<
     recordFixup(fixups, "rateType", row.rateType, after);
     out.rateType = after;
   }
+  if ("customerId" in row) {
+    // Lease-level customer override (Task #439). Both the legacy
+    // empty-string sentinel and `null` mean "fall back to the
+    // property's customerId" — collapse them both to `null` so the
+    // DB never stores "" again. Trim whitespace before checking so a
+    // hand-crafted `"   "` payload behaves the same. Not recorded as
+    // a fix-up because going from `""` → `null` is a default-shape
+    // collapse, not an operator-visible data-quality issue.
+    const raw = row.customerId;
+    const after =
+      typeof raw === "string" && raw.trim() === ""
+        ? null
+        : raw == null
+          ? null
+          : raw;
+    out.customerId = after;
+  }
   if ("snoozedUntil" in row) {
     // Same boundary treatment as the term dates so a datetime-style
     // value (e.g. an XLSX date cell) can't sneak through. Blank means

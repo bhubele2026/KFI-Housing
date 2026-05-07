@@ -266,6 +266,15 @@ function buildLeaseRow(
     clauses: buildLeaseClauses(spec),
     buyoutAvailable: false,
     buyoutCost: null,
+    // Explicitly null so the lease falls back to the property's
+    // customerId end-to-end (Task #439). Historically this was the
+    // empty-string default on the column, which then defeated `??`
+    // fallbacks in `getCustomerResponsibleLeases` because `""` is
+    // not nullish. The column is now nullable; we set null directly
+    // rather than relying on absence so an idempotent re-run doesn't
+    // silently leave a stale "" value behind on a row inserted by an
+    // older build.
+    customerId: null,
     customerResponsibleForRent: spec.loiKfiResponsible,
   };
 }

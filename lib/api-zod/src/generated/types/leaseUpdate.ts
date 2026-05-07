@@ -30,7 +30,7 @@ export interface LeaseUpdate {
   guaranteedRooms?: number;
   monthlyRoomNightMin?: number;
   longStayTaxExempt?: boolean;
-  customerId?: string;
+  customerId?: string | null;
   customerResponsibleForRent?: boolean;
   unit?: string;
   snoozedUntil?: OptionalLeaseDate;

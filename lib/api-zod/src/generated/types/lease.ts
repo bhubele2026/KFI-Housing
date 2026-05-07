@@ -72,10 +72,14 @@ normally inherit the tenant from the property's
 properties used by multiple customers (e.g. Ridge Motor Inn
 shared by Penda + Trienda KFI crews — task #295) so the
 Leases "By customer" view can show one lease under each
-customer. Empty string means "fall back to property's
-customerId".
+customer. `null` (or absent) means "fall back to property's
+customerId" — Task #439 collapsed the legacy empty-string
+sentinel down to `null` so the API + DB agree on a single
+"no override" representation. The API normalises blank
+strings on write, so older clients sending `""` continue
+to round-trip as `null`.
  */
-  customerId?: string;
+  customerId?: string | null;
   /** True when the customer (not the occupant) is on the hook
 for rent, utilities, and damages on this lease — e.g.
 corporate-responsibility units like the KFI-responsible

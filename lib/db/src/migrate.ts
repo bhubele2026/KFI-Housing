@@ -3,6 +3,7 @@ import { db, pool } from "./client";
 import * as schema from "./schema";
 import { backfillRoomsIfNeeded } from "./migrations/backfill-rooms";
 import { dropLeaseIncludedItemsIfNeeded } from "./migrations/drop-lease-included-items";
+import { migrateLeasesCustomerIdNullableIfNeeded } from "./migrations/leases-customer-id-nullable";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -39,6 +40,12 @@ export async function pushSchemaIfNeeded(
   // schema. Otherwise pushSchema would see the missing column as a drop and
   // refuse to apply (hasDataLoss). Idempotent — no-op once the column is gone.
   await dropLeaseIncludedItemsIfNeeded(pool, log);
+
+  // Backfill legacy `leases.customer_id = ''` rows to NULL and relax
+  // the column to nullable BEFORE drizzle diffs the schema (Task #439),
+  // so the empty-string sentinel that used to defeat `??` fallbacks is
+  // gone end-to-end and the diff afterwards is empty.
+  await migrateLeasesCustomerIdNullableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

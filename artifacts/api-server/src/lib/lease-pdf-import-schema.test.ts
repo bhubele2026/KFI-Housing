@@ -23,6 +23,10 @@ const VALID_RESPONSE = {
   extracted: VALID_EXTRACTED,
   topMatch: null,
   candidates: [],
+  // Required by the openapi `ImportLeasePdfResponse` contract — listed
+  // here even when empty so safeParse passes (the spec marks `fixups`
+  // as required alongside `extracted` / `topMatch` / `candidates`).
+  fixups: [],
 };
 
 describe("ImportLeasePdfResponse extracted dates", () => {

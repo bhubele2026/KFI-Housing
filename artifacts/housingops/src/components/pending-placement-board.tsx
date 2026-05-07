@@ -13,6 +13,7 @@ import {
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import type { Occupant, Property } from "@/data/mockData";
+import { formatUsd } from "@/data/mockData";
 import { shortPropertyName } from "@/lib/property-name";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 
@@ -263,7 +264,7 @@ function PendingRow({ occupant, propertyOptions, onMove }: PendingRowProps) {
           {occupant.employeeId ? `#${occupant.employeeId}` : "no employee id"}
           {" · "}
           {occupant.billingFrequency ?? "Monthly"}{" "}
-          ${(occupant.chargePerBed ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          {formatUsd((occupant.chargePerBed ?? 0))}
         </p>
       </div>
       <Select

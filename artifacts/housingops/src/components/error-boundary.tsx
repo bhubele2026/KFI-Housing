@@ -1,8 +1,9 @@
 import { Component, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import { withTranslation, type WithTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 
-interface Props {
+interface Props extends WithTranslation {
   /**
    * Rendered when {@link children} threw during render. Defaults to a
    * full-screen friendly error card with a "Try again" button that resets
@@ -25,7 +26,7 @@ interface State {
  * business without a hard refresh. The sidebar lives outside this
  * boundary so navigation always remains available — see App.tsx.
  */
-export class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryInner extends Component<Props, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -45,6 +46,7 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     if (this.props.fallback) return this.props.fallback(this.reset, error);
+    const { t } = this.props;
 
     return (
       <div className="flex min-h-[60vh] w-full items-center justify-center p-8">
@@ -60,11 +62,10 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
           <div>
             <h2 className="text-lg font-semibold tracking-tight">
-              Something went wrong on this page
+              {t("errorBoundary.title")}
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
-              The rest of the app is still working. Try again, or use the
-              sidebar to go somewhere else.
+              {t("errorBoundary.description")}
             </p>
             {error.message && (
               <p
@@ -79,10 +80,12 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={this.reset}
             data-testid="button-error-boundary-retry"
           >
-            Try again
+            {t("common.tryAgain")}
           </Button>
         </div>
       </div>
     );
   }
 }
+
+export const ErrorBoundary = withTranslation()(ErrorBoundaryInner);

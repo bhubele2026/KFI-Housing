@@ -10,6 +10,7 @@ import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData, type DroppedRow } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { useListUnplacedPayroll } from "@workspace/api-client-react";
+import { useTranslation } from "react-i18next";
 
 const COLLAPSED_STORAGE_KEY = "housingops:sidebar-collapsed";
 
@@ -35,6 +36,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { customerId, setCustomerId } = useCustomerScope();
   const { customers, dataIssues } = useData();
+  const { t } = useTranslation();
   const activeScopedCustomer =
     customerId !== ALL_CUSTOMERS
       ? customers.find((c) => c.id === customerId)
@@ -83,7 +85,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
           className="p-0 w-64 max-w-[85vw] border-r-sidebar-border [&>button]:hidden"
           data-testid="sidebar-mobile-drawer"
         >
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SheetTitle className="sr-only">{t("nav.navigation")}</SheetTitle>
           <Sidebar collapsed={false} onNavigate={closeDrawer} />
         </SheetContent>
       </Sheet>
@@ -96,7 +98,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
             variant="ghost"
             size="icon"
             onClick={() => setDrawerOpen(true)}
-            aria-label="Open navigation"
+            aria-label={t("nav.openNavigation")}
             data-testid="button-open-mobile-nav"
           >
             <Menu className="h-5 w-5" />
@@ -129,7 +131,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
                   setCustomerId(ALL_CUSTOMERS);
                 }}
                 className="rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                aria-label="Clear customer filter"
+                aria-label={t("nav.clearCustomerFilter")}
                 data-testid="button-mobile-header-clear-customer"
               >
                 <X className="h-3.5 w-3.5" />

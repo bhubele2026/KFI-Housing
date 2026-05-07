@@ -3,11 +3,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import {
-  getCustomerResponsibleLeases,
-  sumCustomerResponsibleRent,
-  toMonthlyCharge,
-} from "@/data/mockData";
+import { getCustomerResponsibleLeases, sumCustomerResponsibleRent, toMonthlyCharge, formatUsd } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,7 +139,16 @@ export default function CustomerDetail() {
       const year = d.getFullYear();
       const month = d.getMonth() + 1;
       const key = `${year}-${String(month).padStart(2, "0")}`;
-      const short = d.toLocaleString("en-US", { month: "short" });
+      // Use the active i18n language so Spanish operators see
+      // localized month abbreviations (e.g. `ene`, `feb`) on the
+      // monthly trend axis. Falls back to English when no language
+      // is set.
+      const lang = (
+        globalThis as { i18next?: { language?: string } }
+      ).i18next?.language?.toLowerCase().startsWith("es")
+        ? "es-ES"
+        : "en-US";
+      const short = d.toLocaleString(lang, { month: "short" });
       months.push({
         key,
         label: short,
@@ -363,7 +368,7 @@ export default function CustomerDetail() {
           />
           <StatCard
             label="Monthly Revenue"
-            value={totals.monthlyRevenue > 0 ? `$${totals.monthlyRevenue.toLocaleString()}` : "—"}
+            value={totals.monthlyRevenue > 0 ? `${formatUsd(totals.monthlyRevenue)}` : "—"}
             sub="across all properties"
             color={totals.monthlyRevenue > 0 ? "text-emerald-600" : "text-muted-foreground"}
             icon={TrendingUp}
@@ -389,7 +394,7 @@ export default function CustomerDetail() {
               className={`text-2xl font-bold ${customerPaidRent > 0 ? "text-emerald-600" : "text-muted-foreground"}`}
               data-testid="stat-customer-paid-rent"
             >
-              {customerPaidRent > 0 ? `$${customerPaidRent.toLocaleString()}` : "—"}
+              {customerPaidRent > 0 ? `${formatUsd(customerPaidRent)}` : "—"}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Sum of monthly rent on Active leases this customer is on the hook for.
@@ -430,7 +435,7 @@ export default function CustomerDetail() {
                           <span className="tabular-nums font-medium text-foreground">
                             {isHotelRate
                               ? "—"
-                              : `$${(l.monthlyRent || 0).toLocaleString()}/mo`}
+                              : `${formatUsd((l.monthlyRent || 0))}/mo`}
                           </span>
                           <ChevronRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </span>
@@ -505,7 +510,7 @@ export default function CustomerDetail() {
                   <Tooltip
                     cursor={{ fill: "transparent" }}
                     formatter={(value: number) => [
-                      `$${value.toLocaleString()}`,
+                      `${formatUsd(value)}`,
                       "Revenue",
                     ]}
                     labelFormatter={(_label, payload) =>
@@ -658,7 +663,7 @@ export default function CustomerDetail() {
                         </td>
                         <td className="p-4 text-right text-sm tabular-nums">
                           {monthlyRevenue > 0 ? (
-                            <span className="font-medium">${monthlyRevenue.toLocaleString()}</span>
+                            <span className="font-medium">{formatUsd(monthlyRevenue)}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}

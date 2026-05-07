@@ -25,6 +25,7 @@ import {
   type MapsMap,
 } from "@/lib/google-maps-sdk";
 import type { RenewalUrgency } from "@/data/mockData";
+import { formatUsd } from "@/data/mockData";
 
 /**
  * Inline color palette for the lease-renewal badge. The bubble lives
@@ -299,7 +300,7 @@ function buildInfoBubbleContent(
       const val =
         p.rentPerBed === null
           ? "—"
-          : `$${p.rentPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          : `${formatUsd(p.rentPerBed)}`;
       span.innerHTML = `<strong>${val}</strong> / bed`;
       econ.appendChild(span);
     }
@@ -310,7 +311,7 @@ function buildInfoBubbleContent(
       const val =
         p.electricPerBed === null
           ? "—"
-          : `$${p.electricPerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          : `${formatUsd(p.electricPerBed)}`;
       span.innerHTML = `<strong>${val}</strong> elec/bed`;
       econ.appendChild(span);
     }
@@ -322,7 +323,7 @@ function buildInfoBubbleContent(
       const val =
         v === null
           ? "—"
-          : `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+          : `${formatUsd(v)}`;
       span.innerHTML = `<strong>${val}</strong> rent+elec/bed`;
       econ.appendChild(span);
     }

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData, CustomerInUseError } from "@/context/data-store";
-import { type Customer, toMonthlyCharge } from "@/data/mockData";
+import { type Customer, toMonthlyCharge, formatUsd } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,7 @@ function stateBucketKey(raw: string | undefined): string {
 }
 
 export default function Customers() {
+  const { t } = useTranslation();
   const [location, navigate] = useLocation();
   const { customers, properties, beds, occupants, isLoading, addCustomer, updateCustomer, deleteCustomer } = useData();
   const { toast } = useToast();
@@ -269,8 +271,8 @@ export default function Customers() {
     const name = draft.name.trim();
     if (!name) {
       toast({
-        title: "Name is required",
-        description: "Please enter a customer (company) name.",
+        title: t("toasts.customerNameRequiredTitle"),
+        description: t("toasts.customerNameRequiredDescription"),
         variant: "destructive",
       });
       return;
@@ -286,11 +288,11 @@ export default function Customers() {
     };
     if (editing) {
       updateCustomer(editing.id, payload);
-      toast({ title: "Customer updated", description: `${payload.name} saved.` });
+      toast({ title: t("toasts.customerUpdatedTitle"), description: t("toasts.customerUpdatedDescription", { name: payload.name }) });
     } else {
       const id = `cust-${Date.now()}`;
       addCustomer({ ...payload, id });
-      toast({ title: "Customer added", description: `${payload.name} created.` });
+      toast({ title: t("toasts.customerAddedTitle"), description: t("toasts.customerAddedDescription", { name: payload.name }) });
     }
     setDialogOpen(false);
   };
@@ -314,8 +316,8 @@ export default function Customers() {
     ]);
     downloadCsv(timestampedCsvName("housingops-customers"), csv);
     toast({
-      title: "Customers exported",
-      description: `Downloaded ${filtered.length} ${filtered.length === 1 ? "customer" : "customers"} as CSV.`,
+      title: t("toasts.customersExportedTitle"),
+      description: t("toasts.customersExportedDescription", { count: filtered.length }),
     });
   };
 
@@ -323,19 +325,19 @@ export default function Customers() {
     if (!deleteTarget) return;
     try {
       await deleteCustomer(deleteTarget.id);
-      toast({ title: "Customer deleted", description: `${deleteTarget.name} was removed.` });
+      toast({ title: t("toasts.customerDeletedTitle"), description: t("toasts.customerDeletedDescription", { name: deleteTarget.name }) });
       setDeleteTarget(null);
     } catch (err) {
       if (err instanceof CustomerInUseError) {
         toast({
-          title: "Can't delete this customer",
-          description: `${deleteTarget.name} still owns one or more properties. Reassign or remove those properties first.`,
+          title: t("toasts.customerCantDeleteTitle"),
+          description: t("toasts.customerCantDeleteDescription", { name: deleteTarget.name }),
           variant: "destructive",
         });
       } else {
         toast({
-          title: "Delete failed",
-          description: "Something went wrong. Please try again.",
+          title: t("toasts.deleteFailedTitle"),
+          description: t("toasts.deleteFailedDescription"),
           variant: "destructive",
         });
       }
@@ -352,8 +354,8 @@ export default function Customers() {
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
         <PageHeader
-          title="Customers"
-          description="Companies that lease beds across your portfolio."
+          title={t("pages.customers.title")}
+          description={t("pages.customers.description")}
           actions={
             <>
               <Button
@@ -414,7 +416,7 @@ export default function Customers() {
                       <p className="text-lg font-semibold">{topCustomers.topRevenue.customer.name}</p>
                       <p className="text-sm text-muted-foreground">
                         <span className="font-medium text-foreground">
-                          ${topCustomers.topRevenue.revenue.toLocaleString()}
+                          {formatUsd(topCustomers.topRevenue.revenue)}
                         </span>
                         /mo across all properties
                       </p>
@@ -679,7 +681,7 @@ export default function Customers() {
                         </td>
                         <td className="p-4 text-right text-sm tabular-nums" data-testid={`cell-customer-revenue-${c.id}`}>
                           {monthlyRevenue > 0 ? (
-                            <span className="font-medium">${monthlyRevenue.toLocaleString()}</span>
+                            <span className="font-medium">{formatUsd(monthlyRevenue)}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}

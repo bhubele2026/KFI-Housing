@@ -8,7 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
+import { formatUsd } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import {
@@ -123,7 +125,7 @@ function extractNeedsReviewReason(notes: string): string {
 }
 
 function formatMoney(n: number): string {
-  return `$${n.toLocaleString()}`;
+  return `${formatUsd(n)}`;
 }
 
 /**
@@ -857,6 +859,7 @@ function LeaseSourceThumbnail({
  * vertically aligned with peers in the column.
  */
 function LeaseTermsBadges({ lease }: { lease: Lease }) {
+  const { t } = useTranslation();
   const hasBuyout = lease.buyoutAvailable ?? false;
   const hasClauses = (lease.clauses ?? "").trim().length > 0;
   // Hotel-rate (room-night) agreements are surfaced as a distinct pill so
@@ -892,8 +895,8 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
         >
           <DollarSign className="h-3 w-3" />
           {nightlyRate > 0
-            ? `Hotel rate · $${nightlyRate.toLocaleString()}/night`
-            : "Hotel rate"}
+            ? t("leasesTable.hotelRateNightly", { rate: formatUsd(nightlyRate) })
+            : t("leasesTable.hotelRate")}
         </Badge>
       )}
       {hasBuyout && (
@@ -904,8 +907,8 @@ function LeaseTermsBadges({ lease }: { lease: Lease }) {
         >
           <DollarSign className="h-3 w-3" />
           {lease.buyoutCost == null
-            ? "Buyout"
-            : `Buyout: $${lease.buyoutCost.toLocaleString()}`}
+            ? t("leasesTable.buyout")
+            : t("leasesTable.buyoutWithCost", { cost: formatUsd(lease.buyoutCost) })}
         </Badge>
       )}
       {isCustomerResponsible && (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
@@ -20,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
+  const { t } = useTranslation();
   const { beds, properties, rooms, occupants, customers, isLoading } = useData();
   const { toast } = useToast();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
@@ -108,8 +110,8 @@ export default function Beds() {
     ]);
     downloadCsv(timestampedCsvName("housingops-beds"), csv);
     toast({
-      title: "Beds exported",
-      description: `Downloaded ${filteredBeds.length} ${filteredBeds.length === 1 ? "bed" : "beds"} as CSV.`,
+      title: t("toasts.bedsExportedTitle"),
+      description: t("toasts.bedsExportedDescription", { count: filteredBeds.length }),
     });
   };
 
@@ -117,8 +119,8 @@ export default function Beds() {
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
-          title="Beds"
-          description="Track individual bed inventory and assignments"
+          title={t("pages.beds.title")}
+          description={t("pages.beds.description")}
           meta={
             activeCustomerName ? (
               <p

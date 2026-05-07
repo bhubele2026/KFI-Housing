@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { useAuth, readLastRoute } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { LanguageToggle } from "@/components/language-toggle";
 import { motion } from "framer-motion";
 import logoUrl from "@/assets/kfi-staffing-logo.png";
 
@@ -12,6 +14,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [, setLocation] = useLocation();
   const { login } = useAuth();
+  const { t } = useTranslation();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +31,9 @@ export default function Login() {
       >
         <Card className="w-full max-w-md shadow-xl border-zinc-200 dark:border-zinc-800">
           <CardHeader className="space-y-3 text-center pb-6">
+            <div className="flex justify-end">
+              <LanguageToggle />
+            </div>
             <div className="flex flex-col items-center gap-2 mb-2">
               <img
                 src={logoUrl}
@@ -42,19 +48,19 @@ export default function Login() {
                 HousingOps
               </div>
             </div>
-            <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
+            <CardTitle className="text-2xl font-bold tracking-tight">{t("auth.welcomeBack")}</CardTitle>
             <CardDescription className="text-zinc-500 dark:text-zinc-400">
-              Sign in to HousingOps to manage your properties, leases, beds, and occupants.
+              {t("auth.signInDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("auth.email")}</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="name@company.com"
+                  placeholder={t("auth.emailPlaceholder")}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -62,12 +68,12 @@ export default function Login() {
                 />
               </div>
               <Button type="submit" className="w-full mt-6" size="lg">
-                Sign in
+                {t("auth.signIn")}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-center border-t py-4 text-sm text-zinc-500 dark:text-zinc-400">
-            Any email will work for the demo — no password required.
+            {t("auth.demoNote")}
           </CardFooter>
         </Card>
       </motion.div>

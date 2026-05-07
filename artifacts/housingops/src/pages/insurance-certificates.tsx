@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -28,6 +29,7 @@ type SortDir = "asc" | "desc";
 const ALL_PROPERTIES = "__all__";
 
 export default function InsuranceCertificates() {
+  const { t } = useTranslation();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
@@ -160,8 +162,8 @@ export default function InsuranceCertificates() {
     ]);
     downloadCsv(timestampedCsvName("housingops-certificates"), csv);
     toast({
-      title: "Certificates exported",
-      description: `Downloaded ${sorted.length} certificate${sorted.length === 1 ? "" : "s"} as CSV.`,
+      title: t("toasts.certificatesExportedTitle"),
+      description: t("toasts.certificatesExportedDescription", { count: sorted.length }),
     });
   };
 
@@ -169,8 +171,8 @@ export default function InsuranceCertificates() {
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
-          title="Insurance Certificates"
-          description="Track renter's and liability insurance certificates across all properties"
+          title={t("pages.insurance.title")}
+          description={t("pages.insurance.description")}
           actions={
             <>
               <Button
@@ -189,10 +191,10 @@ export default function InsuranceCertificates() {
                   addInsuranceCertificate(cert);
                   const property = propertyById.get(cert.propertyId);
                   toast({
-                    title: "Certificate added",
+                    title: t("toasts.certificateAddedTitle"),
                     description: property
-                      ? `Added a certificate for ${property.name}.`
-                      : "New certificate created.",
+                      ? t("toasts.certificateAddedDescriptionWithProperty", { property: property.name })
+                      : t("toasts.certificateAddedDescription"),
                   });
                 }}
               />
@@ -357,8 +359,8 @@ export default function InsuranceCertificates() {
                         onAdd={(cert) => {
                           addInsuranceCertificate(cert);
                           toast({
-                            title: "Certificate added",
-                            description: "New certificate created.",
+                            title: t("toasts.certificateAddedTitle"),
+                            description: t("toasts.certificateAddedDescription"),
                           });
                         }}
                         trigger={

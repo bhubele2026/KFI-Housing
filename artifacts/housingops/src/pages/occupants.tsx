@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
@@ -22,6 +23,7 @@ import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useMemo } from "react";
 
 export default function Occupants() {
+  const { t } = useTranslation();
   const { occupants, properties, beds, isLoading, deleteOccupant, updateOccupant } = useData();
   const { toast } = useToast();
   const { customerId: customerScope } = useCustomerScope();
@@ -165,8 +167,8 @@ export default function Occupants() {
     ]);
     downloadCsv(timestampedCsvName("housingops-occupants"), csv);
     toast({
-      title: "Occupants exported",
-      description: `Downloaded ${filteredOccupants.length} ${filteredOccupants.length === 1 ? "occupant" : "occupants"} as CSV.`,
+      title: t("toasts.occupantsExportedTitle"),
+      description: t("toasts.occupantsExportedDescription", { count: filteredOccupants.length }),
     });
   };
 
@@ -174,8 +176,8 @@ export default function Occupants() {
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
-          title="Occupants"
-          description="Manage employee housing assignments"
+          title={t("pages.occupants.title")}
+          description={t("pages.occupants.description")}
           actions={
             <>
               <Button

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { shortPropertyName } from "@/lib/property-name";
@@ -12,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Briefcase, ChevronRight, X, Zap, Download } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
-import { UTILITY_TYPES } from "@/data/mockData";
+import { UTILITY_TYPES, formatUsd } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
@@ -31,6 +32,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function Utilities() {
+  const { t } = useTranslation();
   const [, navigate] = useLocation();
   const { utilities, properties, customers, isLoading } = useData();
   const { toast } = useToast();
@@ -76,8 +78,8 @@ export default function Utilities() {
     ]);
     downloadCsv(timestampedCsvName("housingops-utilities"), csv);
     toast({
-      title: "Utilities exported",
-      description: `Downloaded ${filtered.length} utility ${filtered.length === 1 ? "service" : "services"} as CSV.`,
+      title: t("toasts.utilitiesExportedTitle"),
+      description: t("toasts.utilitiesExportedDescription", { count: filtered.length }),
     });
   };
 
@@ -114,8 +116,8 @@ export default function Utilities() {
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
         <PageHeader
-          title="Utilities"
-          description="All utility services across your portfolio"
+          title={t("pages.utilities.title")}
+          description={t("pages.utilities.description")}
           meta={
             activeCustomerName ? (
               <p
@@ -153,7 +155,7 @@ export default function Utilities() {
               {isLoading ? (
                 <Skeleton className="h-8 w-28 mt-1 ml-auto" />
               ) : (
-                <p className="text-2xl font-bold">${totalMonthly.toLocaleString()}</p>
+                <p className="text-2xl font-bold">{formatUsd(totalMonthly)}</p>
               )}
             </div>
           </>}
@@ -284,7 +286,7 @@ export default function Utilities() {
                           </td>
                           <td className="p-4 text-sm">{u.company}</td>
                           <td className="p-4 text-sm text-muted-foreground font-mono">{u.accountNumber || "—"}</td>
-                          <td className="p-4 text-right font-semibold">${u.monthlyCost.toLocaleString()}</td>
+                          <td className="p-4 text-right font-semibold">{formatUsd(u.monthlyCost)}</td>
                           <td className="p-4 text-sm text-muted-foreground max-w-[200px] truncate">{u.notes || "—"}</td>
                           <td className="p-4">
                             <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -296,7 +298,7 @@ export default function Utilities() {
                       <td colSpan={showCustomerColumn ? 5 : 4} className="p-4 text-sm font-semibold text-right text-muted-foreground">
                         {filtered.length} service{filtered.length !== 1 ? "s" : ""} total
                       </td>
-                      <td className="p-4 text-right font-bold">${totalMonthly.toLocaleString()}/mo</td>
+                      <td className="p-4 text-right font-bold">{formatUsd(totalMonthly)}/mo</td>
                       <td colSpan={2} />
                     </tr>
                   </>

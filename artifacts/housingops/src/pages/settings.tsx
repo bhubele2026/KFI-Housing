@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: recipients, isLoading } = useListDigestRecipients();
@@ -51,8 +53,8 @@ export default function Settings() {
     if (!email) return;
     if (!EMAIL_RE.test(email)) {
       toast({
-        title: "Invalid email",
-        description: "Please enter a valid email address.",
+        title: t("toasts.invalidEmailTitle"),
+        description: t("toasts.invalidEmailDescription"),
         variant: "destructive",
       });
       return;
@@ -65,7 +67,7 @@ export default function Settings() {
           queryClient.invalidateQueries({
             queryKey: getListDigestRecipientsQueryKey(),
           });
-          toast({ title: "Recipient added", description: email });
+          toast({ title: t("toasts.recipientAddedTitle"), description: email });
         },
         onError: (err) => {
           const msg =
@@ -73,9 +75,9 @@ export default function Settings() {
               ? (err as { message: string }).message
               : "Could not add recipient.";
           toast({
-            title: "Failed to add",
+            title: t("toasts.failedToAddTitle"),
             description: msg.includes("409")
-              ? "This email is already subscribed."
+              ? t("toasts.failedToAddDuplicate")
               : msg,
             variant: "destructive",
           });
@@ -93,13 +95,13 @@ export default function Settings() {
           queryClient.invalidateQueries({
             queryKey: getListDigestRecipientsQueryKey(),
           });
-          toast({ title: "Recipient removed" });
+          toast({ title: t("toasts.recipientRemovedTitle") });
           setDeletingId(null);
         },
         onError: () => {
           toast({
-            title: "Failed to remove",
-            description: "Could not remove recipient. Try again.",
+            title: t("toasts.failedToRemoveTitle"),
+            description: t("toasts.failedToRemoveDescription"),
             variant: "destructive",
           });
           setDeletingId(null);
@@ -110,7 +112,7 @@ export default function Settings() {
 
   return (
     <MainLayout>
-      <PageHeader title="Settings" />
+      <PageHeader title={t("pages.settings.title")} />
       <div className="max-w-2xl space-y-6">
         <Card>
           <CardHeader>

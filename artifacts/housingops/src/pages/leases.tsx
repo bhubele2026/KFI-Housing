@@ -1,8 +1,9 @@
 import { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
-import { getRenewalInfo, sortLeases } from "@/data/mockData";
+import { getRenewalInfo, sortLeases, formatUsd } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,6 +51,7 @@ type CustomerResponsibleFilter = "All" | "Yes" | "No";
 type ViewMode = "flat" | "by-customer";
 
 export default function Leases() {
+  const { t } = useTranslation();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState("All");
@@ -388,8 +390,8 @@ export default function Leases() {
     ]);
     downloadCsv(timestampedCsvName("housingops-leases"), csv);
     toast({
-      title: "Leases exported",
-      description: `Downloaded ${filteredLeases.length} ${filteredLeases.length === 1 ? "lease" : "leases"} as CSV.`,
+      title: t("toasts.leasesExportedTitle"),
+      description: t("toasts.leasesExportedDescription", { count: filteredLeases.length }),
     });
   };
 
@@ -397,8 +399,8 @@ export default function Leases() {
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
-          title="Leases"
-          description="Manage master lease agreements"
+          title={t("pages.leases.title")}
+          description={t("pages.leases.description")}
           actions={
             <>
               <Button
@@ -420,10 +422,10 @@ export default function Leases() {
                   addLease(lease);
                   const property = propertyById.get(lease.propertyId);
                   toast({
-                    title: "Lease added",
+                    title: t("toasts.leaseAddedTitle"),
                     description: property
-                      ? `Added a new lease for ${property.name}.`
-                      : "New lease created.",
+                      ? t("toasts.leaseAddedDescriptionWithProperty", { property: property.name })
+                      : t("toasts.leaseAddedDescription"),
                   });
                 }}
               />
@@ -440,10 +442,10 @@ export default function Leases() {
             addLease(lease);
             const property = propertyById.get(lease.propertyId);
             toast({
-              title: "Lease added",
+              title: t("toasts.leaseAddedTitle"),
               description: property
-                ? `Added a new lease for ${property.name}.`
-                : "New lease created.",
+                ? t("toasts.leaseAddedDescriptionWithProperty", { property: property.name })
+                : t("toasts.leaseAddedDescription"),
             });
           }}
         />
@@ -612,7 +614,7 @@ export default function Leases() {
                             {info.label}
                           </Badge>
                           <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-medium text-muted-foreground">${lease.monthlyRent.toLocaleString()}/mo</span>
+                            <span className="text-xs font-medium text-muted-foreground">{formatUsd(lease.monthlyRent)}/mo</span>
                             <RenewLeasePopover
                               currentEndDate={lease.endDate}
                               currentStatus={lease.status}
@@ -818,8 +820,8 @@ export default function Leases() {
                 onMarkReviewed={(leaseId) => {
                   updateLease(leaseId, { needsReview: false });
                   toast({
-                    title: "Marked as reviewed",
-                    description: "The 'Needs review' flag has been cleared.",
+                    title: t("toasts.markedAsReviewedTitle"),
+                    description: t("toasts.markedAsReviewedDescription"),
                   });
                 }}
                 onBulkMarkReviewed={(ids) => {
@@ -827,10 +829,8 @@ export default function Leases() {
                     updateLease(id, { needsReview: false });
                   }
                   toast({
-                    title: `Marked ${ids.length} as reviewed`,
-                    description: `Cleared the 'Needs review' flag on ${ids.length} ${
-                      ids.length === 1 ? "lease" : "leases"
-                    }.`,
+                    title: t("toasts.markedManyAsReviewedTitle", { count: ids.length }),
+                    description: t("toasts.markedManyAsReviewedDescription", { count: ids.length }),
                   });
                 }}
                 placeholderProperties={visiblePlaceholderProperties}
@@ -844,10 +844,10 @@ export default function Leases() {
                         addLease(lease);
                         const property = propertyById.get(lease.propertyId);
                         toast({
-                          title: "Lease added",
+                          title: t("toasts.leaseAddedTitle"),
                           description: property
-                            ? `Added a new lease for ${property.name}.`
-                            : "New lease created.",
+                            ? t("toasts.leaseAddedDescriptionWithProperty", { property: property.name })
+                            : t("toasts.leaseAddedDescription"),
                         });
                       }}
                     />
@@ -908,8 +908,8 @@ export default function Leases() {
                         onMarkReviewed={(leaseId) => {
                           updateLease(leaseId, { needsReview: false });
                           toast({
-                            title: "Marked as reviewed",
-                            description: "The 'Needs review' flag has been cleared.",
+                            title: t("toasts.markedAsReviewedTitle"),
+                            description: t("toasts.markedAsReviewedDescription"),
                           });
                         }}
                         onBulkMarkReviewed={(ids) => {
@@ -917,10 +917,8 @@ export default function Leases() {
                             updateLease(id, { needsReview: false });
                           }
                           toast({
-                            title: `Marked ${ids.length} as reviewed`,
-                            description: `Cleared the 'Needs review' flag on ${ids.length} ${
-                              ids.length === 1 ? "lease" : "leases"
-                            }.`,
+                            title: t("toasts.markedManyAsReviewedTitle", { count: ids.length }),
+                            description: t("toasts.markedManyAsReviewedDescription", { count: ids.length }),
                           });
                         }}
                         roomNightLogs={roomNightLogs}

@@ -1159,7 +1159,7 @@ export default function PropertyDetail() {
                               : "text-muted-foreground line-through decoration-muted")
                           }
                         >
-                          ${(l.monthlyRent || 0).toLocaleString()}/mo
+                          {formatUsd((l.monthlyRent || 0))}/mo
                         </span>
                       </div>
                     ))}
@@ -1169,7 +1169,7 @@ export default function PropertyDetail() {
                   >
                     <span>Combined active rent</span>
                     <span className="tabular-nums">
-                      ${monthlyLeaseCost.toLocaleString()}/mo
+                      {formatUsd(monthlyLeaseCost)}/mo
                     </span>
                   </div>
                 </CardContent>
@@ -1218,7 +1218,7 @@ export default function PropertyDetail() {
                     <div data-testid="room-totals-expected-rent">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expected Rent</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">
-                        ${roomTotals.totalMonthlyRent.toLocaleString()}
+                        {formatUsd(roomTotals.totalMonthlyRent)}
                         <span className="text-sm font-normal text-muted-foreground">/mo</span>
                       </p>
                       {expectedVsLeaseDelta !== null && (
@@ -1226,12 +1226,12 @@ export default function PropertyDetail() {
                           className={`text-xs mt-0.5 ${expectedVsLeaseDelta >= 0 ? "text-green-600" : "text-destructive"}`}
                           data-testid="room-totals-vs-lease"
                         >
-                          {expectedVsLeaseDelta >= 0 ? "+" : "−"}${Math.abs(expectedVsLeaseDelta).toLocaleString()} vs lease rent
+                          {expectedVsLeaseDelta >= 0 ? "+" : "−"}{formatUsd(Math.abs(expectedVsLeaseDelta))} vs lease rent
                         </p>
                       )}
                       {expectedVsLeaseDelta === null && monthlyLeaseCost > 0 && (
                         <p className="text-xs mt-0.5 text-muted-foreground">
-                          Lease rent ${monthlyLeaseCost.toLocaleString()}/mo
+                          Lease rent {formatUsd(monthlyLeaseCost)}/mo
                         </p>
                       )}
                     </div>
@@ -1431,7 +1431,7 @@ export default function PropertyDetail() {
                                   : `${activeLeases.length} active leases — open the Leases tab to edit each one`
                               }
                             >
-                              ${displayAmount.toLocaleString()}
+                              {formatUsd(displayAmount)}
                             </span>
                           );
                         }
@@ -1627,7 +1627,7 @@ export default function PropertyDetail() {
                                 >
                                   {activeLease.status}
                                 </Badge>
-                                <span className="font-medium tabular-nums">${(activeLease.monthlyRent || 0).toLocaleString()}/mo</span>
+                                <span className="font-medium tabular-nums">{formatUsd((activeLease.monthlyRent || 0))}/mo</span>
                               </button>
                             </Link>
                           )}
@@ -1669,7 +1669,7 @@ export default function PropertyDetail() {
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{occupiedBeds} occupied</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{vacantBeds} vacant</span>
                 <span>{propRooms.length} room{propRooms.length !== 1 ? "s" : ""}</span>
-                <span className="text-foreground font-medium">${propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0).toLocaleString()}/mo revenue</span>
+                <span className="text-foreground font-medium">{formatUsd(propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0))}/mo revenue</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <Label htmlFor="beds-sort" className="text-xs text-muted-foreground">Sort</Label>
@@ -2304,7 +2304,7 @@ export default function PropertyDetail() {
           <TabsContent value="utilities" className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
-                {propUtils.length} service{propUtils.length !== 1 ? "s" : ""} &mdash; ${propUtils.reduce((s, u) => s + u.monthlyCost, 0).toLocaleString()}/mo total
+                {propUtils.length} service{propUtils.length !== 1 ? "s" : ""} &mdash; {formatUsd(propUtils.reduce((s, u) => s + u.monthlyCost, 0))}/mo total
               </p>
               <AddUtilityDialog propertyId={id} onAdd={addUtility} />
             </div>
@@ -2566,19 +2566,19 @@ export default function PropertyDetail() {
                 {propOccupants.map(occ => (
                   <div key={occ.id} className="flex justify-between text-sm py-1 border-b border-dashed border-border/40">
                     <span className="text-muted-foreground">{occ.name} (Bed charge · {occ.billingFrequency ?? "Monthly"})</span>
-                    <span className="font-medium text-green-600">+${toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly").toLocaleString()}/mo</span>
+                    <span className="font-medium text-green-600">+{formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/mo</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
                   <span>Total Revenue</span>
-                  <span className="text-green-600">+${monthlyRevenue.toLocaleString()}</span>
+                  <span className="text-green-600">+{formatUsd(monthlyRevenue)}</span>
                 </div>
 
                 <Separator />
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Costs</p>
                 <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
                   <span className="text-muted-foreground">Lease (active)</span>
-                  <span className="text-destructive">-${monthlyLeaseCost.toLocaleString()}</span>
+                  <span className="text-destructive">-{formatUsd(monthlyLeaseCost)}</span>
                 </div>
                 {hotelRateLeaseEstimates.map((h) => (
                   <div
@@ -2589,12 +2589,12 @@ export default function PropertyDetail() {
                     <span className="inline-flex items-center gap-1">
                       <Hotel className="h-3 w-3" />
                       {h.month && h.nights > 0
-                        ? `Hotel-rate ${h.month} · ${h.nights} room-night${h.nights === 1 ? "" : "s"} × $${h.nightlyRate.toLocaleString()}/night`
+                        ? `Hotel-rate ${h.month} · ${h.nights} room-night${h.nights === 1 ? "" : "s"} × ${formatUsd(h.nightlyRate)}/night`
                         : "Hotel-rate · no room-nights logged yet"}
                     </span>
                     <span className="tabular-nums">
                       {h.month && h.nights > 0
-                        ? `≈ -$${h.estimate.toLocaleString()}`
+                        ? `≈ -${formatUsd(h.estimate)}`
                         : "—"}
                     </span>
                   </div>
@@ -2602,18 +2602,18 @@ export default function PropertyDetail() {
                 {propUtils.map(u => (
                   <div key={u.id} className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
                     <span className="text-muted-foreground">{u.type} ({u.company})</span>
-                    <span className="text-destructive">-${u.monthlyCost.toLocaleString()}</span>
+                    <span className="text-destructive">-{formatUsd(u.monthlyCost)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
                   <span>Total Costs</span>
-                  <span className="text-destructive">-${totalCost.toLocaleString()}</span>
+                  <span className="text-destructive">-{formatUsd(totalCost)}</span>
                 </div>
 
                 <Separator />
                 <div className={`flex justify-between text-base font-bold py-2 ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
                   <span>Net Profit / Loss</span>
-                  <span>{profit >= 0 ? "+" : ""}${profit.toLocaleString()}</span>
+                  <span>{profit >= 0 ? "+" : ""}{formatUsd(profit)}</span>
                 </div>
               </CardContent>
             </Card>

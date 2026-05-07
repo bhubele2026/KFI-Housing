@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { AlertCircle, Home, ChevronLeft } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function NotFoundScreen({
   testId?: string;
   icon?: LucideIcon;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="w-full flex items-center justify-center py-16 px-4"
@@ -57,7 +59,7 @@ export function NotFoundScreen({
             <Link href="/dashboard">
               <Button data-testid="button-not-found-dashboard" className="gap-1.5">
                 <Home className="h-4 w-4" />
-                Back to dashboard
+                {t("notFound.backToDashboard")}
               </Button>
             </Link>
             {secondary && (

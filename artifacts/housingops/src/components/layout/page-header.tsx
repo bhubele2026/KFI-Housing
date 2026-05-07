@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { LanguageToggle } from "@/components/language-toggle";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,11 +55,11 @@ export function PageHeader({
         ) : null}
         {meta ? <div className="mt-2">{meta}</div> : null}
       </div>
-      {actions ? (
-        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
-          {actions}
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+        {actions}
+        <LanguageToggle />
+      </div>
     </header>
   );
 }
+

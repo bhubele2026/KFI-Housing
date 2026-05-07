@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
@@ -21,7 +22,7 @@ import {
 } from "@workspace/api-client-react";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -70,6 +71,7 @@ function formatRelativeTime(timestamp: number, now: number = Date.now()): string
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { properties, beds, rooms, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant, updateLease } = useData();
   const { toast } = useToast();
   const [pendingEmployerMove, setPendingEmployerMove] = useState<{
@@ -845,8 +847,8 @@ export default function Dashboard() {
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
-          title="Dashboard"
-          description="Overview of your housing operations and financials."
+          title={t("pages.dashboard.title")}
+          description={t("pages.dashboard.description")}
           meta={
             activeCustomerName ? (
               <p
@@ -1303,7 +1305,7 @@ export default function Dashboard() {
                 className="text-2xl font-bold tabular-nums"
                 data-testid="text-customer-paid-rent-total"
               >
-                ${customerPaidRentByCustomer.total.toLocaleString()}
+                {formatUsd(customerPaidRentByCustomer.total)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Total monthly rent across all Active leases where the customer is responsible for paying the landlord.
@@ -1346,7 +1348,7 @@ export default function Dashboard() {
                             className="text-right tabular-nums font-semibold"
                             data-testid={`text-customer-paid-rent-${row.customerId}-rent`}
                           >
-                            ${row.rent.toLocaleString()}
+                            {formatUsd(row.rent)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1430,7 +1432,7 @@ export default function Dashboard() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            ${o.chargePerBed.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            {formatUsd(o.chargePerBed)}
                             <span className="text-xs text-muted-foreground ml-1">
                               /{o.billingFrequency === "Weekly" ? "wk" : "mo"}
                             </span>
@@ -1616,7 +1618,7 @@ export default function Dashboard() {
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            ${row.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            {formatUsd(row.weekly)}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -1758,7 +1760,7 @@ export default function Dashboard() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          ${entry.weekly.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          {formatUsd(entry.weekly)}
                         </TableCell>
                         <TableCell
                           className="text-xs text-muted-foreground"
@@ -1937,16 +1939,16 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Property Performance</CardTitle>
+              <CardTitle>{t("dashboardExtra.propertyPerformance")}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table containerClassName="max-h-[300px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="sticky top-0 z-10 bg-card">Property</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Customer</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card">Occupancy</TableHead>
-                    <TableHead className="sticky top-0 z-10 bg-card text-right">Profit/Loss</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">{t("dashboardExtra.property")}</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">{t("dashboardExtra.customer")}</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card">{t("dashboardExtra.occupancy")}</TableHead>
+                    <TableHead className="sticky top-0 z-10 bg-card text-right">{t("dashboardExtra.profitLoss")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1993,7 +1995,7 @@ export default function Dashboard() {
                           <TableCell>{occupancyPct}%</TableCell>
                           <TableCell className="text-right">
                             <Badge variant={data.Profit >= 0 ? "default" : "destructive"} className={data.Profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
-                              ${Math.abs(data.Profit).toLocaleString()} {data.Profit >= 0 ? 'Profit' : 'Loss'}
+                              {formatUsd(Math.abs(data.Profit))} {data.Profit >= 0 ? 'Profit' : 'Loss'}
                             </Badge>
                           </TableCell>
                         </TableRow>

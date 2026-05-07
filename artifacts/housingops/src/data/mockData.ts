@@ -623,28 +623,58 @@ export function toWeeklyCharge(charge: number, freq: BillingFrequency): number {
   return Math.round(charge * (12 / 52) * 100) / 100;
 }
 
-// Currency formatter shared by the deduction columns so weekly +
-// monthly values render consistently across views.
-const USD = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
+// Locale-aware currency cache — built lazily per language so a
+// Spanish operator sees `1.234,56 US$` while English shows
+// `$1,234.56` for the same amount. Keeping a small cache means we
+// don't allocate a new `Intl.NumberFormat` per render. The active
+// language is read from the i18n singleton at call time so callers
+// don't have to thread a hook through every column formatter.
+const usdFormatters = new Map<string, Intl.NumberFormat>();
+function currencyForLocale(locale: string): Intl.NumberFormat {
+  let f = usdFormatters.get(locale);
+  if (!f) {
+    f = new Intl.NumberFormat(locale, { style: "currency", currency: "USD" });
+    usdFormatters.set(locale, f);
+  }
+  return f;
+}
+function activeFormatLocale(): string {
+  // Lazy import avoids pulling i18n into modules loaded before init.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  try {
+    const lang = (
+      globalThis as { i18next?: { language?: string } }
+    ).i18next?.language;
+    if (lang?.toLowerCase().startsWith("es")) return "es-ES";
+  } catch {
+    // ignore
+  }
+  return "en-US";
+}
 export function formatUsd(amount: number): string {
-  return USD.format(amount);
+  return currencyForLocale(activeFormatLocale()).format(amount);
 }
 
 // Whole-dollar currency formatter — used by the property detail header
 // stat-card row where the cards are too narrow to fit a `$X,XXX.XX`
 // value alongside the icon (task #481). Rounds to the nearest dollar so
 // every money card in the row reads consistently (e.g. `$4,875`, `$0`).
-const USD_WHOLE = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-  minimumFractionDigits: 0,
-});
+const usdWholeFormatters = new Map<string, Intl.NumberFormat>();
+function currencyWholeForLocale(locale: string): Intl.NumberFormat {
+  let f = usdWholeFormatters.get(locale);
+  if (!f) {
+    f = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
+    });
+    usdWholeFormatters.set(locale, f);
+  }
+  return f;
+}
 export function formatUsdWhole(amount: number): string {
-  return USD_WHOLE.format(amount);
+  return currencyWholeForLocale(activeFormatLocale()).format(amount);
 }
 
 // ── Lease renewal helpers ──────────────────────────────────────────────

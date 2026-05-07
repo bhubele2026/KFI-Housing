@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
@@ -245,6 +246,7 @@ const EMPTY_NEW_CUSTOMER: NewCustomerDraft = {
 const NEW_CUSTOMER_VALUE = "__new__";
 
 export default function Properties() {
+  const { t } = useTranslation();
   const [, navigate] = useLocation();
   // Defensive fallback to `[]` for `utilities` keeps existing tests
   // with partial `useData` mocks from crashing on the per-bed-electric
@@ -651,8 +653,8 @@ export default function Properties() {
     const name = draft.name.trim();
     if (!name) {
       toast({
-        title: "Name is required",
-        description: "Please enter a property name.",
+        title: t("toasts.nameRequiredTitle"),
+        description: t("toasts.propertyNameRequiredDescription"),
         variant: "destructive",
       });
       return;
@@ -663,8 +665,8 @@ export default function Properties() {
       const cName = newCustomer.name.trim();
       if (!cName) {
         toast({
-          title: "Customer name is required",
-          description: "Please enter a name for the new customer.",
+          title: t("toasts.newCustomerNameRequiredTitle"),
+          description: t("toasts.newCustomerNameRequiredDescription"),
           variant: "destructive",
         });
         return;
@@ -673,8 +675,8 @@ export default function Properties() {
     }
     if (!customerId) {
       toast({
-        title: "Customer is required",
-        description: "Please select a customer or create a new one.",
+        title: t("toasts.customerSelectionRequiredTitle"),
+        description: t("toasts.customerSelectionRequiredDescription"),
         variant: "destructive",
       });
       return;
@@ -698,8 +700,8 @@ export default function Properties() {
           });
         } catch {
           toast({
-            title: "Couldn't create customer",
-            description: "The new customer couldn't be saved. The property was not created.",
+            title: t("toasts.couldntCreateCustomerTitle"),
+            description: t("toasts.couldntCreateCustomerDescription"),
             variant: "destructive",
           });
           return;
@@ -735,7 +737,7 @@ export default function Properties() {
 
       try {
         const saved = await addProperty(newProperty);
-        toast({ title: "Property added", description: `${name} created.` });
+        toast({ title: t("toasts.propertyAddedTitle"), description: t("toasts.propertyAddedDescription", { name }) });
         setAddOpen(false);
         // Save-time geocode warning (Task #228). The property already
         // saved (POST returned 201) — this toast only flags that
@@ -757,9 +759,8 @@ export default function Properties() {
         }
       } catch {
         toast({
-          title: "Couldn't create property",
-          description:
-            "Saving failed on the server. Please verify the customer exists and try again.",
+          title: t("toasts.couldntCreatePropertyTitle"),
+          description: t("toasts.couldntCreatePropertyDescription"),
           variant: "destructive",
         });
       }
@@ -1260,8 +1261,8 @@ export default function Properties() {
     ]);
     downloadCsv(timestampedCsvName("housingops-properties"), csv);
     toast({
-      title: "Properties exported",
-      description: `Downloaded ${filtered.length} ${filtered.length === 1 ? "property" : "properties"} as CSV.`,
+      title: t("toasts.propertiesExportedTitle"),
+      description: t("toasts.propertiesExportedDescription", { count: filtered.length }),
     });
   };
 
@@ -1274,8 +1275,8 @@ export default function Properties() {
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
         <PageHeader
-          title="Properties"
-          description="Select a property to manage it"
+          title={t("pages.properties.title")}
+          description={t("pages.properties.description")}
           actions={<>
             {/* Table/Map toggle. Persisted with the rest of the toolbar
                 prefs so the operator's last choice survives refresh and

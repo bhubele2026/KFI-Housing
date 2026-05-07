@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,11 +39,13 @@ export function ConfirmDeleteButton({
   trigger,
   title,
   description,
-  confirmLabel = "Delete",
+  confirmLabel,
   onConfirm,
   testId,
 }: ConfirmDeleteButtonProps) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
+  const resolvedConfirmLabel = confirmLabel ?? t("confirmDelete.delete");
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -60,14 +63,14 @@ export function ConfirmDeleteButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="button-confirm-delete-cancel">
-            Cancel
+            {t("confirmDelete.cancel")}
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             data-testid="button-confirm-delete-confirm"
           >
-            {confirmLabel}
+            {resolvedConfirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

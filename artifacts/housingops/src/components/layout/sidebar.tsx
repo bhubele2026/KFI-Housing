@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "@/components/language-toggle";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -46,16 +48,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Briefcase },
-  { href: "/properties", label: "Properties", icon: Home },
-  { href: "/leases", label: "Leases", icon: KeyRound },
-  { href: "/beds", label: "Beds", icon: BedDouble },
-  { href: "/occupants", label: "Occupants", icon: Users },
-  { href: "/utilities", label: "Utilities", icon: Zap },
-  { href: "/finance", label: "Finance", icon: DollarSign },
-  { href: "/insurance", label: "Insurance", icon: ShieldCheck },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { href: "/customers", labelKey: "nav.customers", icon: Briefcase },
+  { href: "/properties", labelKey: "nav.properties", icon: Home },
+  { href: "/leases", labelKey: "nav.leases", icon: KeyRound },
+  { href: "/beds", labelKey: "nav.beds", icon: BedDouble },
+  { href: "/occupants", labelKey: "nav.occupants", icon: Users },
+  { href: "/utilities", labelKey: "nav.utilities", icon: Zap },
+  { href: "/finance", labelKey: "nav.finance", icon: DollarSign },
+  { href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export type SidebarProps = {
@@ -69,6 +71,7 @@ export type SidebarProps = {
 
 export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: SidebarProps = {}) {
   const [location] = useLocation();
+  const { t } = useTranslation();
   const { logout } = useAuth();
   const { resetToSampleData, exportData, importData, previewMergeImport, undoLastImport, customers, properties } = useData();
   const { customerId, setCustomerId } = useCustomerScope();
@@ -419,14 +422,14 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 <button
                   type="button"
                   onClick={onToggleCollapsed}
-                  aria-label="Expand sidebar"
+                  aria-label={t("nav.expandSidebar")}
                   className="flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                   data-testid="button-sidebar-toggle"
                 >
                   <PanelLeftOpen className="h-4 w-4" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Expand sidebar</TooltipContent>
+              <TooltipContent side="right">{t("nav.expandSidebar")}</TooltipContent>
             </Tooltip>
           ) : null
         ) : (
@@ -445,7 +448,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               <button
                 type="button"
                 onClick={onToggleCollapsed}
-                aria-label="Collapse sidebar"
+                aria-label={t("nav.collapseSidebar")}
                 className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                 data-testid="button-sidebar-toggle"
               >
@@ -486,7 +489,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             data-testid="sidebar-customer-scope"
           >
             <p className="text-[10px] uppercase tracking-wider font-semibold text-sidebar-foreground/50 mb-1.5">
-              Filtered by customer
+              {t("nav.filteredByCustomer")}
             </p>
             <div className="flex items-center gap-2">
               <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
@@ -501,7 +504,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 type="button"
                 onClick={() => setCustomerId(ALL_CUSTOMERS)}
                 className="rounded-sm p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                aria-label="Clear customer filter"
+                aria-label={t("nav.clearCustomerFilter")}
                 data-testid="button-sidebar-clear-customer"
               >
                 <X className="h-3.5 w-3.5" />
@@ -512,13 +515,16 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       )}
 
       {!collapsed ? (
-        <div className="px-5 pt-5 pb-2">
+        <div className="flex items-center justify-between px-5 pt-5 pb-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
-            Workspace
+            {t("nav.workspace")}
           </p>
+          <LanguageToggle />
         </div>
       ) : (
-        <div className="pt-3" />
+        <div className="pt-3 flex justify-center">
+          <LanguageToggle iconOnly />
+        </div>
       )}
       <nav
         className={cn(
@@ -527,6 +533,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
         )}
       >
         {NAV_ITEMS.map((item) => {
+          const label = t(item.labelKey);
           const isActive = location === item.href;
           const showAddressBadge =
             item.href === "/properties" && addressesNeedingFixCount > 0;
@@ -556,7 +563,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                   )}
                   aria-hidden="true"
                 />
-                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && <span className="flex-1">{label}</span>}
                 {showAddressBadge ? (
                   collapsed ? (
                     <span
@@ -587,8 +594,8 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Link>
           );
           const tipLabel = showAddressBadge && addressesNeedingFixTooltip
-            ? `${item.label} — ${addressesNeedingFixTooltip}`
-            : item.label;
+            ? `${label} — ${addressesNeedingFixTooltip}`
+            : label;
           return collapsed ? (
             <Tooltip key={item.href}>
               <TooltipTrigger asChild>{linkNode}</TooltipTrigger>
@@ -708,7 +715,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           )
         ) : null}
         {wrapTip(
-          "Log out",
+          t("nav.logout"),
           <Button
             variant="outline"
             size={collapsed ? "icon" : "default"}
@@ -717,10 +724,10 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               collapsed ? "h-9 w-9" : "w-full justify-start",
             )}
             onClick={logout}
-            aria-label="Log out"
+            aria-label={t("nav.logout")}
           >
             <LogOut className={cn("h-4 w-4", !collapsed && "mr-2")} />
-            {!collapsed && "Log out"}
+            {!collapsed && t("nav.logout")}
           </Button>,
         )}
       </div>

@@ -1,11 +1,12 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { sumActiveRentBreakdown, toMonthlyCharge } from "@/data/mockData";
+import { sumActiveRentBreakdown, toMonthlyCharge, formatUsd } from "@/data/mockData";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +22,7 @@ import { toCsv, toCsvRows, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Finance() {
+  const { t } = useTranslation();
   const { properties, beds, leases, utilities, occupants, customers } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
@@ -115,7 +117,7 @@ export default function Finance() {
     ? round2((totals.leaseCost + totals.electricCost) / totals.totalBeds)
     : null;
   const fmtPerBed = (v: number | null) =>
-    v === null ? "—" : `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    v === null ? "—" : `${formatUsd(v)}`;
 
   const activeCustomerName =
     customerFilter === ALL_CUSTOMERS ? null : customerById.get(customerFilter) ?? null;
@@ -128,28 +130,32 @@ export default function Finance() {
   const { toast } = useToast();
 
   const handleDownloadCsv = () => {
+    const tt = (k: string) => t(`pages.finance.table.${k}`);
     const columns = [
-      { header: "Property", value: (d: typeof financialData[number]) => d.name },
+      { header: tt("property"), value: (d: typeof financialData[number]) => d.name },
       ...(showCustomerColumn
-        ? [{ header: "Customer", value: (d: typeof financialData[number]) => d.customerName ?? "" }]
+        ? [{ header: tt("customer"), value: (d: typeof financialData[number]) => d.customerName ?? "" }]
         : []),
-      { header: "Occupied Beds", value: (d: typeof financialData[number]) => d.occupiedBeds },
-      { header: "Total Beds", value: (d: typeof financialData[number]) => d.totalBeds },
-      { header: "Revenue", value: (d: typeof financialData[number]) => d.revenue },
-      { header: "Lease Cost", value: (d: typeof financialData[number]) => d.leaseCost },
-      { header: "Contract Rent", value: (d: typeof financialData[number]) => d.contractCost },
-      { header: "Hotel-Rate (est.)", value: (d: typeof financialData[number]) => d.hotelRateCost },
-      { header: "Utility Cost", value: (d: typeof financialData[number]) => d.utilCost },
-      { header: "Total Cost", value: (d: typeof financialData[number]) => d.totalCost },
-      { header: "Net Profit", value: (d: typeof financialData[number]) => d.profit },
-      { header: "Rent / Bed", value: (d: typeof financialData[number]) => d.rentPerBed ?? "" },
-      { header: "Electric / Bed", value: (d: typeof financialData[number]) => d.electricPerBed ?? "" },
-      { header: "Rent + Electric / Bed", value: (d: typeof financialData[number]) => d.rentPlusElectricPerBed ?? "" },
+      { header: tt("occupiedBeds"), value: (d: typeof financialData[number]) => d.occupiedBeds },
+      { header: tt("totalBeds"), value: (d: typeof financialData[number]) => d.totalBeds },
+      { header: tt("revenue"), value: (d: typeof financialData[number]) => d.revenue },
+      { header: tt("leaseCost"), value: (d: typeof financialData[number]) => d.leaseCost },
+      { header: tt("contractRent"), value: (d: typeof financialData[number]) => d.contractCost },
+      { header: tt("hotelRateEst"), value: (d: typeof financialData[number]) => d.hotelRateCost },
+      { header: tt("utilityCost"), value: (d: typeof financialData[number]) => d.utilCost },
+      { header: tt("totalCost"), value: (d: typeof financialData[number]) => d.totalCost },
+      { header: tt("netProfit"), value: (d: typeof financialData[number]) => d.profit },
+      { header: tt("rentPerBed"), value: (d: typeof financialData[number]) => d.rentPerBed ?? "" },
+      { header: tt("electricPerBed"), value: (d: typeof financialData[number]) => d.electricPerBed ?? "" },
+      { header: tt("rentPlusElectricPerBed"), value: (d: typeof financialData[number]) => d.rentPlusElectricPerBed ?? "" },
     ];
+    const totalLabel = activeCustomerName
+      ? t("pages.finance.table.customerTotal", { customer: activeCustomerName })
+      : t("pages.finance.table.portfolioTotal");
     const totalsRow: typeof financialData[number] = {
       id: "__totals__",
-      name: activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total",
-      shortName: activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total",
+      name: totalLabel,
+      shortName: totalLabel,
       customerId: "",
       customerName: "",
       revenue: totals.revenue,
@@ -170,11 +176,12 @@ export default function Finance() {
     // Blank out the non-numeric columns (Customer, Occupied/Total Beds) so the
     // totals row only carries summed values alongside its label.
     const numericHeaders = new Set([
-      "Revenue", "Lease Cost", "Contract Rent", "Hotel-Rate (est.)", "Utility Cost", "Total Cost", "Net Profit",
-      "Rent / Bed", "Electric / Bed", "Rent + Electric / Bed",
+      tt("revenue"), tt("leaseCost"), tt("contractRent"), tt("hotelRateEst"), tt("utilityCost"), tt("totalCost"), tt("netProfit"),
+      tt("rentPerBed"), tt("electricPerBed"), tt("rentPlusElectricPerBed"),
     ]);
+    const propertyHeader = tt("property");
     const totalsColumns = columns.map((col) =>
-      col.header === "Property" || numericHeaders.has(col.header)
+      col.header === propertyHeader || numericHeaders.has(col.header)
         ? col
         : { ...col, value: () => "" },
     );
@@ -183,8 +190,8 @@ export default function Finance() {
     const csv = `${bodyCsv}\r\n${totalsCsv}`;
     downloadCsv(timestampedCsvName("housingops-finance"), csv);
     toast({
-      title: "Finance summary exported",
-      description: `Downloaded ${financialData.length} ${financialData.length === 1 ? "property" : "properties"} as CSV.`,
+      title: t("pages.finance.exportedTitle"),
+      description: t("pages.finance.exportedDescription", { count: financialData.length }),
     });
   };
 
@@ -197,8 +204,8 @@ export default function Finance() {
         className="p-8 max-w-7xl mx-auto space-y-8"
       >
         <PageHeader
-          title="Financials"
-          description="Profit & loss per property (monthly)"
+          title={t("pages.finance.title")}
+          description={t("pages.finance.description")}
           meta={
             activeCustomerName ? (
               <p
@@ -206,17 +213,17 @@ export default function Finance() {
                 data-testid="text-finance-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
-                Showing only <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.finance.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
               </p>
             ) : null
           }
           actions={<>
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-finance-customer-filter">
-                <SelectValue placeholder="Customer" />
+                <SelectValue placeholder={t("pages.finance.customerPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>{t("pages.finance.allCustomers")}</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -229,21 +236,21 @@ export default function Finance() {
               data-testid="button-download-finance-csv"
             >
               <Download className="mr-2 h-4 w-4" />
-              Download CSV
+              {t("pages.finance.downloadCsv")}
             </Button>
             <div className="flex gap-6 text-right">
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Revenue</p>
-                <p className="text-xl font-bold text-green-600">${totals.revenue.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.finance.totalRevenue")}</p>
+                <p className="text-xl font-bold text-green-600">{formatUsd(totals.revenue)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Costs</p>
-                <p className="text-xl font-bold text-destructive">${totals.totalCost.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.finance.totalCosts")}</p>
+                <p className="text-xl font-bold text-destructive">{formatUsd(totals.totalCost)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Net Profit</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.finance.netProfit")}</p>
                 <p className={`text-xl font-bold ${totals.profit >= 0 ? "text-green-600" : "text-destructive"}`}>
-                  {totals.profit >= 0 ? "+" : ""}${totals.profit.toLocaleString()}
+                  {totals.profit >= 0 ? "+" : ""}{formatUsd(totals.profit)}
                 </p>
               </div>
             </div>
@@ -254,26 +261,26 @@ export default function Finance() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
               <Briefcase className="h-3 w-3" />
-              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              {t("pages.finance.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
                 onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                aria-label="Clear customer filter"
+                aria-label={t("pages.finance.clearCustomerFilter")}
                 data-testid="button-clear-customer-filter"
               >
                 <X className="h-3 w-3" />
               </button>
             </Badge>
             <span className="text-xs text-muted-foreground">
-              {financialData.length} of {properties.length} propert{properties.length === 1 ? "y" : "ies"}
+              {t("pages.finance.propertiesCount", { shown: financialData.length, total: properties.length, count: properties.length })}
             </span>
           </div>
         )}
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Revenue vs Cost by Property</CardTitle>
+            <CardTitle className="text-base">{t("pages.finance.chartTitle")}</CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -291,7 +298,7 @@ export default function Finance() {
                 />
                 <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                  formatter={(value: number, name: string) => [`${formatUsd(value)}`, name]}
                   labelFormatter={(label) => {
                     const row = financialData.find((d) => d.id === label);
                     return row?.name ?? String(label);
@@ -300,9 +307,9 @@ export default function Finance() {
                   cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
                 />
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
-                <Bar dataKey="revenue" name="Revenue" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="leaseCost" name="Lease Cost" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} stackId="cost" />
-                <Bar dataKey="utilCost" name="Utility Cost" fill="hsl(25 95% 53%)" radius={[4, 4, 0, 0]} stackId="cost" />
+                <Bar dataKey="revenue" name={t("pages.finance.table.revenue")} fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="leaseCost" name={t("pages.finance.table.leaseCost")} fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} stackId="cost" />
+                <Bar dataKey="utilCost" name={t("pages.finance.table.utilityCost")} fill="hsl(25 95% 53%)" radius={[4, 4, 0, 0]} stackId="cost" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -313,17 +320,17 @@ export default function Finance() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property</TableHead>
-                  {showCustomerColumn && <TableHead>Customer</TableHead>}
-                  <TableHead className="text-center">Occupancy</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Lease Cost</TableHead>
-                  <TableHead className="text-right">Utility Cost</TableHead>
-                  <TableHead className="text-right">Total Cost</TableHead>
-                  <TableHead className="text-right">Net Profit</TableHead>
-                  <TableHead className="text-right">Rent / Bed</TableHead>
-                  <TableHead className="text-right">Electric / Bed</TableHead>
-                  <TableHead className="text-right">Rent + Electric / Bed</TableHead>
+                  <TableHead>{t("pages.finance.table.property")}</TableHead>
+                  {showCustomerColumn && <TableHead>{t("pages.finance.table.customer")}</TableHead>}
+                  <TableHead className="text-center">{t("pages.finance.table.occupancy")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.revenue")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.leaseCost")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.utilityCost")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.totalCost")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.netProfit")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.rentPerBed")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.electricPerBed")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.rentPlusElectricPerBed")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -334,18 +341,18 @@ export default function Finance() {
                         icon={properties.length === 0 ? Building2 : DollarSign}
                         title={
                           properties.length === 0
-                            ? "No properties yet"
-                            : "No properties match this filter"
+                            ? t("pages.finance.empty.noPropertiesTitle")
+                            : t("pages.finance.empty.noMatchTitle")
                         }
                         description={
                           properties.length === 0
-                            ? "Add your first property to start seeing revenue and expenses here."
-                            : "Adjust the customer filter above to see revenue and expenses."
+                            ? t("pages.finance.empty.noPropertiesDescription")
+                            : t("pages.finance.empty.noMatchDescription")
                         }
                         action={
                           properties.length === 0 ? (
                             <Button asChild data-testid="button-empty-finance-cta">
-                              <Link href="/properties">Add Property</Link>
+                              <Link href="/properties">{t("pages.finance.empty.addProperty")}</Link>
                             </Button>
                           ) : undefined
                         }
@@ -376,7 +383,7 @@ export default function Finance() {
                                 }}
                                 className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 data-testid={`button-filter-customer-${d.id}`}
-                                aria-label={`Filter by customer ${d.customerName}`}
+                                aria-label={t("pages.finance.filterByCustomerAria", { customer: d.customerName })}
                               >
                                 {d.customerName}
                               </button>
@@ -388,28 +395,28 @@ export default function Finance() {
                         <td className="p-4 text-center text-sm text-muted-foreground">
                           {d.occupiedBeds}/{d.totalBeds}
                         </td>
-                        <td className="p-4 text-right font-medium text-green-600">${d.revenue.toLocaleString()}</td>
+                        <td className="p-4 text-right font-medium text-green-600">{formatUsd(d.revenue)}</td>
                         <td className="p-4 text-right text-sm text-muted-foreground">
-                          <span>${d.leaseCost.toLocaleString()}</span>
+                          <span>{formatUsd(d.leaseCost)}</span>
                           {d.hasHotelRateLease && (
                             <>
                               <span className="block text-xs text-muted-foreground/70" data-testid={`text-finance-contract-rent-${d.id}`}>
-                                Contract: ${d.contractCost.toLocaleString()}
+                                {t("pages.finance.table.contractLabel")} {formatUsd(d.contractCost)}
                               </span>
                               <span className="block text-xs text-muted-foreground/70" data-testid={`text-finance-hotel-rate-${d.id}`}>
-                                Hotel-rate: ${d.hotelRateCost.toLocaleString()} (est.)
+                                {t("pages.finance.table.hotelRateLabel")} {formatUsd(d.hotelRateCost)} {t("pages.finance.table.hotelRateSuffix")}
                               </span>
                             </>
                           )}
                         </td>
-                        <td className="p-4 text-right text-sm text-muted-foreground">${d.utilCost.toLocaleString()}</td>
-                        <td className="p-4 text-right text-sm font-medium">${d.totalCost.toLocaleString()}</td>
+                        <td className="p-4 text-right text-sm text-muted-foreground">{formatUsd(d.utilCost)}</td>
+                        <td className="p-4 text-right text-sm font-medium">{formatUsd(d.totalCost)}</td>
                         <td className="p-4 text-right">
                           <Badge
                             variant={d.profit >= 0 ? "default" : "destructive"}
                             className={d.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
                           >
-                            {d.profit >= 0 ? "+" : "-"}${Math.abs(d.profit).toLocaleString()}
+                            {d.profit >= 0 ? "+" : "-"}{formatUsd(Math.abs(d.profit))}
                           </Badge>
                         </td>
                         <td
@@ -433,31 +440,31 @@ export default function Finance() {
                       </motion.tr>
                     ))}
                     <tr className="bg-muted/50 border-t-2 border-border">
-                      <td className="p-4 font-bold">{activeCustomerName ? `${activeCustomerName} Total` : "Portfolio Total"}</td>
+                      <td className="p-4 font-bold">{activeCustomerName ? t("pages.finance.table.customerTotal", { customer: activeCustomerName }) : t("pages.finance.table.portfolioTotal")}</td>
                       {showCustomerColumn && <td />}
                       <td />
-                      <td className="p-4 text-right font-bold text-green-600">${totals.revenue.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold text-green-600">{formatUsd(totals.revenue)}</td>
                       <td className="p-4 text-right font-bold">
-                        <span>${totals.leaseCost.toLocaleString()}</span>
+                        <span>{formatUsd(totals.leaseCost)}</span>
                         {totals.hasAnyHotelRateLease && (
                           <>
                             <span className="block text-xs font-normal text-muted-foreground" data-testid="text-finance-contract-rent-total">
-                              Contract: ${totals.contractCost.toLocaleString()}
+                              {t("pages.finance.table.contractLabel")} {formatUsd(totals.contractCost)}
                             </span>
                             <span className="block text-xs font-normal text-muted-foreground" data-testid="text-finance-hotel-rate-total">
-                              Hotel-rate: ${totals.hotelRateCost.toLocaleString()} (est.)
+                              {t("pages.finance.table.hotelRateLabel")} {formatUsd(totals.hotelRateCost)} {t("pages.finance.table.hotelRateSuffix")}
                             </span>
                           </>
                         )}
                       </td>
-                      <td className="p-4 text-right font-bold">${totals.utilCost.toLocaleString()}</td>
-                      <td className="p-4 text-right font-bold">${totals.totalCost.toLocaleString()}</td>
+                      <td className="p-4 text-right font-bold">{formatUsd(totals.utilCost)}</td>
+                      <td className="p-4 text-right font-bold">{formatUsd(totals.totalCost)}</td>
                       <td className="p-4 text-right">
                         <Badge
                           variant={totals.profit >= 0 ? "default" : "destructive"}
                           className={totals.profit >= 0 ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
                         >
-                          {totals.profit >= 0 ? "+" : "-"}${Math.abs(totals.profit).toLocaleString()}
+                          {totals.profit >= 0 ? "+" : "-"}{formatUsd(Math.abs(totals.profit))}
                         </Badge>
                       </td>
                       <td className="p-4 text-right font-bold tabular-nums">{fmtPerBed(totalsRentPerBed)}</td>

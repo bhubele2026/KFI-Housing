@@ -79,6 +79,9 @@ export const importDataBodyLeasesItemStartDateRegExp = new RegExp(
 export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const importDataBodyLeasesItemSnoozedUntilRegExp = new RegExp(
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
+);
 export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
@@ -291,6 +294,13 @@ export const ImportDataBody = zod.object({
         .optional()
         .describe(
           'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
+        ),
+      snoozedUntil: zod
+        .string()
+        .regex(importDataBodyLeasesItemSnoozedUntilRegExp)
+        .optional()
+        .describe(
+          'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
         ),
     }),
   ),
@@ -1023,6 +1033,9 @@ export const listLeasesResponseStartDateRegExp = new RegExp(
 export const listLeasesResponseEndDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
+export const listLeasesResponseSnoozedUntilRegExp = new RegExp(
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
+);
 
 export const ListLeasesResponseItem = zod.object({
   id: zod.string(),
@@ -1111,6 +1124,13 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
     ),
+  snoozedUntil: zod
+    .string()
+    .regex(listLeasesResponseSnoozedUntilRegExp)
+    .optional()
+    .describe(
+      'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1121,6 +1141,9 @@ export const createLeaseBodyStartDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const createLeaseBodyEndDateRegExp = new RegExp(
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
+);
+export const createLeaseBodySnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
@@ -1210,6 +1233,13 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
+    ),
+  snoozedUntil: zod
+    .string()
+    .regex(createLeaseBodySnoozedUntilRegExp)
+    .optional()
+    .describe(
+      'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
     ),
 });
 
@@ -1599,6 +1629,9 @@ export const updateLeaseBodyStartDateRegExp = new RegExp(
 export const updateLeaseBodyEndDateRegExp = new RegExp(
   "^\\d{4}-\\d{2}-\\d{2}$",
 );
+export const updateLeaseBodySnoozedUntilRegExp = new RegExp(
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
+);
 
 export const UpdateLeaseBody = zod.object({
   propertyId: zod.string().optional(),
@@ -1622,12 +1655,19 @@ export const UpdateLeaseBody = zod.object({
   customerId: zod.string().optional(),
   customerResponsibleForRent: zod.boolean().optional(),
   unit: zod.string().optional(),
+  snoozedUntil: zod
+    .string()
+    .regex(updateLeaseBodySnoozedUntilRegExp)
+    .optional(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const updateLeaseResponseEndDateRegExp = new RegExp(
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
+);
+export const updateLeaseResponseSnoozedUntilRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
@@ -1717,6 +1757,13 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       'First-class apartment-unit identifier inside a multi-unit\nproperty (e.g. \"509\", \"500-118\", \"Apt 3B\"). Empty for\nsingle-unit \/ whole-house leases. The Property detail\npage groups leases + occupants by this field. Added by\ntask #310.\n',
+    ),
+  snoozedUntil: zod
+    .string()
+    .regex(updateLeaseResponseSnoozedUntilRegExp)
+    .optional()
+    .describe(
+      'When set to a future YYYY-MM-DD date, the lease is hidden\nfrom the dashboard \"Lease expiry alerts\" card until that\ndate passes. Empty string means \"not snoozed\". Persisted\nserver-side so the dismissal sticks across reloads and\nacross users. Added by task #357.\n',
     ),
 });
 

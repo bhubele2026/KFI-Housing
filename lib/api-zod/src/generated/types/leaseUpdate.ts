@@ -8,6 +8,7 @@
 import type { LeaseDate } from "./leaseDate";
 import type { LeaseUpdateRateType } from "./leaseUpdateRateType";
 import type { LeaseUpdateStatus } from "./leaseUpdateStatus";
+import type { OptionalLeaseDate } from "./optionalLeaseDate";
 
 export interface LeaseUpdate {
   propertyId?: string;
@@ -32,4 +33,5 @@ export interface LeaseUpdate {
   customerId?: string;
   customerResponsibleForRent?: boolean;
   unit?: string;
+  snoozedUntil?: OptionalLeaseDate;
 }

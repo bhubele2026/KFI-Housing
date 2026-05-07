@@ -239,6 +239,14 @@ export function normalizeLeaseRow<
     recordFixup(fixups, "rateType", row.rateType, after);
     out.rateType = after;
   }
+  if ("snoozedUntil" in row) {
+    // Same boundary treatment as the term dates so a datetime-style
+    // value (e.g. an XLSX date cell) can't sneak through. Blank means
+    // "not snoozed".
+    const after = normalizeLeaseDate(row.snoozedUntil as string | null);
+    recordFixup(fixups, "snoozedUntil", row.snoozedUntil, after);
+    out.snoozedUntil = after;
+  }
   return out as T;
 }
 

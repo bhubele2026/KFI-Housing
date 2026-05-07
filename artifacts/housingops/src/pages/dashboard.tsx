@@ -4,7 +4,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,7 +22,7 @@ import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status"
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
-import { formatYMDPretty } from "@/lib/lease-dates";
+import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -61,7 +65,7 @@ function formatRelativeTime(timestamp: number, now: number = Date.now()): string
 }
 
 export default function Dashboard() {
-  const { properties, beds, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant } = useData();
+  const { properties, beds, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant, updateLease } = useData();
   const { toast } = useToast();
   const [pendingEmployerMove, setPendingEmployerMove] = useState<{
     occupantId: string;
@@ -331,7 +335,17 @@ export default function Dashboard() {
     days: number;
     bucket: ExpiryBucket;
   }
-  const expiringLeases = useMemo<ExpiringLease[]>(() => {
+  // Snooze support (Task #357). A lease whose `snoozedUntil` date is
+  // strictly after today is hidden from the alerts panel — operators
+  // dismiss / snooze rows for renewals already in flight so the panel
+  // keeps signalling work that still needs attention. We compute today
+  // once per render via `formatTodayYMD` and compare YYYY-MM-DD strings
+  // lexicographically (safe because the format is fixed-width).
+  const todayYMD = formatTodayYMD();
+  // Bucket every in-window lease (visible or snoozed) so the header
+  // can show "X snoozed" alongside the visible count without double
+  // counting.
+  const allInWindowLeases = useMemo<ExpiringLease[]>(() => {
     const out: ExpiringLease[] = [];
     for (const l of scopedLeases) {
       if (!l.endDate) continue;
@@ -364,6 +378,27 @@ export default function Dashboard() {
     out.sort((a, b) => a.days - b.days);
     return out;
   }, [scopedLeases, scopedProperties]);
+
+  // Active alerts = in-window AND not currently snoozed. A snooze is
+  // active when `snoozedUntil` (a YYYY-MM-DD or "") is strictly after
+  // today's YYYY-MM-DD — the snoozed lease reappears the day the snooze
+  // window passes.
+  const expiringLeases = useMemo<ExpiringLease[]>(
+    () =>
+      allInWindowLeases.filter(({ lease }) => {
+        const snz = lease.snoozedUntil ?? "";
+        return !(snz && snz > todayYMD);
+      }),
+    [allInWindowLeases, todayYMD],
+  );
+  const snoozedLeases = useMemo<ExpiringLease[]>(
+    () =>
+      allInWindowLeases.filter(({ lease }) => {
+        const snz = lease.snoozedUntil ?? "";
+        return snz && snz > todayYMD;
+      }),
+    [allInWindowLeases, todayYMD],
+  );
 
   const expiringCounts = useMemo(() => {
     const counts = { critical: 0, warning: 0, soon: 0, expired: 0 };
@@ -838,7 +873,7 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {expiringLeases.length > 0 && (
+        {(expiringLeases.length > 0 || snoozedLeases.length > 0) && (
           <Card data-testid="card-expiring-leases">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -856,6 +891,36 @@ export default function Dashboard() {
                 Leases ending in the next 30 / 60 / 90 days, plus any that
                 quietly expired in the last 30 days.
               </p>
+              {snoozedLeases.length > 0 && (
+                <div
+                  className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"
+                  data-testid="snoozed-leases-summary"
+                >
+                  <BellOff className="h-3.5 w-3.5" />
+                  <span data-testid="text-snoozed-leases-count">
+                    {snoozedLeases.length} snoozed
+                  </span>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    data-testid="button-unsnooze-all-leases"
+                    onClick={() => {
+                      for (const { lease } of snoozedLeases) {
+                        updateLease(lease.id, { snoozedUntil: "" });
+                      }
+                      toast({
+                        title: "Snoozes cleared",
+                        description: `${snoozedLeases.length} lease alert${
+                          snoozedLeases.length === 1 ? "" : "s"
+                        } restored to the panel.`,
+                      });
+                    }}
+                  >
+                    Unsnooze all
+                  </Button>
+                </div>
+              )}
               <div
                 className="mt-2 flex flex-wrap gap-2 text-xs"
                 data-testid="bucket-counts-expiring-leases"
@@ -902,11 +967,20 @@ export default function Dashboard() {
                     <TableHead>Ends</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">When</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {expiringLeases.map(({ lease, propertyName, days, bucket }) => {
                     const style = expiryBucketStyle[bucket];
+                    function snooze(durationDays: number, label: string) {
+                      const until = addDaysToToday(durationDays);
+                      updateLease(lease.id, { snoozedUntil: until });
+                      toast({
+                        title: `Snoozed ${label}`,
+                        description: `${propertyName} alert hidden until ${formatYMDPretty(until)}.`,
+                      });
+                    }
                     return (
                       <TableRow
                         key={lease.id}
@@ -943,6 +1017,49 @@ export default function Dashboard() {
                           data-testid={`text-expiring-lease-${lease.id}-when`}
                         >
                           {expiryRowLabel(days)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                data-testid={`button-snooze-lease-${lease.id}`}
+                              >
+                                <BellOff className="h-3 w-3 mr-1" />
+                                Snooze
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Hide this alert for…</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                data-testid={`button-snooze-lease-${lease.id}-7d`}
+                                onSelect={() => snooze(7, "7 days")}
+                              >
+                                7 days
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                data-testid={`button-snooze-lease-${lease.id}-30d`}
+                                onSelect={() => snooze(30, "30 days")}
+                              >
+                                30 days
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                data-testid={`button-snooze-lease-${lease.id}-90d`}
+                                onSelect={() => snooze(90, "90 days")}
+                              >
+                                90 days
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                data-testid={`button-snooze-lease-${lease.id}-renewal`}
+                                onSelect={() => snooze(365, "until renewal")}
+                              >
+                                Renewal in progress (1 year)
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       </TableRow>
                     );

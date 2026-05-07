@@ -60,6 +60,12 @@ export const leasesTable = pgTable("leases", {
   // marker in lease notes is preserved for audit trail but no longer
   // the source of truth.
   unit: text("unit").notNull().default(""),
+  // Snooze date for the dashboard "Lease expiry alerts" card (task #357).
+  // When set to a YYYY-MM-DD string in the future, the lease is hidden
+  // from the alerts panel until that date passes. Empty string means
+  // "not snoozed". Stored on the lease itself so the state persists
+  // across reloads and across users (server-side single source of truth).
+  snoozedUntil: text("snoozed_until").notNull().default(""),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

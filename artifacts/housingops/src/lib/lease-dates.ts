@@ -94,6 +94,36 @@ export function addMonthsToYMD(dateStr: string, months: number): string {
 }
 
 /**
+ * Today's calendar date as a `YYYY-MM-DD` string in the user's *local*
+ * timezone. Used by the dashboard "Lease expiry alerts" snooze logic
+ * (task #357) so a snoozed-until date written today behaves the same
+ * regardless of the host timezone — `new Date().toISOString()` would
+ * shift a day for users west of UTC.
+ */
+export function formatTodayYMD(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Add N calendar days to today and return the result as a YYYY-MM-DD
+ * string in the user's local timezone. Negative values move backward.
+ * Used to compute snooze expiry dates ("snooze 7 days", etc.).
+ */
+export function addDaysToToday(days: number): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Format a `YYYY-MM-DD` value as `Mon D, YYYY` in the user's locale, using
  * a *local* `Date` so the output never drifts a day in timezones west of
  * UTC. Throws on a malformed input via `parseYMD`.

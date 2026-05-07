@@ -69,6 +69,46 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// Radix DropdownMenu uses portals + focus traps that don't behave in
+// jsdom — swap it for transparent passthroughs that always render the
+// content inline so the snooze test (Task #357) can click items
+// directly via their data-testid. `onSelect` is wired up the same way
+// it is in the real Radix primitive.
+vi.mock("@/components/ui/dropdown-menu", () => {
+  const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  function Item({
+    children,
+    onSelect,
+    ...rest
+  }: {
+    children?: ReactNode;
+    onSelect?: () => void;
+  } & Record<string, unknown>) {
+    return (
+      <button {...rest} onClick={() => onSelect?.()}>
+        {children}
+      </button>
+    );
+  }
+  return {
+    DropdownMenu: Pass,
+    DropdownMenuTrigger: Pass,
+    DropdownMenuContent: Pass,
+    DropdownMenuItem: Item,
+    DropdownMenuLabel: Pass,
+    DropdownMenuSeparator: () => null,
+    DropdownMenuGroup: Pass,
+    DropdownMenuPortal: Pass,
+    DropdownMenuSub: Pass,
+    DropdownMenuSubTrigger: Pass,
+    DropdownMenuSubContent: Pass,
+    DropdownMenuCheckboxItem: Item,
+    DropdownMenuRadioItem: Item,
+    DropdownMenuRadioGroup: Pass,
+    DropdownMenuShortcut: Pass,
+  };
+});
+
 // Radix's AlertDialog uses portals + focus traps that don't behave in
 // jsdom; swap it for a transparent passthrough that respects `open` so
 // the confirm/cancel buttons inside are clickable in tests.
@@ -161,6 +201,7 @@ const addOccupantMock = vi.fn();
 const updateBedMock = vi.fn();
 
 const updateOccupantMock = vi.fn();
+const updateLeaseMock = vi.fn();
 
 vi.mock("@/context/data-store", () => ({
   useData: () => ({
@@ -168,6 +209,7 @@ vi.mock("@/context/data-store", () => ({
     addOccupant: addOccupantMock,
     updateBed: updateBedMock,
     updateOccupant: updateOccupantMock,
+    updateLease: updateLeaseMock,
   }),
 }));
 
@@ -1427,6 +1469,160 @@ describe("Dashboard Lease expiry alerts", () => {
 
     expect(container.querySelector('[data-testid="row-expiring-lease-l-c1"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="row-expiring-lease-l-c2"]')).toBeNull();
+  });
+});
+
+describe("Dashboard Lease expiry snooze (Task #357)", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    selectHandlers.clear();
+    invalidateQueriesMock.mockReset();
+    updateOccupantMock.mockReset();
+    updateLeaseMock.mockReset();
+    toastMock.mockReset();
+    unplacedPayrollState.rows = [];
+    unplacedPayrollState.lowConfidenceMatches = [];
+    mockData.isLoading = false;
+    mockData.properties = [];
+    mockData.beds = [];
+    mockData.leases = [];
+    mockData.utilities = [];
+    mockData.occupants = [];
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-06T12:00:00Z"));
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    vi.useRealTimers();
+    mockData.properties = [];
+    mockData.leases = [];
+  });
+
+  async function render() {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<DashboardUnderTest />);
+    });
+  }
+
+  it("hides a row whose snoozedUntil is in the future and exposes a snooze action that calls updateLease", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      // Critical (15 days left) — should appear, snooze action available.
+      { id: "l-crit", propertyId: "p1", status: "Active", startDate: "2025-01-01", endDate: "2026-05-21", monthlyRent: 100 },
+      // Warning (45 days left) — already snoozed past today, hidden from
+      // the panel and surfaced in the "snoozed" summary instead.
+      {
+        id: "l-warn",
+        propertyId: "p1",
+        status: "Active",
+        startDate: "2025-01-01",
+        endDate: "2026-06-20",
+        monthlyRent: 100,
+        snoozedUntil: "2026-06-01",
+      },
+      // Snooze date already passed — must NOT be treated as snoozed,
+      // mirrors the operator-visible contract that the row reappears
+      // once the window passes.
+      {
+        id: "l-soon",
+        propertyId: "p1",
+        status: "Active",
+        startDate: "2025-01-01",
+        endDate: "2026-07-20",
+        monthlyRent: 100,
+        snoozedUntil: "2026-04-01",
+      },
+    ];
+
+    await render();
+
+    // Snoozed row hidden, expired-snooze row visible, total reflects 2.
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-crit"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-soon"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-warn"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="text-expiring-leases-total-count"]')?.textContent,
+    ).toContain("2");
+    expect(
+      container.querySelector('[data-testid="text-snoozed-leases-count"]')?.textContent,
+    ).toContain("1");
+
+    // Click "Snooze 7 days" on the visible critical row → updateLease is
+    // called with a YYYY-MM-DD 7 days from today (2026-05-06 → 2026-05-13).
+    const snoozeBtn = container.querySelector(
+      '[data-testid="button-snooze-lease-l-crit-7d"]',
+    ) as HTMLButtonElement | null;
+    expect(snoozeBtn).not.toBeNull();
+    await act(async () => {
+      snoozeBtn!.click();
+    });
+    expect(updateLeaseMock).toHaveBeenCalledWith("l-crit", { snoozedUntil: "2026-05-13" });
+
+    // "Renewal in progress" preset snoozes for ~1 year.
+    const renewalBtn = container.querySelector(
+      '[data-testid="button-snooze-lease-l-crit-renewal"]',
+    ) as HTMLButtonElement | null;
+    expect(renewalBtn).not.toBeNull();
+    await act(async () => {
+      renewalBtn!.click();
+    });
+    expect(updateLeaseMock).toHaveBeenLastCalledWith("l-crit", { snoozedUntil: "2027-05-06" });
+
+    // "Unsnooze all" clears the future-snoozed rows.
+    const unsnoozeAll = container.querySelector(
+      '[data-testid="button-unsnooze-all-leases"]',
+    ) as HTMLButtonElement | null;
+    expect(unsnoozeAll).not.toBeNull();
+    await act(async () => {
+      unsnoozeAll!.click();
+    });
+    expect(updateLeaseMock).toHaveBeenLastCalledWith("l-warn", { snoozedUntil: "" });
+  });
+
+  it("keeps the card visible when every active alert is snoozed so operators can undo", async () => {
+    mockData.properties = [
+      { id: "p1", name: "Lakeside", customerId: "c1", monthlyRent: 100, totalBeds: 1, ratings: {}, paymentNotes: "", notes: "" },
+    ];
+    mockData.leases = [
+      {
+        id: "l-crit",
+        propertyId: "p1",
+        status: "Active",
+        startDate: "2025-01-01",
+        endDate: "2026-05-21",
+        monthlyRent: 100,
+        snoozedUntil: "2026-06-30",
+      },
+    ];
+
+    await render();
+
+    // No active alerts but card stays so the operator can unsnooze.
+    expect(container.querySelector('[data-testid="card-expiring-leases"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-expiring-lease-l-crit"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="text-expiring-leases-total-count"]')?.textContent,
+    ).toContain("0");
+    expect(
+      container.querySelector('[data-testid="text-snoozed-leases-count"]')?.textContent,
+    ).toContain("1");
   });
 });
 

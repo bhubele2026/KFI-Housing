@@ -408,6 +408,13 @@ page groups leases + occupants by this field. Added by
 task #310.
  */
   unit?: string;
+  /** When set to a future YYYY-MM-DD date, the lease is hidden
+from the dashboard "Lease expiry alerts" card until that
+date passes. Empty string means "not snoozed". Persisted
+server-side so the dismissal sticks across reloads and
+across users. Added by task #357.
+ */
+  snoozedUntil?: OptionalLeaseDate;
 }
 
 export type LeaseUpdateStatus =
@@ -450,6 +457,7 @@ export interface LeaseUpdate {
   customerId?: string;
   customerResponsibleForRent?: boolean;
   unit?: string;
+  snoozedUntil?: OptionalLeaseDate;
 }
 
 export interface RoomNightLog {

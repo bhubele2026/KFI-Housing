@@ -267,6 +267,12 @@ export const LeaseSchema = z.object({
   // Optional so legacy backups, manual create flows, and older API
   // clients keep parsing. Treat `undefined` as "no unit".
   unit: z.string().optional(),
+  // Snooze date for the dashboard "Lease expiry alerts" card (task #357).
+  // YYYY-MM-DD or "" (not snoozed). Optional so legacy backups, seed
+  // literals and pre-task #357 API clients keep parsing — the API always
+  // returns the field on the wire. Treat `undefined` as "not snoozed"
+  // (mirrors `unit`).
+  snoozedUntil: z.string().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 

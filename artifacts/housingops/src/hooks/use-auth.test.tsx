@@ -89,7 +89,7 @@ describe("AuthProvider", () => {
     document.body.appendChild(container);
     let root!: Root;
     const renders: boolean[] = [];
-    let loginFn!: () => void;
+    let loginFn!: (email: string) => void;
 
     function LoginProbe() {
       const { isAuthenticated, login } = useAuth();
@@ -111,7 +111,7 @@ describe("AuthProvider", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
 
     await act(async () => {
-      loginFn();
+      loginFn("test@example.com");
     });
 
     expect(renders[renders.length - 1]).toBe(true);

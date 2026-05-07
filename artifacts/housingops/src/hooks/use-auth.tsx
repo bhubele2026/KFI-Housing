@@ -2,13 +2,15 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: () => void;
+  email: string | null;
+  login: (email: string) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = "housingops_auth";
+const AUTH_EMAIL_STORAGE_KEY = "housingops_auth_email";
 const LAST_ROUTE_STORAGE_KEY = "housingops:last-route";
 
 function readAuthFromStorage(): boolean {
@@ -20,13 +22,15 @@ function readAuthFromStorage(): boolean {
   }
 }
 
-/**
- * Returns the last route the operator was viewing before they closed the
- * tab, or null if nothing was saved (or storage is unavailable). The caller
- * is responsible for falling back to /dashboard. We require a leading "/"
- * and reject "/login" so a stale value can never trap the user on the
- * sign-in screen after they authenticate.
- */
+function readEmailFromStorage(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(AUTH_EMAIL_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function readLastRoute(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -44,7 +48,6 @@ export function writeLastRoute(path: string): void {
   try {
     window.localStorage.setItem(LAST_ROUTE_STORAGE_KEY, path);
   } catch {
-    // Best-effort persistence — Safari Private Mode etc.
   }
 }
 
@@ -53,35 +56,40 @@ function clearLastRoute(): void {
   try {
     window.localStorage.removeItem(LAST_ROUTE_STORAGE_KEY);
   } catch {
-    // ignored
   }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(readAuthFromStorage);
+  const [email, setEmail] = useState<string | null>(readEmailFromStorage);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== AUTH_STORAGE_KEY && event.key !== null) return;
       setIsAuthenticated(readAuthFromStorage());
+      setEmail(readEmailFromStorage());
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  const login = () => {
+  const login = (userEmail: string) => {
     localStorage.setItem(AUTH_STORAGE_KEY, "true");
+    localStorage.setItem(AUTH_EMAIL_STORAGE_KEY, userEmail);
     setIsAuthenticated(true);
+    setEmail(userEmail);
   };
 
   const logout = () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_EMAIL_STORAGE_KEY);
     clearLastRoute();
     setIsAuthenticated(false);
+    setEmail(null);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, email, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

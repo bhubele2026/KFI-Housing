@@ -15,10 +15,7 @@ export default function Login() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    login();
-    // Drop the operator back on the page they were last viewing before
-    // the tab closed; falls back to /dashboard for first-time logins or
-    // when localStorage is unreadable.
+    login(email);
     setLocation(readLastRoute() ?? "/dashboard");
   };
 

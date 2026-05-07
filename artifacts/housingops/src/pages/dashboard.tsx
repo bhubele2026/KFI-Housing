@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2 } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, UserCheck, ArrowRight, History, ShieldCheck, BellOff, CheckCircle2, RotateCcw, Undo2, Send } from "lucide-react";
 import { ToastAction } from "@/components/ui/toast";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -40,6 +40,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import {
   recordPayrollReconciliation,
@@ -240,6 +245,57 @@ export default function Dashboard() {
       (a, b) => b.rows.length - a.rows.length || a.customer.localeCompare(b.customer),
     );
   }, [overriddenOccupants]);
+
+  const [digestPreviewEnabled, setDigestPreviewEnabled] = useState(false);
+  useEffect(() => {
+    const baseUrl = import.meta.env.BASE_URL ?? "/";
+    fetch(`${baseUrl}api/lease-digest/status`)
+      .then((r) => r.json())
+      .then((body) => {
+        setDigestPreviewEnabled(Boolean(body.previewEnabled));
+      })
+      .catch(() => {});
+  }, []);
+
+  const [sendingDigestPreview, setSendingDigestPreview] = useState(false);
+  const [digestSecretDialogOpen, setDigestSecretDialogOpen] = useState(false);
+  const [digestSecret, setDigestSecret] = useState("");
+
+  const handleSendDigestPreview = async () => {
+    if (!digestSecret.trim()) return;
+    setSendingDigestPreview(true);
+    setDigestSecretDialogOpen(false);
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(`${baseUrl}api/lease-digest/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: digestSecret.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Digest preview failed",
+          description: body.error ?? `Server returned ${res.status}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({
+        title: "Preview digest sent",
+        description: `Emailed ${body.total} expiring lease${body.total === 1 ? "" : "s"} to ${body.recipients} recipient${body.recipients === 1 ? "" : "s"}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Digest preview failed",
+        description: "Could not reach the server. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingDigestPreview(false);
+      setDigestSecret("");
+    }
+  };
 
   const [reclaimingIds, setReclaimingIds] = useState<Set<string>>(new Set());
   const [reclaimingAll, setReclaimingAll] = useState(false);
@@ -1109,6 +1165,19 @@ export default function Dashboard() {
                   {expiringLeases.length} lease
                   {expiringLeases.length === 1 ? "" : "s"}
                 </span>
+                {digestPreviewEnabled && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    disabled={sendingDigestPreview}
+                    onClick={() => setDigestSecretDialogOpen(true)}
+                    data-testid="button-send-digest-preview"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {sendingDigestPreview ? "Sending…" : "Send preview"}
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Leases ending in the next 30 / 60 / 90 days, plus any that
@@ -2648,6 +2717,37 @@ export default function Dashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={digestSecretDialogOpen} onOpenChange={(open) => { setDigestSecretDialogOpen(open); if (!open) setDigestSecret(""); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send digest preview</DialogTitle>
+            <DialogDescription>
+              Enter the admin secret to send the weekly lease digest email now.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-4">
+            <Label htmlFor="digest-secret">Admin secret</Label>
+            <Input
+              id="digest-secret"
+              type="password"
+              placeholder="Enter admin secret"
+              value={digestSecret}
+              onChange={(e) => setDigestSecret(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && digestSecret.trim()) handleSendDigestPreview(); }}
+              data-testid="input-digest-secret"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDigestSecretDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSendDigestPreview} disabled={!digestSecret.trim()} data-testid="button-confirm-digest-preview">
+              <Send className="h-4 w-4 mr-2" />
+              Send now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

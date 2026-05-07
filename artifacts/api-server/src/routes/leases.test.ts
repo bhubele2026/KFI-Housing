@@ -200,19 +200,15 @@ describe("GET /leases — dynamic status derivation (task #309 / #327)", () => {
     expect(store.get("l-future")?.status).toBe("Active");
   });
 
-  // Documents the route's current contract for blank-date rows
-  // (e.g. master-import rows from `import-master-leases.ts`). The
-  // `deriveLeaseStatus` helper falls back to the stored status when
-  // either term date is blank — see `lib/lease-status.test.ts` for
-  // the unit-level coverage of that fallback. At the route boundary
-  // however, `ListLeasesResponse` (generated from the openapi
-  // `LeaseDate` schema) requires `^\d{4}-\d{2}-\d{2}$`, so a
-  // blank-date row cannot currently round-trip through GET /leases.
-  // We assert that current behavior here so any future loosening of
-  // the response schema (which would surface the wrapper's
-  // blank-date branch) trips this test and forces the symmetric
-  // route-level "falls back to stored" assertion to be added.
-  it("currently 500s when a blank-date row is in the table — the response schema rejects it before the wrapper's fallback can ship the stored status to the client", async () => {
+  // Blank-date rows (e.g. master-import rows awaiting triage from
+  // `import-master-leases.ts` and the Ridge Motor Inn seed) must
+  // round-trip through GET /leases without 500ing. The openapi
+  // `Lease` schema was loosened in task #359 to allow blank term
+  // dates via `OptionalLeaseDate`, so the `deriveLeaseStatus`
+  // wrapper's blank-date branch can finally reach the client — it
+  // falls back to the stored status since there's no calendar to
+  // compare against.
+  it("returns blank-date rows with their stored status preserved (task #359)", async () => {
     store.set(
       "l-blank",
       makeLease({
@@ -224,6 +220,13 @@ describe("GET /leases — dynamic status derivation (task #309 / #327)", () => {
     );
 
     const res = await fetch(`${baseUrl}/api/leases`);
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as LeaseRow[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("l-blank");
+    expect(rows[0].startDate).toBe("");
+    expect(rows[0].endDate).toBe("");
+    expect(rows[0].status).toBe("Upcoming");
+    expect(store.get("l-blank")?.status).toBe("Upcoming");
   });
 });

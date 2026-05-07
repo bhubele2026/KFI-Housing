@@ -1069,8 +1069,14 @@ components:
       properties:
         id: { type: string }
         propertyId: { type: string }
-        startDate: { $ref: "#/components/schemas/LeaseDate" }
-        endDate: { $ref: "#/components/schemas/LeaseDate" }
+        # Term dates are OptionalLeaseDate (allow blank) because the
+        # master-lease importer and Ridge Motor Inn seed insert rows
+        # awaiting triage with empty `startDate` / `endDate`. Without
+        # this, GET /leases 500s as soon as such a row exists. The
+        # `deriveLeaseStatus` wrapper falls back to the stored status
+        # for blank-date rows. See task #359.
+        startDate: { $ref: "#/components/schemas/OptionalLeaseDate" }
+        endDate: { $ref: "#/components/schemas/OptionalLeaseDate" }
         monthlyRent: { type: number }
         securityDeposit: { type: number }
         status: { type: string, enum: [Active, Expired, Upcoming] }

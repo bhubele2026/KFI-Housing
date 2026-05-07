@@ -326,8 +326,8 @@ export const LeaseRateType = {
 export interface Lease {
   id: string;
   propertyId: string;
-  startDate: LeaseDate;
-  endDate: LeaseDate;
+  startDate: OptionalLeaseDate;
+  endDate: OptionalLeaseDate;
   monthlyRent: number;
   securityDeposit: number;
   status: LeaseStatus;

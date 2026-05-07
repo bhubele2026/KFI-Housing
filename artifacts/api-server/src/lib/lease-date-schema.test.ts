@@ -35,11 +35,21 @@ describe("CreateLeaseBody (POST /leases)", () => {
     expect(CreateLeaseBody.safeParse(VALID_LEASE).success).toBe(true);
   });
 
+  // Empty string is intentionally accepted: the master-lease importer
+  // and Ridge Motor Inn seed insert rows with blank `startDate` /
+  // `endDate` for leases awaiting triage, and the Lease schema was
+  // loosened in task #359 to permit those term dates round-tripping
+  // through GET /leases. The other malformed shapes below are still
+  // rejected at the boundary.
+  it("accepts an empty string for startDate (blank-date triage rows — task #359)", () => {
+    const result = CreateLeaseBody.safeParse({ ...VALID_LEASE, startDate: "" });
+    expect(result.success).toBe(true);
+  });
+
   it.each([
     ["space + time suffix", "2026-05-31 00:00:00"],
     ["T + time suffix", "2026-05-31T00:00:00"],
     ["full ISO with Z", "2026-05-31T00:00:00.000Z"],
-    ["empty string", ""],
     ["non-date garbage", "not-a-date"],
     ["MM/DD/YYYY", "05/31/2026"],
     ["YYYY-M-D (missing zero pad)", "2026-5-31"],

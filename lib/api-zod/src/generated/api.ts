@@ -74,10 +74,10 @@ export const importDataBodyPropertiesItemRatingsValueForMoneyMin = 0;
 export const importDataBodyPropertiesItemRatingsValueForMoneyMax = 5;
 
 export const importDataBodyLeasesItemStartDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const importDataBodyLeasesItemEndDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const importDataBodyOccupantsItemMoveInDateRegExp = new RegExp(
   "^(\\d{4}-\\d{2}-\\d{2})?$",
@@ -952,10 +952,10 @@ export const DeletePropertyParams = zod.object({
  * @summary List all leases
  */
 export const listLeasesResponseStartDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const listLeasesResponseEndDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const ListLeasesResponseItem = zod.object({
@@ -1052,10 +1052,10 @@ export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
  * @summary Create a lease
  */
 export const createLeaseBodyStartDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const createLeaseBodyEndDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const CreateLeaseBody = zod.object({
@@ -1493,10 +1493,10 @@ export const UpdateLeaseBody = zod.object({
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 export const updateLeaseResponseEndDateRegExp = new RegExp(
-  "^\\d{4}-\\d{2}-\\d{2}$",
+  "^(\\d{4}-\\d{2}-\\d{2})?$",
 );
 
 export const UpdateLeaseResponse = zod.object({

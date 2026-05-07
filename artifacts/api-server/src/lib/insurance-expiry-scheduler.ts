@@ -4,6 +4,8 @@ import {
   sendInsuranceExpiryReminder,
   type InsuranceExpiryReminderDeps,
 } from "./insurance-expiry-reminder";
+import { mergeRecipients } from "./lease-digest-scheduler";
+import { todayIso } from "./lease-status";
 
 export const SCHEDULER_STATE_ID = "insurance-expiry-reminder";
 
@@ -14,6 +16,18 @@ export interface InsuranceExpirySchedulerConfig {
   hourUtc: number;
 }
 
+/**
+ * Read scheduler config from env. Both the dedicated
+ * `INSURANCE_EXPIRY_*` vars and the shared `LEASE_DIGEST_*` vars are
+ * accepted so an operator already wired up for the lease digest
+ * (Task #356) gets the insurance reminder for free, without
+ * provisioning a second webhook + recipient list.
+ *
+ * Per Task #401 the global env recipient list acts as the "ops
+ * mailbox fallback" — at send time we also merge in the
+ * `digest_recipients` DB rows (managed in-app from Settings) so
+ * admins can add/remove people without a redeploy.
+ */
 export function readInsuranceExpiryConfig(env: NodeJS.ProcessEnv): InsuranceExpirySchedulerConfig {
   return {
     webhookUrl: (
@@ -40,31 +54,46 @@ function parseIntOr(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function currentWeekKey(now: Date): string {
-  const jan1 = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-  const dayOfYear = Math.floor(
-    (now.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  const week = Math.ceil((dayOfYear + jan1.getUTCDay() + 1) / 7);
-  return `${now.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
 export interface StartInsuranceExpirySchedulerDeps extends InsuranceExpiryReminderDeps {
   config: InsuranceExpirySchedulerConfig;
   logger: Pick<Logger, "info" | "warn" | "error">;
-  getLastSentWeekKey: () => Promise<string | null>;
-  setLastSentWeekKey: (weekKey: string) => Promise<void>;
+  /**
+   * Last day key (YYYY-MM-DD UTC) the scheduler successfully sent for.
+   * Persisted in `scheduler_state` so a restart between the scheduled
+   * hour and the next tick on the same day cannot double-send the
+   * daily reminder.
+   */
+  getLastSentDayKey: () => Promise<string | null>;
+  setLastSentDayKey: (dayKey: string) => Promise<void>;
+  /**
+   * Optional DB-backed recipient loader. Merged with the env-var
+   * recipient list at send time so admins can manage the recipient
+   * roster from Settings without a redeploy. When omitted, only
+   * env-var recipients are used.
+   */
+  loadDbRecipients?: () => Promise<string[]>;
   setIntervalFn?: (cb: () => void, ms: number) => { unref?: () => void };
   intervalMs?: number;
 }
 
+/**
+ * Daily insurance-expiry reminder scheduler (Task #401).
+ *
+ * Ticks hourly and fires once per UTC day, after the configured
+ * `hourUtc` (default 13:00 UTC ≈ 8am US Central). Day-key dedupe is
+ * persisted via `scheduler_state` so a restart inside the firing
+ * window cannot double-send. Sending is skipped quietly when there
+ * are no certs in the 0–30 day window — the scheduler is intentionally
+ * chatty about *attempts* (one info log on send, one on skip) so an
+ * operator can verify "yes, the daily job ran" from the workflow logs.
+ */
 export function startInsuranceExpiryScheduler(
   deps: StartInsuranceExpirySchedulerDeps,
 ): () => void {
   const { config, logger } = deps;
-  if (!config.webhookUrl || config.recipients.length === 0) {
+  if (!config.webhookUrl) {
     logger.info(
-      "Insurance expiry reminder disabled — set INSURANCE_EXPIRY_WEBHOOK_URL (or LEASE_DIGEST_WEBHOOK_URL) and INSURANCE_EXPIRY_RECIPIENTS (or LEASE_DIGEST_RECIPIENTS) to enable.",
+      "Insurance expiry reminder disabled — set INSURANCE_EXPIRY_WEBHOOK_URL (or LEASE_DIGEST_WEBHOOK_URL) to enable.",
     );
     return () => {};
   }
@@ -79,27 +108,41 @@ export function startInsuranceExpiryScheduler(
   const tick = async (): Promise<void> => {
     if (inFlight) return;
     const now = deps.now();
-    if (now.getUTCDay() !== 1) return;
     if (now.getUTCHours() < config.hourUtc) return;
 
     inFlight = true;
     try {
-      const lastSentWeekKey = await deps.getLastSentWeekKey();
-      const weekKey = currentWeekKey(now);
-      if (weekKey === lastSentWeekKey) return;
+      const dayKey = todayIso(now);
+      const lastSentDayKey = await deps.getLastSentDayKey();
+      if (dayKey === lastSentDayKey) return;
+
+      const dbEmails = deps.loadDbRecipients
+        ? await deps.loadDbRecipients()
+        : [];
+      const merged = mergeRecipients(config.recipients, dbEmails);
+      if (merged.length === 0) {
+        // Deliberately do NOT persist the day key here: if an admin
+        // adds a recipient later the same day, the next hourly tick
+        // should pick it up and send. Persisting on "no recipients"
+        // would silently swallow the alert until the next UTC day.
+        logger.info(
+          "Insurance expiry reminder skipped — no recipients configured (env or DB).",
+        );
+        return;
+      }
 
       const result = await sendInsuranceExpiryReminder(
         {
           webhookUrl: config.webhookUrl,
-          recipients: config.recipients,
+          recipients: merged,
           appBaseUrl: config.appBaseUrl,
         },
         deps,
       );
-      await deps.setLastSentWeekKey(weekKey);
+      await deps.setLastSentDayKey(dayKey);
       if (result.sent) {
         logger.info(
-          { count: result.count, recipients: config.recipients.length },
+          { count: result.count, recipients: merged.length },
           "Sent insurance expiry reminder email",
         );
       } else {

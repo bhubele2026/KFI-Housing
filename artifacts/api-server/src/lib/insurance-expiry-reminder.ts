@@ -14,7 +14,18 @@ export interface ReminderProperty {
   name: string;
 }
 
-export type InsuranceExpiryBucket = "critical" | "warning" | "soon" | "expired";
+/**
+ * Buckets used by the daily insurance-expiry reminder (Task #401).
+ *
+ * - `expiring`: cert ends in 1–30 days. Operators get a daily nudge
+ *   while the cert is in this window so renewal conversations start
+ *   before coverage actually lapses.
+ * - `today`: cert ends today (days === 0). Same daily cadence as
+ *   `expiring`, surfaced separately so the email can call out the
+ *   "ends today" rows distinctly — this is the "again on the day they
+ *   expire" reminder the task explicitly calls for.
+ */
+export type InsuranceExpiryBucket = "today" | "expiring";
 
 export interface BucketedCert {
   cert: ReminderCert;
@@ -49,6 +60,13 @@ export interface SendInsuranceExpiryResult {
   count?: number;
 }
 
+/**
+ * Returns the certs operators should be nudged about today: anything
+ * with a coverage end date 0–30 days out (inclusive). Past-expiry
+ * certs are excluded — once a cert has lapsed it is a different state
+ * than "about to expire" and the dashboard already shows it; the
+ * scheduled email is forward-looking only.
+ */
 export function bucketExpiringCerts(
   certs: readonly ReminderCert[],
   properties: readonly ReminderProperty[],
@@ -59,24 +77,12 @@ export function bucketExpiringCerts(
   for (const cert of certs) {
     if (!cert.coverageEnd) continue;
     const days = daysUntilExpiry(cert.coverageEnd, today);
-    let bucket: InsuranceExpiryBucket;
-    if (days < 0) {
-      if (days < -30) continue;
-      bucket = "expired";
-    } else if (days <= 30) {
-      bucket = "critical";
-    } else if (days <= 60) {
-      bucket = "warning";
-    } else if (days <= 90) {
-      bucket = "soon";
-    } else {
-      continue;
-    }
+    if (days < 0 || days > 30) continue;
     out.push({
       cert,
       propertyName: propertyName.get(cert.propertyId) ?? "—",
       days,
-      bucket,
+      bucket: days === 0 ? "today" : "expiring",
     });
   }
   out.sort((a, b) => a.days - b.days);
@@ -91,19 +97,21 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function bucketLabel(bucket: InsuranceExpiryBucket): string {
-  switch (bucket) {
-    case "expired": return "Expired";
-    case "critical": return "≤ 30 days";
-    case "warning": return "31–60 days";
-    case "soon": return "61–90 days";
-  }
-}
-
 function daysLabel(days: number): string {
-  if (days < 0) return `expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
   if (days === 0) return "expires today";
   return `${days} day${days === 1 ? "" : "s"} left`;
+}
+
+/**
+ * Deep-link to a property's Insurance tab. The property-detail page
+ * reads the active tab from the `?tab=` query param (see
+ * `artifacts/housingops/src/pages/property-detail.tsx`), so this
+ * lands the operator one click away from "Edit cert" / "Upload
+ * replacement" without having to find the property and switch tabs.
+ */
+function propertyInsuranceLink(baseUrl: string, propertyId: string): string {
+  const trimmed = baseUrl.replace(/\/$/, "");
+  return `${trimmed}/properties/${encodeURIComponent(propertyId)}?tab=insurance`;
 }
 
 export function buildInsuranceExpiryEmail(input: {
@@ -113,52 +121,48 @@ export function buildInsuranceExpiryEmail(input: {
 }): InsuranceExpiryEmail {
   const { recipients, certs, appBaseUrl } = input;
   const count = certs.length;
-  const trimmedBase = appBaseUrl.replace(/\/$/, "");
-  const actionUrl = `${trimmedBase}/`;
+  const todayCount = certs.filter((c) => c.bucket === "today").length;
+  const expiringCount = certs.filter((c) => c.bucket === "expiring").length;
 
-  const expiredCount = certs.filter((c) => c.bucket === "expired").length;
-  const criticalCount = certs.filter((c) => c.bucket === "critical").length;
-  const warningCount = certs.filter((c) => c.bucket === "warning").length;
-  const soonCount = certs.filter((c) => c.bucket === "soon").length;
+  const summaryParts = [
+    todayCount > 0 ? `${todayCount} expiring today` : "",
+    expiringCount > 0 ? `${expiringCount} within 30 days` : "",
+  ].filter(Boolean);
+  const summary = summaryParts.join(", ");
 
-  const bucketSummary = [
-    expiredCount > 0 ? `${expiredCount} expired` : "",
-    criticalCount > 0 ? `${criticalCount} within 30 days` : "",
-    warningCount > 0 ? `${warningCount} within 31–60 days` : "",
-    soonCount > 0 ? `${soonCount} within 61–90 days` : "",
-  ].filter(Boolean).join(", ");
-
-  const subject = `HousingOps insurance alert — ${count} certificate${count === 1 ? "" : "s"} expiring or expired`;
+  const subject = `HousingOps insurance alert — ${count} certificate${count === 1 ? "" : "s"} expiring within 30 days`;
 
   const textLines: string[] = [
     `Insurance certificate expiry alert.`,
     "",
-    `${count} certificate${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} attention: ${bucketSummary}.`,
+    `${count} certificate${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} attention: ${summary}.`,
     "",
   ];
 
   const htmlParts: string[] = [
     `<p>Insurance certificate expiry alert.</p>`,
-    `<p>${count} certificate${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} attention: ${escapeHtml(bucketSummary)}.</p>`,
+    `<p>${count} certificate${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} attention: ${escapeHtml(summary)}.</p>`,
     `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px">`,
-    `<tr><th>Property</th><th>Carrier</th><th>Policy #</th><th>Status</th><th>When</th></tr>`,
+    `<tr><th>Property</th><th>Carrier</th><th>Policy #</th><th>Coverage ends</th><th>When</th></tr>`,
   ];
 
   for (const c of certs) {
+    const link = propertyInsuranceLink(appBaseUrl, c.cert.propertyId);
     textLines.push(
-      `- ${c.propertyName} — ${c.cert.carrier || "—"} (${c.cert.policyNumber || "—"}) — ${bucketLabel(c.bucket)} — ${daysLabel(c.days)}`,
+      `- ${c.propertyName} — ${c.cert.carrier || "—"} (${c.cert.policyNumber || "—"}) — coverage ends ${c.cert.coverageEnd} (${daysLabel(c.days)}) — ${link}`,
     );
     htmlParts.push(
-      `<tr><td>${escapeHtml(c.propertyName)}</td><td>${escapeHtml(c.cert.carrier || "—")}</td><td>${escapeHtml(c.cert.policyNumber || "—")}</td><td>${escapeHtml(bucketLabel(c.bucket))}</td><td>${escapeHtml(daysLabel(c.days))}</td></tr>`,
+      `<tr>` +
+        `<td><a href="${escapeHtml(link)}">${escapeHtml(c.propertyName)}</a></td>` +
+        `<td>${escapeHtml(c.cert.carrier || "—")}</td>` +
+        `<td>${escapeHtml(c.cert.policyNumber || "—")}</td>` +
+        `<td>${escapeHtml(c.cert.coverageEnd)}</td>` +
+        `<td>${escapeHtml(daysLabel(c.days))}</td>` +
+        `</tr>`,
     );
   }
 
   htmlParts.push(`</table>`);
-  textLines.push("");
-  textLines.push(`Review certificates: ${actionUrl}`);
-  htmlParts.push(
-    `<p><a href="${escapeHtml(actionUrl)}">Review certificates in HousingOps →</a></p>`,
-  );
 
   return {
     to: [...recipients],
@@ -188,7 +192,10 @@ export async function sendInsuranceExpiryReminder(
   ]);
   const bucketed = bucketExpiringCerts(certs, properties, today);
   if (bucketed.length === 0) {
-    return { sent: false, reason: "no insurance certificates expiring within 90 days" };
+    return {
+      sent: false,
+      reason: "no insurance certificates expiring within 30 days",
+    };
   }
   const email = buildInsuranceExpiryEmail({
     recipients: config.recipients,

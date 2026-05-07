@@ -18,8 +18,8 @@ function makeDeps(
     fetch: vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
     loadCerts: vi.fn().mockResolvedValue([]),
     loadProperties: vi.fn().mockResolvedValue([]),
-    getLastSentWeekKey: vi.fn().mockResolvedValue(null),
-    setLastSentWeekKey: vi.fn().mockResolvedValue(undefined),
+    getLastSentDayKey: vi.fn().mockResolvedValue(null),
+    setLastSentDayKey: vi.fn().mockResolvedValue(undefined),
     now: () => new Date("2026-05-11T14:00:00Z"),
     logger: {
       info: vi.fn(),
@@ -77,26 +77,7 @@ describe("startInsuranceExpiryScheduler", () => {
     stop();
   });
 
-  it("does nothing when recipients are empty", () => {
-    const deps = makeDeps({
-      config: { ...makeDeps().config, recipients: [] },
-    });
-    const stop = startInsuranceExpiryScheduler(deps);
-    expect(deps.logger.info).toHaveBeenCalledWith(
-      expect.stringContaining("disabled"),
-    );
-    stop();
-  });
-
-  it("skips when not Monday", () => {
-    const deps = makeDeps({
-      now: () => new Date("2026-05-12T14:00:00Z"),
-    });
-    startInsuranceExpiryScheduler(deps);
-    expect(deps.loadCerts).not.toHaveBeenCalled();
-  });
-
-  it("skips when before hourUtc on Monday", () => {
+  it("skips when before hourUtc on the current day", () => {
     const deps = makeDeps({
       now: () => new Date("2026-05-11T10:00:00Z"),
     });
@@ -104,19 +85,41 @@ describe("startInsuranceExpiryScheduler", () => {
     expect(deps.loadCerts).not.toHaveBeenCalled();
   });
 
-  it("skips when already sent this week", async () => {
+  it("runs daily — does not require a specific weekday", async () => {
+    // Tuesday — the previous weekly scheduler would have skipped this.
     const deps = makeDeps({
-      getLastSentWeekKey: vi.fn().mockResolvedValue("2026-W20"),
-      now: () => new Date("2026-05-11T14:00:00Z"),
+      now: () => new Date("2026-05-12T14:00:00Z"),
+      loadCerts: vi.fn().mockResolvedValue([
+        {
+          id: "c1",
+          propertyId: "p1",
+          carrier: "Acme",
+          policyNumber: "POL-1",
+          coverageEnd: "2026-05-20",
+        },
+      ]),
+      loadProperties: vi.fn().mockResolvedValue([{ id: "p1", name: "Oak Manor" }]),
     });
     startInsuranceExpiryScheduler(deps);
     await vi.waitFor(() => {
-      expect(deps.getLastSentWeekKey).toHaveBeenCalled();
+      expect(deps.setLastSentDayKey).toHaveBeenCalledWith("2026-05-12");
     });
-    expect(deps.fetch).not.toHaveBeenCalled();
+    expect(deps.fetch).toHaveBeenCalled();
   });
 
-  it("sends and persists week key when certs are expiring", async () => {
+  it("skips when already sent today", async () => {
+    const deps = makeDeps({
+      getLastSentDayKey: vi.fn().mockResolvedValue("2026-05-11"),
+    });
+    startInsuranceExpiryScheduler(deps);
+    await vi.waitFor(() => {
+      expect(deps.getLastSentDayKey).toHaveBeenCalled();
+    });
+    expect(deps.fetch).not.toHaveBeenCalled();
+    expect(deps.setLastSentDayKey).not.toHaveBeenCalled();
+  });
+
+  it("sends and persists day key when certs are expiring within 30 days", async () => {
     const deps = makeDeps({
       loadCerts: vi.fn().mockResolvedValue([
         {
@@ -127,13 +130,11 @@ describe("startInsuranceExpiryScheduler", () => {
           coverageEnd: "2026-05-20",
         },
       ]),
-      loadProperties: vi.fn().mockResolvedValue([
-        { id: "p1", name: "Oak Manor" },
-      ]),
+      loadProperties: vi.fn().mockResolvedValue([{ id: "p1", name: "Oak Manor" }]),
     });
     startInsuranceExpiryScheduler(deps);
     await vi.waitFor(() => {
-      expect(deps.setLastSentWeekKey).toHaveBeenCalled();
+      expect(deps.setLastSentDayKey).toHaveBeenCalledWith("2026-05-11");
     });
     expect(deps.fetch).toHaveBeenCalledWith(
       "https://hooks.example.com/ins",
@@ -143,6 +144,47 @@ describe("startInsuranceExpiryScheduler", () => {
       expect.objectContaining({ count: 1 }),
       expect.stringContaining("Sent insurance expiry reminder"),
     );
+  });
+
+  it("merges DB recipients with env recipients", async () => {
+    const deps = makeDeps({
+      loadDbRecipients: vi.fn().mockResolvedValue(["extra@example.com"]),
+      loadCerts: vi.fn().mockResolvedValue([
+        {
+          id: "c1",
+          propertyId: "p1",
+          carrier: "Acme",
+          policyNumber: "POL-1",
+          coverageEnd: "2026-05-20",
+        },
+      ]),
+      loadProperties: vi.fn().mockResolvedValue([{ id: "p1", name: "Oak Manor" }]),
+    });
+    startInsuranceExpiryScheduler(deps);
+    await vi.waitFor(() => {
+      expect(deps.fetch).toHaveBeenCalled();
+    });
+    const fetchMock = deps.fetch as ReturnType<typeof vi.fn>;
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.to).toEqual(["ops@example.com", "extra@example.com"]);
+  });
+
+  it("skips without persisting day key when no recipients are configured (env or DB)", async () => {
+    // Not persisting on "no recipients" is intentional: it lets a
+    // same-day fix (admin adds an email in Settings) pick the alert up
+    // on the next hourly tick instead of silently waiting until tomorrow.
+    const deps = makeDeps({
+      config: { ...makeDeps().config, recipients: [] },
+      loadDbRecipients: vi.fn().mockResolvedValue([]),
+    });
+    startInsuranceExpiryScheduler(deps);
+    await vi.waitFor(() => {
+      expect(deps.logger.info).toHaveBeenCalledWith(
+        expect.stringContaining("no recipients"),
+      );
+    });
+    expect(deps.fetch).not.toHaveBeenCalled();
+    expect(deps.setLastSentDayKey).not.toHaveBeenCalled();
   });
 
   it("warns on missing base URL", () => {

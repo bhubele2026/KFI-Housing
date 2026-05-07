@@ -93,9 +93,11 @@ export interface StartDeps {
   // Live data loaders for the weekly insurance-expiry reminder (Task #398).
   loadCertsForInsuranceExpiry: () => Promise<ReminderCert[]>;
   loadPropertiesForInsuranceExpiry: () => Promise<InsuranceReminderProperty[]>;
-  // Persistent dedupe for the insurance-expiry reminder (Task #398).
-  getInsuranceExpiryLastSentWeekKey: () => Promise<string | null>;
-  setInsuranceExpiryLastSentWeekKey: (weekKey: string) => Promise<void>;
+  // Persistent dedupe for the daily insurance-expiry reminder
+  // (Task #401 — was originally a weekly week-key in Task #398).
+  // Stored in `scheduler_state` keyed on `insurance-expiry-reminder`.
+  getInsuranceExpiryLastSentDayKey: () => Promise<string | null>;
+  setInsuranceExpiryLastSentDayKey: (dayKey: string) => Promise<void>;
   // Task #410: load digest recipients from the DB on each scheduler
   // tick so admins can manage the list in-app without a redeploy.
   loadDigestRecipientsFromDb: () => Promise<string[]>;
@@ -508,8 +510,9 @@ export async function start(deps: StartDeps): Promise<void> {
       fetch: deps.digestFetch,
       loadCerts: deps.loadCertsForInsuranceExpiry,
       loadProperties: deps.loadPropertiesForInsuranceExpiry,
-      getLastSentWeekKey: deps.getInsuranceExpiryLastSentWeekKey,
-      setLastSentWeekKey: deps.setInsuranceExpiryLastSentWeekKey,
+      getLastSentDayKey: deps.getInsuranceExpiryLastSentDayKey,
+      setLastSentDayKey: deps.setInsuranceExpiryLastSentDayKey,
+      loadDbRecipients: deps.loadDigestRecipientsFromDb,
       now: () => new Date(),
       logger: deps.logger,
     });

@@ -146,20 +146,20 @@ void start({
     const rows = await db.select().from(propertiesTable);
     return rows.map((r) => ({ id: r.id, name: r.name }));
   },
-  getInsuranceExpiryLastSentWeekKey: async () => {
+  getInsuranceExpiryLastSentDayKey: async () => {
     const rows = await db
       .select()
       .from(schedulerStateTable)
       .where(eq(schedulerStateTable.id, "insurance-expiry-reminder"));
     return rows[0]?.lastSentKey || null;
   },
-  setInsuranceExpiryLastSentWeekKey: async (weekKey: string) => {
+  setInsuranceExpiryLastSentDayKey: async (dayKey: string) => {
     await db
       .insert(schedulerStateTable)
-      .values({ id: "insurance-expiry-reminder", lastSentKey: weekKey })
+      .values({ id: "insurance-expiry-reminder", lastSentKey: dayKey })
       .onConflictDoUpdate({
         target: schedulerStateTable.id,
-        set: { lastSentKey: weekKey },
+        set: { lastSentKey: dayKey },
       });
   },
   loadDigestRecipientsFromDb: async () => {

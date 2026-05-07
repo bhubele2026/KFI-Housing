@@ -1504,6 +1504,14 @@ components:
             don't apply (most of the portfolio). Surfaced for hot-bedded
             units like 1850 W. Pine St. Baraboo where two shifts share
             the same bedroom (task #315).
+        createdAt:
+          type: ["string", "null"]
+          format: date-time
+          description: |
+            ISO-8601 timestamp of when this occupant record was created.
+            Null for legacy rows inserted before the column existed.
+            Used by the dashboard to show how long pending-placement
+            occupants have been waiting (task #391).
     # Like `Occupant` but with the chargeSource* provenance fields
     # optional — newly-created occupants are assumed to be manually
     # entered, and the seeder is the only writer that stamps these.

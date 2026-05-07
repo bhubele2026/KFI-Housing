@@ -316,15 +316,34 @@ export default function Dashboard() {
   // list to find each bucket. Counts use Active occupants pinned to the
   // bucket — mirrors what the per-property board shows.
   const pendingPlacementBuckets = useMemo(() => {
+    const now = Date.now();
     return scopedProperties
       .filter((p) => isPendingPlacementProperty(p.name))
-      .map((p) => ({
-        property: p,
-        count: scopedOccupants.filter(
+      .map((p) => {
+        const bucketOccupants = scopedOccupants.filter(
           (o) => o.propertyId === p.id && o.status === "Active",
-        ).length,
-      }))
-      .sort((a, b) => b.count - a.count || a.property.name.localeCompare(b.property.name));
+        );
+        let oldestCreatedAt: number | null = null;
+        for (const o of bucketOccupants) {
+          if (o.createdAt) {
+            const ts = new Date(o.createdAt).getTime();
+            if (!Number.isNaN(ts) && (oldestCreatedAt === null || ts < oldestCreatedAt)) {
+              oldestCreatedAt = ts;
+            }
+          }
+        }
+        const oldestWaitingDays =
+          oldestCreatedAt !== null
+            ? Math.floor((now - oldestCreatedAt) / (1000 * 60 * 60 * 24))
+            : null;
+        return { property: p, count: bucketOccupants.length, oldestWaitingDays };
+      })
+      .sort((a, b) => {
+        const aAge = a.oldestWaitingDays ?? -1;
+        const bAge = b.oldestWaitingDays ?? -1;
+        if (bAge !== aAge) return bAge - aAge;
+        return b.count - a.count || a.property.name.localeCompare(b.property.name);
+      });
   }, [scopedProperties, scopedOccupants]);
 
   const needsReviewOccupantCount = useMemo(
@@ -990,7 +1009,7 @@ export default function Dashboard() {
               </p>
             </CardHeader>
             <CardContent className="space-y-2">
-              {pendingPlacementBuckets.map(({ property, count }) => (
+              {pendingPlacementBuckets.map(({ property, count, oldestWaitingDays }) => (
                 <Link
                   key={property.id}
                   href={`/properties/${property.id}`}
@@ -1006,6 +1025,21 @@ export default function Dashboard() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    {oldestWaitingDays !== null && (
+                      <span
+                        className={
+                          "text-xs tabular-nums " +
+                          (oldestWaitingDays >= 30
+                            ? "text-red-600 dark:text-red-400 font-semibold"
+                            : oldestWaitingDays >= 14
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-muted-foreground")
+                        }
+                        data-testid={`text-pending-placement-${property.id}-oldest`}
+                      >
+                        oldest waiting {oldestWaitingDays} day{oldestWaitingDays === 1 ? "" : "s"}
+                      </span>
+                    )}
                     <span
                       className="text-sm font-semibold tabular-nums"
                       data-testid={`text-pending-placement-${property.id}-count`}

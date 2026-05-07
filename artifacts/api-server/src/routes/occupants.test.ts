@@ -40,8 +40,12 @@ const fakeDb = {
   insert: () => ({
     values: (vals: Record<string, unknown>) => ({
       returning: () => {
-        insertedRows.push(vals);
-        return [vals];
+        const row = {
+          ...vals,
+          createdAt: vals.createdAt ?? new Date("2026-03-10T08:00:00Z"),
+        };
+        insertedRows.push(row);
+        return [row];
       },
     }),
   }),
@@ -72,6 +76,7 @@ const fakeDb = {
             chargeSourceCustomer: "",
             chargeSourcePersonId: "",
             shift: null,
+            createdAt: new Date("2026-01-15T12:00:00Z"),
             ...vals,
           };
           return [fullRow];
@@ -208,5 +213,43 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
     expect(insertedRows).toHaveLength(0);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/moveInDate/i);
+  });
+
+  it("POST response serializes createdAt as an ISO-8601 string (Task #391)", async () => {
+    const res = await fetch(`${baseUrl}/api/occupants`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(validBody()),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { createdAt: string };
+    expect(typeof body.createdAt).toBe("string");
+    expect(new Date(body.createdAt).toISOString()).toBe(body.createdAt);
+  });
+
+  it("PATCH response serializes createdAt as an ISO-8601 string (Task #391)", async () => {
+    existingByPatchId.set("o-ts", { chargeSource: "" });
+    const res = await fetch(`${baseUrl}/api/occupants/o-ts`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Updated" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { createdAt: string };
+    expect(typeof body.createdAt).toBe("string");
+    expect(new Date(body.createdAt).toISOString()).toBe(body.createdAt);
+  });
+
+  it("serializes null createdAt as null in PATCH response (Task #391)", async () => {
+    existingByPatchId.set("o-null", { chargeSource: "" });
+    const res = await fetch(`${baseUrl}/api/occupants/o-null`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "NullDate" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { createdAt: string };
+    expect(typeof body.createdAt).toBe("string");
+    expect(new Date(body.createdAt).toISOString()).toBe(body.createdAt);
   });
 });

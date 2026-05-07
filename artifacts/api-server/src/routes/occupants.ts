@@ -15,7 +15,11 @@ const router: IRouter = Router();
 
 router.get("/occupants", async (_req, res): Promise<void> => {
   const rows = await db.select().from(occupantsTable).orderBy(occupantsTable.id);
-  res.json(ListOccupantsResponse.parse(rows));
+  const serialized = rows.map((r) => ({
+    ...r,
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt ?? null,
+  }));
+  res.json(ListOccupantsResponse.parse(serialized));
 });
 
 // Strict YYYY-MM-DD pattern. The shared `OptionalLeaseDate` schema
@@ -48,7 +52,11 @@ router.post("/occupants", async (req, res): Promise<void> => {
     .insert(occupantsTable)
     .values(normalized)
     .returning();
-  res.status(201).json(UpdateOccupantResponse.parse(row));
+  const serializedRow = {
+    ...row,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt ?? null,
+  };
+  res.status(201).json(UpdateOccupantResponse.parse(serializedRow));
 });
 
 router.patch("/occupants/:id", async (req, res): Promise<void> => {
@@ -109,7 +117,11 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Occupant not found" });
     return;
   }
-  res.json(UpdateOccupantResponse.parse(row));
+  const serializedPatch = {
+    ...row,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt ?? null,
+  };
+  res.json(UpdateOccupantResponse.parse(serializedPatch));
 });
 
 router.delete("/occupants/:id", async (req, res): Promise<void> => {

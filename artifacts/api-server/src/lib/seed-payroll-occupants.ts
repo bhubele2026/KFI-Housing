@@ -431,5 +431,6 @@ export async function seedPayrollOccupantsIfMissing(
   ) {
     log.info(result, "Payroll-occupants seed applied.");
   }
+
   return result;
 }

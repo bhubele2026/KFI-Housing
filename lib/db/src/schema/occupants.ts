@@ -1,4 +1,4 @@
-import { pgTable, text, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, doublePrecision, timestamp } from "drizzle-orm/pg-core";
 
 export const occupantsTable = pgTable("occupants", {
   id: text("id").primaryKey(),
@@ -35,6 +35,7 @@ export const occupantsTable = pgTable("occupants", {
   // for hot-bedded units like 1850 W. Pine St. Baraboo where bedrooms are
   // shared across two shifts (task #315).
   shift: text("shift"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export type OccupantRow = typeof occupantsTable.$inferSelect;

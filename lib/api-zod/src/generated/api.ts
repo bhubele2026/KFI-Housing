@@ -2122,6 +2122,12 @@ export const ListOccupantsResponseItem = zod.object({
     .describe(
       'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
     ),
+  createdAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
+    ),
 });
 export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
 
@@ -2232,6 +2238,12 @@ export const UpdateOccupantResponse = zod.object({
     .nullable()
     .describe(
       'Crew shift this occupant works. \"1st\" = 5am–2pm, \"2nd\" =\n2pm–midnight. Null for properties where shift assignments\ndon\'t apply (most of the portfolio). Surfaced for hot-bedded\nunits like 1850 W. Pine St. Baraboo where two shifts share\nthe same bedroom (task #315).\n',
+    ),
+  createdAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
     ),
 });
 

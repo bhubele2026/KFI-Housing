@@ -181,6 +181,7 @@ export function AssignOccupantDialog({
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
       shift: null,
+      createdAt: new Date().toISOString(),
     };
     onAssign(occ, resolvedBed);
     setOpen(false);

@@ -650,6 +650,15 @@ the same bedroom (task #315).
    * @nullable
    */
   shift: OccupantShift;
+  /**
+   * ISO-8601 timestamp of when this occupant record was created.
+Null for legacy rows inserted before the column existed.
+Used by the dashboard to show how long pending-placement
+occupants have been waiting (task #391).
+
+   * @nullable
+   */
+  createdAt?: string | null;
 }
 
 export type OccupantCreateStatus =

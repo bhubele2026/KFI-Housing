@@ -583,6 +583,7 @@ export const OccupantSchema = z.object({
   // where shift assignments don't apply. Surfaced for hot-bedded units like
   // 1850 W. Pine St. Baraboo (task #315).
   shift: z.enum(["1st", "2nd"]).nullable().default(null),
+  createdAt: z.string().nullable().optional().default(null),
 });
 export type Occupant = z.infer<typeof OccupantSchema>;
 
@@ -1036,6 +1037,7 @@ export const MOCK_OCCUPANTS: Occupant[] = MOCK_BEDS
       chargeSourceCustomer: "",
       chargeSourcePersonId: "",
       shift: null,
+      createdAt: null,
     };
   });
 

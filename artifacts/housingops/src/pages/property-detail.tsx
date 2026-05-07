@@ -536,7 +536,7 @@ export function InlineEdit({
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, customers, isLoading, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, customers, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
   // Room-night logs back the hotel-rate revenue estimate ("≈ $X this
   // month (Y nights × $Z/night)") shown for hotel-rate leases. Pulled
   // here so the Stat strip and the Finance tab share the same numbers.
@@ -693,6 +693,14 @@ export default function PropertyDetail() {
   const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
   const propLeases = leases.filter(l => l.propertyId === id);
   const sortedPropLeases = sortLeases(propLeases);
+
+  const droppedRoomsForProperty = useMemo(() => {
+    const roomIssue = dataIssues.find(i => i.kind === "rooms");
+    const bedIssue = dataIssues.find(i => i.kind === "beds");
+    const droppedRooms = roomIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    const droppedBeds = bedIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    return { droppedRooms, droppedBeds };
+  }, [dataIssues, id]);
 
   // ── Units (task #310) ───────────────────────────────────────────
   // First-class apartment units inside a multi-unit property. We
@@ -877,6 +885,30 @@ export default function PropertyDetail() {
             })()}
           </div>
         </div>
+
+        {(droppedRoomsForProperty.droppedRooms.length > 0 || droppedRoomsForProperty.droppedBeds.length > 0) && (
+          <div
+            className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+            data-testid="property-dropped-notice"
+          >
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">Some records for this property were hidden due to data issues</p>
+              <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs">
+                {droppedRoomsForProperty.droppedRooms.map((row, i) => (
+                  <li key={`room-${row.id ?? i}`}>
+                    Room{row.id ? <> <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">{row.id}</code></> : ""}{row.label ? ` — ${row.label}` : ""}
+                  </li>
+                ))}
+                {droppedRoomsForProperty.droppedBeds.map((row, i) => (
+                  <li key={`bed-${row.id ?? i}`}>
+                    {typeof row.bedNumber === "number" ? `Bed #${row.bedNumber}` : "Bed"}{row.id ? <> <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">{row.id}</code></> : ""}{row.label ? ` — ${row.label}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* Summary Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">

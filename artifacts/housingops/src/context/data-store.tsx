@@ -160,6 +160,10 @@ export interface DroppedRow {
   label?: string;
   /** In-app href to the detail page when one exists for this kind. */
   href?: string;
+  /** The owning property's id, when the row belongs to a property (rooms, beds). */
+  propertyId?: string;
+  /** For beds: the bed number from the raw row, so the property page can show it. */
+  bedNumber?: number;
 }
 
 /**
@@ -869,9 +873,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         label: name && property
           ? `${name} @ ${property.name}`
           : name || (property ? `Room @ ${property.name}` : undefined),
-        // No detail page for rooms — operators reach them via the
-        // property page, which we don't auto-route to from here because
-        // the bad row may be the reason that property page is blank.
+        propertyId,
       };
     });
     const bedRows = buildRows(bedsDroppedRaw, (r) => {
@@ -882,6 +884,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return {
         id: readString(r, "id"),
         label: property ? `${numLabel} @ ${property.name}` : numLabel,
+        propertyId,
+        bedNumber: num,
       };
     });
     const occupantRows = buildRows(occupantsDroppedRaw, (r) => ({

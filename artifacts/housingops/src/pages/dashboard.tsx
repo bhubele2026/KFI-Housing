@@ -1009,6 +1009,13 @@ export default function Dashboard() {
                   <span data-testid="text-snoozed-leases-count">
                     {snoozedLeases.length} snoozed
                   </span>
+                  <Link
+                    href="/leases/snoozed"
+                    className="text-xs text-primary hover:underline"
+                    data-testid="link-review-snoozed-leases"
+                  >
+                    Review
+                  </Link>
                   <Button
                     variant="link"
                     size="sm"

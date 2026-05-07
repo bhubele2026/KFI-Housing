@@ -18,6 +18,7 @@ import Properties from "@/pages/properties";
 import PropertyDetail from "@/pages/property-detail";
 import Leases from "@/pages/leases";
 import LeaseDetail from "@/pages/lease-detail";
+import SnoozedLeaseAlerts from "@/pages/snoozed-lease-alerts";
 import Beds from "@/pages/beds";
 import Occupants from "@/pages/occupants";
 import Utilities from "@/pages/utilities";
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
+      <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
       {/* Create-mode route is registered BEFORE the parameterized one so
           wouter's <Switch> matches it first; otherwise `/leases/new` would
           land on the edit page with id="new" and try to look up a lease

@@ -842,7 +842,8 @@ export default function Finance() {
                 />
                 <Legend wrapperStyle={{ fontSize: "12px" }} />
                 <Bar dataKey="revenue" name={t("pages.finance.table.revenue")} fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="leaseCost" name={t("pages.finance.table.leaseCost")} fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} stackId="cost" />
+                <Bar dataKey="contractCost" name={t("pages.finance.table.contractRent")} fill="hsl(var(--destructive))" stackId="cost" />
+                <Bar dataKey="hotelRateCost" name={t("pages.finance.table.hotelRateEst")} fill="hsl(0 72% 70%)" stackId="cost" />
                 <Bar dataKey="utilCost" name={t("pages.finance.table.utilityCost")} fill="hsl(25 95% 53%)" radius={[4, 4, 0, 0]} stackId="cost" />
               </BarChart>
             </ResponsiveContainer>

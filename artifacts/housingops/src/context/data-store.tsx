@@ -140,6 +140,21 @@ const LEGACY_CUSTOMER: Customer = {
 };
 
 /**
+ * Per-row info about a dropped record so the inline banner can surface the
+ * specific id (and where possible a human label / detail-page link)
+ * instead of just a count. Operators get to navigate straight to the
+ * broken record — or copy the id when the row is too broken to route to.
+ */
+export interface DroppedRow {
+  /** The raw row's `id` field, when it was a non-empty string. */
+  id?: string;
+  /** Best-effort human label derived from the raw row + sibling caches. */
+  label?: string;
+  /** In-app href to the detail page when one exists for this kind. */
+  href?: string;
+}
+
+/**
  * One bad row dropped from a list response. Surfaced via {@link DataStore.dataIssues}
  * so the UI can render a small inline notice instead of letting a single
  * malformed row blank the whole page.
@@ -151,6 +166,14 @@ export interface DataIssue {
   label: string;
   /** Number of rows that failed schema validation and were dropped. */
   dropped: number;
+  /**
+   * One entry per dropped row, with whatever id/label/href we could
+   * salvage from the raw payload. Always populated alongside `dropped`
+   * (length === dropped) so the banner can iterate without a separate
+   * counter — though individual fields may be missing when the row was
+   * too malformed to carry an id at all.
+   */
+  rows: DroppedRow[];
 }
 
 /**
@@ -158,21 +181,24 @@ export interface DataIssue {
  * `console.warn`s) any row that fails to parse so a single malformed row
  * only loses that row, not the whole list. A non-array input is treated as
  * an empty list.
+ *
+ * Also returns the raw payloads of the rows that failed validation so the
+ * caller can extract per-row hints (id, label) for the inline notice.
  */
 export function safeParseList<S extends z.ZodTypeAny>(
   schema: S,
   raw: unknown,
   label: string,
-): { rows: z.infer<S>[]; dropped: number } {
-  if (!Array.isArray(raw)) return { rows: [], dropped: 0 };
+): { rows: z.infer<S>[]; dropped: number; droppedRaw: unknown[] } {
+  if (!Array.isArray(raw)) return { rows: [], dropped: 0, droppedRaw: [] };
   const rows: z.infer<S>[] = [];
-  let dropped = 0;
+  const droppedRaw: unknown[] = [];
   for (let i = 0; i < raw.length; i++) {
     const result = schema.safeParse(raw[i]);
     if (result.success) {
       rows.push(result.data);
     } else {
-      dropped++;
+      droppedRaw.push(raw[i]);
       // eslint-disable-next-line no-console
       console.warn(
         `[data-store] Dropped malformed ${label} row at index ${i}:`,
@@ -181,7 +207,23 @@ export function safeParseList<S extends z.ZodTypeAny>(
       );
     }
   }
-  return { rows, dropped };
+  return { rows, dropped: droppedRaw.length, droppedRaw };
+}
+
+/** Pull a string field off an unknown object, or undefined if absent/non-string. */
+function readString(raw: unknown, field: string): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = (raw as Record<string, unknown>)[field];
+  if (typeof v === "string" && v.length > 0) return v;
+  return undefined;
+}
+
+/** Pull a number field off an unknown object, or undefined if absent/non-number. */
+function readNumber(raw: unknown, field: string): number | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = (raw as Record<string, unknown>)[field];
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  return undefined;
 }
 
 export class UnsupportedImportError extends Error {
@@ -717,56 +759,133 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // surfaced via `dataIssues` so the layout can render an inline notice
   // ("N rows hidden — see console") instead of going blank. Memoized on
   // the raw query data so we don't re-walk the array every render.
-  const { rows: customers, dropped: customersDropped } = useMemo(
+  const { rows: customers, droppedRaw: customersDroppedRaw } = useMemo(
     () => safeParseList(CustomerSchema, customersQuery.data, "customers"),
     [customersQuery.data],
   );
-  const { rows: properties, dropped: propertiesDropped } = useMemo(
+  const { rows: properties, droppedRaw: propertiesDroppedRaw } = useMemo(
     () => safeParseList(PropertySchema, propertiesQuery.data, "properties"),
     [propertiesQuery.data],
   );
-  const { rows: leases, dropped: leasesDropped } = useMemo(
+  const { rows: leases, droppedRaw: leasesDroppedRaw } = useMemo(
     () => safeParseList(LeaseSchema, leasesQuery.data, "leases"),
     [leasesQuery.data],
   );
-  const { rows: rooms, dropped: roomsDropped } = useMemo(
+  const { rows: rooms, droppedRaw: roomsDroppedRaw } = useMemo(
     () => safeParseList(RoomSchema, roomsQuery.data, "rooms"),
     [roomsQuery.data],
   );
-  const { rows: beds, dropped: bedsDropped } = useMemo(
+  const { rows: beds, droppedRaw: bedsDroppedRaw } = useMemo(
     () => safeParseList(BedSchema, bedsQuery.data, "beds"),
     [bedsQuery.data],
   );
-  const { rows: occupants, dropped: occupantsDropped } = useMemo(
+  const { rows: occupants, droppedRaw: occupantsDroppedRaw } = useMemo(
     () => safeParseList(OccupantSchema, occupantsQuery.data, "occupants"),
     [occupantsQuery.data],
   );
-  const { rows: utilities, dropped: utilitiesDropped } = useMemo(
+  const { rows: utilities, droppedRaw: utilitiesDroppedRaw } = useMemo(
     () => safeParseList(UtilitySchema, utilitiesQuery.data, "utilities"),
     [utilitiesQuery.data],
   );
-  const { rows: roomNightLogs, dropped: roomNightLogsDropped } = useMemo(
+  const { rows: roomNightLogs, droppedRaw: roomNightLogsDroppedRaw } = useMemo(
     () => safeParseList(RoomNightLogSchema, roomNightLogsQuery.data, "room-night logs"),
     [roomNightLogsQuery.data],
   );
 
+  // Cross-table label helpers. Built once per render (cheap; the Maps
+  // mirror caches we already iterate elsewhere) so the per-kind row
+  // builders below don't have to walk the full sibling list per row.
   const dataIssues = useMemo<DataIssue[]>(() => {
-    const counts: Array<[string, string, number]> = [
-      ["customers", "customers", customersDropped],
-      ["properties", "properties", propertiesDropped],
-      ["leases", "leases", leasesDropped],
-      ["rooms", "rooms", roomsDropped],
-      ["beds", "beds", bedsDropped],
-      ["occupants", "occupants", occupantsDropped],
-      ["utilities", "utilities", utilitiesDropped],
-      ["roomNightLogs", "room-night logs", roomNightLogsDropped],
+    const propertiesById = new Map(properties.map((p) => [p.id, p] as const));
+
+    const buildRows = (
+      raw: unknown[],
+      toRow: (r: unknown) => DroppedRow,
+    ): DroppedRow[] => raw.map(toRow);
+
+    const customerRows = buildRows(customersDroppedRaw, (r) => ({
+      id: readString(r, "id"),
+      label: readString(r, "name"),
+      href: readString(r, "id") ? `/customers/${readString(r, "id")}` : undefined,
+    }));
+    const propertyRows = buildRows(propertiesDroppedRaw, (r) => ({
+      id: readString(r, "id"),
+      label: readString(r, "name"),
+      href: readString(r, "id") ? `/properties/${readString(r, "id")}` : undefined,
+    }));
+    const leaseRows = buildRows(leasesDroppedRaw, (r) => {
+      const id = readString(r, "id");
+      const propertyId = readString(r, "propertyId");
+      const property = propertyId ? propertiesById.get(propertyId) : undefined;
+      const start = readString(r, "startDate");
+      const end = readString(r, "endDate");
+      const datePart = start && end ? `${start} → ${end}` : start || end;
+      const label = property
+        ? `Lease at ${property.name}${datePart ? ` (${datePart})` : ""}`
+        : datePart
+          ? `Lease ${datePart}`
+          : undefined;
+      return { id, label, href: id ? `/leases/${id}` : undefined };
+    });
+    const roomRows = buildRows(roomsDroppedRaw, (r) => {
+      const propertyId = readString(r, "propertyId");
+      const property = propertyId ? propertiesById.get(propertyId) : undefined;
+      const name = readString(r, "name");
+      return {
+        id: readString(r, "id"),
+        label: name && property
+          ? `${name} @ ${property.name}`
+          : name || (property ? `Room @ ${property.name}` : undefined),
+        // No detail page for rooms — operators reach them via the
+        // property page, which we don't auto-route to from here because
+        // the bad row may be the reason that property page is blank.
+      };
+    });
+    const bedRows = buildRows(bedsDroppedRaw, (r) => {
+      const propertyId = readString(r, "propertyId");
+      const property = propertyId ? propertiesById.get(propertyId) : undefined;
+      const num = readNumber(r, "bedNumber");
+      const numLabel = typeof num === "number" ? `Bed #${num}` : "Bed";
+      return {
+        id: readString(r, "id"),
+        label: property ? `${numLabel} @ ${property.name}` : numLabel,
+      };
+    });
+    const occupantRows = buildRows(occupantsDroppedRaw, (r) => ({
+      id: readString(r, "id"),
+      label: readString(r, "name"),
+    }));
+    const utilityRows = buildRows(utilitiesDroppedRaw, (r) => {
+      const type = readString(r, "type");
+      const company = readString(r, "company");
+      return {
+        id: readString(r, "id"),
+        label: type && company ? `${type} — ${company}` : type || company,
+      };
+    });
+    const logRows = buildRows(roomNightLogsDroppedRaw, (r) => {
+      const month = readString(r, "month");
+      return {
+        id: readString(r, "id"),
+        label: month ? `Log ${month}` : undefined,
+      };
+    });
+
+    const all: DataIssue[] = [
+      { kind: "customers", label: "customers", dropped: customerRows.length, rows: customerRows },
+      { kind: "properties", label: "properties", dropped: propertyRows.length, rows: propertyRows },
+      { kind: "leases", label: "leases", dropped: leaseRows.length, rows: leaseRows },
+      { kind: "rooms", label: "rooms", dropped: roomRows.length, rows: roomRows },
+      { kind: "beds", label: "beds", dropped: bedRows.length, rows: bedRows },
+      { kind: "occupants", label: "occupants", dropped: occupantRows.length, rows: occupantRows },
+      { kind: "utilities", label: "utilities", dropped: utilityRows.length, rows: utilityRows },
+      { kind: "roomNightLogs", label: "room-night logs", dropped: logRows.length, rows: logRows },
     ];
-    return counts
-      .filter(([, , n]) => n > 0)
-      .map(([kind, label, dropped]) => ({ kind, label, dropped }));
+    return all.filter((i) => i.dropped > 0);
   }, [
-    customersDropped, propertiesDropped, leasesDropped, roomsDropped,
-    bedsDropped, occupantsDropped, utilitiesDropped, roomNightLogsDropped,
+    properties,
+    customersDroppedRaw, propertiesDroppedRaw, leasesDroppedRaw, roomsDroppedRaw,
+    bedsDroppedRaw, occupantsDroppedRaw, utilitiesDroppedRaw, roomNightLogsDroppedRaw,
   ]);
   const isLoading =
     customersQuery.isLoading ||

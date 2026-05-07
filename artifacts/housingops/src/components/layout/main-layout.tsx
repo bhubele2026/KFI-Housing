@@ -1,13 +1,14 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
-import { Briefcase, Menu, X } from "lucide-react";
+import { Briefcase, Copy, Menu, X } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
-import { Redirect, useLocation } from "wouter";
+import { Link, Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { useData } from "@/context/data-store";
+import { useData, type DroppedRow } from "@/context/data-store";
+import { useToast } from "@/hooks/use-toast";
 
 const COLLAPSED_STORAGE_KEY = "housingops:sidebar-collapsed";
 
@@ -141,16 +142,9 @@ export function MainLayout({ children }: { children: ReactNode }) {
               going blank because of a single bad row — operators see
               what's hidden and can dig into the console for details. */}
           {dataIssues.length > 0 ? (
-            <div
-              role="status"
-              data-testid="banner-data-issues"
-              className="mx-4 mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
-            >
-              {dataIssues
-                .map((i) => `${i.dropped} ${i.label}`)
-                .join(", ")}{" "}
-              hidden — see console for details.
-            </div>
+            <DataIssuesBanner
+              issues={dataIssues}
+            />
           ) : null}
           {/* Inner boundary so a crash inside the page body keeps the
               Sidebar (rendered above this line) mounted and clickable.
@@ -160,6 +154,126 @@ export function MainLayout({ children }: { children: ReactNode }) {
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inline notice listing the rows the data store dropped because they
+ * failed schema validation. Renders the summary count first (back-compat
+ * with the original task #354 banner) and then a per-row list so a
+ * non-technical operator can navigate straight to the broken record
+ * without opening DevTools — or copy the id when no detail page exists.
+ */
+function DataIssuesBanner({
+  issues,
+}: {
+  issues: { kind: string; label: string; dropped: number; rows: DroppedRow[] }[];
+}) {
+  const { toast } = useToast();
+
+  const copyId = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      toast({ title: "Copied", description: `Copied id ${id} to clipboard.` });
+    } catch {
+      // Older browsers / restrictive contexts may block writeText. Fall
+      // back to a textarea + execCommand so the operator still gets the
+      // id onto their clipboard instead of a silent failure.
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = id;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        toast({ title: "Copied", description: `Copied id ${id} to clipboard.` });
+      } catch {
+        toast({
+          title: "Could not copy",
+          description: `Select and copy manually: ${id}`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  return (
+    <div
+      role="status"
+      data-testid="banner-data-issues"
+      className="mx-4 mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
+    >
+      <div data-testid="banner-data-issues-summary">
+        {issues.map((i) => `${i.dropped} ${i.label}`).join(", ")} hidden — see
+        console for details.
+      </div>
+      <ul className="mt-1.5 space-y-0.5">
+        {issues.flatMap((issue) =>
+          issue.rows.map((row, idx) => {
+            // Strip the trailing "s" from "leases"/"properties"/etc. so
+            // each list entry reads like "lease L2 …" rather than
+            // "leases L2 …" — purely cosmetic but reads more naturally.
+            const singular = issue.label.endsWith("s")
+              ? issue.label.slice(0, -1)
+              : issue.label;
+            const key = `${issue.kind}:${row.id ?? idx}`;
+            // Suffix per-row test ids with the row index so multiple
+            // dropped rows of the same kind don't collide with the
+            // first match in querySelector-based tests.
+            const rowSuffix = `${issue.kind}-${idx}`;
+            return (
+              <li
+                key={key}
+                data-testid={`data-issue-row-${rowSuffix}`}
+                data-issue-kind={issue.kind}
+                className="flex flex-wrap items-center gap-1.5"
+              >
+                <span className="capitalize">{singular}</span>
+                {row.label ? (
+                  <span className="font-medium">{row.label}</span>
+                ) : null}
+                {row.id ? (
+                  <code
+                    className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] dark:bg-amber-900/50"
+                    data-testid={`data-issue-row-id-${issue.kind}`}
+                  >
+                    {row.id}
+                  </code>
+                ) : (
+                  <span className="italic text-amber-800/80 dark:text-amber-300/80">
+                    (no id — see console)
+                  </span>
+                )}
+                {row.id && row.href ? (
+                  <Link
+                    href={row.href}
+                    data-testid={`data-issue-row-open-${rowSuffix}`}
+                    data-issue-kind={issue.kind}
+                    className="underline underline-offset-2 hover:text-amber-950 dark:hover:text-amber-100"
+                  >
+                    Open
+                  </Link>
+                ) : row.id ? (
+                  <button
+                    type="button"
+                    onClick={() => copyId(row.id!)}
+                    data-testid={`data-issue-row-copy-${rowSuffix}`}
+                    data-issue-kind={issue.kind}
+                    className="inline-flex items-center gap-1 rounded border border-amber-300 px-1.5 py-0.5 text-[10px] hover:bg-amber-100 dark:border-amber-700/60 dark:hover:bg-amber-900/40"
+                    aria-label={`Copy ${singular} id ${row.id}`}
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copy id
+                  </button>
+                ) : null}
+              </li>
+            );
+          }),
+        )}
+      </ul>
     </div>
   );
 }

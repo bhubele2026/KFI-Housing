@@ -105,4 +105,20 @@ describe("safeParseList", () => {
     expect(dropped).toBe(0);
     expect(warnSpy).not.toHaveBeenCalled();
   });
+
+  it("returns the raw payloads of the dropped rows so callers can extract id/labels", () => {
+    const bad = makeLease({ id: "L-bad", monthlyRent: "oops", propertyId: "P-9" });
+    const { rows, dropped, droppedRaw } = safeParseList(
+      LeaseSchema,
+      [makeLease({ id: "L1" }), bad, makeLease({ id: "L3" })],
+      "leases",
+    );
+
+    expect(rows.map((r) => r.id)).toEqual(["L1", "L3"]);
+    expect(dropped).toBe(1);
+    expect(droppedRaw).toHaveLength(1);
+    // The exact same reference (and full payload) is preserved so the
+    // banner can pull off id/propertyId/etc. for the inline notice.
+    expect(droppedRaw[0]).toBe(bad);
+  });
 });

@@ -21,7 +21,7 @@ vi.mock("./sidebar", () => ({
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;
-  dataIssues: { kind: string; label: string; dropped: number }[];
+  dataIssues: { kind: string; label: string; dropped: number; rows: never[] }[];
 } = {
   customers: [],
   isLoading: false,

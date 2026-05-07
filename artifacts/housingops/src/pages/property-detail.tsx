@@ -844,7 +844,7 @@ export default function PropertyDetail() {
             })()}
             {primaryActiveLease && (() => {
               const renewal = getRenewalInfo(primaryActiveLease.endDate);
-              if (renewal.level === "ok") return null;
+              if (!renewal || renewal.level === "ok") return null;
               return (
                 <div className="flex items-center gap-1.5 ml-1">
                   <Badge variant="outline" className={`text-xs font-medium ${renewal.badgeClass}`}>

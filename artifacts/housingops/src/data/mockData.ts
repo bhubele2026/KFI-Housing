@@ -637,7 +637,8 @@ export interface RenewalInfo {
   days: number;
 }
 
-export function getRenewalInfo(endDate: string): RenewalInfo {
+export function getRenewalInfo(endDate: string): RenewalInfo | null {
+  if (!endDate) return null;
   const days = daysUntil(endDate);
   const abs = Math.abs(days);
   const dayWord = (n: number) => `${n} day${n === 1 ? "" : "s"}`;

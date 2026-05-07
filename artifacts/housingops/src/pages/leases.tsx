@@ -339,7 +339,7 @@ export default function Leases() {
       return tenantId === customerFilter;
     })
     .map((l) => ({ lease: l, info: getRenewalInfo(l.endDate) }))
-    .filter(({ info }) => info.level !== "ok")
+    .filter((row): row is { lease: typeof row.lease; info: NonNullable<typeof row.info> } => row.info !== null && row.info.level !== "ok")
     .sort((a, b) => a.info.days - b.info.days);
 
   // Hotel-rate "at risk this month" — every hotel-rate lease in the
@@ -380,7 +380,7 @@ export default function Leases() {
         } },
       { header: "Start Date",       value: (l) => l.startDate },
       { header: "End Date",         value: (l) => l.endDate },
-      { header: "Days Left",        value: (l) => getRenewalInfo(l.endDate).days },
+      { header: "Days Left",        value: (l) => getRenewalInfo(l.endDate)?.days ?? "" },
       { header: "Monthly Rent",     value: (l) => l.monthlyRent },
       { header: "Security Deposit", value: (l) => l.securityDeposit },
       { header: "Status",           value: (l) => l.status },

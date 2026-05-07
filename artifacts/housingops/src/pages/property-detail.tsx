@@ -1025,7 +1025,7 @@ export default function PropertyDetail() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList
-            className={`grid w-full max-w-3xl ${propertyUnits.length > 0 ? "grid-cols-7" : "grid-cols-6"}`}
+            className={`grid w-full max-w-3xl ${propertyUnits.length > 0 ? "grid-cols-8" : "grid-cols-7"}`}
           >
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>

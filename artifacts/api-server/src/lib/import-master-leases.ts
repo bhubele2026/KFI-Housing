@@ -90,7 +90,7 @@ export interface ImportDeps {
   logger: Pick<Logger, "info" | "warn">;
 }
 
-const DEFAULT_MASTER_FILENAME = "Housing_Lease_MASTER_1778105244042.xlsx";
+export const DEFAULT_MASTER_FILENAME = "Housing_Lease_MASTER_1778105244042.xlsx";
 
 /** Resolves the bundled master file under `attached_assets/`. */
 export function defaultMasterFilePath(): string {

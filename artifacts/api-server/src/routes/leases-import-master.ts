@@ -12,6 +12,7 @@ import {
   readMasterWorkbookFromBuffer,
   getLastBootMasterImport,
   getBundledMasterMtime,
+  DEFAULT_MASTER_FILENAME,
 } from "../lib/import-master-leases";
 import { logger } from "../lib/logger";
 
@@ -53,11 +54,12 @@ router.get(
       const record = await getLastBootMasterImport();
       const mtime = await getBundledMasterMtime();
       const bundledMtime = mtime ? mtime.toISOString() : null;
+      const bundledFilename = mtime ? DEFAULT_MASTER_FILENAME : null;
       if (!record) {
-        res.json({ ranAt: null, bundledMtime });
+        res.json({ ranAt: null, bundledMtime, bundledFilename });
         return;
       }
-      res.json({ ...record, bundledMtime });
+      res.json({ ...record, bundledMtime, bundledFilename });
     } catch (err) {
       logger.error({ err }, "Failed to read last boot master import record");
       const message = err instanceof Error ? err.message : String(err);
@@ -73,6 +75,7 @@ router.post(
     try {
       const file = req.file;
       let summary;
+      let usedBundled = false;
       if (file) {
         if (
           file.mimetype &&
@@ -89,8 +92,14 @@ router.post(
         summary = await importMasterLeases(rows, { logger });
       } else {
         summary = await importDefaultMasterLeases({ logger });
+        usedBundled = true;
       }
-      res.json(summary);
+      const mtime = usedBundled ? await getBundledMasterMtime() : null;
+      res.json({
+        ...summary,
+        bundledFilename: usedBundled ? DEFAULT_MASTER_FILENAME : null,
+        bundledMtime: mtime ? mtime.toISOString() : null,
+      });
     } catch (err) {
       logger.error({ err }, "Master lease import failed");
       const message = err instanceof Error ? err.message : String(err);

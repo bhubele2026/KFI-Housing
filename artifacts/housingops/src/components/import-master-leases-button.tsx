@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useImportMasterLeases,
+  useGetLastAutoMasterImport,
   getListLeasesQueryKey,
   getListPropertiesQueryKey,
   getListCustomersQueryKey,
@@ -19,17 +20,24 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { FileSpreadsheet, Loader2, CheckCircle2, AlertTriangle, ArrowRight, Upload, Clock } from "lucide-react";
+
+function formatMtime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
 
 export function ImportMasterLeasesButton() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [pending, setPending] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
   const [importResult, setImportResult] = useState<MasterLeaseImportResult | null>(null);
 
   const { mutateAsync } = useImportMasterLeases();
+  const { data: lastAutoImport } = useGetLastAutoMasterImport();
 
   const summarize = (result: MasterLeaseImportResult): string => {
     const parts: string[] = [];
@@ -47,6 +55,7 @@ export function ImportMasterLeasesButton() {
   };
 
   const runImport = async (file: File | null) => {
+    setConfirmDialogOpen(false);
     setPending(true);
     try {
       const result = await mutateAsync({
@@ -87,7 +96,7 @@ export function ImportMasterLeasesButton() {
         variant="outline"
         disabled={pending}
         data-testid="button-import-master-leases"
-        onClick={() => fileInput.current?.click()}
+        onClick={() => setConfirmDialogOpen(true)}
         title="Re-import the master housing-lease spreadsheet (idempotent)"
       >
         {pending ? (
@@ -97,6 +106,64 @@ export function ImportMasterLeasesButton() {
         )}
         Import master file
       </Button>
+
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent className="max-w-md" data-testid="master-import-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle>Import master file</DialogTitle>
+            <DialogDescription>
+              Choose how to import the housing-lease master spreadsheet.
+            </DialogDescription>
+          </DialogHeader>
+
+          {lastAutoImport?.bundledFilename && (
+            <div
+              className="flex items-start gap-3 rounded-md border bg-muted/40 px-3 py-2.5 text-sm"
+              data-testid="bundled-file-info"
+            >
+              <FileSpreadsheet className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 space-y-0.5">
+                <p className="font-medium truncate" data-testid="bundled-filename">
+                  {lastAutoImport.bundledFilename}
+                </p>
+                {lastAutoImport.bundledMtime && (
+                  <p className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="bundled-mtime">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    Dropped {formatMtime(lastAutoImport.bundledMtime)}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              onClick={() => void runImport(null)}
+              disabled={pending}
+              data-testid="button-import-bundled"
+            >
+              {pending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+              )}
+              Import bundled file
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmDialogOpen(false);
+                fileInput.current?.click();
+              }}
+              disabled={pending}
+              data-testid="button-upload-custom"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload a different file
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" data-testid="master-import-results-dialog">
@@ -109,6 +176,18 @@ export function ImportMasterLeasesButton() {
 
           {importResult && (
             <div className="space-y-4 py-2">
+              {importResult.bundledFilename && importResult.bundledMtime && (
+                <div
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                  data-testid="import-result-bundled-info"
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Used <span className="font-medium">{importResult.bundledFilename}</span>
+                    {" "}(dropped {formatMtime(importResult.bundledMtime)})
+                  </span>
+                </div>
+              )}
               <FixupsSection rows={importResult.rowsWithFixups} />
             </div>
           )}

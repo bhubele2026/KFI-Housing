@@ -1749,6 +1749,8 @@ components:
         - fuzzyCustomerMatches
         - decisions
         - rowsWithFixups
+        - bundledFilename
+        - bundledMtime
       properties:
         customersCreated: { type: integer }
         customersUpdated: { type: integer }
@@ -1757,6 +1759,19 @@ components:
         leasesCreated: { type: integer }
         leasesUpdated: { type: integer }
         leasesSkipped: { type: integer }
+        bundledFilename:
+          type: ["string", "null"]
+          description: |
+            Filename of the bundled master workbook that was used for
+            this import (Task #392). `null` when the operator uploaded
+            their own file instead of using the bundled one.
+        bundledMtime:
+          type: ["string", "null"]
+          format: date-time
+          description: |
+            ISO-8601 modification time of the bundled master workbook
+            that was used for this import (Task #392). `null` when the
+            operator uploaded their own file.
         rowsNeedingReview:
           type: array
           items: { $ref: "#/components/schemas/MasterLeaseImportRowDecision" }
@@ -1779,7 +1794,7 @@ components:
 
     LastAutoMasterImport:
       type: object
-      required: [ranAt, bundledMtime]
+      required: [ranAt, bundledMtime, bundledFilename]
       description: |
         Timestamp + summary counts of the most recent successful
         boot-time master-file auto-import (Task #318). When the boot
@@ -1792,6 +1807,12 @@ components:
           description: |
             ISO-8601 timestamp of the most recent successful boot
             import, or `null` when no boot import has succeeded yet.
+        bundledFilename:
+          type: ["string", "null"]
+          description: |
+            Filename of the bundled `Housing_Lease_MASTER_*.xlsx`
+            workbook under `attached_assets/` (Task #392). `null`
+            when the bundled file cannot be read on disk.
         bundledMtime:
           type: ["string", "null"]
           format: date-time

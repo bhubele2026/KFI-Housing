@@ -1385,6 +1385,12 @@ export const GetLastAutoMasterImportResponse = zod
       .describe(
         "ISO-8601 timestamp of the most recent successful boot\nimport, or `null` when no boot import has succeeded yet.\n",
       ),
+    bundledFilename: zod
+      .string()
+      .nullable()
+      .describe(
+        "Filename of the bundled `Housing_Lease_MASTER_\*.xlsx`\nworkbook under `attached_assets\/` (Task #392). `null`\nwhen the bundled file cannot be read on disk.\n",
+      ),
     bundledMtime: zod.coerce
       .date()
       .nullable()
@@ -1436,6 +1442,18 @@ export const ImportMasterLeasesResponse = zod.object({
   leasesCreated: zod.number(),
   leasesUpdated: zod.number(),
   leasesSkipped: zod.number(),
+  bundledFilename: zod
+    .string()
+    .nullable()
+    .describe(
+      "Filename of the bundled master workbook that was used for\nthis import (Task #392). `null` when the operator uploaded\ntheir own file instead of using the bundled one.\n",
+    ),
+  bundledMtime: zod.coerce
+    .date()
+    .nullable()
+    .describe(
+      "ISO-8601 modification time of the bundled master workbook\nthat was used for this import (Task #392). `null` when the\noperator uploaded their own file.\n",
+    ),
   rowsNeedingReview: zod.array(
     zod.object({
       sourceRow: zod.number(),

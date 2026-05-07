@@ -22,6 +22,14 @@ import, or `null` when no boot import has succeeded yet.
    */
   ranAt: Date | null;
   /**
+   * Filename of the bundled `Housing_Lease_MASTER_*.xlsx`
+workbook under `attached_assets/` (Task #392). `null`
+when the bundled file cannot be read on disk.
+
+   * @nullable
+   */
+  bundledFilename: string | null;
+  /**
    * ISO-8601 modification time of the bundled
 `Housing_Lease_MASTER_*.xlsx` workbook under
 `attached_assets/` (Task #340). The Leases-page indicator

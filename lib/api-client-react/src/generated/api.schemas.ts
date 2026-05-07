@@ -948,6 +948,22 @@ export interface MasterLeaseImportResult {
   leasesCreated: number;
   leasesUpdated: number;
   leasesSkipped: number;
+  /**
+   * Filename of the bundled master workbook that was used for
+this import (Task #392). `null` when the operator uploaded
+their own file instead of using the bundled one.
+
+   * @nullable
+   */
+  bundledFilename: string | null;
+  /**
+   * ISO-8601 modification time of the bundled master workbook
+that was used for this import (Task #392). `null` when the
+operator uploaded their own file.
+
+   * @nullable
+   */
+  bundledMtime: string | null;
   rowsNeedingReview: MasterLeaseImportRowDecision[];
   fuzzyCustomerMatches: MasterLeaseImportResultFuzzyCustomerMatchesItem[];
   decisions: MasterLeaseImportRowDecision[];
@@ -970,6 +986,14 @@ import, or `null` when no boot import has succeeded yet.
    * @nullable
    */
   ranAt: string | null;
+  /**
+   * Filename of the bundled `Housing_Lease_MASTER_*.xlsx`
+workbook under `attached_assets/` (Task #392). `null`
+when the bundled file cannot be read on disk.
+
+   * @nullable
+   */
+  bundledFilename: string | null;
   /**
    * ISO-8601 modification time of the bundled
 `Housing_Lease_MASTER_*.xlsx` workbook under

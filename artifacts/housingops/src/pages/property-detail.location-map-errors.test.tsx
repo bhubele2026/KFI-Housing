@@ -273,6 +273,7 @@ const storeState = {
   addInsuranceCertificate: vi.fn(),
   updateInsuranceCertificate: vi.fn(),
   deleteInsuranceCertificate: vi.fn(),
+  dataIssues: [],
 };
 
 vi.mock("@/context/data-store", () => ({

@@ -317,6 +317,7 @@ vi.mock("@/context/data-store", () => ({
   useData: () => ({
     ...state,
     isLoading: false,
+    dataIssues: [],
     ...mocks,
   }),
   RoomInUseError: MockRoomInUseError,

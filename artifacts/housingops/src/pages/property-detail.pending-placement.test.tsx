@@ -208,6 +208,7 @@ vi.mock("@/context/data-store", () => ({
     addUtility: vi.fn(),
     deleteUtility: vi.fn(),
     deleteProperty,
+    dataIssues: [],
   }),
   RoomInUseError: class RoomInUseError extends Error {},
 }));

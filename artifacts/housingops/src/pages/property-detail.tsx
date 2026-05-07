@@ -621,6 +621,46 @@ export default function PropertyDetail() {
       });
   }, [propLeases, propRooms, propBeds, propOccupants]);
 
+  const propRooms = rooms.filter(r => r.propertyId === id);
+  const propBeds = beds.filter(b => b.propertyId === id);
+  const propOccupants = occupants.filter(o => o.propertyId === id && o.status === "Active");
+  const propLeases = leases.filter(l => l.propertyId === id);
+  const sortedPropLeases = sortLeases(propLeases);
+
+  const droppedRoomsForProperty = useMemo(() => {
+    const roomIssue = dataIssues.find(i => i.kind === "rooms");
+    const bedIssue = dataIssues.find(i => i.kind === "beds");
+    const droppedRooms = roomIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    const droppedBeds = bedIssue?.rows.filter(r => r.propertyId === id) ?? [];
+    return { droppedRooms, droppedBeds };
+  }, [dataIssues, id]);
+
+  const propertyUnits = useMemo(() => {
+    const byUnit = new Map<string, Lease[]>();
+    for (const l of propLeases) {
+      const u = (l.unit ?? "").trim();
+      if (!u) continue;
+      const list = byUnit.get(u) ?? [];
+      list.push(l);
+      byUnit.set(u, list);
+    }
+    const naturalCompare = (a: string, b: string) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    return Array.from(byUnit.entries())
+      .sort(([a], [b]) => naturalCompare(a, b))
+      .map(([unit, unitLeases]) => {
+        const sortedLeases = sortLeases(unitLeases);
+        const room = propRooms.find(
+          (r) => r.name === `Unit ${unit}` || r.name === unit,
+        );
+        const unitBeds = room ? propBeds.filter((b) => b.roomId === room.id) : [];
+        const unitOccupants = unitBeds
+          .map((b) => propOccupants.find((o) => o.bedId === b.id))
+          .filter((o): o is Occupant => Boolean(o));
+        return { unit, leases: sortedLeases, room, beds: unitBeds, occupants: unitOccupants };
+      });
+  }, [propLeases, propRooms, propBeds, propOccupants]);
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -671,11 +711,6 @@ export default function PropertyDetail() {
     );
   }
 
-  // Synthetic "Roster — Pending Placement (<Customer>)" buckets created by
-  // `seedPayrollOccupantsIfMissing` (Task #305) hold payroll-only people
-  // with bedId=null and no real beds/rooms/leases of their own. Render the
-  // focused PendingPlacementBoard instead of the normal property page so
-  // the operator can move each pending person into a real property + bed.
   if (isPendingPlacementProperty(property.name)) {
     return (
       <MainLayout>
@@ -712,8 +747,6 @@ export default function PropertyDetail() {
       </MainLayout>
     );
   }
-
-  const sortedPropLeases = sortLeases(propLeases);
   const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
   const propCerts = insuranceCertificates
     .filter(c => c.propertyId === id)

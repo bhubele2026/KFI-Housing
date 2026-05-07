@@ -35,7 +35,10 @@ export default function Occupants() {
   );
   const [propertyFilter, setPropertyFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">("All");
+  const [shiftFilter, setShiftFilter] = useState<"All" | "1st" | "2nd" | "Unassigned">(() => {
+    const raw = new URLSearchParams(searchString).get("shift");
+    return raw === "1st" || raw === "2nd" || raw === "Unassigned" ? raw : "All";
+  });
   const [moveInFilter, setMoveInFilter] = useState<"All" | "NeedsReview">(() =>
     new URLSearchParams(searchString).get("needsReview") === "1"
       ? "NeedsReview"
@@ -47,17 +50,32 @@ export default function Occupants() {
     const next =
       params.get("needsReview") === "1" ? "NeedsReview" : "All";
     setMoveInFilter((prev) => (prev === next ? prev : next));
+    const rawShift = params.get("shift");
+    const nextShift: "All" | "1st" | "2nd" | "Unassigned" =
+      rawShift === "1st" || rawShift === "2nd" || rawShift === "Unassigned"
+        ? rawShift
+        : "All";
+    setShiftFilter((prev) => (prev === nextShift ? prev : nextShift));
     const q = params.get("q") ?? "";
     setSearch((prev) => (prev === q || prev !== "" && q === "" ? prev : q));
   }, [searchString]);
 
-  const updateMoveInFilter = (value: "All" | "NeedsReview") => {
-    setMoveInFilter(value);
+  const updateUrlParam = (key: string, value: string | null) => {
     const params = new URLSearchParams(window.location.search);
-    if (value === "NeedsReview") params.set("needsReview", "1");
-    else params.delete("needsReview");
+    if (value) params.set(key, value);
+    else params.delete(key);
     const qs = params.toString();
     navigate(qs ? `/occupants?${qs}` : "/occupants", { replace: true });
+  };
+
+  const updateMoveInFilter = (value: "All" | "NeedsReview") => {
+    setMoveInFilter(value);
+    updateUrlParam("needsReview", value === "NeedsReview" ? "1" : null);
+  };
+
+  const updateShiftFilter = (value: "All" | "1st" | "2nd" | "Unassigned") => {
+    setShiftFilter(value);
+    updateUrlParam("shift", value === "All" ? null : value);
   };
 
   const filteredOccupants = occupants.filter((o) => {
@@ -183,7 +201,7 @@ export default function Occupants() {
               </Select>
               <Select
                 value={shiftFilter}
-                onValueChange={(v) => setShiftFilter(v as "All" | "1st" | "2nd" | "Unassigned")}
+                onValueChange={(v) => updateShiftFilter(v as "All" | "1st" | "2nd" | "Unassigned")}
               >
                 <SelectTrigger
                   className="w-full sm:w-44"

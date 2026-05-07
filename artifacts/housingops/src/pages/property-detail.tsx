@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
@@ -2944,12 +2944,32 @@ function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange
   const totalAvailable = ALL_FURNISHINGS_COUNT;
   const pct = totalAvailable === 0 ? 0 : Math.round((totalSelected / totalAvailable) * 100);
 
+  // When toggling an item that belongs to a category's radioGroup
+  // (mutually-exclusive set), make sure the sibling option is removed
+  // so only one value from the group is ever selected at a time. Plain
+  // checkbox items behave as before.
+  const findRadioGroup = (item: string) =>
+    FURNISHING_CATEGORIES.find(c => c.radioGroup?.options.includes(item))
+      ?.radioGroup;
+
   const toggleItem = (item: string) => {
     if (selectedSet.has(item)) {
       onChange(selected.filter(f => f !== item));
+      return;
+    }
+    const group = findRadioGroup(item);
+    if (group) {
+      const siblings = new Set(group.options);
+      onChange([...selected.filter(f => !siblings.has(f)), item]);
     } else {
       onChange([...selected, item]);
     }
+  };
+
+  const selectRadio = (group: NonNullable<FurnishingCategory["radioGroup"]>, value: string | null) => {
+    const siblings = new Set(group.options);
+    const others = selected.filter(f => !siblings.has(f));
+    onChange(value ? [...others, value] : others);
   };
 
   const setCategory = (items: string[], select: boolean) => {
@@ -3045,19 +3065,40 @@ function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange
         )}
         {visibleCategories.map(cat => {
           const Icon = FURNISHING_ICONS[cat.iconName] ?? Sparkles;
+          const catItemsSelected = cat.items.filter(i => selectedSet.has(i)).length;
           const catSelectedInVisible = cat.visibleItems.filter(i => selectedSet.has(i)).length;
-          const catSelectedTotal = cat.items.filter(i => selectedSet.has(i)).length;
-          const allInCatSelected = catSelectedTotal === cat.items.length;
+          const radioGroup = cat.radioGroup;
+          const radioValue = radioGroup?.options.find(o => selectedSet.has(o)) ?? null;
+          const radioSelectedCount = radioValue ? 1 : 0;
+          const catSelectedTotal = catItemsSelected + radioSelectedCount;
+          const catTotal = cat.items.length + (radioGroup ? 1 : 0);
+          // "Select all"/"Clear" only operates on the regular checkbox
+          // items — the radio group is left to the segmented control so
+          // the toolbar doesn't accidentally pick Onsite vs Offsite for
+          // the operator.
+          const allInCatSelected = catItemsSelected === cat.items.length;
+          const radioBadgeLabel = radioValue
+            ? radioGroup?.shortLabels?.[radioValue] ?? radioValue
+            : null;
 
           return (
             <Card key={cat.id} data-testid={`furnishings-category-${cat.id}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base flex items-center gap-2">
+                  <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                     <Icon className="h-4 w-4 text-muted-foreground" />
                     {cat.name}
+                    {radioBadgeLabel && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        data-testid={`furnishings-${cat.id}-radio-badge`}
+                      >
+                        {radioBadgeLabel}
+                      </Badge>
+                    )}
                     <span className="text-xs font-normal text-muted-foreground">
-                      {catSelectedTotal}/{cat.items.length}
+                      {catSelectedTotal}/{catTotal}
                     </span>
                   </CardTitle>
                   <button
@@ -3069,7 +3110,53 @@ function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 space-y-3">
+                {radioGroup && (
+                  <div data-testid={`furnishings-${cat.id}-radio-group`}>
+                    <div className="text-xs font-medium text-muted-foreground mb-1.5">
+                      {radioGroup.label}
+                    </div>
+                    <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5">
+                      {radioGroup.options.map(option => {
+                        const isOn = radioValue === option;
+                        const short = radioGroup.shortLabels?.[option] ?? option;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            role="radio"
+                            aria-checked={isOn}
+                            onClick={() => selectRadio(radioGroup, isOn ? null : option)}
+                            data-testid={`furnishings-${cat.id}-radio-${short.toLowerCase()}`}
+                            className={
+                              "px-3 py-1 rounded text-xs font-medium transition-colors " +
+                              (isOn
+                                ? "bg-emerald-600 text-white shadow-sm"
+                                : "text-muted-foreground hover:text-foreground")
+                            }
+                          >
+                            {short}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={radioValue === null}
+                        onClick={() => selectRadio(radioGroup, null)}
+                        data-testid={`furnishings-${cat.id}-radio-na`}
+                        className={
+                          "px-3 py-1 rounded text-xs font-medium transition-colors " +
+                          (radioValue === null
+                            ? "bg-white text-foreground shadow-sm border border-border"
+                            : "text-muted-foreground hover:text-foreground")
+                        }
+                      >
+                        N/A
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {cat.visibleItems.map(item => {
                     const isOn = selectedSet.has(item);

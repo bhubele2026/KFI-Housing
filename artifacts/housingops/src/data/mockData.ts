@@ -111,6 +111,20 @@ export interface FurnishingCategory {
   name: string;
   iconName: string; // lucide-react icon name; resolved in the UI
   items: string[];
+  // Optional mutually-exclusive group rendered as a segmented control
+  // (radio-style) above the regular checkbox `items`. At most one of
+  // `radioGroup.options` may appear in a property's `furnishings`
+  // array at a time. The catalogue uses this for things like the
+  // Laundry location (Onsite vs Offsite) where the answer is a single
+  // choice rather than a list of present amenities.
+  radioGroup?: {
+    label: string;
+    // Short labels shown inside the badge / pill once a value has
+    // been picked, keyed by the full option string. Falls back to the
+    // option string when omitted.
+    shortLabels?: Record<string, string>;
+    options: string[];
+  };
 }
 
 export const FURNISHING_CATEGORIES: FurnishingCategory[] = [
@@ -162,6 +176,14 @@ export const FURNISHING_CATEGORIES: FurnishingCategory[] = [
     name: "Laundry",
     iconName: "WashingMachine",
     items: ["Washing machine", "Dryer", "Iron", "Ironing board", "Drying rack"],
+    radioGroup: {
+      label: "Location",
+      shortLabels: {
+        "Laundry: Onsite": "Onsite",
+        "Laundry: Offsite": "Offsite",
+      },
+      options: ["Laundry: Onsite", "Laundry: Offsite"],
+    },
   },
   {
     id: "climate",
@@ -214,8 +236,11 @@ export const FURNISHING_CATEGORIES: FurnishingCategory[] = [
   },
 ];
 
+// Each radio group counts as a single selectable slot (since at most
+// one option can be active) so the "X / Y included" header in the
+// Furnishings panel stays accurate when categories use radio groups.
 export const ALL_FURNISHINGS_COUNT = FURNISHING_CATEGORIES.reduce(
-  (n, c) => n + c.items.length,
+  (n, c) => n + c.items.length + (c.radioGroup ? 1 : 0),
   0,
 );
 

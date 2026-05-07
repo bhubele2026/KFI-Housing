@@ -64,6 +64,16 @@ changes — a verified pin only applies to the address it
 was verified against.
  */
   coordsVerified?: boolean;
+  /** When true, the property has no monthly rent (cleaning-fee
+/ pass-through arrangement). The Lease Rent stat, the
+Properties / Leases columns, and the finance roll-up swap
+in the sum of `OtherCost.monthlyCost` for this property
+instead of the canonical `monthlyRent`, and the
+"missing rent" review filter excludes the row. See task
+#497. Optional for backward compatibility — older payloads
+without the field default to `false`.
+ */
+  rentFree?: boolean;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time

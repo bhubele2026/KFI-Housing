@@ -134,6 +134,7 @@
         "revenue": "Ingresos",
         "leaseCost": "Costo de arrendamiento",
         "utilityCost": "Costo de servicios",
+        "otherCost": "Otros costos",
         "totalCost": "Costo total",
         "netProfit": "Utilidad neta",
         "rentPerBed": "Renta / cama",

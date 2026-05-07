@@ -406,7 +406,11 @@ export default function Properties() {
       // Needs review = property missing a monthly rent (0 / unset).
       // Mirrors the "incomplete record" pattern used by the occupants
       // missing-move-in subset and lets the dashboard tile deep-link in.
-      if (needsReviewFilter === "NeedsReview" && (p.monthlyRent || 0) > 0) {
+      // Rent-free properties (task #497) are never "missing rent" — the
+      // canonical rent is intentionally $0, so they shouldn't surface
+      // in the missing-rent triage queue alongside genuinely incomplete
+      // records.
+      if (needsReviewFilter === "NeedsReview" && (p.rentFree || (p.monthlyRent || 0) > 0)) {
         return false;
       }
       let matchesRating = true;

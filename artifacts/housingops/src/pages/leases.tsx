@@ -156,7 +156,7 @@ export default function Leases() {
   };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
-  const { leases, properties, customers, updateLease, addLease, deleteLease } = useData();
+  const { leases, properties, customers, otherCosts, updateLease, addLease, deleteLease } = useData();
   // Room-night logs power the hotel-rate "at risk this month" tile and
   // the per-row "Below min / No log yet" pill on the leases table. The
   // hook always returns a stable array (or undefined while loading) — no
@@ -814,6 +814,7 @@ export default function Leases() {
                 leases={filteredLeases}
                 properties={properties}
                 customers={customers}
+                otherCosts={otherCosts}
                 showProperty
                 onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
                 onDelete={deleteLease}
@@ -901,6 +902,7 @@ export default function Leases() {
                         leases={group.leases}
                         properties={properties}
                         customers={customers}
+                        otherCosts={otherCosts}
                         showProperty
                         onPropertyClick={(propertyId) =>
                           navigate(`/properties/${propertyId}`)

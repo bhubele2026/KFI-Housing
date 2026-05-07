@@ -10,6 +10,7 @@ import type { Customer } from "./customer";
 import type { InsuranceCertificate } from "./insuranceCertificate";
 import type { Lease } from "./lease";
 import type { OccupantCreate } from "./occupantCreate";
+import type { OtherCost } from "./otherCost";
 import type { Property } from "./property";
 import type { Room } from "./room";
 import type { RoomNightLog } from "./roomNightLog";
@@ -34,4 +35,9 @@ include this — the importer treats a missing array as
 empty.
  */
   insuranceCertificates?: InsuranceCertificate[];
+  /** Optional. Per-property recurring non-rent costs (Task
+#497, rent-free mode). Older backups won't include this —
+the importer treats a missing array as empty.
+ */
+  otherCosts?: OtherCost[];
 }

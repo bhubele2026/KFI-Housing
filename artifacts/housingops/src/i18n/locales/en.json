@@ -134,6 +134,7 @@
         "revenue": "Revenue",
         "leaseCost": "Lease Cost",
         "utilityCost": "Utility Cost",
+        "otherCost": "Other Costs",
         "totalCost": "Total Cost",
         "netProfit": "Net Profit",
         "rentPerBed": "Rent / Bed",

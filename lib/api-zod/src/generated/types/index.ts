@@ -67,6 +67,8 @@ export * from "./occupantUpdateChargeSource";
 export * from "./occupantUpdateShift";
 export * from "./occupantUpdateStatus";
 export * from "./optionalLeaseDate";
+export * from "./otherCost";
+export * from "./otherCostUpdate";
 export * from "./property";
 export * from "./propertyGeocodeStatus";
 export * from "./propertyPaymentMethod";

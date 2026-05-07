@@ -47,4 +47,9 @@ pinpoints the property accurately. See `Property.coordsVerified`
 for the full contract.
  */
   coordsVerified?: boolean;
+  /** See `Property.rentFree` for the full contract. Optional on
+PATCH bodies so partial updates that don't touch this
+field keep working.
+ */
+  rentFree?: boolean;
 }

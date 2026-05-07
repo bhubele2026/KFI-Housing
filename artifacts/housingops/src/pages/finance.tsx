@@ -103,7 +103,7 @@ type SortDirection = "asc" | "desc";
 
 export default function Finance() {
   const { t } = useTranslation();
-  const { properties, beds, leases, utilities, occupants, customers } = useData();
+  const { properties, beds, leases, utilities, otherCosts, occupants, customers } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   // Room-night logs power the hotel-rate revenue estimate so corporate
@@ -131,6 +131,11 @@ export default function Finance() {
     const leaseCost = contractCost + hotelRateCost;
     const propUtils = utilities.filter(u => u.propertyId === p.id);
     const utilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
+    // Per-property recurring non-rent line items (task #497). Surfaced as
+    // a distinct rollup so they aren't silently merged into rent — the
+    // Finance table can label them "Other Costs" alongside Lease Cost.
+    const propOtherCosts = otherCosts.filter(c => c.propertyId === p.id);
+    const otherCost = propOtherCosts.reduce((s, c) => s + (c.monthlyCost || 0), 0);
     // Per-bed "electric" specifically excludes water/internet/etc, matching
     // the Dashboard and Property Detail Electric / Bed cards. Total Utility
     // Cost above keeps summing every utility type.
@@ -138,7 +143,7 @@ export default function Finance() {
       (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
       0,
     );
-    const totalCost = leaseCost + utilCost;
+    const totalCost = leaseCost + utilCost + otherCost;
     const occupiedBeds = beds.filter(b => b.propertyId === p.id && b.status === "Occupied").length;
     const totalBeds = beds.filter(b => b.propertyId === p.id).length;
     const customerName = p.customerId ? customerById.get(p.customerId) : undefined;
@@ -164,6 +169,7 @@ export default function Finance() {
       hotelRateCost,
       hasHotelRateLease,
       utilCost,
+      otherCost,
       electricCost,
       totalCost,
       profit: revenue - totalCost,
@@ -183,12 +189,13 @@ export default function Finance() {
       hotelRateCost: acc.hotelRateCost + d.hotelRateCost,
       hasAnyHotelRateLease: acc.hasAnyHotelRateLease || d.hasHotelRateLease,
       utilCost: acc.utilCost + d.utilCost,
+      otherCost: acc.otherCost + d.otherCost,
       electricCost: acc.electricCost + d.electricCost,
       totalCost: acc.totalCost + d.totalCost,
       profit: acc.profit + d.profit,
       totalBeds: acc.totalBeds + d.totalBeds,
     }),
-    { revenue: 0, leaseCost: 0, contractCost: 0, hotelRateCost: 0, hasAnyHotelRateLease: false, utilCost: 0, electricCost: 0, totalCost: 0, profit: 0, totalBeds: 0 }
+    { revenue: 0, leaseCost: 0, contractCost: 0, hotelRateCost: 0, hasAnyHotelRateLease: false, utilCost: 0, otherCost: 0, electricCost: 0, totalCost: 0, profit: 0, totalBeds: 0 }
   );
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const totalsRentPerBed = totals.totalBeds ? round2(totals.leaseCost / totals.totalBeds) : null;
@@ -405,6 +412,7 @@ export default function Finance() {
       { header: tt("contractRent"), value: (d: typeof financialData[number]) => d.contractCost },
       { header: tt("hotelRateEst"), value: (d: typeof financialData[number]) => d.hotelRateCost },
       { header: tt("utilityCost"), value: (d: typeof financialData[number]) => d.utilCost },
+      { header: tt("otherCost"), value: (d: typeof financialData[number]) => d.otherCost },
       { header: tt("totalCost"), value: (d: typeof financialData[number]) => d.totalCost },
       { header: tt("netProfit"), value: (d: typeof financialData[number]) => d.profit },
       { header: tt("rentPerBed"), value: (d: typeof financialData[number]) => d.rentPerBed ?? "" },
@@ -426,6 +434,7 @@ export default function Finance() {
       hotelRateCost: totals.hotelRateCost,
       hasHotelRateLease: totals.hasAnyHotelRateLease,
       utilCost: totals.utilCost,
+      otherCost: totals.otherCost,
       electricCost: totals.electricCost,
       totalCost: totals.totalCost,
       profit: totals.profit,
@@ -438,7 +447,7 @@ export default function Finance() {
     // Blank out the non-numeric columns (Customer, Occupied/Total Beds) so the
     // totals row only carries summed values alongside its label.
     const numericHeaders = new Set([
-      tt("revenue"), tt("leaseCost"), tt("contractRent"), tt("hotelRateEst"), tt("utilityCost"), tt("totalCost"), tt("netProfit"),
+      tt("revenue"), tt("leaseCost"), tt("contractRent"), tt("hotelRateEst"), tt("utilityCost"), tt("otherCost"), tt("totalCost"), tt("netProfit"),
       tt("rentPerBed"), tt("electricPerBed"), tt("rentPlusElectricPerBed"),
     ]);
     const propertyHeader = tt("property");
@@ -869,6 +878,7 @@ export default function Finance() {
                   <TableHead className="text-right">{t("pages.finance.table.revenue")}</TableHead>
                   <TableHead className="text-right">{t("pages.finance.table.leaseCost")}</TableHead>
                   <TableHead className="text-right">{t("pages.finance.table.utilityCost")}</TableHead>
+                  <TableHead className="text-right">{t("pages.finance.table.otherCost")}</TableHead>
                   <TableHead className="text-right">{t("pages.finance.table.totalCost")}</TableHead>
                   <TableHead className="text-right">{t("pages.finance.table.netProfit")}</TableHead>
                   <TableHead className="text-right">{t("pages.finance.table.rentPerBed")}</TableHead>
@@ -953,6 +963,12 @@ export default function Finance() {
                           )}
                         </td>
                         <td className="p-4 text-right text-sm text-muted-foreground">{formatUsd(d.utilCost)}</td>
+                        <td
+                          className="p-4 text-right text-sm text-muted-foreground"
+                          data-testid={`text-finance-other-cost-${d.id}`}
+                        >
+                          {formatUsd(d.otherCost)}
+                        </td>
                         <td className="p-4 text-right text-sm font-medium">{formatUsd(d.totalCost)}</td>
                         <td className="p-4 text-right">
                           <Badge
@@ -1001,6 +1017,12 @@ export default function Finance() {
                         )}
                       </td>
                       <td className="p-4 text-right font-bold">{formatUsd(totals.utilCost)}</td>
+                      <td
+                        className="p-4 text-right font-bold"
+                        data-testid="text-finance-other-cost-total"
+                      >
+                        {formatUsd(totals.otherCost)}
+                      </td>
                       <td className="p-4 text-right font-bold">{formatUsd(totals.totalCost)}</td>
                       <td className="p-4 text-right">
                         <Badge

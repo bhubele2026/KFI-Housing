@@ -210,6 +210,12 @@ export const ImportDataBody = zod.object({
         .describe(
           'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
         ),
+      rentFree: zod
+        .boolean()
+        .optional()
+        .describe(
+          'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
+        ),
       geocodeStatus: zod
         .enum(["ok", "no_result", "skipped"])
         .optional()
@@ -457,6 +463,23 @@ export const ImportDataBody = zod.object({
     .describe(
       "Optional. Renter's \/ liability insurance certificates on\nfile for properties. Older backups (pre task #333) won't\ninclude this — the importer treats a missing array as\nempty.\n",
     ),
+  otherCosts: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          propertyId: zod.string(),
+          label: zod.string(),
+          monthlyCost: zod.number(),
+        })
+        .describe(
+          "Recurring non-rent monthly cost line for a property — used by\nthe rent-free \/ cleaning-fee-only mode (Task #497) to capture\nthe actual recurring spend (cleaning, pass-through utilities,\nflat fees, etc.) when `Property.rentFree` is true.\n",
+        ),
+    )
+    .optional()
+    .describe(
+      "Optional. Per-property recurring non-rent costs (Task\n#497, rent-free mode). Older backups won't include this —\nthe importer treats a missing array as empty.\n",
+    ),
 });
 
 export const ImportDataResponse = zod.object({
@@ -690,6 +713,12 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
     ),
+  rentFree: zod
+    .boolean()
+    .optional()
+    .describe(
+      'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -808,6 +837,12 @@ export const CreatePropertyBody = zod.object({
     .optional()
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
+  rentFree: zod
+    .boolean()
+    .optional()
+    .describe(
+      'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
     ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
@@ -952,6 +987,12 @@ export const UpdatePropertyBody = zod.object({
     .describe(
       "Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. See `Property.coordsVerified`\nfor the full contract.\n",
     ),
+  rentFree: zod
+    .boolean()
+    .optional()
+    .describe(
+      "See `Property.rentFree` for the full contract. Optional on\nPATCH bodies so partial updates that don't touch this\nfield keep working.\n",
+    ),
 });
 
 export const updatePropertyResponseRatingsLandlordMin = 0;
@@ -1060,6 +1101,12 @@ export const UpdatePropertyResponse = zod.object({
     .optional()
     .describe(
       'Whether the operator has confirmed the persisted lat\/lng\npinpoints the property accurately. Auto-geocoded pins land\nhere as `false` so the UI can label them \"approximate\".\nCleared back to `false` automatically when the address\nchanges — a verified pin only applies to the address it\nwas verified against.\n',
+    ),
+  rentFree: zod
+    .boolean()
+    .optional()
+    .describe(
+      'When true, the property has no monthly rent (cleaning-fee\n\/ pass-through arrangement). The Lease Rent stat, the\nProperties \/ Leases columns, and the finance roll-up swap\nin the sum of `OtherCost.monthlyCost` for this property\ninstead of the canonical `monthlyRent`, and the\n\"missing rent\" review filter excludes the row. See task\n#497. Optional for backward compatibility — older payloads\nwithout the field default to `false`.\n',
     ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
@@ -2429,6 +2476,66 @@ export const UpdateUtilityResponse = zod.object({
  * @summary Delete a utility
  */
 export const DeleteUtilityParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List all other costs
+ */
+export const ListOtherCostsResponseItem = zod
+  .object({
+    id: zod.string(),
+    propertyId: zod.string(),
+    label: zod.string(),
+    monthlyCost: zod.number(),
+  })
+  .describe(
+    "Recurring non-rent monthly cost line for a property — used by\nthe rent-free \/ cleaning-fee-only mode (Task #497) to capture\nthe actual recurring spend (cleaning, pass-through utilities,\nflat fees, etc.) when `Property.rentFree` is true.\n",
+  );
+export const ListOtherCostsResponse = zod.array(ListOtherCostsResponseItem);
+
+/**
+ * @summary Create an other cost
+ */
+export const CreateOtherCostBody = zod
+  .object({
+    id: zod.string(),
+    propertyId: zod.string(),
+    label: zod.string(),
+    monthlyCost: zod.number(),
+  })
+  .describe(
+    "Recurring non-rent monthly cost line for a property — used by\nthe rent-free \/ cleaning-fee-only mode (Task #497) to capture\nthe actual recurring spend (cleaning, pass-through utilities,\nflat fees, etc.) when `Property.rentFree` is true.\n",
+  );
+
+/**
+ * @summary Update an other cost
+ */
+export const UpdateOtherCostParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateOtherCostBody = zod.object({
+  propertyId: zod.string().optional(),
+  label: zod.string().optional(),
+  monthlyCost: zod.number().optional(),
+});
+
+export const UpdateOtherCostResponse = zod
+  .object({
+    id: zod.string(),
+    propertyId: zod.string(),
+    label: zod.string(),
+    monthlyCost: zod.number(),
+  })
+  .describe(
+    "Recurring non-rent monthly cost line for a property — used by\nthe rent-free \/ cleaning-fee-only mode (Task #497) to capture\nthe actual recurring spend (cleaning, pass-through utilities,\nflat fees, etc.) when `Property.rentFree` is true.\n",
+  );
+
+/**
+ * @summary Delete an other cost
+ */
+export const DeleteOtherCostParams = zod.object({
   id: zod.coerce.string(),
 });
 

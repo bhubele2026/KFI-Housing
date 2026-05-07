@@ -911,6 +911,68 @@ paths:
         "204":
           description: Deleted
 
+  /other-costs:
+    get:
+      operationId: listOtherCosts
+      tags: [other-costs]
+      summary: List all other costs
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OtherCost" }
+    post:
+      operationId: createOtherCost
+      tags: [other-costs]
+      summary: Create an other cost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtherCost" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtherCost" }
+  /other-costs/{id}:
+    patch:
+      operationId: updateOtherCost
+      tags: [other-costs]
+      summary: Update an other cost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OtherCostUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtherCost" }
+    delete:
+      operationId: deleteOtherCost
+      tags: [other-costs]
+      summary: Delete an other cost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
   /payroll/unplaced:
     get:
       operationId: listUnplacedPayroll
@@ -1248,6 +1310,17 @@ components:
             Cleared back to `false` automatically when the address
             changes — a verified pin only applies to the address it
             was verified against.
+        rentFree:
+          type: boolean
+          description: |
+            When true, the property has no monthly rent (cleaning-fee
+            / pass-through arrangement). The Lease Rent stat, the
+            Properties / Leases columns, and the finance roll-up swap
+            in the sum of `OtherCost.monthlyCost` for this property
+            instead of the canonical `monthlyRent`, and the
+            "missing rent" review filter excludes the row. See task
+            #497. Optional for backward compatibility — older payloads
+            without the field default to `false`.
         geocodeStatus:
           type: string
           enum: [ok, no_result, skipped]
@@ -1327,6 +1400,12 @@ components:
             Whether the operator has confirmed the persisted lat/lng
             pinpoints the property accurately. See `Property.coordsVerified`
             for the full contract.
+        rentFree:
+          type: boolean
+          description: |
+            See `Property.rentFree` for the full contract. Optional on
+            PATCH bodies so partial updates that don't touch this
+            field keep working.
 
     Ratings:
       type: object
@@ -1793,6 +1872,26 @@ components:
         accountNumber: { type: string }
         notes: { type: string }
 
+    OtherCost:
+      type: object
+      description: |
+        Recurring non-rent monthly cost line for a property — used by
+        the rent-free / cleaning-fee-only mode (Task #497) to capture
+        the actual recurring spend (cleaning, pass-through utilities,
+        flat fees, etc.) when `Property.rentFree` is true.
+      required: [id, propertyId, label, monthlyCost]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        label: { type: string }
+        monthlyCost: { type: number }
+    OtherCostUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        label: { type: string }
+        monthlyCost: { type: number }
+
     LeasePdfExtracted:
       type: object
       required:
@@ -2216,3 +2315,10 @@ components:
             include this — the importer treats a missing array as
             empty.
           items: { $ref: "#/components/schemas/InsuranceCertificate" }
+        otherCosts:
+          type: array
+          description: |
+            Optional. Per-property recurring non-rent costs (Task
+            #497, rent-free mode). Older backups won't include this —
+            the importer treats a missing array as empty.
+          items: { $ref: "#/components/schemas/OtherCost" }

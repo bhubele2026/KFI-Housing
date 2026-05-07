@@ -9,6 +9,7 @@ import {
   bedsTable,
   occupantsTable,
   utilitiesTable,
+  otherCostsTable,
   insuranceCertificatesTable,
   schedulerStateTable,
   type InsertCustomerRow,
@@ -18,6 +19,7 @@ import {
   type InsertBedRow,
   type InsertOccupantRow,
   type InsertUtilityRow,
+  type InsertOtherCostRow,
   type InsertInsuranceCertificateRow,
   type InsertRoomNightLogRow,
 } from "@workspace/db";
@@ -528,6 +530,9 @@ interface DataBundle {
   // Optional so callers built before task #333 (insurance-certificates
   // resource) keep compiling. Treated as `[]` when missing.
   insuranceCertificates?: InsertInsuranceCertificateRow[];
+  // Optional so callers built before task #497 (rent-free / other
+  // costs) keep compiling. Treated as `[]` when missing.
+  otherCosts?: InsertOtherCostRow[];
 }
 
 /**
@@ -595,6 +600,10 @@ async function wipeAllInTx(
   await tx.delete(roomNightLogsTable);
   await tx.delete(leasesTable);
   await tx.delete(utilitiesTable);
+  // Per-property recurring non-rent costs (Task #497). Wiped before
+  // properties so a future FK on `property_id` would already see its
+  // parent rows gone in the right order.
+  await tx.delete(otherCostsTable);
   // Insurance certificates reference properties (and optionally
   // leases) by id — wipe before properties so a future FK doesn't
   // trip on cascade order.
@@ -651,6 +660,10 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
     // reason. Optional on legacy bundles.
     const certs = bundle.insuranceCertificates ?? [];
     if (certs.length > 0) await tx.insert(insuranceCertificatesTable).values(certs);
+    // Inserted after properties for FK-friendliness (the column is a
+    // plain `text` ref today; ordering future-proofs the insert).
+    const otherCosts = bundle.otherCosts ?? [];
+    if (otherCosts.length > 0) await tx.insert(otherCostsTable).values(otherCosts);
   });
 }
 
@@ -740,6 +753,7 @@ export async function replaceAllData(bundle: DataBundle): Promise<void> {
       utilities: bundle.utilities.length,
       roomNightLogs: bundle.roomNightLogs?.length ?? 0,
       insuranceCertificates: bundle.insuranceCertificates?.length ?? 0,
+      otherCosts: bundle.otherCosts?.length ?? 0,
     },
     "Replacing all data with imported bundle…",
   );

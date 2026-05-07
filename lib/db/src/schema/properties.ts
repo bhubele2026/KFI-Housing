@@ -72,6 +72,12 @@ export const propertiesTable = pgTable("properties", {
   // automatically whenever the address changes — a verified pin only
   // applies to the address it was verified against.
   coordsVerified: boolean("coords_verified").notNull().default(false),
+  // Rent-free property (cleaning-fee-only): when true, the canonical
+  // monthly rent is treated as $0 and the property's recurring cost
+  // comes from the `other_costs` table instead. Suppresses the
+  // "missing rent" review alert and swaps the Lease Rent stat / list
+  // columns / finance roll-up for the other-costs total. See task #497.
+  rentFree: boolean("rent_free").notNull().default(false),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

@@ -21,6 +21,8 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import {
   getRenewalInfo,
+  sumOtherCostsForProperty,
+  formatUsd,
   type Lease,
   type RentFrequency,
 } from "@/data/mockData";
@@ -455,7 +457,7 @@ export default function LeaseDetail() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const {
-    leases, properties, customers, isLoading,
+    leases, properties, customers, otherCosts, isLoading,
     updateLease, addLease, deleteLease,
   } = useData();
 
@@ -597,6 +599,13 @@ export default function LeaseDetail() {
     setDraft((d) => ({ ...d, propertyId: lockedPropertyId }));
   }, [isCreateMode, lockedPropertyId, draft.propertyId]);
 
+  // Sum of OtherCost rows for the lease's property (task #497). Used to
+  // surface the cleaning-fee total in place of the lease's $0 monthlyRent
+  // when the property is rent-free.
+  const propertyOtherCostsTotal = useMemo(() => {
+    if (!lease) return 0;
+    return sumOtherCostsForProperty(otherCosts, lease.propertyId);
+  }, [otherCosts, lease]);
   const property = useMemo(
     () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),
     [lease, properties],
@@ -1052,18 +1061,36 @@ export default function LeaseDetail() {
                 ref={rentRowRef}
                 data-testid="lease-rent-row"
               >
-                <span className="text-sm text-muted-foreground w-40 shrink-0">Rent (monthly)</span>
+                <span className="text-sm text-muted-foreground w-40 shrink-0">
+                  {property?.rentFree ? "Other Costs (monthly)" : "Rent (monthly)"}
+                </span>
                 <div className="flex items-center gap-2">
-                  <InlineEdit
-                    value={lease.monthlyRent}
-                    prefix="$"
-                    type="number"
-                    startEditing={focusRentOnMount}
-                    onSave={(v) =>
-                      applyUpdate( { monthlyRent: parseFloat(v) || 0 })
-                    }
-                    testId="inline-lease-rent"
-                  />
+                  {property?.rentFree ? (
+                    // Rent-free properties (task #497) intentionally have $0
+                    // lease rent; the recurring cost lives in OtherCost rows
+                    // on the property. Show the property's total here as
+                    // read-only with a deep link to the property's Payment
+                    // Details where the operator can edit the line items.
+                    <span
+                      className="text-sm font-medium tabular-nums"
+                      data-testid="lease-rent-other-costs-total"
+                    >
+                      {propertyOtherCostsTotal > 0
+                        ? formatUsd(propertyOtherCostsTotal) + "/mo"
+                        : "—"}
+                    </span>
+                  ) : (
+                    <InlineEdit
+                      value={lease.monthlyRent}
+                      prefix="$"
+                      type="number"
+                      startEditing={focusRentOnMount}
+                      onSave={(v) =>
+                        applyUpdate( { monthlyRent: parseFloat(v) || 0 })
+                      }
+                      testId="inline-lease-rent"
+                    />
+                  )}
                   {/*
                     Property's billing cadence — show the equivalent amount
                     when the property is billed Weekly / Bi-Weekly so the

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, UTILITY_TYPES, BILLING_FREQUENCIES, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { RoomInUseError } from "@/context/data-store";
@@ -31,6 +31,7 @@ import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { StarRating } from "@/components/star-rating";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
@@ -524,7 +525,7 @@ export function InlineEdit({
 export default function PropertyDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, customers, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, customers, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addOtherCost, updateOtherCost, deleteOtherCost, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
   // Room-night logs back the hotel-rate revenue estimate ("≈ $X this
   // month (Y nights × $Z/night)") shown for hotel-rate leases. Pulled
   // here so the Stat strip and the Finance tab share the same numbers.
@@ -796,6 +797,18 @@ export default function PropertyDetail() {
   // unaffected because `estimateLeaseMonthlyRent` returns their stored
   // `monthlyRent` unchanged when `rateType !== "room-night"`.
   const monthlyLeaseCost = sumActiveRentEstimated(propLeases, roomNightLogs, id);
+  // Total of recurring non-rent line items for this property (task #497).
+  // When `property.rentFree` is true, this replaces `monthlyLeaseCost` in
+  // every "rent" surface (header stat card, leases table, etc.) so the
+  // operator sees the cleaning fee total instead of a perpetual $0.
+  const propOtherCostsTotal = useMemo(
+    () => sumOtherCostsForProperty(otherCosts, id),
+    [otherCosts, id],
+  );
+  const propOtherCosts = useMemo(
+    () => otherCosts.filter((c) => c.propertyId === id),
+    [otherCosts, id],
+  );
   // Per-lease hotel-rate breakdown — used by the Lease Rent stat sub and
   // by the Finance tab Costs section to surface the
   // "≈ $X this month (Y nights × $Z/night)" figure operators want next
@@ -1055,8 +1068,12 @@ export default function PropertyDetail() {
           <StatCard label="Monthly Revenue" value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
           <StatCard
             testId="stat-lease-rent"
-            label="Lease Rent"
-            value={monthlyLeaseCost > 0 ? formatUsdWhole(monthlyLeaseCost) : "—"}
+            label={property.rentFree ? "Other Costs" : "Lease Rent"}
+            value={
+              property.rentFree
+                ? (propOtherCostsTotal > 0 ? formatUsdWhole(propOtherCostsTotal) : "—")
+                : (monthlyLeaseCost > 0 ? formatUsdWhole(monthlyLeaseCost) : "—")
+            }
             icon={KeyRound}
             color="text-destructive"
             sub={
@@ -1494,6 +1511,102 @@ export default function PropertyDetail() {
                   <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" />Payment Details</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {/* Rent-free toggle (task #497). When enabled, the canonical
+                      monthly rent is treated as $0 and the property's recurring
+                      cost is the sum of the Other Costs editor below. */}
+                  <div
+                    className="flex items-center justify-between py-2 mb-3 border-b border-border/60"
+                    data-testid="rent-free-toggle-row"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">Rent-free property</span>
+                      <span className="text-xs text-muted-foreground">
+                        Use this for cleaning-fee-only sites with no monthly rent.
+                      </span>
+                    </div>
+                    <Switch
+                      checked={property.rentFree ?? false}
+                      onCheckedChange={(v) => updateProperty(id, { rentFree: v })}
+                      data-testid="switch-rent-free"
+                    />
+                  </div>
+                  {property.rentFree && (
+                    <div className="mb-4" data-testid="other-costs-editor">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Other Costs</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            addOtherCost({
+                              id: `oc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                              propertyId: id,
+                              label: "",
+                              monthlyCost: 0,
+                            })
+                          }
+                          data-testid="button-add-other-cost"
+                        >
+                          Add line
+                        </Button>
+                      </div>
+                      {propOtherCosts.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">
+                          No recurring costs yet — add one (e.g. "Cleaning fee").
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {propOtherCosts.map((c) => (
+                            <div
+                              key={c.id}
+                              className="flex items-center gap-2"
+                              data-testid={`other-cost-row-${c.id}`}
+                            >
+                              <InlineEdit
+                                value={c.label}
+                                onSave={(v) => updateOtherCost(c.id, { label: v })}
+                                placeholder="Label"
+                              />
+                              <InlineEdit
+                                value={c.monthlyCost}
+                                type="number"
+                                prefix="$"
+                                onSave={(v) =>
+                                  updateOtherCost(c.id, { monthlyCost: parseFloat(v) || 0 })
+                                }
+                              />
+                              <span className="text-xs text-muted-foreground">/mo</span>
+                              <ConfirmDeleteButton
+                                title="Delete this line item?"
+                                description="This permanently removes the recurring cost line. You can't undo this."
+                                onConfirm={() => deleteOtherCost(c.id)}
+                                trigger={
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                    aria-label="Delete other cost"
+                                    data-testid={`button-delete-other-cost-${c.id}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                }
+                              />
+                            </div>
+                          ))}
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-dashed border-border/50">
+                            <span className="text-xs text-muted-foreground">Total</span>
+                            <span
+                              className="text-sm font-medium tabular-nums"
+                              data-testid="other-costs-total"
+                            >
+                              {formatUsd(propOtherCostsTotal)}/mo
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
                       <span className="text-sm text-muted-foreground w-40 shrink-0">Payment Method</span>
@@ -1634,6 +1747,7 @@ export default function PropertyDetail() {
                 <LeasesTable
                   leases={sortedPropLeases}
                   properties={properties}
+                  otherCosts={otherCosts}
                   showProperty={false}
                   showCustomer={false}
                   onDelete={deleteLease}

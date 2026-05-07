@@ -120,6 +120,12 @@ export const PropertySchema = z.object({
   // label the marker "approximate location"; cleared back to `false`
   // automatically whenever the address changes.
   coordsVerified: z.boolean().optional(),
+  // Rent-free property (cleaning-fee-only — task #497). When true the
+  // canonical monthly rent is treated as $0 and the property's
+  // recurring cost comes from the `OtherCost` rows for it instead.
+  // Optional so older payloads / fixtures keep parsing; treat
+  // missing/undefined as `false` at the call site.
+  rentFree: z.boolean().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 
@@ -836,6 +842,30 @@ export function getRenewalInfo(endDate: string): RenewalInfo | null {
     label: `${dayWord(days)} left`,
     shortLabel: `${days}d`,
   };
+}
+
+/**
+ * Per-property recurring non-rent cost line (task #497, rent-free
+ * mode). Mirrors `OtherCost` in `lib/api-spec/openapi.yaml`. When a
+ * property has `rentFree: true`, the sum of these rows is shown in
+ * place of the canonical `monthlyRent` everywhere rent is surfaced.
+ */
+export const OtherCostSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  label: z.string(),
+  monthlyCost: z.number(),
+});
+export type OtherCost = z.infer<typeof OtherCostSchema>;
+
+/** Sum of the monthly cost of every {@link OtherCost} for a property. */
+export function sumOtherCostsForProperty(
+  otherCosts: readonly OtherCost[],
+  propertyId: string,
+): number {
+  return otherCosts
+    .filter((c) => c.propertyId === propertyId)
+    .reduce((s, c) => s + (c.monthlyCost || 0), 0);
 }
 
 export const UTILITY_TYPES = ["Electric", "Gas", "Propane", "Water", "Garbage", "Internet", "Other"] as const;

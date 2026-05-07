@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { getCustomerResponsibleLeases, sumCustomerResponsibleRent, toMonthlyCharge, formatUsd } from "@/data/mockData";
+import { getCustomerResponsibleLeases, sumCustomerResponsibleRent, sumOtherCostsForProperty, toMonthlyCharge, formatUsd } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ function StatCard({
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, leases, isLoading, updateCustomer } = useData();
+  const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer } = useData();
   const { toast } = useToast();
   const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(() => {
     if (typeof window === "undefined") return 12;
@@ -435,7 +435,9 @@ export default function CustomerDetail() {
                           <span className="tabular-nums font-medium text-foreground">
                             {isHotelRate
                               ? "—"
-                              : `${formatUsd((l.monthlyRent || 0))}/mo`}
+                              : property?.rentFree
+                                ? `${formatUsd(sumOtherCostsForProperty(otherCosts, l.propertyId))}/mo`
+                                : `${formatUsd((l.monthlyRent || 0))}/mo`}
                           </span>
                           <ChevronRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </span>

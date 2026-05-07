@@ -261,6 +261,16 @@ changes — a verified pin only applies to the address it
 was verified against.
  */
   coordsVerified?: boolean;
+  /** When true, the property has no monthly rent (cleaning-fee
+/ pass-through arrangement). The Lease Rent stat, the
+Properties / Leases columns, and the finance roll-up swap
+in the sum of `OtherCost.monthlyCost` for this property
+instead of the canonical `monthlyRent`, and the
+"missing rent" review filter excludes the row. See task
+#497. Optional for backward compatibility — older payloads
+without the field default to `false`.
+ */
+  rentFree?: boolean;
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time
@@ -346,6 +356,11 @@ pinpoints the property accurately. See `Property.coordsVerified`
 for the full contract.
  */
   coordsVerified?: boolean;
+  /** See `Property.rentFree` for the full contract. Optional on
+PATCH bodies so partial updates that don't touch this
+field keep working.
+ */
+  rentFree?: boolean;
 }
 
 /**
@@ -879,6 +894,26 @@ export interface UtilityUpdate {
   notes?: string;
 }
 
+/**
+ * Recurring non-rent monthly cost line for a property — used by
+the rent-free / cleaning-fee-only mode (Task #497) to capture
+the actual recurring spend (cleaning, pass-through utilities,
+flat fees, etc.) when `Property.rentFree` is true.
+
+ */
+export interface OtherCost {
+  id: string;
+  propertyId: string;
+  label: string;
+  monthlyCost: number;
+}
+
+export interface OtherCostUpdate {
+  propertyId?: string;
+  label?: string;
+  monthlyCost?: number;
+}
+
 export type LeasePdfExtractedConfidence =
   (typeof LeasePdfExtractedConfidence)[keyof typeof LeasePdfExtractedConfidence];
 
@@ -1215,6 +1250,11 @@ include this — the importer treats a missing array as
 empty.
  */
   insuranceCertificates?: InsuranceCertificate[];
+  /** Optional. Per-property recurring non-rent costs (Task
+#497, rent-free mode). Older backups won't include this —
+the importer treats a missing array as empty.
+ */
+  otherCosts?: OtherCost[];
 }
 
 export type DeleteCustomer409 = {

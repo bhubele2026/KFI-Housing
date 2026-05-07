@@ -6,6 +6,7 @@ export * from "./rooms";
 export * from "./beds";
 export * from "./occupants";
 export * from "./utilities";
+export * from "./other-costs";
 export * from "./insurance-certificates";
 export * from "./last-boot-master-import";
 export * from "./scheduler-state";

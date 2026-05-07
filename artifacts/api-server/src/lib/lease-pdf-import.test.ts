@@ -50,6 +50,7 @@ function makeProperty(overrides: Partial<PropertyRow> = {}): PropertyRow {
     lat: null,
     lng: null,
     coordsVerified: false,
+    rentFree: false,
     ...overrides,
   };
 }

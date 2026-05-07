@@ -44,6 +44,8 @@ import type {
   Occupant,
   OccupantCreate,
   OccupantUpdate,
+  OtherCost,
+  OtherCostUpdate,
   Property,
   PropertyUpdate,
   Room,
@@ -4028,6 +4030,338 @@ export const useDeleteUtility = <
   TContext
 > => {
   return useMutation(getDeleteUtilityMutationOptions(options));
+};
+
+/**
+ * @summary List all other costs
+ */
+export const getListOtherCostsUrl = () => {
+  return `/api/other-costs`;
+};
+
+export const listOtherCosts = async (
+  options?: RequestInit,
+): Promise<OtherCost[]> => {
+  return customFetch<OtherCost[]>(getListOtherCostsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListOtherCostsQueryKey = () => {
+  return [`/api/other-costs`] as const;
+};
+
+export const getListOtherCostsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listOtherCosts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOtherCosts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListOtherCostsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listOtherCosts>>> = ({
+    signal,
+  }) => listOtherCosts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listOtherCosts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListOtherCostsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listOtherCosts>>
+>;
+export type ListOtherCostsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all other costs
+ */
+
+export function useListOtherCosts<
+  TData = Awaited<ReturnType<typeof listOtherCosts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listOtherCosts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListOtherCostsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an other cost
+ */
+export const getCreateOtherCostUrl = () => {
+  return `/api/other-costs`;
+};
+
+export const createOtherCost = async (
+  otherCost: OtherCost,
+  options?: RequestInit,
+): Promise<OtherCost> => {
+  return customFetch<OtherCost>(getCreateOtherCostUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(otherCost),
+  });
+};
+
+export const getCreateOtherCostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOtherCost>>,
+    TError,
+    { data: BodyType<OtherCost> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createOtherCost>>,
+  TError,
+  { data: BodyType<OtherCost> },
+  TContext
+> => {
+  const mutationKey = ["createOtherCost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createOtherCost>>,
+    { data: BodyType<OtherCost> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createOtherCost(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateOtherCostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createOtherCost>>
+>;
+export type CreateOtherCostMutationBody = BodyType<OtherCost>;
+export type CreateOtherCostMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create an other cost
+ */
+export const useCreateOtherCost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createOtherCost>>,
+    TError,
+    { data: BodyType<OtherCost> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createOtherCost>>,
+  TError,
+  { data: BodyType<OtherCost> },
+  TContext
+> => {
+  return useMutation(getCreateOtherCostMutationOptions(options));
+};
+
+/**
+ * @summary Update an other cost
+ */
+export const getUpdateOtherCostUrl = (id: string) => {
+  return `/api/other-costs/${id}`;
+};
+
+export const updateOtherCost = async (
+  id: string,
+  otherCostUpdate: OtherCostUpdate,
+  options?: RequestInit,
+): Promise<OtherCost> => {
+  return customFetch<OtherCost>(getUpdateOtherCostUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(otherCostUpdate),
+  });
+};
+
+export const getUpdateOtherCostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOtherCost>>,
+    TError,
+    { id: string; data: BodyType<OtherCostUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateOtherCost>>,
+  TError,
+  { id: string; data: BodyType<OtherCostUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateOtherCost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateOtherCost>>,
+    { id: string; data: BodyType<OtherCostUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateOtherCost(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateOtherCostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateOtherCost>>
+>;
+export type UpdateOtherCostMutationBody = BodyType<OtherCostUpdate>;
+export type UpdateOtherCostMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an other cost
+ */
+export const useUpdateOtherCost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateOtherCost>>,
+    TError,
+    { id: string; data: BodyType<OtherCostUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateOtherCost>>,
+  TError,
+  { id: string; data: BodyType<OtherCostUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateOtherCostMutationOptions(options));
+};
+
+/**
+ * @summary Delete an other cost
+ */
+export const getDeleteOtherCostUrl = (id: string) => {
+  return `/api/other-costs/${id}`;
+};
+
+export const deleteOtherCost = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteOtherCostUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteOtherCostMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOtherCost>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteOtherCost>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteOtherCost"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteOtherCost>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteOtherCost(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteOtherCostMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteOtherCost>>
+>;
+
+export type DeleteOtherCostMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an other cost
+ */
+export const useDeleteOtherCost = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteOtherCost>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteOtherCost>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteOtherCostMutationOptions(options));
 };
 
 /**

@@ -452,7 +452,9 @@ export default function Dashboard() {
     [scopedLeases],
   );
   const needsReviewPropertyCount = useMemo(
-    () => scopedProperties.filter((p) => !(p.monthlyRent && p.monthlyRent > 0)).length,
+    // Rent-free properties (task #497) are intentionally $0 rent, so
+    // they don't count toward the missing-rent triage tile.
+    () => scopedProperties.filter((p) => !p.rentFree && !(p.monthlyRent && p.monthlyRent > 0)).length,
     [scopedProperties],
   );
   // Hotel-rate "at risk this month" — every Active/Upcoming hotel-rate

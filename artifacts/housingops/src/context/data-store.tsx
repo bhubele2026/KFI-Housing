@@ -9,6 +9,7 @@ import {
   useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
   useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant, useDeleteOccupant,
   useListUtilities, getListUtilitiesQueryKey, useCreateUtility, useUpdateUtility, useDeleteUtility,
+  useListOtherCosts, getListOtherCostsQueryKey, useCreateOtherCost, useUpdateOtherCost, useDeleteOtherCost,
   useListInsuranceCertificates, getListInsuranceCertificatesQueryKey,
   useCreateInsuranceCertificate, useUpdateInsuranceCertificate, useDeleteInsuranceCertificate,
   useListRoomNightLogs, getListRoomNightLogsQueryKey,
@@ -17,10 +18,12 @@ import {
 } from "@workspace/api-client-react";
 import {
   CustomerSchema, PropertySchema, LeaseSchema, RoomSchema, BedSchema, OccupantSchema, UtilitySchema,
+  OtherCostSchema,
   InsuranceCertificateSchema,
   RoomNightLogSchema,
   RatingsSchema,
   type Customer, type Property, type Lease, type Room, type Bed, type Occupant, type Utility,
+  type OtherCost,
   type InsuranceCertificate,
   type RoomNightLog,
 } from "@/data/mockData";
@@ -48,6 +51,11 @@ export const ExportPayloadSchema = z.object({
     // #333 shipped this field. Default to empty so older v3 files (and
     // the v1/v2 migration paths) parse cleanly.
     insuranceCertificates: z.array(InsuranceCertificateSchema).optional().default([]),
+    // Optional for backward compatibility: backups taken before task
+    // #497 (rent-free / other costs) shipped this field. Default to
+    // empty so older v3 files (and the v1/v2 migration paths) parse
+    // cleanly.
+    otherCosts: z.array(OtherCostSchema).optional().default([]),
   }),
 });
 export type ExportPayload = z.infer<typeof ExportPayloadSchema>;
@@ -255,6 +263,7 @@ export interface ImportSummary {
   utilities: number;
   roomNightLogs: number;
   insuranceCertificates: number;
+  otherCosts: number;
 }
 
 export type ImportMode = "replace" | "merge";
@@ -283,7 +292,7 @@ export interface ImportPreview {
 
 /** Sums two ImportSummary objects field-by-field. */
 export function totalImportSummary(s: ImportSummary): number {
-  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities + s.roomNightLogs + s.insuranceCertificates;
+  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities + s.roomNightLogs + s.insuranceCertificates + s.otherCosts;
 }
 
 /** A single record affected by a merge dry-run, with a human-readable label. */
@@ -313,12 +322,13 @@ export interface MergeDryRun {
   utilities: MergeImpactCategory;
   roomNightLogs: MergeImpactCategory;
   insuranceCertificates: MergeImpactCategory;
+  otherCosts: MergeImpactCategory;
 }
 
 /** Total counts across every record type in a dry run. */
 export function totalMergeDryRun(dry: MergeDryRun): { added: number; updated: number; unchanged: number } {
   let added = 0, updated = 0, unchanged = 0;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates"] as const) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates", "otherCosts"] as const) {
     added += dry[k].added;
     updated += dry[k].updated;
     unchanged += dry[k].unchanged;
@@ -336,6 +346,7 @@ const EMPTY_SUMMARY: ImportSummary = {
   utilities: 0,
   roomNightLogs: 0,
   insuranceCertificates: 0,
+  otherCosts: 0,
 };
 
 /**
@@ -384,6 +395,7 @@ export function mergeImportBundles(
     utilities: mergeList(current.utilities, incoming.utilities, "utilities"),
     roomNightLogs: mergeList(current.roomNightLogs, incoming.roomNightLogs, "roomNightLogs"),
     insuranceCertificates: mergeList(current.insuranceCertificates, incoming.insuranceCertificates, "insuranceCertificates"),
+    otherCosts: mergeList(current.otherCosts, incoming.otherCosts, "otherCosts"),
   };
 
   return { data, added, updated };
@@ -404,6 +416,7 @@ const MERGE_LABELS = {
   roomNightLogs: (l: RoomNightLog) => `Log ${l.month}`,
   insuranceCertificates: (c: InsuranceCertificate) =>
     `${c.carrier || "Insurance"}${c.policyNumber ? ` — ${c.policyNumber}` : ""}`,
+  otherCosts: (c: OtherCost) => c.label || c.id,
 };
 
 const EMPTY_CATEGORY = (): MergeImpactCategory => ({
@@ -457,6 +470,7 @@ export function dryRunMergeImport(current: ExportData, incoming: ExportData): Me
     utilities: diffList(current.utilities, incoming.utilities, MERGE_LABELS.utilities),
     roomNightLogs: diffList(current.roomNightLogs, incoming.roomNightLogs, MERGE_LABELS.roomNightLogs),
     insuranceCertificates: diffList(current.insuranceCertificates, incoming.insuranceCertificates, MERGE_LABELS.insuranceCertificates),
+    otherCosts: diffList(current.otherCosts, incoming.otherCosts, MERGE_LABELS.otherCosts),
   };
 }
 
@@ -471,13 +485,13 @@ function isImportPreview(value: unknown): value is ImportPreview {
   const summary = v.summary;
   if (typeof summary !== "object" || summary === null) return false;
   const s = summary as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates", "otherCosts"]) {
     if (typeof s[k] !== "number") return false;
   }
   const data = v.data;
   if (typeof data !== "object" || data === null) return false;
   const d = data as Record<string, unknown>;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates"]) {
+  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates", "otherCosts"]) {
     if (!Array.isArray(d[k])) return false;
   }
   return true;
@@ -546,6 +560,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         utilities: d.utilities.length,
         roomNightLogs: d.roomNightLogs.length,
         insuranceCertificates: d.insuranceCertificates.length,
+        otherCosts: d.otherCosts.length,
       },
     };
   }
@@ -565,6 +580,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       utilities: old.utilities,
       roomNightLogs: [],
       insuranceCertificates: [],
+      otherCosts: [],
     };
     return {
       data,
@@ -580,6 +596,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         utilities: data.utilities.length,
         roomNightLogs: 0,
         insuranceCertificates: 0,
+        otherCosts: 0,
       },
     };
   }
@@ -603,6 +620,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       utilities: old.utilities,
       roomNightLogs: [],
       insuranceCertificates: [],
+      otherCosts: [],
     };
     return {
       data,
@@ -618,6 +636,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
         utilities: data.utilities.length,
         roomNightLogs: 0,
         insuranceCertificates: 0,
+        otherCosts: 0,
       },
     };
   }
@@ -665,6 +684,7 @@ interface DataStore {
   beds: Bed[];
   occupants: Occupant[];
   utilities: Utility[];
+  otherCosts: OtherCost[];
   insuranceCertificates: InsuranceCertificate[];
   roomNightLogs: RoomNightLog[];
   isLoading: boolean;
@@ -696,6 +716,9 @@ interface DataStore {
   updateUtility: (id: string, updates: Partial<Utility>) => void;
   addUtility: (utility: Utility) => void;
   deleteUtility: (id: string) => void;
+  updateOtherCost: (id: string, updates: Partial<OtherCost>) => void;
+  addOtherCost: (otherCost: OtherCost) => void;
+  deleteOtherCost: (id: string) => void;
   updateInsuranceCertificate: (id: string, updates: Partial<InsuranceCertificate>) => void;
   addInsuranceCertificate: (cert: InsuranceCertificate) => void;
   deleteInsuranceCertificate: (id: string) => void;
@@ -747,6 +770,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bedsQuery = useListBeds();
   const occupantsQuery = useListOccupants();
   const utilitiesQuery = useListUtilities();
+  const otherCostsQuery = useListOtherCosts();
   const insuranceCertificatesQuery = useListInsuranceCertificates();
   const roomNightLogsQuery = useListRoomNightLogs();
 
@@ -757,6 +781,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bedsKey = getListBedsQueryKey();
   const occupantsKey = getListOccupantsQueryKey();
   const utilitiesKey = getListUtilitiesQueryKey();
+  const otherCostsKey = getListOtherCostsQueryKey();
   const insuranceCertificatesKey = getListInsuranceCertificatesQueryKey();
   const roomNightLogsKey = getListRoomNightLogsQueryKey();
 
@@ -781,6 +806,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const createUtilityMut = useCreateUtility();
   const updateUtilityMut = useUpdateUtility();
   const deleteUtilityMut = useDeleteUtility();
+  const createOtherCostMut = useCreateOtherCost();
+  const updateOtherCostMut = useUpdateOtherCost();
+  const deleteOtherCostMut = useDeleteOtherCost();
   const createInsuranceCertificateMut = useCreateInsuranceCertificate();
   const updateInsuranceCertificateMut = useUpdateInsuranceCertificate();
   const deleteInsuranceCertificateMut = useDeleteInsuranceCertificate();
@@ -819,6 +847,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const { rows: utilities, droppedRaw: utilitiesDroppedRaw } = useMemo(
     () => safeParseList(UtilitySchema, utilitiesQuery.data, "utilities"),
     [utilitiesQuery.data],
+  );
+  const { rows: otherCosts, droppedRaw: otherCostsDroppedRaw } = useMemo(
+    () => safeParseList(OtherCostSchema, otherCostsQuery.data, "other costs"),
+    [otherCostsQuery.data],
   );
   const { rows: insuranceCertificates, droppedRaw: insuranceCertificatesDroppedRaw } = useMemo(
     () => safeParseList(InsuranceCertificateSchema, insuranceCertificatesQuery.data, "insurance certificates"),
@@ -900,6 +932,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         label: type && company ? `${type} — ${company}` : type || company,
       };
     });
+    const otherCostRows = buildRows(otherCostsDroppedRaw, (r) => ({
+      id: readString(r, "id"),
+      label: readString(r, "label"),
+      propertyId: readString(r, "propertyId"),
+    }));
     const insuranceRows = buildRows(insuranceCertificatesDroppedRaw, (r) => {
       const carrier = readString(r, "carrier");
       const policy = readString(r, "policyNumber");
@@ -924,6 +961,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       { kind: "beds", label: "beds", dropped: bedRows.length, rows: bedRows },
       { kind: "occupants", label: "occupants", dropped: occupantRows.length, rows: occupantRows },
       { kind: "utilities", label: "utilities", dropped: utilityRows.length, rows: utilityRows },
+      { kind: "otherCosts", label: "other costs", dropped: otherCostRows.length, rows: otherCostRows },
       { kind: "insuranceCertificates", label: "insurance certificates", dropped: insuranceRows.length, rows: insuranceRows },
       { kind: "roomNightLogs", label: "room-night logs", dropped: logRows.length, rows: logRows },
     ];
@@ -932,6 +970,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     properties,
     customersDroppedRaw, propertiesDroppedRaw, leasesDroppedRaw, roomsDroppedRaw,
     bedsDroppedRaw, occupantsDroppedRaw, utilitiesDroppedRaw,
+    otherCostsDroppedRaw,
     insuranceCertificatesDroppedRaw, roomNightLogsDroppedRaw,
   ]);
   const isLoading =
@@ -942,6 +981,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     bedsQuery.isLoading ||
     occupantsQuery.isLoading ||
     utilitiesQuery.isLoading ||
+    otherCostsQuery.isLoading ||
     insuranceCertificatesQuery.isLoading ||
     roomNightLogsQuery.isLoading;
 
@@ -993,6 +1033,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: bedsKey });
     queryClient.invalidateQueries({ queryKey: occupantsKey });
     queryClient.invalidateQueries({ queryKey: utilitiesKey });
+    queryClient.invalidateQueries({ queryKey: otherCostsKey });
     queryClient.invalidateQueries({ queryKey: insuranceCertificatesKey });
     queryClient.invalidateQueries({ queryKey: roomNightLogsKey });
   };
@@ -1225,6 +1266,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     deleteUtilityMut.mutate({ id }, handlers);
   };
 
+  const updateOtherCost = (id: string, updates: Partial<OtherCost>) => {
+    const handlers = captureRollback<OtherCost[]>(otherCostsKey, "save your other-cost changes");
+    patchInList<OtherCost>(otherCostsKey, id, updates);
+    updateOtherCostMut.mutate({ id, data: updates }, handlers);
+  };
+  const addOtherCost = (otherCost: OtherCost) => {
+    const handlers = captureRollback<OtherCost[]>(otherCostsKey, "add the new other cost");
+    pushToList<OtherCost>(otherCostsKey, otherCost);
+    createOtherCostMut.mutate({ data: otherCost }, handlers);
+  };
+  const deleteOtherCost = (id: string) => {
+    const handlers = captureRollback<OtherCost[]>(otherCostsKey, "delete the other cost");
+    removeFromList<OtherCost>(otherCostsKey, id);
+    deleteOtherCostMut.mutate({ id }, handlers);
+  };
+
   const updateInsuranceCertificate = (id: string, updates: Partial<InsuranceCertificate>) => {
     const handlers = captureRollback<InsuranceCertificate[]>(insuranceCertificatesKey, "save your insurance certificate changes");
     patchInList<InsuranceCertificate>(insuranceCertificatesKey, id, updates);
@@ -1261,7 +1318,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     format: "housingops-export",
     version: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs, insuranceCertificates },
+    data: { customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs, insuranceCertificates, otherCosts },
   });
 
   // Holds the pre-import bundle plus the timer that drops it after the
@@ -1298,6 +1355,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
     queryClient.setQueryData<Occupant[]>(occupantsKey, dataToWrite.occupants);
     queryClient.setQueryData<Utility[]>(utilitiesKey, dataToWrite.utilities);
+    queryClient.setQueryData<OtherCost[]>(otherCostsKey, dataToWrite.otherCosts);
     queryClient.setQueryData<InsuranceCertificate[]>(insuranceCertificatesKey, dataToWrite.insuranceCertificates);
     queryClient.setQueryData<RoomNightLog[]>(roomNightLogsKey, dataToWrite.roomNightLogs);
 
@@ -1336,6 +1394,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       beds: [...beds],
       occupants: [...occupants],
       utilities: [...utilities],
+      otherCosts: [...otherCosts],
       insuranceCertificates: [...insuranceCertificates],
       roomNightLogs: [...roomNightLogs],
     };
@@ -1379,13 +1438,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const previewMergeImport = (preview: ImportPreview): MergeDryRun =>
     dryRunMergeImport(
-      { customers, properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, roomNightLogs },
+      { customers, properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs },
       preview.data,
     );
 
   return (
     <DataContext.Provider value={{
-      customers, properties, leases, rooms, beds, occupants, utilities, insuranceCertificates, roomNightLogs, isLoading,
+      customers, properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs, isLoading,
       dataIssues,
       addCustomer, updateCustomer, deleteCustomer,
       addProperty, updateProperty, deleteProperty,
@@ -1393,6 +1452,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addRoom, updateRoom, deleteRoom,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant,
       updateUtility, addUtility, deleteUtility,
+      updateOtherCost, addOtherCost, deleteOtherCost,
       updateInsuranceCertificate, addInsuranceCertificate, deleteInsuranceCertificate,
       resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
     }}>

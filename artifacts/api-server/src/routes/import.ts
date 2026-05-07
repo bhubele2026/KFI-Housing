@@ -16,6 +16,9 @@ router.post("/import", async (req, res): Promise<void> => {
     // missing as an empty array so the importer never crashes on a
     // legacy backup that has nothing to restore.
     roomNightLogs: body.data.roomNightLogs ?? [],
+    // Older clients (pre task #497) won't include this field; treat
+    // missing as an empty array.
+    otherCosts: body.data.otherCosts ?? [],
   });
   res.json({ status: "ok" });
 });

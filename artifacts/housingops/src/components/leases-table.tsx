@@ -9,7 +9,7 @@ import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Brie
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Lease, Customer, Property, RoomNightLog } from "@/data/mockData";
+import type { Lease, Customer, Property, RoomNightLog, OtherCost } from "@/data/mockData";
 import { formatUsd } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
@@ -90,6 +90,14 @@ export interface LeasesTableProps {
    * per-property Leases tab) keep their current behaviour.
    */
   roomNightLogs?: readonly RoomNightLog[];
+  /**
+   * Per-property recurring non-rent costs (task #497). When a lease's
+   * property has `rentFree: true`, the Rent column shows the sum of
+   * that property's `OtherCost` rows instead of the lease's stored $0
+   * `monthlyRent`. Defaults to an empty array so callers that don't
+   * care (sandbox / unit tests) keep their current behaviour.
+   */
+  otherCosts?: readonly OtherCost[];
   /**
    * Page path (no leading hash) the user is currently on. Threaded through
    * to the lease detail page via the `?from=` query string so the back
@@ -175,9 +183,19 @@ export function LeasesTable({
   emptyAction,
   placeholderProperties = [],
   roomNightLogs,
+  otherCosts = [],
   originPath,
 }: LeasesTableProps) {
   const propertyById = new Map(properties.map((p) => [p.id, p] as const));
+  // Pre-aggregate OtherCost rows per property so the Rent column lookup
+  // is O(1) per row instead of O(n) per render.
+  const otherCostsByPropertyId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of otherCosts) {
+      m.set(c.propertyId, (m.get(c.propertyId) ?? 0) + (c.monthlyCost || 0));
+    }
+    return m;
+  }, [otherCosts]);
   const customerById = new Map((customers ?? []).map((c) => [c.id, c] as const));
   const [, navigate] = useLocation();
 
@@ -489,7 +507,19 @@ export function LeasesTable({
                     )}
                   </TableCell>
                   <TableCell className="text-right text-sm tabular-nums" data-testid={`cell-lease-rent-${lease.id}`}>
-                    {formatMoney(lease.monthlyRent)}
+                    {(() => {
+                      // Rent-free properties (task #497) store $0 rent on
+                      // each lease by design — surface the property's
+                      // recurring "other costs" total instead so this
+                      // column never shows a perpetual $0 for cleaning-
+                      // fee-only sites.
+                      const property = propertyById.get(lease.propertyId);
+                      if (property?.rentFree) {
+                        const total = otherCostsByPropertyId.get(lease.propertyId) ?? 0;
+                        return total > 0 ? formatMoney(total) : "—";
+                      }
+                      return formatMoney(lease.monthlyRent);
+                    })()}
                   </TableCell>
                   <TableCell className="text-right text-sm tabular-nums" data-testid={`cell-lease-deposit-${lease.id}`}>
                     {formatMoney(lease.securityDeposit)}

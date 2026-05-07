@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   readDigestConfig,
   startWeeklyLeaseDigestScheduler,
+  mergeRecipients,
 } from "./lease-digest-scheduler";
 
 function fakeLogger() {
@@ -31,8 +32,22 @@ describe("readDigestConfig", () => {
   });
 });
 
+describe("mergeRecipients", () => {
+  it("deduplicates case-insensitively", () => {
+    expect(mergeRecipients(["A@x.com"], ["a@x.com", "b@y.com"])).toEqual([
+      "a@x.com",
+      "b@y.com",
+    ]);
+  });
+  it("handles empty inputs", () => {
+    expect(mergeRecipients([], [])).toEqual([]);
+    expect(mergeRecipients([], ["c@z.com"])).toEqual(["c@z.com"]);
+    expect(mergeRecipients(["c@z.com"], [])).toEqual(["c@z.com"]);
+  });
+});
+
 describe("startWeeklyLeaseDigestScheduler", () => {
-  it("logs and no-ops when not configured", () => {
+  it("logs and no-ops when webhook URL is missing", () => {
     const logger = fakeLogger();
     const setIntervalFn = vi.fn();
     startWeeklyLeaseDigestScheduler({
@@ -92,17 +107,97 @@ describe("startWeeklyLeaseDigestScheduler", () => {
     });
     expect(setIntervalFn).toHaveBeenCalledTimes(1);
     expect(registered).not.toBeNull();
-    // First tick: Monday 13:00 → fires.
     registered!();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    // Second tick same week: no-op.
     now = new Date("2026-05-04T15:00:00Z");
     registered!();
     await new Promise((r) => setTimeout(r, 0));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    // Next Monday: fires again.
     now = new Date("2026-05-11T13:00:00Z");
     registered!();
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("merges env and DB recipients at send time", async () => {
+    const logger = fakeLogger();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("ok", { status: 200 }));
+    let registered: (() => void) | null = null;
+    const setIntervalFn = vi.fn((cb: () => void) => {
+      registered = cb;
+      return { unref: () => {} };
+    });
+    const loadDbRecipients = vi
+      .fn()
+      .mockResolvedValue(["db@example.com", "ops@example.com"]);
+
+    startWeeklyLeaseDigestScheduler({
+      config: {
+        webhookUrl: "https://hooks/x",
+        recipients: ["ops@example.com"],
+        appBaseUrl: "https://app.example.com",
+        weekday: 1,
+        hourUtc: 13,
+      },
+      fetch: fetchMock,
+      loadLeases: async () => [
+        {
+          id: "l1",
+          propertyId: "p1",
+          startDate: "2024-01-01",
+          endDate: "2026-05-25",
+          status: "Active",
+        },
+      ],
+      loadProperties: async () => [{ id: "p1", name: "Maple" }],
+      loadDbRecipients,
+      now: () => new Date("2026-05-04T13:00:00Z"),
+      logger,
+      setIntervalFn,
+    });
+
+    registered!();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(loadDbRecipients).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.to).toEqual(
+      expect.arrayContaining(["ops@example.com", "db@example.com"]),
+    );
+    expect(body.to).toHaveLength(2);
+  });
+
+  it("skips when no env recipients and no DB recipients", async () => {
+    const logger = fakeLogger();
+    const fetchMock = vi.fn();
+    let registered: (() => void) | null = null;
+    const setIntervalFn = vi.fn((cb: () => void) => {
+      registered = cb;
+      return { unref: () => {} };
+    });
+
+    startWeeklyLeaseDigestScheduler({
+      config: {
+        webhookUrl: "https://hooks/x",
+        recipients: [],
+        appBaseUrl: "https://app.example.com",
+        weekday: 1,
+        hourUtc: 13,
+      },
+      fetch: fetchMock,
+      loadLeases: async () => [],
+      loadProperties: async () => [],
+      loadDbRecipients: async () => [],
+      now: () => new Date("2026-05-04T13:00:00Z"),
+      logger,
+      setIntervalFn,
+    });
+
+    registered!();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("no recipients"),
+    );
   });
 });

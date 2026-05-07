@@ -8,6 +8,12 @@
  * scheduled window is short) this is acceptable; persist
  * `lastSentWeekKey` to the DB if you need stronger cross-restart
  * guarantees.
+ *
+ * Task #410: recipients are now read from the `digest_recipients` DB
+ * table on every tick so admins can manage the list in-app without a
+ * redeploy. The env-var `LEASE_DIGEST_RECIPIENTS` is still honoured
+ * as a fallback / seed — its entries are merged (deduplicated) with
+ * the DB rows at send time.
  */
 
 import type { Logger } from "pino";
@@ -50,6 +56,7 @@ function parseIntOr(raw: string | undefined, fallback: number): number {
 export interface StartSchedulerDeps extends WeeklyDigestDeps {
   config: SchedulerConfig;
   logger: Pick<Logger, "info" | "warn" | "error">;
+  loadDbRecipients?: () => Promise<string[]>;
   setIntervalFn?: (cb: () => void, ms: number) => { unref?: () => void };
   intervalMs?: number;
 }
@@ -64,9 +71,9 @@ export function startWeeklyLeaseDigestScheduler(
   deps: StartSchedulerDeps,
 ): () => void {
   const { config, logger } = deps;
-  if (!config.webhookUrl || config.recipients.length === 0) {
+  if (!config.webhookUrl) {
     logger.info(
-      "Weekly lease digest disabled — set LEASE_DIGEST_WEBHOOK_URL and LEASE_DIGEST_RECIPIENTS to enable.",
+      "Weekly lease digest disabled — set LEASE_DIGEST_WEBHOOK_URL to enable.",
     );
     return () => {};
   }
@@ -94,10 +101,20 @@ export function startWeeklyLeaseDigestScheduler(
     }
     inFlight = true;
     try {
+      const dbEmails = deps.loadDbRecipients
+        ? await deps.loadDbRecipients()
+        : [];
+      const merged = mergeRecipients(config.recipients, dbEmails);
+      if (merged.length === 0) {
+        logger.info(
+          "Weekly lease digest skipped — no recipients configured (env or DB).",
+        );
+        return;
+      }
       const result = await sendWeeklyLeaseDigest(
         {
           webhookUrl: config.webhookUrl,
-          recipients: config.recipients,
+          recipients: merged,
           appBaseUrl: config.appBaseUrl,
         },
         deps,
@@ -105,7 +122,7 @@ export function startWeeklyLeaseDigestScheduler(
       if (result.sent) {
         lastSentWeekKey = isoWeekKey(now);
         logger.info(
-          { total: result.total, recipients: config.recipients.length },
+          { total: result.total, recipients: merged.length },
           "Sent weekly lease expiry digest",
         );
       }
@@ -129,4 +146,19 @@ export function startWeeklyLeaseDigestScheduler(
       clearInterval(handle as unknown as NodeJS.Timeout);
     }
   };
+}
+
+export function mergeRecipients(
+  envRecipients: string[],
+  dbRecipients: string[],
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const e of [...envRecipients, ...dbRecipients]) {
+    const lower = e.toLowerCase().trim();
+    if (!lower || seen.has(lower)) continue;
+    seen.add(lower);
+    out.push(lower);
+  }
+  return out;
 }

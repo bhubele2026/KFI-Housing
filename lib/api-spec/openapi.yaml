@@ -26,6 +26,8 @@ tags:
     description: Payroll-derived housing deductions
   - name: insurance
     description: Renter's / liability insurance certificates on file
+  - name: digest
+    description: Weekly lease-expiry digest configuration
 paths:
   /healthz:
     get:
@@ -510,6 +512,60 @@ paths:
       operationId: deleteLease
       tags: [leases]
       summary: Delete a lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /digest-recipients:
+    get:
+      operationId: listDigestRecipients
+      tags: [digest]
+      summary: List all weekly lease digest recipients
+      description: |
+        Returns every email address currently subscribed to the weekly
+        lease-expiry digest. Admins manage this list in-app so changes
+        take effect on the next scheduler tick without a redeploy.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DigestRecipient" }
+    post:
+      operationId: createDigestRecipient
+      tags: [digest]
+      summary: Add a recipient to the weekly lease digest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DigestRecipientCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DigestRecipient" }
+        "409":
+          description: Email already subscribed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+  /digest-recipients/{id}:
+    delete:
+      operationId: deleteDigestRecipient
+      tags: [digest]
+      summary: Remove a recipient from the weekly lease digest
       parameters:
         - in: path
           name: id
@@ -1967,6 +2023,26 @@ components:
             fallback pass; the dashboard uses this to render a
             distinct "Did you mean (different employer): …" label and
             to also overwrite the occupant's company on confirm.
+
+    DigestRecipient:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    DigestRecipientCreate:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          description: Email address to subscribe to the weekly digest.
 
     ImportPayload:
       type: object

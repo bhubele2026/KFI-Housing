@@ -20,10 +20,13 @@ import type {
   BackfillPropertyCoords200,
   Bed,
   BedUpdate,
+  CreateDigestRecipient409,
   Customer,
   CustomerUpdate,
   DeleteCustomer409,
   DeleteRoom409,
+  DigestRecipient,
+  DigestRecipientCreate,
   HealthStatus,
   ImportLeasePdfBody,
   ImportMasterLeasesBody,
@@ -2108,6 +2111,256 @@ export const useDeleteLease = <
   TContext
 > => {
   return useMutation(getDeleteLeaseMutationOptions(options));
+};
+
+/**
+ * Returns every email address currently subscribed to the weekly
+lease-expiry digest. Admins manage this list in-app so changes
+take effect on the next scheduler tick without a redeploy.
+
+ * @summary List all weekly lease digest recipients
+ */
+export const getListDigestRecipientsUrl = () => {
+  return `/api/digest-recipients`;
+};
+
+export const listDigestRecipients = async (
+  options?: RequestInit,
+): Promise<DigestRecipient[]> => {
+  return customFetch<DigestRecipient[]>(getListDigestRecipientsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListDigestRecipientsQueryKey = () => {
+  return [`/api/digest-recipients`] as const;
+};
+
+export const getListDigestRecipientsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listDigestRecipients>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDigestRecipients>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListDigestRecipientsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listDigestRecipients>>
+  > = ({ signal }) => listDigestRecipients({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listDigestRecipients>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListDigestRecipientsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listDigestRecipients>>
+>;
+export type ListDigestRecipientsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all weekly lease digest recipients
+ */
+
+export function useListDigestRecipients<
+  TData = Awaited<ReturnType<typeof listDigestRecipients>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listDigestRecipients>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListDigestRecipientsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a recipient to the weekly lease digest
+ */
+export const getCreateDigestRecipientUrl = () => {
+  return `/api/digest-recipients`;
+};
+
+export const createDigestRecipient = async (
+  digestRecipientCreate: DigestRecipientCreate,
+  options?: RequestInit,
+): Promise<DigestRecipient> => {
+  return customFetch<DigestRecipient>(getCreateDigestRecipientUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(digestRecipientCreate),
+  });
+};
+
+export const getCreateDigestRecipientMutationOptions = <
+  TError = ErrorType<CreateDigestRecipient409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDigestRecipient>>,
+    TError,
+    { data: BodyType<DigestRecipientCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createDigestRecipient>>,
+  TError,
+  { data: BodyType<DigestRecipientCreate> },
+  TContext
+> => {
+  const mutationKey = ["createDigestRecipient"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createDigestRecipient>>,
+    { data: BodyType<DigestRecipientCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createDigestRecipient(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateDigestRecipientMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createDigestRecipient>>
+>;
+export type CreateDigestRecipientMutationBody = BodyType<DigestRecipientCreate>;
+export type CreateDigestRecipientMutationError =
+  ErrorType<CreateDigestRecipient409>;
+
+/**
+ * @summary Add a recipient to the weekly lease digest
+ */
+export const useCreateDigestRecipient = <
+  TError = ErrorType<CreateDigestRecipient409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createDigestRecipient>>,
+    TError,
+    { data: BodyType<DigestRecipientCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createDigestRecipient>>,
+  TError,
+  { data: BodyType<DigestRecipientCreate> },
+  TContext
+> => {
+  return useMutation(getCreateDigestRecipientMutationOptions(options));
+};
+
+/**
+ * @summary Remove a recipient from the weekly lease digest
+ */
+export const getDeleteDigestRecipientUrl = (id: string) => {
+  return `/api/digest-recipients/${id}`;
+};
+
+export const deleteDigestRecipient = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteDigestRecipientUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteDigestRecipientMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDigestRecipient>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteDigestRecipient>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteDigestRecipient"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteDigestRecipient>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteDigestRecipient(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDigestRecipientMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteDigestRecipient>>
+>;
+
+export type DeleteDigestRecipientMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a recipient from the weekly lease digest
+ */
+export const useDeleteDigestRecipient = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteDigestRecipient>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteDigestRecipient>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteDigestRecipientMutationOptions(options));
 };
 
 /**

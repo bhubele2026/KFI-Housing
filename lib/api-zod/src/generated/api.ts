@@ -1793,6 +1793,38 @@ export const DeleteLeaseParams = zod.object({
 });
 
 /**
+ * Returns every email address currently subscribed to the weekly
+lease-expiry digest. Admins manage this list in-app so changes
+take effect on the next scheduler tick without a redeploy.
+
+ * @summary List all weekly lease digest recipients
+ */
+export const ListDigestRecipientsResponseItem = zod.object({
+  id: zod.string(),
+  email: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListDigestRecipientsResponse = zod.array(
+  ListDigestRecipientsResponseItem,
+);
+
+/**
+ * @summary Add a recipient to the weekly lease digest
+ */
+export const CreateDigestRecipientBody = zod.object({
+  email: zod
+    .string()
+    .describe("Email address to subscribe to the weekly digest."),
+});
+
+/**
+ * @summary Remove a recipient from the weekly lease digest
+ */
+export const DeleteDigestRecipientParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * Returns every renter's / liability insurance certificate currently
 on file across all properties. Certificates are the manual-entry
 intake path described in `lib/db/src/schema/insurance-certificates.ts`:

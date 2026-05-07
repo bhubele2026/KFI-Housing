@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, PanelLeftClose, PanelLeftOpen, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/kfi-staffing-logo.png";
@@ -55,6 +55,7 @@ const NAV_ITEMS = [
   { href: "/utilities", label: "Utilities", icon: Zap },
   { href: "/finance", label: "Finance", icon: DollarSign },
   { href: "/insurance", label: "Insurance", icon: ShieldCheck },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export type SidebarProps = {

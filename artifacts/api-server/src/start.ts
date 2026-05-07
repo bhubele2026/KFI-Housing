@@ -89,6 +89,9 @@ export interface StartDeps {
   // Persistent dedupe for the insurance-expiry reminder (Task #398).
   getInsuranceExpiryLastSentWeekKey: () => Promise<string | null>;
   setInsuranceExpiryLastSentWeekKey: (weekKey: string) => Promise<void>;
+  // Task #410: load digest recipients from the DB on each scheduler
+  // tick so admins can manage the list in-app without a redeploy.
+  loadDigestRecipientsFromDb: () => Promise<string[]>;
   // `fetch` impl used by the digest webhook POST. Defaults to
   // `globalThis.fetch` in `index.ts`; tests inject a vi.fn().
   digestFetch: typeof fetch;
@@ -431,6 +434,7 @@ export async function start(deps: StartDeps): Promise<void> {
       fetch: deps.digestFetch,
       loadLeases: deps.loadLeasesForDigest,
       loadProperties: deps.loadPropertiesForDigest,
+      loadDbRecipients: deps.loadDigestRecipientsFromDb,
       now: () => new Date(),
       logger: deps.logger,
     });

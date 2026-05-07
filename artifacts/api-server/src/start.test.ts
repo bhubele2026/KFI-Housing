@@ -41,6 +41,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     notifySchemaDrift: vi.fn().mockResolvedValue(undefined),
     loadLeasesForDigest: vi.fn().mockResolvedValue([]),
     loadPropertiesForDigest: vi.fn().mockResolvedValue([]),
+    loadDigestRecipientsFromDb: vi.fn().mockResolvedValue([]),
     loadLeasesForReminder: vi.fn().mockResolvedValue([]),
     loadPropertiesForReminder: vi.fn().mockResolvedValue([]),
     loadRoomNightLogsForReminder: vi.fn().mockResolvedValue([]),

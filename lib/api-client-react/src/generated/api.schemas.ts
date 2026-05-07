@@ -1132,6 +1132,17 @@ export interface ListUnplacedPayrollResult {
   lowConfidenceMatches: LowConfidencePayrollMatch[];
 }
 
+export interface DigestRecipient {
+  id: string;
+  email: string;
+  createdAt: string;
+}
+
+export interface DigestRecipientCreate {
+  /** Email address to subscribe to the weekly digest. */
+  email: string;
+}
+
 export interface ImportPayload {
   customers: Customer[];
   properties: Property[];
@@ -1184,6 +1195,10 @@ When omitted, the importer reads the bundled
 `attached_assets/Housing_Lease_MASTER_1778105244042.xlsx`.
  */
   file?: Blob;
+};
+
+export type CreateDigestRecipient409 = {
+  error?: string;
 };
 
 export type DeleteRoom409 = {

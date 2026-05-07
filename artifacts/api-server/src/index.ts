@@ -1,4 +1,4 @@
-import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable, insuranceCertificatesTable } from "@workspace/db";
+import { pushSchemaIfNeeded, db, leasesTable, propertiesTable, roomNightLogsTable, schedulerStateTable, insuranceCertificatesTable, digestRecipientsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
@@ -160,6 +160,10 @@ void start({
         target: schedulerStateTable.id,
         set: { lastSentKey: weekKey },
       });
+  },
+  loadDigestRecipientsFromDb: async () => {
+    const rows = await db.select().from(digestRecipientsTable);
+    return rows.map((r) => r.email);
   },
   digestFetch: globalThis.fetch,
   logger,

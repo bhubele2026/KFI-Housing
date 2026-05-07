@@ -111,6 +111,69 @@ function writePersistedBedsSort(sort: BedsSortKey): void {
   }
 }
 
+// Shift coverage for hot-bedded rooms (task #337). For Patriot/Baraboo-style
+// units, slots 1+2 share Bedroom A and slots 3+4 share Bedroom B (see
+// seed-patriot-baraboo.ts). We pair beds by consecutive bedNumber so the same
+// logic generalises to any room with an even number of beds — pair (1,2) is
+// "Bedroom A", (3,4) is "Bedroom B", (5,6) is "Bedroom C", and so on. This is
+// purely a UI grouping; it does not change the underlying schema.
+//
+// Coverage mode is opt-in: if no occupant in the room has a shift set, we skip
+// the badges entirely so non-hot-bedded properties look unchanged.
+type PairCoverage = {
+  letter: string;          // "A", "B", ...
+  pairLabel: string;       // "Bedroom A"
+  bedNumbers: [number, number];
+  shifts: Array<"1st" | "2nd" | null>; // per slot, in order
+  hasFirst: boolean;
+  hasSecond: boolean;
+  hasDuplicate: boolean;   // both occupants on the same shift → double-booked
+  isFullyCovered: boolean; // exactly one 1st and one 2nd
+  isEmpty: boolean;        // no shifts assigned in this pair yet
+};
+
+function computeShiftPairs(
+  beds: Bed[],
+  occupants: Occupant[],
+): PairCoverage[] {
+  const sorted = [...beds].sort((a, b) => a.bedNumber - b.bedNumber);
+  const pairs: PairCoverage[] = [];
+  for (let i = 0; i + 1 < sorted.length; i += 2) {
+    const left = sorted[i];
+    const right = sorted[i + 1];
+    const leftOcc = occupants.find(o => o.bedId === left.id && o.status === "Active");
+    const rightOcc = occupants.find(o => o.bedId === right.id && o.status === "Active");
+    const shifts: Array<"1st" | "2nd" | null> = [
+      leftOcc?.shift ?? null,
+      rightOcc?.shift ?? null,
+    ];
+    const hasFirst = shifts.includes("1st");
+    const hasSecond = shifts.includes("2nd");
+    const hasDuplicate =
+      (shifts[0] !== null && shifts[0] === shifts[1]);
+    const isEmpty = shifts.every(s => s === null);
+    pairs.push({
+      letter: String.fromCharCode(65 + i / 2),
+      pairLabel: `Bedroom ${String.fromCharCode(65 + i / 2)}`,
+      bedNumbers: [left.bedNumber, right.bedNumber],
+      shifts,
+      hasFirst,
+      hasSecond,
+      hasDuplicate,
+      isFullyCovered: hasFirst && hasSecond && !hasDuplicate,
+      isEmpty,
+    });
+  }
+  return pairs;
+}
+
+function roomHasAnyShift(beds: Bed[], occupants: Occupant[]): boolean {
+  return beds.some(b => {
+    const occ = occupants.find(o => o.bedId === b.id && o.status === "Active");
+    return occ?.shift != null;
+  });
+}
+
 const TYPE_COLORS: Record<string, string> = {
   Electric: "bg-yellow-100 text-yellow-800",
   Gas:      "bg-orange-100 text-orange-800",
@@ -1792,6 +1855,75 @@ export default function PropertyDetail() {
                                 </div>
                               </div>
                             </CardHeader>
+                            {(() => {
+                              // Shift coverage strip (task #337). Only render
+                              // when at least one occupant in the room has a
+                              // shift set, so non-hot-bedded properties look
+                              // unchanged.
+                              if (!roomHasAnyShift(roomBeds, occupants)) return null;
+                              const pairs = computeShiftPairs(roomBeds, occupants);
+                              if (pairs.length === 0) return null;
+                              return (
+                                <div
+                                  className="px-6 pb-3 flex flex-wrap gap-2"
+                                  data-testid={`shift-coverage-${room.id}`}
+                                >
+                                  {pairs.map(p => {
+                                    let tone =
+                                      "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800";
+                                    let status = "1st + 2nd";
+                                    let icon: React.ReactNode = (
+                                      <CheckCircle2 className="h-3 w-3" />
+                                    );
+                                    if (p.hasDuplicate) {
+                                      tone =
+                                        "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800";
+                                      status = `Two ${p.shifts[0]} shifts — double-booked`;
+                                      icon = <AlertTriangle className="h-3 w-3" />;
+                                    } else if (p.isEmpty) {
+                                      tone =
+                                        "bg-muted text-muted-foreground border-border";
+                                      status = "No shifts set";
+                                      icon = null;
+                                    } else if (!p.isFullyCovered) {
+                                      tone =
+                                        "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800";
+                                      const have = p.hasFirst ? "1st" : "2nd";
+                                      const need = p.hasFirst ? "2nd" : "1st";
+                                      status = `${have} only — needs ${need}`;
+                                      icon = <AlertTriangle className="h-3 w-3" />;
+                                    }
+                                    return (
+                                      <Tooltip key={p.letter} delayDuration={100}>
+                                        <TooltipTrigger asChild>
+                                          <Badge
+                                            variant="outline"
+                                            className={`gap-1.5 text-[11px] font-medium ${tone}`}
+                                            data-testid={`shift-pair-${room.id}-${p.letter}`}
+                                          >
+                                            {icon}
+                                            <span className="font-semibold">{p.pairLabel}</span>
+                                            <span className="opacity-70">·</span>
+                                            <span>{status}</span>
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">
+                                          <p className="font-semibold">
+                                            {p.pairLabel} — beds {p.bedNumbers[0]} &amp; {p.bedNumbers[1]}
+                                          </p>
+                                          <p className="text-muted-foreground">
+                                            Bed {p.bedNumbers[0]}: {p.shifts[0] ?? "—"} shift
+                                          </p>
+                                          <p className="text-muted-foreground">
+                                            Bed {p.bedNumbers[1]}: {p.shifts[1] ?? "—"} shift
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                             <CardContent className="p-0">
                               <Table>
                                 <TableHeader>
@@ -1832,9 +1964,17 @@ export default function PropertyDetail() {
                                         </Button>
                                       }
                                     />
-                                  ) : roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map(bed => {
+                                  ) : (() => {
+                                    // Reuse the same shift-mode toggle as the
+                                    // coverage badges so the per-row bedroom
+                                    // tag stays opt-in.
+                                    const showBedroomTag = roomHasAnyShift(roomBeds, occupants);
+                                    return roomBeds.sort((a, b) => a.bedNumber - b.bedNumber).map((bed, idx) => {
                                     const occ = occupants.find(o => o.bedId === bed.id && o.status === "Active");
                                     const isOccupied = bed.status === "Occupied";
+                                    // Pair index → bedroom letter (matches
+                                    // computeShiftPairs above).
+                                    const bedroomLetter = String.fromCharCode(65 + Math.floor(idx / 2));
 
                                     const handleStatusChange = (newStatus: string) => {
                                       updateBed(bed.id, { status: newStatus as "Occupied" | "Vacant", occupantId: newStatus === "Vacant" ? null : bed.occupantId });
@@ -1851,7 +1991,20 @@ export default function PropertyDetail() {
                                         data-testid={`bed-row-${bed.id}`}
                                         className={`${isOccupied ? "" : "bg-muted/20"} ${isHighlighted ? "ring-2 ring-primary ring-offset-1 transition-shadow duration-300" : "transition-shadow duration-300"}`}
                                       >
-                                        <TableCell className="font-bold text-center">{bed.bedNumber}</TableCell>
+                                        <TableCell className="font-bold text-center">
+                                          <div className="flex flex-col items-center leading-tight">
+                                            <span>{bed.bedNumber}</span>
+                                            {showBedroomTag && (
+                                              <span
+                                                className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider mt-0.5"
+                                                data-testid={`bed-${bed.id}-bedroom-letter`}
+                                                title={`Bedroom ${bedroomLetter}`}
+                                              >
+                                                Bdr {bedroomLetter}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </TableCell>
                                         <TableCell>
                                           <Select value={bed.status} onValueChange={handleStatusChange}>
                                             <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
@@ -2037,7 +2190,8 @@ export default function PropertyDetail() {
                                         </TableCell>
                                       </TableRow>
                                     );
-                                  })}
+                                    });
+                                  })()}
                                 </TableBody>
                               </Table>
                             </CardContent>

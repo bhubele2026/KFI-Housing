@@ -134,6 +134,8 @@ const {
   readMasterWorkbookFromBuffer,
   getLastBootMasterImport,
   resetLastBootMasterImportForTests,
+  getBundledMasterMtime,
+  defaultMasterFilePath,
 } = await import("./import-master-leases");
 
 const silentLogger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -323,5 +325,38 @@ describe("importDefaultMasterLeasesIfMissing", () => {
     const second = getLastBootMasterImport();
     expect(second).not.toBeNull();
     expect(new Date(second!.ranAt).getTime()).toBeGreaterThanOrEqual(ranAtMs);
+  });
+});
+
+describe("getBundledMasterMtime", () => {
+  // Task #340: the Leases-page indicator compares this mtime against
+  // the recorded boot-time import timestamp to flip itself into a
+  // warning style when someone dropped a fresh master file but the
+  // api-server hasn't been restarted to pick it up. The contract that
+  // matters here is:
+  //
+  //   • a real Date (matching `fs.stat` on the bundled file) when the
+  //     workbook is on disk, so the UI can do an honest mtime > ranAt
+  //     comparison; and
+  //   • a quiet `null` when the file is unreadable, so the indicator
+  //     gracefully degrades to its plain timestamp variant instead of
+  //     showing a false "stale" warning to operators.
+  it("returns the bundled workbook's modification time when the file exists", async () => {
+    const mtime = await getBundledMasterMtime();
+    expect(mtime).toBeInstanceOf(Date);
+    const fromStat = await fs.stat(defaultMasterFilePath());
+    expect(mtime!.getTime()).toBe(fromStat.mtime.getTime());
+  });
+
+  it("returns null when the bundled workbook cannot be stat'd, instead of throwing", async () => {
+    const spy = vi.spyOn(fs, "stat").mockRejectedValueOnce(
+      Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+    );
+    try {
+      const mtime = await getBundledMasterMtime();
+      expect(mtime).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

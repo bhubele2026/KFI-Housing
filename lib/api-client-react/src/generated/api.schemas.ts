@@ -901,6 +901,18 @@ import, or `null` when no boot import has succeeded yet.
    * @nullable
    */
   ranAt: string | null;
+  /**
+   * ISO-8601 modification time of the bundled
+`Housing_Lease_MASTER_*.xlsx` workbook under
+`attached_assets/` (Task #340). The Leases-page indicator
+compares this against `ranAt` to detect a stale boot
+import — a workbook that was dropped after the last
+successful auto-import. `null` when the bundled file
+cannot be read on disk.
+
+   * @nullable
+   */
+  bundledMtime: string | null;
   customersCreated?: number;
   customersUpdated?: number;
   propertiesCreated?: number;

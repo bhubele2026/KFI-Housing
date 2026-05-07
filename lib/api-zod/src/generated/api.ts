@@ -1276,6 +1276,14 @@ When the boot import has never succeeded in this api-server
 process (fresh deploy that errored on its first attempt), the
 response is `{"ranAt": null}` and all count fields are omitted.
 
+`bundledMtime` carries the modification time of the bundled
+`Housing_Lease_MASTER_*.xlsx` file under `attached_assets/`
+(Task #340) so the UI can flip its badge to a warning style
+when the recorded `ranAt` is older than the bundled workbook
+— that's the silent-failure case where someone dropped a fresh
+master file but the api-server hasn't been restarted to pick
+it up. `null` when the bundled file is unreadable on disk.
+
  * @summary Most recent successful boot-time master-file auto-import
  */
 export const GetLastAutoMasterImportResponse = zod
@@ -1285,6 +1293,12 @@ export const GetLastAutoMasterImportResponse = zod
       .nullable()
       .describe(
         "ISO-8601 timestamp of the most recent successful boot\nimport, or `null` when no boot import has succeeded yet.\n",
+      ),
+    bundledMtime: zod.coerce
+      .date()
+      .nullable()
+      .describe(
+        "ISO-8601 modification time of the bundled\n`Housing_Lease_MASTER_\*.xlsx` workbook under\n`attached_assets\/` (Task #340). The Leases-page indicator\ncompares this against `ranAt` to detect a stale boot\nimport — a workbook that was dropped after the last\nsuccessful auto-import. `null` when the bundled file\ncannot be read on disk.\n",
       ),
     customersCreated: zod.number().optional(),
     customersUpdated: zod.number().optional(),

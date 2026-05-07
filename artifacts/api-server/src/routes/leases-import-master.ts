@@ -11,6 +11,7 @@ import {
   importDefaultMasterLeases,
   readMasterWorkbookFromBuffer,
   getLastBootMasterImport,
+  getBundledMasterMtime,
 } from "../lib/import-master-leases";
 import { logger } from "../lib/logger";
 
@@ -47,13 +48,15 @@ function uploadOptionalXlsx(req: Request, res: Response, next: NextFunction): vo
 
 router.get(
   "/leases/import-master/last-auto-import",
-  (_req, res): void => {
+  async (_req, res): Promise<void> => {
     const record = getLastBootMasterImport();
+    const mtime = await getBundledMasterMtime();
+    const bundledMtime = mtime ? mtime.toISOString() : null;
     if (!record) {
-      res.json({ ranAt: null });
+      res.json({ ranAt: null, bundledMtime });
       return;
     }
-    res.json(record);
+    res.json({ ...record, bundledMtime });
   },
 );
 

@@ -357,6 +357,14 @@ paths:
         When the boot import has never succeeded in this api-server
         process (fresh deploy that errored on its first attempt), the
         response is `{"ranAt": null}` and all count fields are omitted.
+
+        `bundledMtime` carries the modification time of the bundled
+        `Housing_Lease_MASTER_*.xlsx` file under `attached_assets/`
+        (Task #340) so the UI can flip its badge to a warning style
+        when the recorded `ranAt` is older than the bundled workbook
+        — that's the silent-failure case where someone dropped a fresh
+        master file but the api-server hasn't been restarted to pick
+        it up. `null` when the bundled file is unreadable on disk.
       responses:
         "200":
           description: OK
@@ -1597,7 +1605,7 @@ components:
 
     LastAutoMasterImport:
       type: object
-      required: [ranAt]
+      required: [ranAt, bundledMtime]
       description: |
         Timestamp + summary counts of the most recent successful
         boot-time master-file auto-import (Task #318). When the boot
@@ -1610,6 +1618,17 @@ components:
           description: |
             ISO-8601 timestamp of the most recent successful boot
             import, or `null` when no boot import has succeeded yet.
+        bundledMtime:
+          type: ["string", "null"]
+          format: date-time
+          description: |
+            ISO-8601 modification time of the bundled
+            `Housing_Lease_MASTER_*.xlsx` workbook under
+            `attached_assets/` (Task #340). The Leases-page indicator
+            compares this against `ranAt` to detect a stale boot
+            import — a workbook that was dropped after the last
+            successful auto-import. `null` when the bundled file
+            cannot be read on disk.
         customersCreated: { type: integer }
         customersUpdated: { type: integer }
         propertiesCreated: { type: integer }

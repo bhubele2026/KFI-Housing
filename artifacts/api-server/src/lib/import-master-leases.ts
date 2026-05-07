@@ -102,6 +102,25 @@ export function defaultMasterFilePath(): string {
   );
 }
 
+/**
+ * Returns the modification time of the bundled master workbook, or
+ * `null` when the file cannot be stat'd (missing, permission denied,
+ * etc.). Surfaced through `GET /leases/import-master/last-auto-import`
+ * so the Leases page can flip its indicator to a warning style when
+ * the recorded boot-import `ranAt` is older than the workbook on disk
+ * — that's the silent-failure case where someone dropped a fresh
+ * master file but the api-server hasn't been restarted to pick it up
+ * (Task #340).
+ */
+export async function getBundledMasterMtime(): Promise<Date | null> {
+  try {
+    const stat = await fs.stat(defaultMasterFilePath());
+    return stat.mtime;
+  } catch {
+    return null;
+  }
+}
+
 /** Reads + parses an XLSX workbook into the raw `string[][]` rows used by the parser. */
 export async function readMasterWorkbook(filePath: string): Promise<string[][]> {
   const buf = await fs.readFile(filePath);

@@ -1414,6 +1414,14 @@ When the boot import has never succeeded in this api-server
 process (fresh deploy that errored on its first attempt), the
 response is `{"ranAt": null}` and all count fields are omitted.
 
+`bundledMtime` carries the modification time of the bundled
+`Housing_Lease_MASTER_*.xlsx` file under `attached_assets/`
+(Task #340) so the UI can flip its badge to a warning style
+when the recorded `ranAt` is older than the bundled workbook
+— that's the silent-failure case where someone dropped a fresh
+master file but the api-server hasn't been restarted to pick
+it up. `null` when the bundled file is unreadable on disk.
+
  * @summary Most recent successful boot-time master-file auto-import
  */
 export const getGetLastAutoMasterImportUrl = () => {

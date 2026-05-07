@@ -68,6 +68,51 @@ function makeSelect(projection: Record<string, { __col: string }>) {
   };
 }
 
+function makeUpdate(table: unknown) {
+  return {
+    set: (patch: Record<string, unknown>) => ({
+      where: (pred: Predicate) => {
+        const exec = async (): Promise<Row[]> => {
+          const store = stores[tableNameOf(table)];
+          const updated: Row[] = [];
+          for (const [id, row] of store) {
+            if (matches(row, pred)) {
+              store.set(id, { ...row, ...patch });
+              updated.push({ id });
+            }
+          }
+          return updated;
+        };
+        return {
+          returning: (_cols?: unknown) => exec(),
+          then: (
+            onF: (v: Row[]) => unknown,
+            onR?: (e: unknown) => unknown,
+          ) => exec().then(onF, onR),
+        };
+      },
+    }),
+  };
+}
+
+function makeDelete(table: unknown) {
+  return {
+    where: (pred: Predicate) => ({
+      returning: async (_cols?: unknown) => {
+        const store = stores[tableNameOf(table)];
+        const removed: Row[] = [];
+        for (const [id, row] of Array.from(store.entries())) {
+          if (matches(row, pred)) {
+            store.delete(id);
+            removed.push({ id });
+          }
+        }
+        return removed;
+      },
+    }),
+  };
+}
+
 function makeInsert(table: unknown) {
   return {
     values: (rows: Row | Row[]) => {
@@ -91,11 +136,18 @@ function makeInsert(table: unknown) {
   };
 }
 
-const tx = { select: makeSelect, insert: makeInsert };
+const tx = {
+  select: makeSelect,
+  insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
+};
 type Tx = typeof tx;
 const fakeDb = {
   select: makeSelect,
   insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
   transaction: <T,>(cb: (tx: Tx) => Promise<T>): Promise<T> => cb(tx),
 };
 
@@ -183,6 +235,9 @@ describe("seedParkPlaceIfMissing", () => {
       customerInserted: true,
       propertyInserted: true,
       leasesInserted: 9,
+      customerId: PARK_PLACE_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
     expect(stores.customers.has(PARK_PLACE_CUSTOMER_ID)).toBe(true);
     expect(stores.properties.has(PARK_PLACE_PROPERTY_ID)).toBe(true);
@@ -281,6 +336,9 @@ describe("seedParkPlaceIfMissing", () => {
       customerInserted: false,
       propertyInserted: false,
       leasesInserted: 0,
+      customerId: PARK_PLACE_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
 
     const after = stores.properties.get(PARK_PLACE_PROPERTY_ID)!;
@@ -316,5 +374,94 @@ describe("seedParkPlaceIfMissing", () => {
     expect(stores.customers.get("operator-cust-kfi")!["notes"]).toBe(
       "operator notes",
     );
+  });
+
+  it("repoints the property from the KFI Staffing fallback to Cardinal CG (Spring Green) once the end-client shows up, and deletes the unused fallback (Task #328)", async () => {
+    const first = await seedParkPlaceIfMissing({ logger: silentLogger, now: FIXED_NOW });
+    expect(first.customerInserted).toBe(true);
+    expect(first.repointedToEndClient).toBe(false);
+    expect(first.fallbackCustomerDeleted).toBe(false);
+    expect(
+      stores.properties.get(PARK_PLACE_PROPERTY_ID)!["customerId"],
+    ).toBe(PARK_PLACE_CUSTOMER_ID);
+
+    stores.customers.set("cust-cardinal-spring-green", {
+      id: "cust-cardinal-spring-green",
+      name: "Cardinal CG at Spring Green, WI",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const second = await seedParkPlaceIfMissing({ logger: silentLogger, now: FIXED_NOW });
+    expect(second.repointedToEndClient).toBe(true);
+    expect(second.fallbackCustomerDeleted).toBe(true);
+    expect(second.customerId).toBe("cust-cardinal-spring-green");
+    expect(stores.customers.has(PARK_PLACE_CUSTOMER_ID)).toBe(false);
+    expect(
+      stores.properties.get(PARK_PLACE_PROPERTY_ID)!["customerId"],
+    ).toBe("cust-cardinal-spring-green");
+    expect(stores.leases.size).toBe(9);
+  });
+
+  it("does NOT repoint to the unrelated 'Cardinal CG - Northfield' customer (Task #328 disambiguation)", async () => {
+    // Northfield is a different Cardinal CG site (Owatonna, MN address)
+    // — make sure our narrow LIKE pattern doesn't accidentally match it.
+    stores.customers.set("cust-cardinal-northfield", {
+      id: "cust-cardinal-northfield",
+      name: "Cardinal CG - Northfield",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const result = await seedParkPlaceIfMissing({ logger: silentLogger, now: FIXED_NOW });
+
+    expect(result.repointedToEndClient).toBe(false);
+    expect(result.fallbackCustomerDeleted).toBe(false);
+    expect(result.customerId).toBe(PARK_PLACE_CUSTOMER_ID);
+    expect(stores.customers.has(PARK_PLACE_CUSTOMER_ID)).toBe(true);
+    expect(stores.customers.has("cust-cardinal-northfield")).toBe(true);
+  });
+
+  it("preserves an operator-chosen non-fallback customer even when Cardinal CG (Spring Green) exists (Task #328)", async () => {
+    stores.customers.set("operator-cust", {
+      id: "operator-cust",
+      name: "Operator Custom Client",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.customers.set("cust-cardinal-spring-green", {
+      id: "cust-cardinal-spring-green",
+      name: "Cardinal CG at Spring Green, WI",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.properties.set(PARK_PLACE_PROPERTY_ID, {
+      id: PARK_PLACE_PROPERTY_ID,
+      customerId: "operator-cust",
+      name: "Park Place",
+      address: "14550 34th Ave N",
+      city: "Plymouth",
+      state: "MN",
+      zip: "55447",
+      notes: "operator notes",
+    });
+
+    const result = await seedParkPlaceIfMissing({ logger: silentLogger, now: FIXED_NOW });
+
+    expect(result.repointedToEndClient).toBe(false);
+    expect(result.customerId).toBe("operator-cust");
+    expect(
+      stores.properties.get(PARK_PLACE_PROPERTY_ID)!["customerId"],
+    ).toBe("operator-cust");
+    expect(stores.customers.has("operator-cust")).toBe(true);
+    expect(stores.customers.has("cust-cardinal-spring-green")).toBe(true);
   });
 });

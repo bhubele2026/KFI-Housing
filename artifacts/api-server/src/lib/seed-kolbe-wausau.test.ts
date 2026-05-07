@@ -68,6 +68,51 @@ function makeSelect(projection: Record<string, { __col: string }>) {
   };
 }
 
+function makeUpdate(table: unknown) {
+  return {
+    set: (patch: Record<string, unknown>) => ({
+      where: (pred: Predicate) => {
+        const exec = async (): Promise<Row[]> => {
+          const store = stores[tableNameOf(table)];
+          const updated: Row[] = [];
+          for (const [id, row] of store) {
+            if (matches(row, pred)) {
+              store.set(id, { ...row, ...patch });
+              updated.push({ id });
+            }
+          }
+          return updated;
+        };
+        return {
+          returning: (_cols?: unknown) => exec(),
+          then: (
+            onF: (v: Row[]) => unknown,
+            onR?: (e: unknown) => unknown,
+          ) => exec().then(onF, onR),
+        };
+      },
+    }),
+  };
+}
+
+function makeDelete(table: unknown) {
+  return {
+    where: (pred: Predicate) => ({
+      returning: async (_cols?: unknown) => {
+        const store = stores[tableNameOf(table)];
+        const removed: Row[] = [];
+        for (const [id, row] of Array.from(store.entries())) {
+          if (matches(row, pred)) {
+            store.delete(id);
+            removed.push({ id });
+          }
+        }
+        return removed;
+      },
+    }),
+  };
+}
+
 function makeInsert(table: unknown) {
   return {
     values: (rows: Row | Row[]) => {
@@ -91,11 +136,18 @@ function makeInsert(table: unknown) {
   };
 }
 
-const tx = { select: makeSelect, insert: makeInsert };
+const tx = {
+  select: makeSelect,
+  insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
+};
 type Tx = typeof tx;
 const fakeDb = {
   select: makeSelect,
   insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
   transaction: <T,>(cb: (tx: Tx) => Promise<T>): Promise<T> => cb(tx),
 };
 
@@ -163,6 +215,9 @@ describe("seedKolbeWausauIfMissing", () => {
       customerInserted: true,
       propertyInserted: true,
       leasesInserted: 2,
+      customerId: KOLBE_WAUSAU_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
     expect(stores.customers.has(KOLBE_WAUSAU_CUSTOMER_ID)).toBe(true);
     expect(stores.properties.has(KOLBE_WAUSAU_PROPERTY_ID)).toBe(true);
@@ -242,6 +297,9 @@ describe("seedKolbeWausauIfMissing", () => {
       customerInserted: false,
       propertyInserted: false,
       leasesInserted: 0,
+      customerId: KOLBE_WAUSAU_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
 
     const after = stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!;
@@ -271,5 +329,72 @@ describe("seedKolbeWausauIfMissing", () => {
     expect(stores.customers.get("operator-cust-kfi")!["notes"]).toBe(
       "operator notes",
     );
+  });
+
+  it("repoints the property from the KFI Staffing fallback to Schuette Metals once the end-client shows up, and deletes the unused fallback (Task #328)", async () => {
+    const first = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(first.customerInserted).toBe(true);
+    expect(first.repointedToEndClient).toBe(false);
+    expect(first.fallbackCustomerDeleted).toBe(false);
+    expect(
+      stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!["customerId"],
+    ).toBe(KOLBE_WAUSAU_CUSTOMER_ID);
+
+    stores.customers.set("cust-schuette", {
+      id: "cust-schuette",
+      name: "Schuette Metals - Rothschild, WI",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const second = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(second.repointedToEndClient).toBe(true);
+    expect(second.fallbackCustomerDeleted).toBe(true);
+    expect(second.customerId).toBe("cust-schuette");
+    expect(stores.customers.has(KOLBE_WAUSAU_CUSTOMER_ID)).toBe(false);
+    expect(
+      stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!["customerId"],
+    ).toBe("cust-schuette");
+  });
+
+  it("preserves an operator-chosen non-fallback customer even when Schuette Metals exists (Task #328)", async () => {
+    stores.customers.set("operator-cust", {
+      id: "operator-cust",
+      name: "Operator Custom Client",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.customers.set("cust-schuette", {
+      id: "cust-schuette",
+      name: "Schuette Metals",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.properties.set(KOLBE_WAUSAU_PROPERTY_ID, {
+      id: KOLBE_WAUSAU_PROPERTY_ID,
+      customerId: "operator-cust",
+      name: "Kolbe Wausau",
+      address: "1331 South 8th Ave",
+      city: "Wausau",
+      state: "WI",
+      zip: "54401",
+      notes: "operator notes",
+    });
+
+    const result = await seedKolbeWausauIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+
+    expect(result.repointedToEndClient).toBe(false);
+    expect(result.customerId).toBe("operator-cust");
+    expect(
+      stores.properties.get(KOLBE_WAUSAU_PROPERTY_ID)!["customerId"],
+    ).toBe("operator-cust");
+    expect(stores.customers.has("operator-cust")).toBe(true);
+    expect(stores.customers.has("cust-schuette")).toBe(true);
   });
 });

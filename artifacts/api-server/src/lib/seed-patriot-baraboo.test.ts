@@ -85,16 +85,43 @@ function makeSelect(projection: Record<string, { __col: string }>) {
 function makeUpdate(table: unknown) {
   return {
     set: (patch: Record<string, unknown>) => ({
-      where: async (pred: Predicate) => {
+      where: (pred: Predicate) => {
+        const exec = async (): Promise<Row[]> => {
+          const store = stores[tableNameOf(table)];
+          const updated: Row[] = [];
+          for (const [id, row] of store) {
+            if (matches(row, pred)) {
+              store.set(id, { ...row, ...patch });
+              updated.push({ id });
+            }
+          }
+          return updated;
+        };
+        return {
+          returning: (_cols?: unknown) => exec(),
+          then: (
+            onF: (v: Row[]) => unknown,
+            onR?: (e: unknown) => unknown,
+          ) => exec().then(onF, onR),
+        };
+      },
+    }),
+  };
+}
+
+function makeDelete(table: unknown) {
+  return {
+    where: (pred: Predicate) => ({
+      returning: async (_cols?: unknown) => {
         const store = stores[tableNameOf(table)];
-        let count = 0;
-        for (const [id, row] of store) {
+        const removed: Row[] = [];
+        for (const [id, row] of Array.from(store.entries())) {
           if (matches(row, pred)) {
-            store.set(id, { ...row, ...patch });
-            count += 1;
+            store.delete(id);
+            removed.push({ id });
           }
         }
-        return { rowCount: count };
+        return removed;
       },
     }),
   };
@@ -123,12 +150,18 @@ function makeInsert(table: unknown) {
   };
 }
 
-const tx = { select: makeSelect, insert: makeInsert, update: makeUpdate };
+const tx = {
+  select: makeSelect,
+  insert: makeInsert,
+  update: makeUpdate,
+  delete: makeDelete,
+};
 type Tx = typeof tx;
 const fakeDb = {
   select: makeSelect,
   insert: makeInsert,
   update: makeUpdate,
+  delete: makeDelete,
   transaction: <T,>(cb: (tx: Tx) => Promise<T>): Promise<T> => cb(tx),
 };
 
@@ -231,6 +264,9 @@ describe("seedPatriotBarabooIfMissing", () => {
       roomsInserted: 5,
       bedsInserted: 20,
       occupantsInserted: 20,
+      customerId: PATRIOT_BARABOO_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
     expect(stores.customers.has(PATRIOT_BARABOO_CUSTOMER_ID)).toBe(true);
     expect(stores.properties.has(PATRIOT_BARABOO_PROPERTY_ID)).toBe(true);
@@ -315,6 +351,9 @@ describe("seedPatriotBarabooIfMissing", () => {
       roomsInserted: 0,
       bedsInserted: 0,
       occupantsInserted: 0,
+      customerId: PATRIOT_BARABOO_CUSTOMER_ID,
+      repointedToEndClient: false,
+      fallbackCustomerDeleted: false,
     });
 
     const after = stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!;
@@ -644,5 +683,78 @@ describe("seedPatriotBarabooIfMissing", () => {
       const bed = stores.beds.get(patriotBarabooBedId("509", slot))!;
       expect(bed["roomId"]).toBe(opRoomId);
     }
+  });
+
+  it("repoints the property from the KFI Staffing fallback to Milwaukee Valve once the end-client shows up, and deletes the unused fallback (Task #328)", async () => {
+    // First boot: no Milwaukee Valve customer yet — falls back to
+    // "KFI Staffing – Baraboo, WI".
+    const first = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(first.customerInserted).toBe(true);
+    expect(first.repointedToEndClient).toBe(false);
+    expect(first.fallbackCustomerDeleted).toBe(false);
+    expect(
+      stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!["customerId"],
+    ).toBe(PATRIOT_BARABOO_CUSTOMER_ID);
+
+    // Master file lands and creates the real Milwaukee Valve customer.
+    stores.customers.set("cust-milwaukee-valve", {
+      id: "cust-milwaukee-valve",
+      name: "Milwaukee Valve - Prairie du Sac, WI",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+
+    const second = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+    expect(second.repointedToEndClient).toBe(true);
+    expect(second.fallbackCustomerDeleted).toBe(true);
+    expect(second.customerId).toBe("cust-milwaukee-valve");
+    expect(stores.customers.has(PATRIOT_BARABOO_CUSTOMER_ID)).toBe(false);
+    expect(
+      stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!["customerId"],
+    ).toBe("cust-milwaukee-valve");
+  });
+
+  it("preserves an operator-chosen non-fallback customer even when Milwaukee Valve exists (Task #328)", async () => {
+    stores.customers.set("operator-cust", {
+      id: "operator-cust",
+      name: "Operator Custom Client",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    stores.customers.set("cust-milwaukee-valve", {
+      id: "cust-milwaukee-valve",
+      name: "Milwaukee Valve",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+    });
+    // Pre-create the property already attached to the operator's
+    // customer so the seed sees an existing non-fallback attachment.
+    stores.properties.set(PATRIOT_BARABOO_PROPERTY_ID, {
+      id: PATRIOT_BARABOO_PROPERTY_ID,
+      customerId: "operator-cust",
+      name: "Patriot Baraboo",
+      address: "509 8th St",
+      city: "Baraboo",
+      state: "WI",
+      zip: "53913",
+      totalBeds: 20,
+      notes: "operator notes",
+    });
+
+    const result = await seedPatriotBarabooIfMissing({ logger: silentLogger, now: () => new Date("2026-06-01T00:00:00Z") });
+
+    expect(result.repointedToEndClient).toBe(false);
+    expect(result.customerId).toBe("operator-cust");
+    expect(
+      stores.properties.get(PATRIOT_BARABOO_PROPERTY_ID)!["customerId"],
+    ).toBe("operator-cust");
+    expect(stores.customers.has("operator-cust")).toBe(true);
+    expect(stores.customers.has("cust-milwaukee-valve")).toBe(true);
   });
 });

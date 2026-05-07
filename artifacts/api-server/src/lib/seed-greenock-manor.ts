@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 /**
@@ -31,6 +32,13 @@ export const greenockManorLeaseId = (unit: string): string =>
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Greenock Manor, PA";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+/**
+ * Real downstream end-client per master file row 30 (`Shuster's - Irwin,
+ * PA`). The master file pins units 32, 36, 42, 48, 49, 52 — exactly the
+ * six units this seed manages — to Shuster's, so the property as a
+ * whole is repointed to Shuster's when present (Task #328).
+ */
+const GREENOCK_MANOR_END_CLIENT_NAME_PATTERN = "Shuster's%";
 
 const PROPERTY_NAME = "Greenock Manor – McKeesport, PA";
 const PROPERTY_ADDRESS = "900 Seneca Court";
@@ -232,6 +240,14 @@ export interface SeedGreenockManorResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  /** Customer the property is attached to after this run. */
+  customerId: string;
+  /** True when the property was repointed from a KFI Staffing fallback to
+   *  the real Shuster's end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned `cust-kfi-greenock-manor` fallback
+   *  customer was deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedGreenockManorDeps {
@@ -340,13 +356,34 @@ export async function seedGreenockManorIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customerInserted, propertyInserted, leasesInserted };
+    // Task #328: repoint AWAY from any KFI Staffing fallback customer
+    // to the real Shuster's end-client when present, and clean up the
+    // orphaned fallback customer.
+    const repoint = await repointFallbackToEndClient({
+      tx,
+      propertyId,
+      currentCustomerId: customerId,
+      endClientNamePattern: GREENOCK_MANOR_END_CLIENT_NAME_PATTERN,
+      fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
+      fallbackCustomerId: GREENOCK_MANOR_CUSTOMER_ID,
+    });
+
+    return {
+      customerInserted,
+      propertyInserted,
+      leasesInserted,
+      customerId: repoint.customerId,
+      repointedToEndClient: repoint.repointedToEndClient,
+      fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
+    };
   });
 
   if (
     result.customerInserted ||
     result.propertyInserted ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Greenock Manor seed applied.");
   }

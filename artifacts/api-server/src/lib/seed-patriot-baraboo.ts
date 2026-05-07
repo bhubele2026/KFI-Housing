@@ -16,6 +16,7 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 export const PATRIOT_BARABOO_CUSTOMER_ID = "cust-kfi-baraboo";
@@ -31,6 +32,14 @@ export const patriotBarabooOccupantId = (unit: string, slot: number): string =>
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Baraboo, WI";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+/**
+ * Real downstream end-client for this property, per master file row 3
+ * (`Milwaukee Valve` at 1850 W. Pine St., Baraboo, WI). Matched LIKE so
+ * either the master-file form or any city/region suffix
+ * (e.g. `"Milwaukee Valve - Baraboo, WI"`) resolves to the same
+ * customer (Task #328).
+ */
+const PATRIOT_BARABOO_END_CLIENT_NAME_PATTERN = "Milwaukee Valve%";
 const PATRIOT_ADDRESS = "1850 W. Pine St.";
 const PATRIOT_CITY = "Baraboo";
 const PATRIOT_STATE = "WI";
@@ -262,6 +271,15 @@ export interface SeedPatriotBarabooResult {
   roomsInserted: number;
   bedsInserted: number;
   occupantsInserted: number;
+  /** Customer the property is attached to after this run. Either the
+   *  Milwaukee Valve end-client (when found) or a KFI Staffing fallback. */
+  customerId: string;
+  /** True when the property was repointed from a KFI Staffing fallback to
+   *  the real Milwaukee Valve end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned `cust-kfi-baraboo` fallback customer was
+   *  deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedPatriotBarabooDeps {
@@ -549,6 +567,18 @@ export async function seedPatriotBarabooIfMissing(
       if (insertedBed.length > 0) bedsInserted += 1;
     }
 
+    // Task #328: repoint AWAY from any KFI Staffing fallback customer
+    // to the real Milwaukee Valve end-client when the master-file
+    // import has created it; clean up the orphaned fallback customer.
+    const repoint = await repointFallbackToEndClient({
+      tx,
+      propertyId,
+      currentCustomerId: customerId,
+      endClientNamePattern: PATRIOT_BARABOO_END_CLIENT_NAME_PATTERN,
+      fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
+      fallbackCustomerId: PATRIOT_BARABOO_CUSTOMER_ID,
+    });
+
     return {
       customerInserted,
       propertyInserted,
@@ -556,6 +586,9 @@ export async function seedPatriotBarabooIfMissing(
       roomsInserted,
       bedsInserted,
       occupantsInserted,
+      customerId: repoint.customerId,
+      repointedToEndClient: repoint.repointedToEndClient,
+      fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
     };
   });
 
@@ -565,7 +598,9 @@ export async function seedPatriotBarabooIfMissing(
     result.leasesInserted > 0 ||
     result.roomsInserted > 0 ||
     result.bedsInserted > 0 ||
-    result.occupantsInserted > 0
+    result.occupantsInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Patriot Baraboo seed applied.");
   }

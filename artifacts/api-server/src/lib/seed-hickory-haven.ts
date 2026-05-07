@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 /**
@@ -33,6 +34,14 @@ export const hickoryHavenLeaseId = (unit: string): string =>
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Hickory Haven, WI";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+/**
+ * Real downstream end-client per master file row 8 (`WB Manufactoring -
+ * Thorp, WI`, sic — typo preserved verbatim from the master file). The
+ * master file pins units 6, 8, 11, 12 — exactly the four units this
+ * seed manages — to WB Manufactoring, so the property as a whole is
+ * repointed when present (Task #328).
+ */
+const HICKORY_HAVEN_END_CLIENT_NAME_PATTERN = "WB Manufactoring%";
 
 const HICKORY_ADDRESS = "600 W Hickory St";
 const HICKORY_CITY = "Gilman";
@@ -211,6 +220,14 @@ export interface SeedHickoryHavenResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  /** Customer the property is attached to after this run. */
+  customerId: string;
+  /** True when the property was repointed from a KFI Staffing fallback to
+   *  the real WB Manufactoring end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned `cust-kfi-hickory-haven` fallback
+   *  customer was deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedHickoryHavenDeps {
@@ -319,13 +336,34 @@ export async function seedHickoryHavenIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customerInserted, propertyInserted, leasesInserted };
+    // Task #328: repoint AWAY from any KFI Staffing fallback customer
+    // to the real WB Manufactoring end-client when present, and clean
+    // up the orphaned fallback customer.
+    const repoint = await repointFallbackToEndClient({
+      tx,
+      propertyId,
+      currentCustomerId: customerId,
+      endClientNamePattern: HICKORY_HAVEN_END_CLIENT_NAME_PATTERN,
+      fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
+      fallbackCustomerId: HICKORY_HAVEN_CUSTOMER_ID,
+    });
+
+    return {
+      customerInserted,
+      propertyInserted,
+      leasesInserted,
+      customerId: repoint.customerId,
+      repointedToEndClient: repoint.repointedToEndClient,
+      fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
+    };
   });
 
   if (
     result.customerInserted ||
     result.propertyInserted ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Hickory Haven seed applied.");
   }

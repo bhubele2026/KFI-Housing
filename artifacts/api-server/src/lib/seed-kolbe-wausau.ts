@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
+import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 export const KOLBE_WAUSAU_CUSTOMER_ID = "cust-kfi-wausau";
@@ -19,6 +20,13 @@ export const kolbeWausauLeaseId = (unit: string): string =>
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Wausau, WI";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+/**
+ * Real downstream end-client for Apt 200 per master file row 9
+ * (`Schuette Metals - Rothschild, WI`). Apt 108 has no third-party
+ * employer recorded in the master file, so the property as a whole is
+ * repointed to Schuette Metals when present (Task #328).
+ */
+const KOLBE_WAUSAU_END_CLIENT_NAME_PATTERN = "Schuette Metals%";
 const KOLBE_ADDRESS = "1331 South 8th Ave";
 const KOLBE_CITY = "Wausau";
 const KOLBE_STATE = "WI";
@@ -162,6 +170,14 @@ export interface SeedKolbeWausauResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  /** Customer the property is attached to after this run. */
+  customerId: string;
+  /** True when the property was repointed from a KFI Staffing fallback to
+   *  the real Schuette Metals end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned `cust-kfi-wausau` fallback customer was
+   *  deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedKolbeWausauDeps {
@@ -279,13 +295,34 @@ export async function seedKolbeWausauIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customerInserted, propertyInserted, leasesInserted };
+    // Task #328: repoint AWAY from any KFI Staffing fallback customer
+    // to the real Schuette Metals end-client when present, and clean
+    // up the orphaned fallback customer.
+    const repoint = await repointFallbackToEndClient({
+      tx,
+      propertyId,
+      currentCustomerId: customerId,
+      endClientNamePattern: KOLBE_WAUSAU_END_CLIENT_NAME_PATTERN,
+      fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
+      fallbackCustomerId: KOLBE_WAUSAU_CUSTOMER_ID,
+    });
+
+    return {
+      customerInserted,
+      propertyInserted,
+      leasesInserted,
+      customerId: repoint.customerId,
+      repointedToEndClient: repoint.repointedToEndClient,
+      fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
+    };
   });
 
   if (
     result.customerInserted ||
     result.propertyInserted ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Kolbe Wausau seed applied.");
   }

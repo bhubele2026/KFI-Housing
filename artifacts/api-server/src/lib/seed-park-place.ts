@@ -13,6 +13,7 @@ import {
   computeLeaseStatus as sharedComputeLeaseStatus,
   todayIso as sharedTodayIso,
 } from "./lease-status";
+import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 // Re-export from the shared helper so callers (and the existing test that
@@ -26,6 +27,17 @@ export const parkPlaceLeaseId = (unit: string): string =>
 
 const KFI_CUSTOMER_NAME_DEFAULT = "KFI Staffing – Plymouth, MN";
 const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+/**
+ * Real downstream end-client per the master file (Task #328). Park Place
+ * Apartments at 14550 34th Ave N, Plymouth MN 55447 is the corporate
+ * housing block for `Cardinal CG at Spring Green, WI` (master row 1,
+ * which lists "Park Place Apartments / 14550 34th Ave N, Playmouth, MN
+ * 55447" in its hint columns alongside that client name). The pattern is
+ * deliberately narrow ("Cardinal CG at Spring Green%") so we don't
+ * accidentally repoint to the unrelated `Cardinal CG - Northfield`
+ * customer (master row with Owatonna, MN address).
+ */
+const PARK_PLACE_END_CLIENT_NAME_PATTERN = "Cardinal CG at Spring Green%";
 
 const PARK_PLACE_ADDRESS = "14550 34th Ave N";
 const PARK_PLACE_CITY = "Plymouth";
@@ -259,6 +271,14 @@ export interface SeedParkPlaceResult {
   customerInserted: boolean;
   propertyInserted: boolean;
   leasesInserted: number;
+  /** Customer the property is attached to after this run. */
+  customerId: string;
+  /** True when the property was repointed from a KFI Staffing fallback to
+   *  the real Cardinal CG (Spring Green) end-client during this run. */
+  repointedToEndClient: boolean;
+  /** True when the now-orphaned `cust-kfi-park-place` fallback customer
+   *  was deleted during this run. */
+  fallbackCustomerDeleted: boolean;
 }
 
 export interface SeedParkPlaceDeps {
@@ -382,13 +402,34 @@ export async function seedParkPlaceIfMissing(
       if (inserted.length > 0) leasesInserted += 1;
     }
 
-    return { customerInserted, propertyInserted, leasesInserted };
+    // Task #328: repoint AWAY from any KFI Staffing fallback customer to
+    // the real Cardinal CG (Spring Green) end-client when present, and
+    // clean up the orphaned fallback customer.
+    const repoint = await repointFallbackToEndClient({
+      tx,
+      propertyId,
+      currentCustomerId: customerId,
+      endClientNamePattern: PARK_PLACE_END_CLIENT_NAME_PATTERN,
+      fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
+      fallbackCustomerId: PARK_PLACE_CUSTOMER_ID,
+    });
+
+    return {
+      customerInserted,
+      propertyInserted,
+      leasesInserted,
+      customerId: repoint.customerId,
+      repointedToEndClient: repoint.repointedToEndClient,
+      fallbackCustomerDeleted: repoint.fallbackCustomerDeleted,
+    };
   });
 
   if (
     result.customerInserted ||
     result.propertyInserted ||
-    result.leasesInserted > 0
+    result.leasesInserted > 0 ||
+    result.repointedToEndClient ||
+    result.fallbackCustomerDeleted
   ) {
     log.info(result, "Park Place KFI seed applied.");
   }

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerNoHousingReason } from "./customerNoHousingReason";
 
 export interface Customer {
   id: string;
@@ -18,4 +19,10 @@ Customers page. Empty string when unknown. Populated by
 the Housing_Lease_MASTER importer (task #288).
  */
   state?: string;
+  /** Operator-recorded reason explaining why this customer has
+zero housing managed through HousingOps (Task #498). Only
+meaningful when the customer has no associated properties;
+`null` (or absent) means no reason has been chosen yet.
+ */
+  noHousingReason?: CustomerNoHousingReason;
 }

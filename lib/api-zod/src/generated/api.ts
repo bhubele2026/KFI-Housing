@@ -107,6 +107,17 @@ export const ImportDataBody = zod.object({
         .describe(
           "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
         ),
+      noHousingReason: zod
+        .union([
+          zod.literal("provided_by_client"),
+          zod.literal("kfis_property"),
+          zod.literal("all_associates_local"),
+          zod.literal(null),
+        ])
+        .nullish()
+        .describe(
+          "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
+        ),
     }),
   ),
   properties: zod.array(
@@ -468,6 +479,17 @@ export const ListCustomersResponseItem = zod.object({
     .describe(
       "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
     ),
+  noHousingReason: zod
+    .union([
+      zod.literal("provided_by_client"),
+      zod.literal("kfis_property"),
+      zod.literal("all_associates_local"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
+    ),
 });
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
 
@@ -487,6 +509,17 @@ export const CreateCustomerBody = zod.object({
     .describe(
       "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
     ),
+  noHousingReason: zod
+    .union([
+      zod.literal("provided_by_client"),
+      zod.literal("kfis_property"),
+      zod.literal("all_associates_local"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
+    ),
 });
 
 /**
@@ -503,6 +536,14 @@ export const UpdateCustomerBody = zod.object({
   phone: zod.string().optional(),
   notes: zod.string().optional(),
   state: zod.string().optional(),
+  noHousingReason: zod
+    .union([
+      zod.literal("provided_by_client"),
+      zod.literal("kfis_property"),
+      zod.literal("all_associates_local"),
+      zod.literal(null),
+    ])
+    .nullish(),
 });
 
 export const UpdateCustomerResponse = zod.object({
@@ -517,6 +558,17 @@ export const UpdateCustomerResponse = zod.object({
     .optional()
     .describe(
       "Two-letter US state code used to group customers on the\nCustomers page. Empty string when unknown. Populated by\nthe Housing_Lease_MASTER importer (task #288).\n",
+    ),
+  noHousingReason: zod
+    .union([
+      zod.literal("provided_by_client"),
+      zod.literal("kfis_property"),
+      zod.literal("all_associates_local"),
+      zod.literal(null),
+    ])
+    .nullish()
+    .describe(
+      "Operator-recorded reason explaining why this customer has\nzero housing managed through HousingOps (Task #498). Only\nmeaningful when the customer has no associated properties;\n`null` (or absent) means no reason has been chosen yet.\n",
     ),
 });
 

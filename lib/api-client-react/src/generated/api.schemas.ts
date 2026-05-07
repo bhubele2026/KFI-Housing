@@ -56,6 +56,23 @@ the portfolio map falls back to Google's built-in
   googleMapsMapId: string | null;
 }
 
+/**
+ * Operator-recorded reason explaining why this customer has
+zero housing managed through HousingOps (Task #498). Only
+meaningful when the customer has no associated properties;
+`null` (or absent) means no reason has been chosen yet.
+
+ */
+export type CustomerNoHousingReason =
+  | (typeof CustomerNoHousingReason)[keyof typeof CustomerNoHousingReason]
+  | null;
+
+export const CustomerNoHousingReason = {
+  provided_by_client: "provided_by_client",
+  kfis_property: "kfis_property",
+  all_associates_local: "all_associates_local",
+} as const;
+
 export interface Customer {
   id: string;
   name: string;
@@ -68,7 +85,23 @@ Customers page. Empty string when unknown. Populated by
 the Housing_Lease_MASTER importer (task #288).
  */
   state?: string;
+  /** Operator-recorded reason explaining why this customer has
+zero housing managed through HousingOps (Task #498). Only
+meaningful when the customer has no associated properties;
+`null` (or absent) means no reason has been chosen yet.
+ */
+  noHousingReason?: CustomerNoHousingReason;
 }
+
+export type CustomerUpdateNoHousingReason =
+  | (typeof CustomerUpdateNoHousingReason)[keyof typeof CustomerUpdateNoHousingReason]
+  | null;
+
+export const CustomerUpdateNoHousingReason = {
+  provided_by_client: "provided_by_client",
+  kfis_property: "kfis_property",
+  all_associates_local: "all_associates_local",
+} as const;
 
 export interface CustomerUpdate {
   name?: string;
@@ -77,6 +110,7 @@ export interface CustomerUpdate {
   phone?: string;
   notes?: string;
   state?: string;
+  noHousingReason?: CustomerUpdateNoHousingReason;
 }
 
 export type PropertyStatus =

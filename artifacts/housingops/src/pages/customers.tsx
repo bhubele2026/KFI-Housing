@@ -5,7 +5,21 @@ import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData, CustomerInUseError } from "@/context/data-store";
-import { type Customer, toMonthlyCharge, formatUsd } from "@/data/mockData";
+import {
+  type Customer,
+  toMonthlyCharge,
+  formatUsd,
+  NO_HOUSING_REASONS,
+  NO_HOUSING_REASON_LABELS,
+  type NoHousingReason,
+} from "@/data/mockData";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,6 +54,7 @@ const EMPTY_DRAFT: Customer = {
   phone: "",
   notes: "",
   state: "",
+  noHousingReason: null,
 };
 
 const UNASSIGNED_STATE_LABEL = "Other / Unassigned";
@@ -285,6 +300,7 @@ export default function Customers() {
       phone: draft.phone.trim(),
       notes: draft.notes,
       state: (draft.state ?? "").trim().toUpperCase(),
+      noHousingReason: draft.noHousingReason ?? null,
     };
     if (editing) {
       updateCustomer(editing.id, payload);
@@ -312,6 +328,10 @@ export default function Customers() {
           return s && s.totalBeds > 0 ? Math.round(s.occupancyPct) : "";
         } },
       { header: "Monthly Revenue", value: (c) => statsByCustomer.get(c.id)?.monthlyRevenue ?? 0 },
+      { header: "No Housing Reason", value: (c) => {
+          if ((statsByCustomer.get(c.id)?.propertyCount ?? 0) > 0) return "";
+          return c.noHousingReason ? NO_HOUSING_REASON_LABELS[c.noHousingReason] : "";
+        } },
       { header: "Notes",           value: (c) => c.notes },
     ]);
     downloadCsv(timestampedCsvName("housingops-customers"), csv);
@@ -510,13 +530,14 @@ export default function Customers() {
                       {sortIcon(dirFor("revenue"))}
                     </button>
                   </TableHead>
+                  <TableHead>No Housing / Reason</TableHead>
                   <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <EmptyStateRow
-                    colSpan={8}
+                    colSpan={9}
                     icon={Briefcase}
                     title={
                       customers.length === 0
@@ -548,7 +569,7 @@ export default function Customers() {
                         data-testid={`row-state-group-${group.state}`}
                       >
                         <th
-                          colSpan={8}
+                          colSpan={9}
                           scope="colgroup"
                           className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                         >
@@ -685,6 +706,48 @@ export default function Customers() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </td>
+                        <td className="p-4 text-sm" data-testid={`cell-customer-no-housing-${c.id}`}>
+                          {count === 0 ? (
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" data-testid={`badge-no-housing-${c.id}`}>
+                                No Housing
+                              </Badge>
+                              <Select
+                                value={c.noHousingReason ?? ""}
+                                onValueChange={(value) =>
+                                  updateCustomer(c.id, {
+                                    noHousingReason: value as NoHousingReason,
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  className="h-8 w-[200px] text-xs"
+                                  data-testid={`select-no-housing-reason-${c.id}`}
+                                  aria-label={`Set no-housing reason for ${c.name}`}
+                                >
+                                  {c.noHousingReason ? (
+                                    <SelectValue />
+                                  ) : (
+                                    <span className="text-muted-foreground italic">
+                                      — Set reason
+                                    </span>
+                                  )}
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {NO_HOUSING_REASONS.map((reason) => (
+                                    <SelectItem
+                                      key={reason}
+                                      value={reason}
+                                      data-testid={`select-no-housing-reason-${c.id}-${reason}`}
+                                    >
+                                      {NO_HOUSING_REASON_LABELS[reason]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ) : null}
                         </td>
                         <td className="p-4">
                           <div className="flex items-center justify-end gap-1">
@@ -833,6 +896,37 @@ export default function Customers() {
                 placeholder="contact@company.com"
                 data-testid="input-customer-email"
               />
+            </div>
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label htmlFor="cust-no-housing-reason">No-housing reason</Label>
+              <Select
+                value={draft.noHousingReason ?? "__none__"}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    noHousingReason:
+                      value === "__none__" ? null : (value as NoHousingReason),
+                  })
+                }
+              >
+                <SelectTrigger
+                  id="cust-no-housing-reason"
+                  data-testid="select-customer-no-housing-reason"
+                >
+                  <SelectValue placeholder="— Set reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— No reason recorded</SelectItem>
+                  {NO_HOUSING_REASONS.map((reason) => (
+                    <SelectItem key={reason} value={reason}>
+                      {NO_HOUSING_REASON_LABELS[reason]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Only meaningful for customers with no properties managed in HousingOps.
+              </p>
             </div>
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="cust-notes">Notes</Label>

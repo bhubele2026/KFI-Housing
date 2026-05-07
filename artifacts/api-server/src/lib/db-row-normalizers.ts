@@ -254,19 +254,40 @@ export function normalizeLeaseRow<
 // Customers
 // ---------------------------------------------------------------------------
 
+const CUSTOMER_NO_HOUSING_REASONS = new Set<string>([
+  "provided_by_client",
+  "kfis_property",
+  "all_associates_local",
+]);
+
 /**
- * Normalize a customer row. The `Customer` schema is loose — every
- * field is a free-form string with a `""` default — so today this is
- * mostly a pass-through. Defined as a first-class function anyway so
- * that future fields with stricter contracts (e.g. an enum on
- * customer type) automatically get the same boundary treatment, and
- * accepts the same optional `fixups` collector for symmetry with the
- * other normalisers.
+ * Coerce the operator-picked "why no housing?" reason into the canonical
+ * enum (Task #498). Anything outside the known set — and any blank
+ * string — collapses to `null`, which means "no reason recorded yet".
+ */
+function normalizeNoHousingReason(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  return CUSTOMER_NO_HOUSING_REASONS.has(trimmed) ? trimmed : null;
+}
+
+/**
+ * Normalize a customer row. Coerces the `noHousingReason` enum down to
+ * the canonical set (Task #498) and otherwise passes through — the
+ * remaining customer fields are free-form strings with a `""` default
+ * at the schema layer.
  */
 export function normalizeCustomerRow<
   T extends Partial<CustomerRow> | Partial<InsertCustomerRow>,
->(row: T, _fixups?: NormalizerFixup[]): T {
-  return { ...row };
+>(row: T, fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  if ("noHousingReason" in row) {
+    const after = normalizeNoHousingReason(row.noHousingReason);
+    recordFixup(fixups, "noHousingReason", row.noHousingReason, after);
+    out.noHousingReason = after;
+  }
+  return out as T;
 }
 
 // ---------------------------------------------------------------------------

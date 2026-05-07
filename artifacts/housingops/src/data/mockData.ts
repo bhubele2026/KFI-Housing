@@ -41,6 +41,20 @@ export function computeOverallRating(ratings?: Ratings | null): number | null {
   return Math.round((sum / values.length) * 10) / 10;
 }
 
+export const NO_HOUSING_REASONS = [
+  "provided_by_client",
+  "kfis_property",
+  "all_associates_local",
+] as const;
+export type NoHousingReason = (typeof NO_HOUSING_REASONS)[number];
+
+/** Human-friendly label for each {@link NoHousingReason} enum value. */
+export const NO_HOUSING_REASON_LABELS: Record<NoHousingReason, string> = {
+  provided_by_client: "Provided by client",
+  kfis_property: "KFIS property",
+  all_associates_local: "All associates living locally",
+};
+
 export const CustomerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -52,6 +66,11 @@ export const CustomerSchema = z.object({
   // Marked optional + defaulted so older API payloads (and existing test
   // fixtures) continue to parse without each one having to be updated.
   state: z.string().optional().default(""),
+  // Operator-recorded reason explaining why this customer has zero
+  // housing managed through HousingOps (Task #498). `null` (or absent)
+  // means no reason has been chosen yet. Optional so older payloads
+  // and existing test fixtures continue to parse.
+  noHousingReason: z.enum(NO_HOUSING_REASONS).nullable().optional(),
 });
 export type Customer = z.infer<typeof CustomerSchema>;
 

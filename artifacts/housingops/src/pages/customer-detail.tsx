@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -53,6 +54,7 @@ function StatCard({
 }
 
 export default function CustomerDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer } = useData();
@@ -258,10 +260,10 @@ export default function CustomerDetail() {
     return (
       <MainLayout>
         <NotFoundScreen
-          title="Customer not found"
-          description="This customer may have been deleted. Head back to the dashboard or pick another customer from the list."
+          title={t("pages.customerDetail.notFoundTitle")}
+          description={t("pages.customerDetail.notFoundDescription")}
           secondary={{
-            label: "Back to Customers",
+            label: t("pages.customerDetail.backToCustomers"),
             href: "/customers",
             testId: "button-back-to-customers",
           }}
@@ -282,20 +284,23 @@ export default function CustomerDetail() {
   ) => {
     if (customer[field] === nextValue) return;
     updateCustomer(customer.id, { [field]: nextValue } as Partial<typeof customer>);
-    toast({ title: "Customer updated", description: `${label} saved.` });
+    toast({
+      title: t("pages.customerDetail.toastUpdatedTitle"),
+      description: t("pages.customerDetail.toastSavedDescription", { label }),
+    });
   };
 
   const saveName = (raw: string) => {
     const trimmed = raw.trim();
     if (!trimmed) {
       toast({
-        title: "Name is required",
-        description: "Customer name can't be empty.",
+        title: t("pages.customerDetail.toastNameRequiredTitle"),
+        description: t("pages.customerDetail.toastNameRequiredDescription"),
         variant: "destructive",
       });
       return;
     }
-    saveField("name", trimmed, "Company name");
+    saveField("name", trimmed, t("pages.customerDetail.fieldLabelCompanyName"));
   };
 
   return (
@@ -311,7 +316,7 @@ export default function CustomerDetail() {
           <Link href="/customers">
             <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground" data-testid="link-back-to-customers">
               <ChevronLeft className="h-4 w-4" />
-              Customers
+              {t("pages.customerDetail.breadcrumbCustomers")}
             </Button>
           </Link>
           <span className="text-muted-foreground">/</span>
@@ -338,7 +343,11 @@ export default function CustomerDetail() {
                 />
               </h1>
               <p className="text-sm text-muted-foreground">
-                {totals.propertyCount} propert{totals.propertyCount === 1 ? "y" : "ies"} · {totals.totalBeds} bed{totals.totalBeds === 1 ? "" : "s"}
+                {t("pages.customerDetail.headerSummary", {
+                  propertyCount: totals.propertyCount,
+                  bedCount: totals.totalBeds,
+                  count: totals.propertyCount,
+                })}
               </p>
             </div>
           </div>
@@ -347,29 +356,29 @@ export default function CustomerDetail() {
         {/* Summary Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard
-            label="Properties"
+            label={t("pages.customerDetail.summaryProperties")}
             value={totals.propertyCount}
             icon={Building2}
             testId="stat-properties"
           />
           <StatCard
-            label="Beds"
+            label={t("pages.customerDetail.summaryBeds")}
             value={totals.totalBeds > 0 ? `${totals.occupiedBeds}/${totals.totalBeds}` : "—"}
-            sub={totals.totalBeds > 0 ? "occupied / total" : undefined}
+            sub={totals.totalBeds > 0 ? t("pages.customerDetail.occupiedOverTotal") : undefined}
             icon={BedDouble}
             testId="stat-beds"
           />
           <StatCard
-            label="Occupancy"
+            label={t("pages.customerDetail.summaryOccupancy")}
             value={totals.totalBeds > 0 ? `${totals.occupancyPct.toFixed(0)}%` : "—"}
             color={totals.totalBeds > 0 ? "text-emerald-600" : "text-muted-foreground"}
             icon={TrendingUp}
             testId="stat-occupancy"
           />
           <StatCard
-            label="Monthly Revenue"
+            label={t("pages.customerDetail.summaryMonthlyRevenue")}
             value={totals.monthlyRevenue > 0 ? `${formatUsd(totals.monthlyRevenue)}` : "—"}
-            sub="across all properties"
+            sub={t("pages.customerDetail.acrossAllProperties")}
             color={totals.monthlyRevenue > 0 ? "text-emerald-600" : "text-muted-foreground"}
             icon={TrendingUp}
             testId="stat-revenue"
@@ -382,10 +391,10 @@ export default function CustomerDetail() {
             <CardTitle className="text-base flex items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <Receipt className="h-4 w-4" />
-                Customer-paid monthly rent
+                {t("pages.customerDetail.customerPaidTitle")}
               </span>
               <span className="text-xs font-normal text-muted-foreground">
-                {customerPaidLeases.length} active lease{customerPaidLeases.length === 1 ? "" : "s"}
+                {t("pages.customerDetail.activeLeases", { count: customerPaidLeases.length })}
               </span>
             </CardTitle>
           </CardHeader>
@@ -397,16 +406,14 @@ export default function CustomerDetail() {
               {customerPaidRent > 0 ? `${formatUsd(customerPaidRent)}` : "—"}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Sum of monthly rent on Active leases this customer is on the hook for.
-              Hotel-rate leases are listed below but excluded from this total — their
-              rent depends on logged room-nights, not a fixed monthly amount.
+              {t("pages.customerDetail.customerPaidHelper")}
             </p>
             {customerPaidLeases.length === 0 ? (
               <p
                 className="mt-4 text-sm text-muted-foreground"
                 data-testid="empty-customer-paid-leases"
               >
-                No leases are currently flagged as customer-paid.
+                {t("pages.customerDetail.noLeasesFlagged")}
               </p>
             ) : (
               <ul className="mt-4 divide-y border rounded-md" data-testid="list-customer-paid-leases">
@@ -422,12 +429,12 @@ export default function CustomerDetail() {
                       >
                         <span className="flex items-center gap-2 min-w-0">
                           <span className="font-medium truncate">
-                            {property?.name ?? "Unknown property"}
+                            {property?.name ?? t("pages.customerDetail.unknownProperty")}
                             {l.unit ? ` · ${l.unit}` : ""}
                           </span>
                           {isHotelRate && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              Hotel rate
+                              {t("pages.customerDetail.hotelRateBadge")}
                             </Badge>
                           )}
                         </span>
@@ -456,12 +463,12 @@ export default function CustomerDetail() {
             <CardTitle className="text-base flex items-center justify-between gap-2">
               <span className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
-                Revenue Trend
+                {t("pages.customerDetail.revenueTrend")}
               </span>
               <div
                 className="flex items-center gap-1"
                 role="group"
-                aria-label="Select revenue trend range"
+                aria-label={t("pages.customerDetail.selectRangeAria")}
                 data-testid="revenue-trend-range"
               >
                 {([3, 6, 12, 24] as const).map((m) => {
@@ -513,7 +520,7 @@ export default function CustomerDetail() {
                     cursor={{ fill: "transparent" }}
                     formatter={(value: number) => [
                       `${formatUsd(value)}`,
-                      "Revenue",
+                      t("pages.customerDetail.revenueLabel"),
                     ]}
                     labelFormatter={(_label, payload) =>
                       (payload?.[0]?.payload as { tooltipLabel?: string } | undefined)
@@ -534,46 +541,46 @@ export default function CustomerDetail() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Contact
+                {t("pages.customerDetail.contact")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Primary contact</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{t("pages.customerDetail.primaryContact")}</p>
                 <div className="mt-0.5" data-testid="contact-name">
                   <InlineEdit
                     value={customer.contactName}
-                    placeholder="Add contact name"
+                    placeholder={t("pages.customerDetail.addContactName")}
                     inputClassName="w-56"
-                    onSave={(v) => saveField("contactName", v.trim(), "Contact name")}
+                    onSave={(v) => saveField("contactName", v.trim(), t("pages.customerDetail.fieldLabelContactName"))}
                     testId="inline-contact-name"
                   />
                 </div>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Email</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{t("pages.customerDetail.email")}</p>
                 <div className="mt-0.5 flex items-center gap-1.5" data-testid="contact-email">
                   {customer.email && <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                   <InlineEdit
                     value={customer.email}
                     type="email"
-                    placeholder="Add email"
+                    placeholder={t("pages.customerDetail.addEmail")}
                     inputClassName="w-56"
-                    onSave={(v) => saveField("email", v.trim(), "Email")}
+                    onSave={(v) => saveField("email", v.trim(), t("pages.customerDetail.fieldLabelEmail"))}
                     testId="inline-contact-email"
                   />
                 </div>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Phone</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{t("pages.customerDetail.phone")}</p>
                 <div className="mt-0.5 flex items-center gap-1.5" data-testid="contact-phone">
                   {customer.phone && <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                   <InlineEdit
                     value={customer.phone}
                     type="tel"
-                    placeholder="Add phone"
+                    placeholder={t("pages.customerDetail.addPhone")}
                     inputClassName="w-56"
-                    onSave={(v) => saveField("phone", v.trim(), "Phone")}
+                    onSave={(v) => saveField("phone", v.trim(), t("pages.customerDetail.fieldLabelPhone"))}
                     testId="inline-contact-phone"
                   />
                 </div>
@@ -581,12 +588,12 @@ export default function CustomerDetail() {
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
                   <FileText className="h-3 w-3" />
-                  Notes
+                  {t("pages.customerDetail.notes")}
                 </p>
                 <div className="mt-1" data-testid="contact-notes">
                   <NotesEditor
                     value={customer.notes ?? ""}
-                    onSave={(v) => saveField("notes", v, "Notes")}
+                    onSave={(v) => saveField("notes", v, t("pages.customerDetail.fieldLabelNotes"))}
                     className="min-h-[88px] text-sm"
                   />
                 </div>
@@ -600,27 +607,27 @@ export default function CustomerDetail() {
               <CardTitle className="text-base flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
-                  Properties
+                  {t("pages.customerDetail.propertiesTitle")}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  {totals.propertyCount} total
+                  {t("pages.customerDetail.propertiesTotal", { count: totals.propertyCount })}
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {propertyStats.length === 0 ? (
                 <p className="px-6 pb-6 text-sm text-muted-foreground" data-testid="empty-properties">
-                  This customer has no properties yet.
+                  {t("pages.customerDetail.noPropertiesYet")}
                 </p>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Property</TableHead>
-                      <TableHead>Location</TableHead>
-                      <TableHead className="text-center">Beds</TableHead>
-                      <TableHead className="text-center">Occupancy</TableHead>
-                      <TableHead className="text-right">Revenue / mo</TableHead>
+                      <TableHead>{t("pages.customerDetail.colProperty")}</TableHead>
+                      <TableHead>{t("pages.customerDetail.colLocation")}</TableHead>
+                      <TableHead className="text-center">{t("pages.customerDetail.colBeds")}</TableHead>
+                      <TableHead className="text-center">{t("pages.customerDetail.colOccupancy")}</TableHead>
+                      <TableHead className="text-right">{t("pages.customerDetail.colRevenuePerMo")}</TableHead>
                       <TableHead className="w-8" />
                     </TableRow>
                   </TableHeader>

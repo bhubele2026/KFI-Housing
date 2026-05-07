@@ -524,7 +524,7 @@ export default function Properties() {
         list.push({
           customer: {
             id: cid,
-            name: "Unknown customer",
+            name: t("toasts.unknownCustomer"),
             contactName: "",
             email: "",
             phone: "",
@@ -649,11 +649,6 @@ export default function Properties() {
       : dir === "desc"
         ? " (currently descending)"
         : "";
-  const activeRatingSortLabel =
-    sortKey === "rating"
-      ? RATING_SORT_OPTIONS.find((o) => o.key === ratingSortCategory)?.label ?? "Rating"
-      : "Rating";
-
   const openAdd = () => {
     setDraft(EMPTY_PROPERTY_DRAFT);
     setShowNewCustomerForm(false);
@@ -767,9 +762,8 @@ export default function Properties() {
         }).geocodeStatus;
         if (geocodeStatus === "no_result") {
           toast({
-            title: "Couldn't locate address",
-            description:
-              `Google had no result for ${name}'s address. The property saved without a map pin — open it to fix the street, city, or ZIP.`,
+            title: t("toasts.geocode.couldntLocateTitle"),
+            description: t("toasts.geocode.couldntLocateDescription", { name }),
             variant: "destructive",
           });
         }
@@ -887,9 +881,8 @@ export default function Properties() {
       if (!mapsApiKey) {
         if (!silent) {
           toast({
-            title: "Couldn't retry",
-            description:
-              "Google Maps key isn't loaded yet. Try again in a moment.",
+            title: t("toasts.geocode.couldntRetryTitle"),
+            description: t("toasts.geocode.couldntRetryDescription"),
             variant: "destructive",
           });
         }
@@ -917,9 +910,8 @@ export default function Properties() {
           // the caller can roll N outcomes into one summary toast.
           if (!silent) {
             toast({
-              title: "Still couldn't pinpoint",
-              description:
-                "Google has no result for this address. Edit it to try a different spelling.",
+              title: t("toasts.geocode.stillCouldntPinpointTitle"),
+              description: t("toasts.geocode.stillCouldntPinpointDescription"),
             });
           }
           return "still-failing";
@@ -936,17 +928,16 @@ export default function Properties() {
         // suppresses to avoid N "Found it" toasts in a row.
         if (!silent) {
           toast({
-            title: "Found it",
-            description: "Google pinpointed this address. Removing it from the list.",
+            title: t("toasts.geocode.foundItTitle"),
+            description: t("toasts.geocode.foundItDescription"),
           });
         }
         return "fixed";
       } catch {
         if (!silent) {
           toast({
-            title: "Retry failed",
-            description:
-              "Couldn't reach Google Maps. Check your connection and try again.",
+            title: t("toasts.geocode.retryFailedTitle"),
+            description: t("toasts.geocode.retryFailedDescription"),
             variant: "destructive",
           });
         }
@@ -1043,9 +1034,8 @@ export default function Properties() {
       // BEFORE flipping into the bulk-progress state so the button
       // doesn't briefly disable itself for a run we never started.
       toast({
-        title: "Couldn't retry",
-        description:
-          "Google Maps key isn't loaded yet. Try again in a moment.",
+        title: t("toasts.geocode.couldntRetryTitle"),
+        description: t("toasts.geocode.couldntRetryDescription"),
         variant: "destructive",
       });
       return;
@@ -1096,25 +1086,22 @@ export default function Properties() {
     let title: string;
     let description: string;
     if (fixed === total) {
-      title = "All addresses pinpointed";
-      description =
-        total === 1
-          ? "Fixed the 1 flagged address."
-          : `Fixed all ${total} flagged addresses.`;
+      title = t("toasts.geocode.allPinpointedTitle");
+      description = t("toasts.geocode.allPinpointedDescription", { count: total });
     } else if (fixed === 0) {
-      title = "No addresses could be pinpointed";
+      title = t("toasts.geocode.nonePinpointedTitle");
       description =
         errored > 0 && stillFailing === 0
-          ? `Couldn't reach Google for ${errored} of ${total}. Check your connection and try again.`
+          ? t("toasts.geocode.nonePinpointedConnectionDescription", { errored, total })
           : errored > 0
-            ? `${stillFailing} of ${total} still need attention; ${errored} couldn't be attempted.`
-            : `${total} still need attention. Try editing the addresses.`;
+            ? t("toasts.geocode.nonePinpointedMixedDescription", { stillFailing, total, errored })
+            : t("toasts.geocode.nonePinpointedNeedAttentionDescription", { total });
     } else {
-      title = `Fixed ${fixed} of ${total}`;
+      title = t("toasts.geocode.fixedSomeTitle", { fixed, total });
       description =
         errored > 0
-          ? `${stillFailing} still need attention; ${errored} couldn't be attempted.`
-          : `${attemptedFailures} still need attention.`;
+          ? t("toasts.geocode.fixedSomeWithErroredDescription", { stillFailing, errored })
+          : t("toasts.geocode.fixedSomeDescription", { count: attemptedFailures });
     }
     toast({
       title,
@@ -1300,7 +1287,7 @@ export default function Properties() {
             <div
               className="inline-flex rounded-md border overflow-hidden"
               role="group"
-              aria-label="Properties view"
+              aria-label={t("pages.properties.viewLabel")}
               data-testid="properties-view-toggle"
             >
               <Button
@@ -1313,7 +1300,7 @@ export default function Properties() {
                 data-testid="button-view-table"
               >
                 <TableIcon className="mr-2 h-4 w-4" />
-                Table
+                {t("pages.properties.tableView")}
               </Button>
               <Button
                 type="button"
@@ -1325,7 +1312,7 @@ export default function Properties() {
                 data-testid="button-view-map"
               >
                 <MapIcon className="mr-2 h-4 w-4" />
-                Map
+                {t("pages.properties.mapView")}
               </Button>
             </div>
             <Button
@@ -1335,11 +1322,11 @@ export default function Properties() {
               data-testid="button-download-properties-csv"
             >
               <Download className="mr-2 h-4 w-4" />
-              Download CSV
+              {t("pages.properties.downloadCsv")}
             </Button>
             <Button onClick={openAdd} data-testid="button-add-property">
               <Plus className="mr-2 h-4 w-4" />
-              Add Property
+              {t("pages.properties.addProperty")}
             </Button>
           </>}
         />
@@ -1349,12 +1336,12 @@ export default function Properties() {
             {activeCustomerName && (
               <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
                 <Briefcase className="h-3 w-3" />
-                Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.properties.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
                 <button
                   type="button"
                   onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear customer filter"
+                  aria-label={t("pages.properties.clearCustomerFilter")}
                   data-testid="button-clear-customer-filter"
                 >
                   <X className="h-3 w-3" />
@@ -1368,12 +1355,12 @@ export default function Properties() {
                 data-testid="badge-needs-review-filter"
               >
                 <AlertTriangle className="h-3 w-3" />
-                Showing properties missing rent
+                {t("pages.properties.needsReviewBadge")}
                 <button
                   type="button"
                   onClick={clearNeedsReviewFilter}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear needs-review filter"
+                  aria-label={t("pages.properties.clearNeedsReview")}
                   data-testid="button-clear-needs-review-filter"
                 >
                   <X className="h-3 w-3" />
@@ -1413,7 +1400,7 @@ export default function Properties() {
               <div className="flex items-center gap-2">
                 <MapPinOff className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <h2 className="text-sm font-semibold">
-                  Addresses Google can't pinpoint
+                  {t("pages.properties.addressReview.title")}
                 </h2>
                 <Badge
                   variant="secondary"
@@ -1451,9 +1438,9 @@ export default function Properties() {
                     onClick={handleRetryAll}
                     disabled={isBulkRetrying}
                     className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed"
-                    aria-label="Retry every flagged address"
+                    aria-label={t("pages.properties.addressReview.retryAllAria")}
                     aria-busy={isBulkRetrying}
-                    title="Re-attempt every address Google couldn't pinpoint"
+                    title={t("pages.properties.addressReview.retryAllTitle")}
                     data-testid="retry-all-addresses-needing-review"
                   >
                     {isBulkRetrying ? (
@@ -1462,18 +1449,16 @@ export default function Properties() {
                       <RefreshCw className="h-3.5 w-3.5" />
                     )}
                     {isBulkRetrying && bulkRetryProgress
-                      ? `Retrying ${Math.min(
-                          bulkRetryProgress.done + 1,
-                          bulkRetryProgress.total,
-                        )} of ${bulkRetryProgress.total}…`
-                      : "Retry all"}
+                      ? t("pages.properties.addressReview.retryingProgress", {
+                          done: Math.min(bulkRetryProgress.done + 1, bulkRetryProgress.total),
+                          total: bulkRetryProgress.total,
+                        })
+                      : t("pages.properties.addressReview.retryAll")}
                   </button>
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Google had no result for these addresses this session.
-                Open each property to fix the street, city, or ZIP and
-                the pin will return on the next map view.
+                {t("pages.properties.addressReview.helper")}
               </p>
               <ul
                 className="divide-y rounded-md border bg-card"
@@ -1573,9 +1558,9 @@ export default function Properties() {
                         onClick={() => handleRetryAddress(addrDisplay)}
                         disabled={isRetrying}
                         className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
-                        aria-label={`Retry geocoding ${p.name}`}
+                        aria-label={t("pages.properties.addressReview.retryAria", { name: p.name })}
                         aria-busy={isRetrying}
-                        title="Re-attempt the address lookup"
+                        title={t("pages.properties.addressReview.retryTitle")}
                         data-testid={`retry-address-needing-review-${p.id}`}
                       >
                         {isRetrying ? (
@@ -1583,7 +1568,7 @@ export default function Properties() {
                         ) : (
                           <RefreshCw className="h-3.5 w-3.5" />
                         )}
-                        {isRetrying ? "Retrying…" : "Retry"}
+                        {isRetrying ? t("pages.properties.addressReview.retrying") : t("pages.properties.addressReview.retry")}
                       </button>
                       {/*
                         Dismiss the row for the rest of the session.
@@ -1600,12 +1585,12 @@ export default function Properties() {
                         type="button"
                         onClick={() => dismissGeocodeFailure(addrDisplay)}
                         className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1"
-                        aria-label={`Dismiss ${p.name} from addresses needing review`}
-                        title="Hide this row for the rest of the session"
+                        aria-label={t("pages.properties.addressReview.dismissAria", { name: p.name })}
+                        title={t("pages.properties.addressReview.dismissTitle")}
                         data-testid={`dismiss-address-needing-review-${p.id}`}
                       >
                         <X className="h-3.5 w-3.5" />
-                        Dismiss
+                        {t("pages.properties.addressReview.dismiss")}
                       </button>
                     </li>
                   );
@@ -1648,8 +1633,8 @@ export default function Properties() {
                     <span data-testid="dismissed-addresses-count">
                       {dismissedPropertiesForReview.length}
                     </span>
-                    {" dismissed this session — "}
-                    {isDismissedExpanded ? "hide" : "show"}
+                    {t("pages.properties.addressReview.dismissedSuffix")}
+                    {isDismissedExpanded ? t("pages.properties.addressReview.hide") : t("pages.properties.addressReview.show")}
                   </button>
                   {isDismissedExpanded && (
                     <ul
@@ -1692,12 +1677,12 @@ export default function Properties() {
                               type="button"
                               onClick={() => undismissGeocodeFailure(addrDisplay)}
                               className="shrink-0 px-3 text-xs text-muted-foreground hover:text-foreground border-l flex items-center gap-1"
-                              aria-label={`Undo dismissal of ${p.name}`}
-                              title="Bring this address back to the active list"
+                              aria-label={t("pages.properties.addressReview.undoAria", { name: p.name })}
+                              title={t("pages.properties.addressReview.undoTitle")}
                               data-testid={`undismiss-address-needing-review-${p.id}`}
                             >
                               <RefreshCw className="h-3.5 w-3.5" />
-                              Undo
+                              {t("pages.properties.addressReview.undo")}
                             </button>
                           </li>
                         );
@@ -1716,7 +1701,7 @@ export default function Properties() {
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search properties or customers..."
+                  placeholder={t("pages.properties.searchPlaceholder")}
                   className="pl-9"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -1726,10 +1711,10 @@ export default function Properties() {
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Select value={customerFilter} onValueChange={updateCustomerFilter}>
                   <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
-                    <SelectValue placeholder="Customer" />
+                    <SelectValue placeholder={t("pages.properties.customerPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                    <SelectItem value={ALL_CUSTOMERS}>{t("pages.properties.allCustomers")}</SelectItem>
                     {customers.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
@@ -1737,12 +1722,12 @@ export default function Properties() {
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-40" data-testid="select-status-filter">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder={t("pages.properties.statusPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
+                    <SelectItem value="All">{t("pages.properties.allStatuses")}</SelectItem>
+                    <SelectItem value="Active">{t("pages.properties.statusActive")}</SelectItem>
+                    <SelectItem value="Inactive">{t("pages.properties.statusInactive")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -1752,27 +1737,27 @@ export default function Properties() {
                   <SelectTrigger
                     className="w-full sm:w-44"
                     data-testid="select-rating-filter-category"
-                    aria-label="Rating category to filter by"
+                    aria-label={t("pages.properties.ratingCategoryAria")}
                   >
-                    <SelectValue placeholder="Rating category" />
+                    <SelectValue placeholder={t("pages.properties.ratingCategoryPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {RATING_SORT_OPTIONS.map((o) => (
                       <SelectItem key={o.key} value={o.key}>
-                        {o.label}
+                        {t(`pages.properties.ratingCategoryLabels.${o.key}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={minRating} onValueChange={(v) => setMinRating(v as MinRating)}>
                   <SelectTrigger className="w-full sm:w-36" data-testid="select-min-rating">
-                    <SelectValue placeholder="Min rating" />
+                    <SelectValue placeholder={t("pages.properties.minRatingPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="any">Any rating</SelectItem>
-                    <SelectItem value="3">3+ stars</SelectItem>
-                    <SelectItem value="4">4+ stars</SelectItem>
-                    <SelectItem value="5">5 stars</SelectItem>
+                    <SelectItem value="any">{t("pages.properties.anyRating")}</SelectItem>
+                    <SelectItem value="3">{t("pages.properties.starsPlus3")}</SelectItem>
+                    <SelectItem value="4">{t("pages.properties.starsPlus4")}</SelectItem>
+                    <SelectItem value="5">{t("pages.properties.stars5")}</SelectItem>
                   </SelectContent>
                 </Select>
                 {minRating !== "any" && (
@@ -1781,7 +1766,7 @@ export default function Properties() {
                     className="self-center gap-1"
                     data-testid="badge-rating-filter-active"
                   >
-                    {RATING_SORT_OPTIONS.find((o) => o.key === ratingFilterCategory)?.label ?? "Overall"}
+                    {t(`pages.properties.ratingCategoryLabels.${ratingFilterCategory}`)}
                     {" "}
                     ≥ {minRating}
                     <button
@@ -1791,7 +1776,7 @@ export default function Properties() {
                         setRatingFilterCategory("overall");
                       }}
                       className="ml-1 hover:text-foreground"
-                      aria-label="Clear rating filter"
+                      aria-label={t("pages.properties.clearRatingFilter")}
                       data-testid="button-clear-rating-filter"
                     >
                       <X className="h-3 w-3" />
@@ -1819,7 +1804,7 @@ export default function Properties() {
                       data-testid="empty-map-view"
                     >
                       <Home className="mx-auto h-6 w-6 mb-2 opacity-50" />
-                      No properties match the current filters.
+                      {t("pages.properties.map.noMatchFilters")}
                     </div>
                   ) : (
                     <PortfolioMap
@@ -1835,22 +1820,18 @@ export default function Properties() {
                         className="mt-3 text-xs text-muted-foreground"
                         data-testid="map-view-no-mapped-note"
                       >
-                        None of the {propertiesWithoutAddress.length}{" "}
-                        {propertiesWithoutAddress.length === 1
-                          ? "property"
-                          : "properties"}{" "}
-                        in view has an address yet — see the side panel.
+                        {t("pages.properties.map.noMappedNote", { count: propertiesWithoutAddress.length })}
                       </p>
                     )}
                 </div>
                 <aside
                   className="rounded-lg border bg-card"
                   data-testid="properties-without-address-panel"
-                  aria-label="Properties without an address"
+                  aria-label={t("pages.properties.map.withoutAddressAria")}
                 >
                   <div className="p-3 border-b flex items-center gap-2">
                     <MapPinOff className="h-4 w-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold">Missing address</h2>
+                    <h2 className="text-sm font-semibold">{t("pages.properties.map.missingAddress")}</h2>
                     <Badge
                       variant="secondary"
                       className="ml-auto text-[11px]"
@@ -1864,8 +1845,7 @@ export default function Properties() {
                       className="p-3 text-xs text-muted-foreground"
                       data-testid="properties-without-address-empty"
                     >
-                      Every property in view has an address. Pins on the
-                      map cover them all.
+                      {t("pages.properties.map.everyHasAddress")}
                     </p>
                   ) : (
                     <ul className="divide-y max-h-[28rem] overflow-y-auto">
@@ -1902,7 +1882,7 @@ export default function Properties() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property</TableHead>
+                  <TableHead>{t("pages.properties.table.property")}</TableHead>
                   <TableHead>
                     <button
                       type="button"
@@ -1910,7 +1890,7 @@ export default function Properties() {
                       className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                       data-testid="button-sort-customer"
                     >
-                      Customer
+                      {t("pages.properties.table.customer")}
                       {customerSortDir === "asc" ? (
                         <ArrowUp className="h-3.5 w-3.5" />
                       ) : customerSortDir === "desc" ? (
@@ -1920,17 +1900,17 @@ export default function Properties() {
                       )}
                     </button>
                   </TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead>City</TableHead>
+                  <TableHead>{t("pages.properties.table.address")}</TableHead>
+                  <TableHead>{t("pages.properties.table.city")}</TableHead>
                   <TableHead className="text-center">
                     <button
                       type="button"
                       onClick={toggleTotalBedsSort}
                       className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
                       data-testid="button-sort-total-beds"
-                      aria-label={`Sort by total beds${sortAriaSuffix(totalBedsSortDir)}`}
+                      aria-label={`${t("pages.properties.table.sortByTotalBeds")}${sortAriaSuffix(totalBedsSortDir)}`}
                     >
-                      Total Beds
+                      {t("pages.properties.table.totalBeds")}
                       {numericSortIcon(totalBedsSortDir)}
                     </button>
                   </TableHead>
@@ -1940,9 +1920,9 @@ export default function Properties() {
                       onClick={toggleOccupiedSort}
                       className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
                       data-testid="button-sort-occupied"
-                      aria-label={`Sort by occupied beds${sortAriaSuffix(occupiedSortDir)}`}
+                      aria-label={`${t("pages.properties.table.sortByOccupied")}${sortAriaSuffix(occupiedSortDir)}`}
                     >
-                      Occupied
+                      {t("pages.properties.table.occupied")}
                       {numericSortIcon(occupiedSortDir)}
                     </button>
                   </TableHead>
@@ -1952,13 +1932,13 @@ export default function Properties() {
                       onClick={toggleVacantSort}
                       className="inline-flex items-center gap-1 mx-auto hover:text-foreground transition-colors"
                       data-testid="button-sort-vacant"
-                      aria-label={`Sort by vacant beds${sortAriaSuffix(vacantSortDir)}`}
+                      aria-label={`${t("pages.properties.table.sortByVacant")}${sortAriaSuffix(vacantSortDir)}`}
                     >
-                      Vacant
+                      {t("pages.properties.table.vacant")}
                       {numericSortIcon(vacantSortDir)}
                     </button>
                   </TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">{t("pages.properties.table.status")}</TableHead>
                   <TableHead>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1966,13 +1946,13 @@ export default function Properties() {
                           type="button"
                           className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
                           data-testid="button-sort-rating"
-                          aria-label={`Sort by rating (currently ${
+                          aria-label={`${t("pages.properties.table.sortByRating")} (currently ${
                             ratingSortDir
-                              ? `${activeRatingSortLabel} ${ratingSortDir === "asc" ? "ascending" : "descending"}`
-                              : "unsorted"
+                              ? `${t(`pages.properties.ratingCategoryLabels.${ratingSortCategory}`)} ${ratingSortDir === "asc" ? t("pages.properties.table.ascending") : t("pages.properties.table.descending")}`
+                              : t("pages.properties.table.unsorted")
                           })`}
                         >
-                          {activeRatingSortLabel}
+                          {t(`pages.properties.ratingCategoryLabels.${ratingSortCategory}`)}
                           {ratingSortDir === "asc" ? (
                             <ArrowUp className="h-3.5 w-3.5" />
                           ) : ratingSortDir === "desc" ? (
@@ -1984,7 +1964,7 @@ export default function Properties() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-52">
                         <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Sort by rating
+                          {t("pages.properties.table.sortByRatingHeader")}
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         {RATING_SORT_OPTIONS.map((opt) => {
@@ -1997,7 +1977,7 @@ export default function Properties() {
                               className="justify-between gap-3"
                               data-testid={`menu-item-sort-rating-${opt.key}`}
                             >
-                              <span className={isActive ? "font-semibold" : ""}>{opt.label}</span>
+                              <span className={isActive ? "font-semibold" : ""}>{t(`pages.properties.ratingCategoryLabels.${opt.key}`)}</span>
                               {dir === "asc" ? (
                                 <ArrowUp className="h-3.5 w-3.5" />
                               ) : dir === "desc" ? (
@@ -2011,8 +1991,8 @@ export default function Properties() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableHead>
-                  <TableHead>Lease Renewal</TableHead>
-                  <TableHead>Insurance</TableHead>
+                  <TableHead>{t("pages.properties.table.leaseRenewal")}</TableHead>
+                  <TableHead>{t("pages.properties.table.insurance")}</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
@@ -2023,17 +2003,17 @@ export default function Properties() {
                   <EmptyStateRow
                     colSpan={12}
                     icon={Home}
-                    title="No properties found"
+                    title={t("pages.properties.empty.noPropertiesFound")}
                     description={
                       properties.length === 0
-                        ? "Add your first property to start tracking beds, leases, and utilities."
-                        : "Try clearing your search or filters above."
+                        ? t("pages.properties.empty.addFirstDescription")
+                        : t("pages.properties.empty.tryClearing")
                     }
                     action={
                       properties.length === 0 ? (
                         <Button onClick={openAdd} data-testid="button-add-property-empty">
                           <Plus className="mr-2 h-4 w-4" />
-                          Add Property
+                          {t("pages.properties.addProperty")}
                         </Button>
                       ) : undefined
                     }
@@ -2223,7 +2203,7 @@ export default function Properties() {
                         <td className="p-4 text-center">
                           <div className="inline-flex items-center gap-1.5">
                             <Badge variant={property.status === "Active" ? "default" : "secondary"}>
-                              {property.status}
+                              {property.status === "Active" ? t("pages.properties.statusActive") : t("pages.properties.statusInactive")}
                             </Badge>
                             {property.propertyType ? (
                               <Badge
@@ -2373,25 +2353,25 @@ export default function Properties() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add property</DialogTitle>
+            <DialogTitle>{t("pages.properties.addDialog.title")}</DialogTitle>
             <DialogDescription>
-              Every property is owned by a customer. Pick an existing one or create a new customer inline.
+              {t("pages.properties.addDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="prop-name">Property name *</Label>
+              <Label htmlFor="prop-name">{t("pages.properties.addDialog.propertyName")}</Label>
               <Input
                 id="prop-name"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="Birchwood Apartments"
+                placeholder={t("pages.properties.addDialog.propertyNamePlaceholder")}
                 data-testid="input-property-name"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="prop-customer">Customer *</Label>
+              <Label htmlFor="prop-customer">{t("pages.properties.addDialog.customerLabel")}</Label>
               <Select
                 value={showNewCustomerForm ? NEW_CUSTOMER_VALUE : draft.customerId}
                 onValueChange={(v) => {
@@ -2405,13 +2385,13 @@ export default function Properties() {
                 }}
               >
                 <SelectTrigger id="prop-customer" data-testid="select-property-customer">
-                  <SelectValue placeholder="Choose a customer" />
+                  <SelectValue placeholder={t("pages.properties.addDialog.customerPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   {customers.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
-                  <SelectItem value={NEW_CUSTOMER_VALUE}>+ Create new customer…</SelectItem>
+                  <SelectItem value={NEW_CUSTOMER_VALUE}>{t("pages.properties.addDialog.createNewCustomer")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2419,10 +2399,10 @@ export default function Properties() {
             {showNewCustomerForm && (
               <div className="space-y-3 p-3 rounded-md border bg-muted/30">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  New customer
+                  {t("pages.properties.addDialog.newCustomer")}
                 </p>
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-cust-name">Company name *</Label>
+                  <Label htmlFor="new-cust-name">{t("pages.properties.addDialog.companyName")}</Label>
                   <Input
                     id="new-cust-name"
                     value={newCustomer.name}
@@ -2432,7 +2412,7 @@ export default function Properties() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="new-cust-contact">Contact</Label>
+                    <Label htmlFor="new-cust-contact">{t("pages.properties.addDialog.contact")}</Label>
                     <Input
                       id="new-cust-contact"
                       value={newCustomer.contactName}
@@ -2440,7 +2420,7 @@ export default function Properties() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="new-cust-phone">Phone</Label>
+                    <Label htmlFor="new-cust-phone">{t("pages.properties.addDialog.phone")}</Label>
                     <Input
                       id="new-cust-phone"
                       value={newCustomer.phone}
@@ -2449,7 +2429,7 @@ export default function Properties() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="new-cust-email">Email</Label>
+                  <Label htmlFor="new-cust-email">{t("pages.properties.dialog.email")}</Label>
                   <Input
                     id="new-cust-email"
                     type="email"
@@ -2461,7 +2441,7 @@ export default function Properties() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="prop-type">Type</Label>
+              <Label htmlFor="prop-type">{t("pages.properties.addDialog.type")}</Label>
               <Select
                 value={draft.propertyType ?? NO_PROPERTY_TYPE_VALUE}
                 onValueChange={(v) =>
@@ -2473,13 +2453,13 @@ export default function Properties() {
                 }
               >
                 <SelectTrigger id="prop-type" data-testid="select-property-type">
-                  <SelectValue placeholder="No type" />
+                  <SelectValue placeholder={t("pages.properties.addDialog.noType")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_PROPERTY_TYPE_VALUE}>No type</SelectItem>
+                  <SelectItem value={NO_PROPERTY_TYPE_VALUE}>{t("pages.properties.addDialog.noType")}</SelectItem>
                   {PROPERTY_TYPE_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>
-                      {opt}
+                      {t(`common.propertyTypes.${opt}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2487,17 +2467,17 @@ export default function Properties() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="prop-address">Address</Label>
+              <Label htmlFor="prop-address">{t("pages.properties.addDialog.address")}</Label>
               <Input
                 id="prop-address"
                 value={draft.address}
                 onChange={(e) => setDraft({ ...draft, address: e.target.value })}
-                placeholder="123 Main St"
+                placeholder={t("pages.properties.addDialog.addressPlaceholder")}
               />
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                <Label htmlFor="prop-city">City</Label>
+                <Label htmlFor="prop-city">{t("pages.properties.addDialog.city")}</Label>
                 <Input
                   id="prop-city"
                   value={draft.city}
@@ -2505,7 +2485,7 @@ export default function Properties() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="prop-state">State</Label>
+                <Label htmlFor="prop-state">{t("pages.properties.addDialog.state")}</Label>
                 <Input
                   id="prop-state"
                   value={draft.state}
@@ -2513,7 +2493,7 @@ export default function Properties() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="prop-zip">ZIP</Label>
+                <Label htmlFor="prop-zip">{t("pages.properties.addDialog.zip")}</Label>
                 <Input
                   id="prop-zip"
                   value={draft.zip}
@@ -2523,9 +2503,9 @@ export default function Properties() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>{t("pages.properties.dialog.cancel")}</Button>
             <Button onClick={handleSaveProperty} disabled={saving} data-testid="button-save-property">
-              {saving ? "Saving…" : "Add property"}
+              {saving ? t("pages.properties.dialog.saving") : t("pages.properties.dialog.addAction")}
             </Button>
           </DialogFooter>
         </DialogContent>

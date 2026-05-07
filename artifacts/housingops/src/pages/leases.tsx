@@ -410,7 +410,7 @@ export default function Leases() {
                 data-testid="button-download-leases-csv"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Download CSV
+                {t("pages.leases.downloadCsv")}
               </Button>
               <UploadLeasePdfDialog onPdfImportFailed={() => setPdfFallbackOpen(true)} />
               <LastAutoImportIndicator />
@@ -455,12 +455,12 @@ export default function Leases() {
             {activeCustomerName && (
               <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
                 <Briefcase className="h-3 w-3" />
-                Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.leases.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
                 <button
                   type="button"
                   onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear customer filter"
+                  aria-label={t("pages.leases.clearCustomerFilter")}
                   data-testid="button-clear-customer-filter"
                 >
                   <X className="h-3 w-3" />
@@ -474,12 +474,12 @@ export default function Leases() {
                 data-testid="badge-needs-dates-filter"
               >
                 <CalendarClock className="h-3 w-3" />
-                Missing dates
+                {t("pages.leases.missingDates")}
                 <button
                   type="button"
                   onClick={() => updateNeedsDatesFilter("All")}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear missing-dates filter"
+                  aria-label={t("pages.leases.clearMissingDatesFilter")}
                   data-testid="button-clear-needs-dates-filter"
                 >
                   <X className="h-3 w-3" />
@@ -493,12 +493,12 @@ export default function Leases() {
                 data-testid="badge-at-risk-filter"
               >
                 <Hotel className="h-3 w-3" />
-                Hotel-rate at risk this month
+                {t("pages.leases.hotelRateAtRisk")}
                 <button
                   type="button"
                   onClick={() => updateAtRiskFilter("All")}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear at-risk filter"
+                  aria-label={t("pages.leases.clearAtRiskFilter")}
                   data-testid="button-clear-at-risk-filter"
                 >
                   <X className="h-3 w-3" />

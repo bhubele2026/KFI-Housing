@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams, Link, useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -78,14 +79,14 @@ type BedsSortKey =
   | "sqft-desc"
   | "sqft-asc";
 
-const BEDS_SORT_OPTIONS: { value: BedsSortKey; label: string }[] = [
-  { value: "default",   label: "Default" },
-  { value: "ppsf-desc", label: "$/sqft (high → low)" },
-  { value: "ppsf-asc",  label: "$/sqft (low → high)" },
-  { value: "rent-desc", label: "Rent (high → low)" },
-  { value: "rent-asc",  label: "Rent (low → high)" },
-  { value: "sqft-desc", label: "Sqft (high → low)" },
-  { value: "sqft-asc",  label: "Sqft (low → high)" },
+const BEDS_SORT_OPTIONS: { value: BedsSortKey; labelKey: string }[] = [
+  { value: "default",   labelKey: "pages.propertyDetail.bedsSort.default" },
+  { value: "ppsf-desc", labelKey: "pages.propertyDetail.bedsSort.ppsfDesc" },
+  { value: "ppsf-asc",  labelKey: "pages.propertyDetail.bedsSort.ppsfAsc" },
+  { value: "rent-desc", labelKey: "pages.propertyDetail.bedsSort.rentDesc" },
+  { value: "rent-asc",  labelKey: "pages.propertyDetail.bedsSort.rentAsc" },
+  { value: "sqft-desc", labelKey: "pages.propertyDetail.bedsSort.sqftDesc" },
+  { value: "sqft-asc",  labelKey: "pages.propertyDetail.bedsSort.sqftAsc" },
 ];
 
 const VALID_BEDS_SORT_KEYS = new Set<BedsSortKey>(
@@ -210,6 +211,7 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
   onDeleteBed: (id: string) => void;
   onBedClick?: (bedId: string) => void;
 }) {
+  const { t } = useTranslation();
   const occupied = beds.filter(b => b.status === "Occupied").length;
   const pct = beds.length > 0 ? Math.round((occupied / beds.length) * 100) : 0;
   const roomNameById = new Map(rooms.map(r => [r.id, r.name] as const));
@@ -236,13 +238,13 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <BedDouble className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold">Bed Occupancy</span>
+            <span className="text-sm font-semibold">{t("pages.propertyDetail.bedOccupancy")}</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block" />Occupied ({occupied})</span>
-              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-400 inline-block" />Vacant ({beds.length - occupied})</span>
-              {beds.length > 0 && <span className="font-medium text-foreground">{pct}% full</span>}
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500 inline-block" />{t("pages.propertyDetail.bedOccupiedCount", { count: occupied })}</span>
+              <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-rose-400 inline-block" />{t("pages.propertyDetail.bedVacantCount", { count: beds.length - occupied })}</span>
+              {beds.length > 0 && <span className="font-medium text-foreground">{t("pages.propertyDetail.pctFull", { pct })}</span>}
             </div>
             <div className="flex items-center gap-1 border rounded-lg p-0.5">
               <Button
@@ -253,13 +255,13 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
               >
                 <span className="text-base leading-none font-bold">−</span>
               </Button>
-              <span className="text-xs font-semibold w-8 text-center tabular-nums">{beds.length} beds</span>
+              <span className="text-xs font-semibold w-8 text-center tabular-nums">{t("pages.propertyDetail.bedsCount", { count: beds.length })}</span>
               <Button
                 size="icon" variant="ghost"
                 className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
                 onClick={addBed}
                 disabled={!defaultRoomId}
-                title={defaultRoomId ? "Add bed" : "Add a room first"}
+                title={defaultRoomId ? t("pages.propertyDetail.addBed") : t("pages.propertyDetail.addRoomFirst")}
               >
                 <span className="text-base leading-none font-bold">+</span>
               </Button>
@@ -280,7 +282,7 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                     transition={{ delay: i * 0.03, type: "spring", stiffness: 300, damping: 20 }}
                     onClick={() => onBedClick?.(bed.id)}
                     data-testid={`bedmap-tile-${bed.id}`}
-                    aria-label={`Bed ${bed.bedNumber} — ${isOccupied && occ ? occ.name : "Vacant"}. Open in Beds tab.`}
+                    aria-label={isOccupied && occ ? t("pages.propertyDetail.bedAriaLabelOccupied", { number: bed.bedNumber, name: occ.name }) : t("pages.propertyDetail.bedAriaLabelVacant", { number: bed.bedNumber })}
                     className={`flex flex-col items-center justify-center rounded-lg border-2 cursor-pointer select-none transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1
                       ${isOccupied
                         ? "bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-600"
@@ -293,10 +295,10 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                   </motion.button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  <p className="font-semibold">Bed {bed.bedNumber}{roomNameById.get(bed.roomId) ? ` · ${roomNameById.get(bed.roomId)}` : ""}</p>
+                  <p className="font-semibold">{t("pages.propertyDetail.bedTooltipLabel", { number: bed.bedNumber, suffix: roomNameById.get(bed.roomId) ? ` · ${roomNameById.get(bed.roomId)}` : "" })}</p>
                   {isOccupied && occ
                     ? <p className="text-muted-foreground">{occ.name}</p>
-                    : <p className="text-rose-400">Vacant</p>
+                    : <p className="text-rose-400">{t("pages.propertyDetail.vacantLabel")}</p>
                   }
                 </TooltipContent>
               </Tooltip>
@@ -309,6 +311,7 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
 }
 
 function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onChange: (next: Ratings) => void }) {
+  const { t } = useTranslation();
   const current: Ratings = ratings ?? EMPTY_RATINGS;
   const overall = computeOverallRating(current);
   const ratedCount = RATING_CATEGORIES.filter(c => current[c.key] > 0).length;
@@ -317,24 +320,24 @@ function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onCh
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
-          <Star className="h-4 w-4" />Ratings
+          <Star className="h-4 w-4" />{t("pages.propertyDetail.ratingsTitle")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Overall summary */}
         <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3" data-testid="ratings-overall">
           <div>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Overall</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.ratingsOverall")}</p>
             {overall === null ? (
-              <p className="text-sm text-muted-foreground mt-1">No ratings yet</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("pages.propertyDetail.ratingsNoneYet")}</p>
             ) : (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Average of {ratedCount} rated categor{ratedCount === 1 ? "y" : "ies"}
+                {t("pages.propertyDetail.ratingsAverageOf", { count: ratedCount })}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <StarRating value={overall ?? 0} readOnly size="md" ariaLabel="Overall rating" />
+            <StarRating value={overall ?? 0} readOnly size="md" ariaLabel={t("pages.propertyDetail.ratingsOverallAria")} />
             <span className="text-base font-semibold tabular-nums w-16 text-right" data-testid="ratings-overall-value">
               {overall === null ? "— / 5" : `${overall.toFixed(1)} / 5`}
             </span>
@@ -343,13 +346,13 @@ function RatingsCard({ ratings, onChange }: { ratings: Ratings | undefined; onCh
 
         {/* Categories */}
         <div className="space-y-2">
-          {RATING_CATEGORIES.map(({ key, label }) => (
+          {RATING_CATEGORIES.map(({ key }) => (
             <div key={key} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
-              <span className="text-sm text-muted-foreground">{label}</span>
+              <span className="text-sm text-muted-foreground">{t(`pages.propertyDetail.ratingsCategoryLabels.${key}`)}</span>
               <StarRating
                 value={current[key]}
                 size="md"
-                ariaLabel={`${label} rating`}
+                ariaLabel={t("pages.propertyDetail.ratingsCategoryAria", { label: t(`pages.propertyDetail.ratingsCategoryLabels.${key}`) })}
                 testId={`rating-${key}`}
                 onChange={(v) => onChange({ ...current, [key]: v })}
               />
@@ -456,6 +459,7 @@ function ResponsibilitiesEditor({
   values: string[];
   onChange: (next: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
   const commit = () => {
@@ -491,7 +495,7 @@ function ResponsibilitiesEditor({
             className="text-muted-foreground hover:text-destructive"
             onClick={() => remove(idx)}
             data-testid={`responsibility-remove-${occupantId}-${idx}`}
-            title="Remove responsibility"
+            title={t("pages.propertyDetail.responsibilities.removeTitle")}
           >
             <X className="h-2.5 w-2.5" />
           </button>
@@ -510,7 +514,7 @@ function ResponsibilitiesEditor({
               setAdding(false);
             }
           }}
-          placeholder="e.g. Take out trash on Mondays"
+          placeholder={t("pages.propertyDetail.responsibilities.placeholder")}
           className="h-6 text-[11px] py-0 w-56"
           data-testid={`responsibility-input-${occupantId}`}
         />
@@ -623,6 +627,7 @@ export function InlineEdit({
 }
 
 export default function PropertyDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, customers, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addOtherCost, updateOtherCost, deleteOtherCost, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
@@ -884,10 +889,10 @@ export default function PropertyDetail() {
     return (
       <MainLayout>
         <NotFoundScreen
-          title="Property not found"
-          description="This property may have been deleted. Head back to the dashboard or pick another property from the list."
+          title={t("pages.propertyDetail.notFoundTitle")}
+          description={t("pages.propertyDetail.notFoundDescription")}
           secondary={{
-            label: "Back to Properties",
+            label: t("pages.propertyDetail.backToProperties"),
             href: "/properties",
             testId: "button-back-to-properties",
           }}
@@ -1235,12 +1240,12 @@ export default function PropertyDetail() {
               {statsExpanded ? (
                 <>
                   <ChevronUp className="h-3.5 w-3.5" />
-                  Hide stats
+                  {t("pages.propertyDetail.hideStats")}
                 </>
               ) : (
                 <>
                   <ChevronDown className="h-3.5 w-3.5" />
-                  Show all stats
+                  {t("pages.propertyDetail.showAllStats")}
                 </>
               )}
             </Button>
@@ -1252,25 +1257,25 @@ export default function PropertyDetail() {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <span className="inline-flex items-center gap-1.5">
                     <BedDouble className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">Total Beds</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.summaryTotalBeds")}</span>
                     <span className="font-semibold">{propBeds.length}</span>
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className="inline-flex items-center gap-1.5">
                     <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">Occupied</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.summaryOccupied")}</span>
                     <span className="font-semibold text-green-600">{occupiedBeds}</span>
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className="inline-flex items-center gap-1.5">
                     <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">Monthly Revenue</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.summaryMonthlyRevenue")}</span>
                     <span className="font-semibold text-green-600">{formatUsdWhole(monthlyRevenue)}</span>
                   </span>
                   <span className="text-muted-foreground">·</span>
                   <span className="inline-flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">Net Profit</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.summaryNetProfit")}</span>
                     <span className={`font-semibold ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
                       {profit >= 0 ? "+" : ""}{formatUsdWhole(profit)}
                     </span>
@@ -1282,11 +1287,11 @@ export default function PropertyDetail() {
 
           {statsExpanded && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
-          <StatCard label="Total Beds" value={propBeds.length} icon={BedDouble} />
-          <StatCard label="Occupied" value={occupiedBeds} icon={Users} color="text-green-600" />
+          <StatCard label={t("pages.propertyDetail.statTotalBeds")} value={propBeds.length} icon={BedDouble} />
+          <StatCard label={t("pages.propertyDetail.statOccupied")} value={occupiedBeds} icon={Users} color="text-green-600" />
           <StatCard
             testId="stat-available-beds"
-            label="Available"
+            label={t("pages.propertyDetail.statAvailable")}
             value={availableBeds}
             icon={BedDouble}
             color={availableBeds > 0 ? "text-amber-500" : "text-muted-foreground"}
@@ -1297,17 +1302,17 @@ export default function PropertyDetail() {
                   data-testid="stat-needs-cleaning-sub"
                 >
                   <Sparkles className="h-3 w-3" />
-                  {bedsNeedsCleaning} needs cleaning
+                  {t("pages.propertyDetail.statNeedsCleaning", { count: bedsNeedsCleaning })}
                 </span>
               ) : (
-                `${vacantBeds} vacant total`
+                t("pages.propertyDetail.statVacantTotal", { count: vacantBeds })
               )
             }
           />
-          <StatCard label="Monthly Revenue" value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
+          <StatCard label={t("pages.propertyDetail.statMonthlyRevenue")} value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
           <StatCard
             testId="stat-lease-rent"
-            label={property.rentFree ? "Other Costs" : "Lease Rent"}
+            label={property.rentFree ? t("pages.propertyDetail.statOtherCosts") : t("pages.propertyDetail.statLeaseRent")}
             value={
               property.rentFree
                 ? (propOtherCostsTotal > 0 ? formatUsdWhole(propOtherCostsTotal) : "—")
@@ -1324,12 +1329,12 @@ export default function PropertyDetail() {
                       data-testid="badge-multi-active-leases"
                     >
                       <AlertTriangle className="h-3 w-3" />
-                      {activeLeases.length} active leases — rents combined
+                      {t("pages.propertyDetail.statActiveLeasesCombined", { count: activeLeases.length })}
                     </span>
                   ) : activeLeases.length === 1 ? (
-                    "active lease"
+                    t("pages.propertyDetail.statActiveLeaseSingular")
                   ) : (
-                    "no active lease"
+                    t("pages.propertyDetail.statNoActiveLease")
                   )}
                 </span>
                 {hotelRateLeaseEstimates.map((h) => (
@@ -1341,40 +1346,44 @@ export default function PropertyDetail() {
                     <Hotel className="h-3 w-3" />
                     {h.month && h.nights > 0 ? (
                       <>
-                        ≈ {formatUsdWhole(h.estimate)} this month ({h.nights}{" "}
-                        room-night{h.nights === 1 ? "" : "s"} × {formatUsdWhole(h.nightlyRate)}/night)
+                        {t("pages.propertyDetail.statHotelRateThisMonth", {
+                          count: h.nights,
+                          est: formatUsdWhole(h.estimate),
+                          nights: h.nights,
+                          rate: formatUsdWhole(h.nightlyRate),
+                        })}
                       </>
                     ) : (
-                      <>Hotel-rate · log room-nights to estimate revenue</>
+                      <>{t("pages.propertyDetail.statHotelRateLogPrompt")}</>
                     )}
                   </span>
                 ))}
               </span>
             }
           />
-          <StatCard label="Utility Cost" value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={`${propUtils.length} service${propUtils.length !== 1 ? "s" : ""}`} />
+          <StatCard label={t("pages.propertyDetail.statUtilityCost")} value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={t("pages.propertyDetail.statServicesCount", { count: propUtils.length })} />
           <StatCard
             testId="stat-rent-per-bed"
-            label="Rent / Bed"
+            label={t("pages.propertyDetail.statRentPerBed")}
             value={rentPerBed === null ? "—" : formatUsdWhole(rentPerBed)}
             icon={DollarSign}
-            sub={`Monthly rent ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+            sub={t("pages.propertyDetail.statRentPerBedSub", { count: propBeds.length })}
           />
           <StatCard
             testId="stat-electric-per-bed"
-            label="Electric / Bed"
+            label={t("pages.propertyDetail.statElectricPerBed")}
             value={electricPerBed === null ? "—" : formatUsdWhole(electricPerBed)}
             icon={Zap}
-            sub={`${formatUsdWhole(monthlyElectricCost)} electric ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+            sub={t("pages.propertyDetail.statElectricPerBedSub", { count: propBeds.length, cost: formatUsdWhole(monthlyElectricCost) })}
           />
           <StatCard
             testId="stat-rent-plus-electric-per-bed"
-            label="Rent + Electric / Bed"
+            label={t("pages.propertyDetail.statRentPlusElectricPerBed")}
             value={rentPlusElectricPerBed === null ? "—" : formatUsdWhole(rentPlusElectricPerBed)}
             icon={DollarSign}
-            sub={`(Rent + ${formatUsdWhole(monthlyElectricCost)} electric) ÷ ${propBeds.length} bed${propBeds.length === 1 ? "" : "s"}`}
+            sub={t("pages.propertyDetail.statRentPlusElectricPerBedSub", { count: propBeds.length, cost: formatUsdWhole(monthlyElectricCost) })}
           />
-          <StatCard label="Net Profit" value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
+          <StatCard label={t("pages.propertyDetail.statNetProfit")} value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
         </div>
           )}
         </div>
@@ -1395,19 +1404,19 @@ export default function PropertyDetail() {
           <TabsList
             className={`grid w-full max-w-4xl ${propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"}`}
           >
-            <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
-            <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
+            <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.info")}</TabsTrigger>
+            <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.leases")}</TabsTrigger>
             {propertyUnits.length > 0 && (
               <TabsTrigger value="units" data-testid="tab-trigger-units">
-                <Building2 className="h-3.5 w-3.5 mr-1.5" />Units
+                <Building2 className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.units")}
               </TabsTrigger>
             )}
-            <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />Beds</TabsTrigger>
-            <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />Furnishings</TabsTrigger>
-            <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
-            <TabsTrigger value="insurance" data-testid="tab-trigger-insurance"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />Insurance</TabsTrigger>
+            <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.beds")}</TabsTrigger>
+            <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.furnishings")}</TabsTrigger>
+            <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.utilities")}</TabsTrigger>
+            <TabsTrigger value="insurance" data-testid="tab-trigger-insurance"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.insurance")}</TabsTrigger>
             <TabsTrigger value="violations" data-testid="tab-trigger-violations">
-              <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />Violations
+              <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.violations")}
               {propertyViolations.length > 0 && (
                 <Badge
                   variant="secondary"
@@ -1418,7 +1427,7 @@ export default function PropertyDetail() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />Finance</TabsTrigger>
+            <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.finance")}</TabsTrigger>
           </TabsList>
 
           {/* ── OVERVIEW TAB ── */}
@@ -1504,9 +1513,9 @@ export default function PropertyDetail() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    Per-lease rent breakdown
+                    {t("pages.propertyDetail.perLeaseRentBreakdown")}
                     <span className="text-xs font-normal text-muted-foreground">
-                      {propLeases.length} leases on this property
+                      {t("pages.propertyDetail.leasesOnThisProperty", { count: propLeases.length })}
                     </span>
                   </CardTitle>
                 </CardHeader>
@@ -1552,7 +1561,7 @@ export default function PropertyDetail() {
                               : "text-muted-foreground line-through decoration-muted")
                           }
                         >
-                          {formatUsd((l.monthlyRent || 0))}/mo
+                          {formatUsd((l.monthlyRent || 0))}{t("pages.propertyDetail.perMonthSuffix")}
                         </span>
                       </div>
                     ))}
@@ -1560,9 +1569,9 @@ export default function PropertyDetail() {
                     className="flex items-center justify-between text-sm pt-2 border-t font-semibold"
                     data-testid="row-active-lease-rent-total"
                   >
-                    <span>Combined active rent</span>
+                    <span>{t("pages.propertyDetail.combinedActiveRent")}</span>
                     <span className="tabular-nums">
-                      {formatUsd(monthlyLeaseCost)}/mo
+                      {formatUsd(monthlyLeaseCost)}{t("pages.propertyDetail.perMonthSuffix")}
                     </span>
                   </div>
                 </CardContent>
@@ -1576,32 +1585,32 @@ export default function PropertyDetail() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Home className="h-4 w-4" />
-                  Room Totals
+                  {t("pages.propertyDetail.roomTotals")}
                   <span className="text-xs font-normal text-muted-foreground">
-                    Rolled up from {roomTotals.roomCount} room{roomTotals.roomCount === 1 ? "" : "s"}
+                    {t("pages.propertyDetail.roomTotalsRolledUp", { count: roomTotals.roomCount })}
                   </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {roomTotals.roomCount === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No rooms yet. Add rooms on the <span className="font-medium text-foreground">Beds</span> tab to see totals here.
+                    {t("pages.propertyDetail.roomTotalsEmpty")} <span className="font-medium text-foreground">{t("pages.propertyDetail.roomTotalsEmptyTab")}</span> {t("pages.propertyDetail.roomTotalsEmptySuffix")}
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     <div data-testid="room-totals-rooms">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Rooms</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.rooms")}</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">{roomTotals.roomCount}</p>
                     </div>
                     <div data-testid="room-totals-sqft">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Sqft</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.totalSqft")}</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">
                         {roomTotals.totalSqft.toLocaleString()}
                         <span className="text-sm font-normal text-muted-foreground"> sqft</span>
                       </p>
                     </div>
                     <div data-testid="room-totals-bathrooms">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Bathrooms</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.totalBathrooms")}</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">
                         {Number.isInteger(roomTotals.totalBathrooms)
                           ? roomTotals.totalBathrooms
@@ -1609,37 +1618,34 @@ export default function PropertyDetail() {
                       </p>
                     </div>
                     <div data-testid="room-totals-expected-rent">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Expected Rent</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.expectedRent")}</p>
                       <p className="text-2xl font-bold mt-1 tabular-nums">
                         {formatUsd(roomTotals.totalMonthlyRent)}
-                        <span className="text-sm font-normal text-muted-foreground">/mo</span>
+                        <span className="text-sm font-normal text-muted-foreground">{t("pages.propertyDetail.perMonthSuffix")}</span>
                       </p>
                       {expectedVsLeaseDelta !== null && (
                         <p
                           className={`text-xs mt-0.5 ${expectedVsLeaseDelta >= 0 ? "text-green-600" : "text-destructive"}`}
                           data-testid="room-totals-vs-lease"
                         >
-                          {expectedVsLeaseDelta >= 0 ? "+" : "−"}{formatUsd(Math.abs(expectedVsLeaseDelta))} vs lease rent
+                          {t("pages.propertyDetail.deltaVsLease", { sign: expectedVsLeaseDelta >= 0 ? "+" : "−", amount: formatUsd(Math.abs(expectedVsLeaseDelta)) })}
                         </p>
                       )}
                       {expectedVsLeaseDelta === null && monthlyLeaseCost > 0 && (
                         <p className="text-xs mt-0.5 text-muted-foreground">
-                          Lease rent {formatUsd(monthlyLeaseCost)}/mo
+                          {t("pages.propertyDetail.leaseRentInfo", { rent: formatUsd(monthlyLeaseCost) })}
                         </p>
                       )}
                     </div>
-                    {/* Derived $/sqft helps compare pricing across properties.
-                        Hidden when either side is zero (computePricePerSqft
-                        returns null) so we don't render a misleading metric. */}
                     {pricePerSqft !== null && (
                       <div data-testid="room-totals-price-per-sqft">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">$ / Sqft</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("pages.propertyDetail.pricePerSqftLabel")}</p>
                         <p className="text-2xl font-bold mt-1 tabular-nums">
                           ${pricePerSqft.toFixed(2)}
                           <span className="text-sm font-normal text-muted-foreground">/sqft</span>
                         </p>
                         <p className="text-xs mt-0.5 text-muted-foreground">
-                          Rent ÷ sqft
+                          {t("pages.propertyDetail.rentDivSqft")}
                         </p>
                       </div>
                     )}
@@ -1652,15 +1658,15 @@ export default function PropertyDetail() {
               {/* Property Details */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><Home className="h-4 w-4" />Property Details</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2"><Home className="h-4 w-4" />{t("pages.propertyDetail.propertyDetailsCard")}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {([
-                    { label: "Property Name", field: "name" },
-                    { label: "Address", field: "address" },
-                    { label: "City", field: "city" },
-                    { label: "State", field: "state" },
-                    { label: "ZIP", field: "zip" },
+                    { label: t("pages.propertyDetail.propertyName"), field: "name" },
+                    { label: t("pages.propertyDetail.address"), field: "address" },
+                    { label: t("pages.propertyDetail.city"), field: "city" },
+                    { label: t("pages.propertyDetail.state"), field: "state" },
+                    { label: t("pages.propertyDetail.zip"), field: "zip" },
                   ] as { label: string; field: keyof typeof property }[]).map(({ label, field }) => (
                     <div key={field} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
                       <span className="text-sm text-muted-foreground w-36 shrink-0">{label}</span>
@@ -1669,7 +1675,7 @@ export default function PropertyDetail() {
                   ))}
                   <div className="flex items-start justify-between py-1 border-b border-dashed border-border/50 gap-2">
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0 pt-1">
-                      <Briefcase className="h-3.5 w-3.5" />Customer
+                      <Briefcase className="h-3.5 w-3.5" />{t("pages.propertyDetail.customer")}
                     </div>
                     <div className="flex-1 flex flex-col items-end gap-1.5" data-testid="property-customer-row">
                       {(() => {
@@ -1686,12 +1692,12 @@ export default function PropertyDetail() {
                             <ChevronLeft className="h-3 w-3 rotate-180" />
                           </button>
                         ) : (
-                          <span className="text-sm italic text-muted-foreground">Unassigned</span>
+                          <span className="text-sm italic text-muted-foreground">{t("pages.propertyDetail.unassigned")}</span>
                         );
                       })()}
                       <Select value={property.customerId} onValueChange={v => updateProperty(id, { customerId: v })}>
                         <SelectTrigger className="h-7 text-xs w-56" data-testid="select-property-customer">
-                          <SelectValue placeholder="Choose a customer" />
+                          <SelectValue placeholder={t("pages.propertyDetail.chooseCustomer")} />
                         </SelectTrigger>
                         <SelectContent>
                           {customers.map((c) => (
@@ -1702,7 +1708,7 @@ export default function PropertyDetail() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                    <span className="text-sm text-muted-foreground w-36 shrink-0">Type</span>
+                    <span className="text-sm text-muted-foreground w-36 shrink-0">{t("pages.propertyDetail.type")}</span>
                     <Select
                       value={property.propertyType ?? "__none__"}
                       onValueChange={(v) =>
@@ -1716,34 +1722,34 @@ export default function PropertyDetail() {
                         className="h-7 text-sm w-36"
                         data-testid="select-property-type"
                       >
-                        <SelectValue placeholder="No type" />
+                        <SelectValue placeholder={t("pages.propertyDetail.noType")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">No type</SelectItem>
+                        <SelectItem value="__none__">{t("pages.propertyDetail.noType")}</SelectItem>
                         {PROPERTY_TYPE_OPTIONS.map((opt) => (
                           <SelectItem key={opt} value={opt}>
-                            {opt}
+                            {t(`common.propertyTypes.${opt}`)}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                    <span className="text-sm text-muted-foreground w-36 shrink-0">Status</span>
+                    <span className="text-sm text-muted-foreground w-36 shrink-0">{t("pages.propertyDetail.status")}</span>
                     <Select value={property.status} onValueChange={v => updateProperty(id, { status: v as "Active" | "Inactive" })}>
                       <SelectTrigger className="h-7 text-sm w-36"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Inactive">Inactive</SelectItem>
+                        <SelectItem value="Active">{t("pages.propertyDetail.statusActive")}</SelectItem>
+                        <SelectItem value="Inactive">{t("pages.propertyDetail.statusInactive")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                    <span className="text-sm text-muted-foreground w-36 shrink-0">Charge / Bed</span>
+                    <span className="text-sm text-muted-foreground w-36 shrink-0">{t("pages.propertyDetail.chargePerBedLabel")}</span>
                     <InlineEdit value={property.chargePerBed} prefix="$" type="number" onSave={v => updateProperty(id, { chargePerBed: parseFloat(v) })} />
                   </div>
                   <div className="py-1">
-                    <span className="text-sm text-muted-foreground block mb-1">Notes</span>
+                    <span className="text-sm text-muted-foreground block mb-1">{t("pages.propertyDetail.notes")}</span>
                     <NotesEditor
                       value={property.notes}
                       className="text-sm min-h-[72px]"
@@ -1758,13 +1764,13 @@ export default function PropertyDetail() {
                 {/* Landlord Info */}
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />Landlord / Contact</CardTitle>
+                    <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" />{t("pages.propertyDetail.landlordContactCard")}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {([
-                      { label: "Name", field: "landlordName", icon: Users },
-                      { label: "Email", field: "landlordEmail", icon: Mail },
-                      { label: "Phone", field: "landlordPhone", icon: Phone },
+                      { label: t("pages.propertyDetail.landlordName"), field: "landlordName", icon: Users },
+                      { label: t("pages.propertyDetail.landlordEmail"), field: "landlordEmail", icon: Mail },
+                      { label: t("pages.propertyDetail.landlordPhone"), field: "landlordPhone", icon: Phone },
                     ] as { label: string; field: keyof typeof property; icon: React.ElementType }[]).map(({ label, field, icon: Icon }) => (
                       <div key={field} className="flex items-center justify-between py-1 border-b border-dashed border-border/50 last:border-0">
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-36 shrink-0">
@@ -1786,7 +1792,7 @@ export default function PropertyDetail() {
               {/* Payment Info */}
               <Card className="lg:col-span-2">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" />Payment Details</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2"><CreditCard className="h-4 w-4" />{t("pages.propertyDetail.paymentDetailsCard")}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {/* Rent-free toggle (task #497). When enabled, the canonical
@@ -1825,12 +1831,12 @@ export default function PropertyDetail() {
                           }
                           data-testid="button-add-other-cost"
                         >
-                          Add line
+                          {t("pages.propertyDetail.addLine")}
                         </Button>
                       </div>
                       {propOtherCosts.length === 0 ? (
                         <p className="text-xs text-muted-foreground italic">
-                          No recurring costs yet — add one (e.g. "Cleaning fee").
+                          {t("pages.propertyDetail.noRecurringCosts")}
                         </p>
                       ) : (
                         <div className="space-y-2">
@@ -1843,7 +1849,7 @@ export default function PropertyDetail() {
                               <InlineEdit
                                 value={c.label}
                                 onSave={(v) => updateOtherCost(c.id, { label: v })}
-                                placeholder="Label"
+                                placeholder={t("pages.propertyDetail.labelPlaceholder")}
                               />
                               <InlineEdit
                                 value={c.monthlyCost}
@@ -1853,7 +1859,7 @@ export default function PropertyDetail() {
                                   updateOtherCost(c.id, { monthlyCost: parseFloat(v) || 0 })
                                 }
                               />
-                              <span className="text-xs text-muted-foreground">/mo</span>
+                              <span className="text-xs text-muted-foreground">{t("pages.propertyDetail.perMonthSuffix")}</span>
                               <ConfirmDeleteButton
                                 title="Delete this line item?"
                                 description="This permanently removes the recurring cost line. You can't undo this."
@@ -1863,7 +1869,7 @@ export default function PropertyDetail() {
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                    aria-label="Delete other cost"
+                                    aria-label={t("pages.propertyDetail.deleteOtherCostAria")}
                                     data-testid={`button-delete-other-cost-${c.id}`}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
@@ -1873,12 +1879,12 @@ export default function PropertyDetail() {
                             </div>
                           ))}
                           <div className="flex items-center justify-end gap-2 pt-1 border-t border-dashed border-border/50">
-                            <span className="text-xs text-muted-foreground">Total</span>
+                            <span className="text-xs text-muted-foreground">{t("pages.propertyDetail.total")}</span>
                             <span
                               className="text-sm font-medium tabular-nums"
                               data-testid="other-costs-total"
                             >
-                              {formatUsd(propOtherCostsTotal)}/mo
+                              {formatUsd(propOtherCostsTotal)}{t("pages.propertyDetail.perMonthSuffix")}
                             </span>
                           </div>
                         </div>
@@ -1887,7 +1893,7 @@ export default function PropertyDetail() {
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                      <span className="text-sm text-muted-foreground w-40 shrink-0">Payment Method</span>
+                      <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.paymentMethod")}</span>
                       <Select value={property.paymentMethod} onValueChange={v => updateProperty(id, { paymentMethod: v as Property["paymentMethod"] })}>
                         <SelectTrigger className="h-7 text-sm w-40"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -1898,11 +1904,11 @@ export default function PropertyDetail() {
                       </Select>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                      <span className="text-sm text-muted-foreground w-40 shrink-0">Pay To</span>
+                      <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.payTo")}</span>
                       <InlineEdit value={property.paymentRecipient} onSave={v => updateProperty(id, { paymentRecipient: v })} />
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                      <span className="text-sm text-muted-foreground w-40 shrink-0">Due Day of Month</span>
+                      <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.dueDayOfMonth")}</span>
                       <InlineEdit value={property.paymentDueDay} type="number" onSave={v => updateProperty(id, { paymentDueDay: parseInt(v) })} />
                     </div>
                     {/* Task #492: property-level default notice period; each
@@ -1910,7 +1916,7 @@ export default function PropertyDetail() {
                         "no notice configured" — alerts simply won't fire for
                         that property until either field is set. */}
                     <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                      <span className="text-sm text-muted-foreground w-40 shrink-0">Default Notice (days)</span>
+                      <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.defaultNoticeDays")}</span>
                       <InlineEdit
                         value={property.defaultNoticePeriodDays ?? ""}
                         type="number"
@@ -1948,7 +1954,7 @@ export default function PropertyDetail() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <span className="text-sm text-muted-foreground">Rent</span>
+                        <span className="text-sm text-muted-foreground">{t("pages.propertyDetail.rentLabel")}</span>
                       </div>
                       {(() => {
                         // The inline editor edits a single lease; with multiple active
@@ -1995,27 +2001,27 @@ export default function PropertyDetail() {
                     {property.paymentMethod !== "Online Portal" && (
                       <>
                         <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                          <span className="text-sm text-muted-foreground w-40 shrink-0">Bank Name</span>
+                          <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.bankName")}</span>
                           <InlineEdit value={property.bankName} onSave={v => updateProperty(id, { bankName: v })} />
                         </div>
                         <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                          <span className="text-sm text-muted-foreground w-40 shrink-0">Routing #</span>
+                          <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.bankRouting")}</span>
                           <InlineEdit value={property.bankRouting} onSave={v => updateProperty(id, { bankRouting: v })} />
                         </div>
                         <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                          <span className="text-sm text-muted-foreground w-40 shrink-0">Account #</span>
+                          <span className="text-sm text-muted-foreground w-40 shrink-0">{t("pages.propertyDetail.bankAccount")}</span>
                           <InlineEdit value={property.bankAccount} onSave={v => updateProperty(id, { bankAccount: v })} />
                         </div>
                       </>
                     )}
                     {property.paymentMethod === "Online Portal" && (
                       <div className="flex items-center justify-between py-1 border-b border-dashed border-border/50">
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-40 shrink-0"><Globe className="h-3.5 w-3.5" />Portal URL</div>
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground w-40 shrink-0"><Globe className="h-3.5 w-3.5" />{t("pages.propertyDetail.portalUrl")}</div>
                         <InlineEdit value={property.portalUrl} onSave={v => updateProperty(id, { portalUrl: v })} />
                       </div>
                     )}
                     <div className="sm:col-span-2 pt-1">
-                      <span className="text-sm text-muted-foreground block mb-1">Payment Notes</span>
+                      <span className="text-sm text-muted-foreground block mb-1">{t("pages.propertyDetail.paymentNotes")}</span>
                       <NotesEditor
                         value={property.paymentNotes}
                         className="text-sm min-h-[60px]"
@@ -2032,14 +2038,14 @@ export default function PropertyDetail() {
           <TabsContent value="leases" className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
-                {propLeases.length} lease{propLeases.length !== 1 ? "s" : ""} for this property
+                {t("pages.propertyDetail.leasesForProperty", { count: propLeases.length })}
                 {activeLeases.length >= 2 && (
                   <span
                     className="ml-2 inline-flex items-center gap-1 text-amber-700"
                     data-testid="text-leases-tab-multi-active"
                   >
                     <AlertTriangle className="h-3 w-3" />
-                    {activeLeases.length} active — rents combined in header
+                    {t("pages.propertyDetail.multiActiveCombined", { count: activeLeases.length })}
                   </span>
                 )}
               </p>
@@ -2073,7 +2079,7 @@ export default function PropertyDetail() {
                       }.`,
                     });
                   }}
-                  emptyMessage="No leases yet"
+                  emptyMessage={t("pages.propertyDetail.noLeasesYet")}
                   // Render the branded EmptyState block (icon + headline +
                   // CTA) when this property has no leases — same treatment
                   // task #128 added to the global list pages. The CTA
@@ -2094,7 +2100,7 @@ export default function PropertyDetail() {
                         onAdd={addLease}
                         trigger={
                           <Button size="sm" data-testid="button-add-lease-empty">
-                            <Plus className="h-4 w-4 mr-1.5" />Add Lease
+                            <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addLease")}
                           </Button>
                         }
                       />
@@ -2103,7 +2109,7 @@ export default function PropertyDetail() {
                         className="text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                         data-testid="link-add-lease-full-form-empty"
                       >
-                        Open full form
+                        {t("pages.propertyDetail.openFullForm")}
                       </Link>
                     </div>
                   }
@@ -2209,13 +2215,13 @@ export default function PropertyDetail() {
           <TabsContent value="beds" className="space-y-4">
             <div className="flex justify-between items-center gap-3 flex-wrap">
               <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{occupiedBeds} occupied</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{vacantBeds} vacant</span>
-                <span>{propRooms.length} room{propRooms.length !== 1 ? "s" : ""}</span>
-                <span className="text-foreground font-medium">{formatUsd(propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0))}/mo revenue</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{t("pages.propertyDetail.bedsOccupied", { count: occupiedBeds })}</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{t("pages.propertyDetail.bedsVacant", { count: vacantBeds })}</span>
+                <span>{t("pages.propertyDetail.roomsCount", { count: propRooms.length })}</span>
+                <span className="text-foreground font-medium">{formatUsd(propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0))}{t("pages.propertyDetail.revenueSuffix")}</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Label htmlFor="beds-sort" className="text-xs text-muted-foreground">Sort</Label>
+                <Label htmlFor="beds-sort" className="text-xs text-muted-foreground">{t("pages.propertyDetail.bedsSort.label")}</Label>
                 <Select
                   value={bedsSort}
                   onValueChange={(v) => setBedsSort(v as BedsSortKey)}
@@ -2230,7 +2236,7 @@ export default function PropertyDetail() {
                   <SelectContent>
                     {BEDS_SORT_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
+                        {t(opt.labelKey)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2254,7 +2260,7 @@ export default function PropertyDetail() {
                     }
                   }}
                 >
-                  <Plus className="h-4 w-4 mr-1.5" />Add Room
+                  <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addRoom")}
                 </Button>
               </div>
             </div>
@@ -2264,8 +2270,8 @@ export default function PropertyDetail() {
                 <CardContent className="p-0">
                   <EmptyState
                     icon={BedDouble}
-                    title="No rooms yet"
-                    description="Add your first room to start tracking beds and occupants for this property."
+                    title={t("pages.propertyDetail.noRoomsYet")}
+                    description={t("pages.propertyDetail.noRoomsDescription")}
                     testId="empty-property-beds"
                     action={
                       <Button
@@ -2286,7 +2292,7 @@ export default function PropertyDetail() {
                           }
                         }}
                       >
-                        <Plus className="h-4 w-4 mr-1.5" />Add Room
+                        <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addRoom")}
                       </Button>
                     }
                   />
@@ -2389,12 +2395,12 @@ export default function PropertyDetail() {
                                     <InlineEdit value={room.name} onSave={v => updateRoom(room.id, { name: v })} />
                                   </CardTitle>
                                   <span className="text-xs text-muted-foreground">
-                                    {roomBeds.length} bed{roomBeds.length !== 1 ? "s" : ""} · {roomOccupied} occupied
+                                    {t("pages.propertyDetail.bedsCount", { count: roomBeds.length })} · {t("pages.propertyDetail.occupiedCount", { count: roomOccupied })}
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                                   <div className="flex items-center gap-1">
-                                    <span>Sqft</span>
+                                    <span>{t("pages.propertyDetail.sqftLabel")}</span>
                                     <InlineEdit value={room.sqft} type="number" onSave={v => updateRoom(room.id, { sqft: parseInt(v) || 0 })} />
                                   </div>
                                   <div className="flex items-center gap-1">
@@ -2402,7 +2408,7 @@ export default function PropertyDetail() {
                                     <InlineEdit value={room.bathrooms} type="number" onSave={v => updateRoom(room.id, { bathrooms: parseFloat(v) || 0 })} />
                                   </div>
                                   <div className="flex items-center gap-1">
-                                    <span>Rent</span>
+                                    <span>{t("pages.propertyDetail.rentLabel")}</span>
                                     <InlineEdit value={room.monthlyRent} prefix="$" type="number" onSave={v => updateRoom(room.id, { monthlyRent: parseFloat(v) || 0 })} />
                                   </div>
                                   {(() => {
@@ -2424,7 +2430,7 @@ export default function PropertyDetail() {
                                     onClick={handleAddBedToRoom}
                                     data-testid={`button-add-bed-${room.id}`}
                                   >
-                                    <Plus className="h-3.5 w-3.5 mr-1" />Add Bed
+                                    <Plus className="h-3.5 w-3.5 mr-1" />{t("pages.propertyDetail.addBed")}
                                   </Button>
                                   <ConfirmDeleteButton
                                     title={`Delete ${room.name}?`}
@@ -2521,20 +2527,20 @@ export default function PropertyDetail() {
                               <Table>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead className="w-12">Bed #</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Occupant Name</TableHead>
-                                    <TableHead>Employee ID</TableHead>
-                                    <TableHead>Company</TableHead>
-                                    <TableHead>Shift</TableHead>
-                                    <TableHead>Move-in</TableHead>
-                                    <TableHead className="text-right">Charge</TableHead>
-                                    <TableHead>Billing</TableHead>
-                                    <TableHead className="text-right">Weekly Deduction</TableHead>
-                                    <TableHead className="text-right">Monthly Equivalent</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Phone</TableHead>
-                                    <TableHead className="w-36">Room</TableHead>
+                                    <TableHead className="w-12">{t("pages.propertyDetail.bedTableBedNum")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableStatus")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableCompany")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableShift")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
+                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableBilling")}</TableHead>
+                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
+                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTableEmail")}</TableHead>
+                                    <TableHead>{t("pages.propertyDetail.bedTablePhone")}</TableHead>
+                                    <TableHead className="w-36">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
                                 </TableHeader>
@@ -2543,8 +2549,8 @@ export default function PropertyDetail() {
                                     <EmptyStateRow
                                       colSpan={15}
                                       icon={BedDouble}
-                                      title="No beds in this room yet"
-                                      description={`Add the first bed to ${room.name} so you can assign an occupant.`}
+                                      title={t("pages.propertyDetail.noBedsInRoom")}
+                                      description={t("pages.propertyDetail.noBedsInRoomDescription", { room: room.name })}
                                       testId={`empty-room-beds-${room.id}`}
                                       action={
                                         <Button
@@ -2553,7 +2559,7 @@ export default function PropertyDetail() {
                                           onClick={handleAddBedToRoom}
                                           data-testid={`button-add-bed-empty-${room.id}`}
                                         >
-                                          <Plus className="h-3.5 w-3.5 mr-1" />Add Bed
+                                          <Plus className="h-3.5 w-3.5 mr-1" />{t("pages.propertyDetail.addBed")}
                                         </Button>
                                       }
                                     />
@@ -2610,8 +2616,8 @@ export default function PropertyDetail() {
                                                 <SelectValue />
                                               </SelectTrigger>
                                               <SelectContent>
-                                                <SelectItem value="Occupied">Occupied</SelectItem>
-                                                <SelectItem value="Vacant">Vacant</SelectItem>
+                                                <SelectItem value="Occupied">{t("pages.propertyDetail.statusOccupied")}</SelectItem>
+                                                <SelectItem value="Vacant">{t("pages.propertyDetail.statusVacant")}</SelectItem>
                                               </SelectContent>
                                             </Select>
                                             {/* Cleaning workflow chip (task #500). Hidden for
@@ -2620,8 +2626,8 @@ export default function PropertyDetail() {
                                             {!isOccupied && (() => {
                                               const cs = bed.cleaningStatus ?? "ready";
                                               const next: Record<string, { label: string; status: string } | null> = {
-                                                needs_cleaning: { label: "Start cleaning", status: "in_progress" },
-                                                in_progress: { label: "Mark ready", status: "ready" },
+                                                needs_cleaning: { label: t("pages.propertyDetail.startCleaning"), status: "in_progress" },
+                                                in_progress: { label: t("pages.propertyDetail.markReady"), status: "ready" },
                                                 ready: null,
                                                 occupied: null,
                                               };
@@ -2634,10 +2640,10 @@ export default function PropertyDetail() {
                                                     : "bg-amber-50 text-amber-700 border-amber-200";
                                               const chipLabel =
                                                 cs === "ready"
-                                                  ? "Ready"
+                                                  ? t("pages.propertyDetail.cleaningReady")
                                                   : cs === "in_progress"
-                                                    ? "Cleaning…"
-                                                    : "Needs cleaning";
+                                                    ? t("pages.propertyDetail.cleaningInProgress")
+                                                    : t("pages.propertyDetail.cleaningNeeds");
                                               return (
                                                 <div className="flex items-center gap-1">
                                                   <Badge
@@ -2821,7 +2827,7 @@ export default function PropertyDetail() {
                                               <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
                                                 <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                  {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                                                  {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{t(`common.billingFrequencies.${f}`)}</SelectItem>)}
                                                 </SelectContent>
                                               </Select>
                                             </TableCell>
@@ -2985,7 +2991,7 @@ export default function PropertyDetail() {
           <TabsContent value="utilities" className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
-                {propUtils.length} service{propUtils.length !== 1 ? "s" : ""} &mdash; {formatUsd(propUtils.reduce((s, u) => s + u.monthlyCost, 0))}/mo total
+                {t("pages.propertyDetail.utilityServicesLine", { count: propUtils.length, cost: formatUsd(propUtils.reduce((s, u) => s + u.monthlyCost, 0)) })}
               </p>
               <AddUtilityDialog propertyId={id} onAdd={addUtility} />
             </div>
@@ -2994,11 +3000,11 @@ export default function PropertyDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Account #</TableHead>
-                      <TableHead className="text-right">Monthly Cost</TableHead>
-                      <TableHead>Notes</TableHead>
+                      <TableHead>{t("pages.propertyDetail.utilityType")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.utilityCompany")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.utilityAccount")}</TableHead>
+                      <TableHead className="text-right">{t("pages.propertyDetail.utilityMonthlyCost")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.utilityNotes")}</TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
@@ -3007,8 +3013,8 @@ export default function PropertyDetail() {
                       <EmptyStateRow
                         colSpan={6}
                         icon={Zap}
-                        title="No utility services yet"
-                        description="Track power, water, internet, and other monthly services for this property."
+                        title={t("pages.propertyDetail.noUtilitiesYet")}
+                        description={t("pages.propertyDetail.noUtilitiesDescription")}
                         testId="empty-property-utilities"
                         action={
                           <AddUtilityDialog
@@ -3016,7 +3022,7 @@ export default function PropertyDetail() {
                             onAdd={addUtility}
                             trigger={
                               <Button size="sm" data-testid="button-add-utility-empty">
-                                <Plus className="h-4 w-4 mr-1.5" />Add Service
+                                <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addService")}
                               </Button>
                             }
                           />
@@ -3026,7 +3032,7 @@ export default function PropertyDetail() {
                       <TableRow key={u.id}>
                         <TableCell>
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}>
-                            <Zap className="h-3 w-3" />{u.type}
+                            <Zap className="h-3 w-3" />{t(`common.utilityTypes.${u.type}`)}
                           </span>
                         </TableCell>
                         <TableCell><InlineEdit value={u.company} onSave={v => updateUtility(u.id, { company: v })} /></TableCell>
@@ -3035,12 +3041,12 @@ export default function PropertyDetail() {
                         <TableCell><InlineEdit value={u.notes || ""} onSave={v => updateUtility(u.id, { notes: v })} /></TableCell>
                         <TableCell>
                           <ConfirmDeleteButton
-                            title="Delete this utility?"
+                            title={t("pages.propertyDetail.deleteUtility.title")}
                             description={
                               <>
-                                Remove the{" "}
-                                <span className="font-medium text-foreground">{u.type}</span>{" "}
-                                service from this property. You can't undo this.
+                                {t("pages.propertyDetail.deleteUtility.descriptionPrefix")}
+                                <span className="font-medium text-foreground">{t(`common.utilityTypes.${u.type}`)}</span>
+                                {t("pages.propertyDetail.deleteUtility.descriptionSuffix")}
                               </>
                             }
                             onConfirm={() => deleteUtility(u.id)}
@@ -3070,7 +3076,7 @@ export default function PropertyDetail() {
           <TabsContent value="insurance" className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground" data-testid="text-insurance-count">
-                {propCerts.length} certificate{propCerts.length !== 1 ? "s" : ""} on file
+                {t("pages.propertyDetail.certificatesOnFile", { count: propCerts.length })}
               </p>
               <AddInsuranceCertificateDialog
                 propertyId={id}
@@ -3083,13 +3089,13 @@ export default function PropertyDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Carrier</TableHead>
-                      <TableHead>Policy #</TableHead>
-                      <TableHead>Insured</TableHead>
-                      <TableHead>Coverage</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Document</TableHead>
-                      <TableHead>Notes</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceCarrier")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insurancePolicy")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceInsured")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceCoverage")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceStatus")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceDocument")}</TableHead>
+                      <TableHead>{t("pages.propertyDetail.insuranceNotes")}</TableHead>
                       <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
@@ -3098,8 +3104,8 @@ export default function PropertyDetail() {
                       <EmptyStateRow
                         colSpan={8}
                         icon={ShieldCheck}
-                        title="No insurance certificates on file"
-                        description="Track renter's or liability policies here so the coverage window and source PDF are one click away."
+                        title={t("pages.propertyDetail.noCertificatesTitle")}
+                        description={t("pages.propertyDetail.noCertificatesDescription")}
                         testId="empty-property-insurance"
                         action={
                           <AddInsuranceCertificateDialog
@@ -3108,7 +3114,7 @@ export default function PropertyDetail() {
                             onAdd={addInsuranceCertificate}
                             trigger={
                               <Button size="sm" data-testid="button-add-insurance-empty">
-                                <Plus className="h-4 w-4 mr-1.5" />Add Certificate
+                                <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addCertificate")}
                               </Button>
                             }
                           />
@@ -3150,21 +3156,21 @@ export default function PropertyDetail() {
                                 {c.coverageEnd ? formatYMDPretty(c.coverageEnd) : "—"}
                               </span>
                             ) : (
-                              <span className="italic">no dates</span>
+                              <span className="italic">{t("pages.propertyDetail.noDates")}</span>
                             )}
                           </TableCell>
                           <TableCell>
                             {expired ? (
                               <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200" data-testid={`badge-insurance-${c.id}-expired`}>
-                                Expired {Math.abs(days!)}d ago
+                                {t("pages.propertyDetail.insuranceExpiredAgo", { days: Math.abs(days!) })}
                               </Badge>
                             ) : expiringSoon ? (
                               <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200" data-testid={`badge-insurance-${c.id}-expiring`}>
-                                Expiring soon · {days}d
+                                {t("pages.propertyDetail.insuranceExpiringSoon", { days })}
                               </Badge>
                             ) : days !== null ? (
                               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200" data-testid={`badge-insurance-${c.id}-active`}>
-                                Active · {days}d left
+                                {t("pages.propertyDetail.insuranceActiveLeft", { days })}
                               </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
@@ -3180,12 +3186,12 @@ export default function PropertyDetail() {
                                   className="text-primary hover:underline text-sm inline-flex items-center gap-1"
                                   data-testid={`link-insurance-${c.id}-doc`}
                                 >
-                                  <FileText className="h-3.5 w-3.5" />View PDF
+                                  <FileText className="h-3.5 w-3.5" />{t("pages.propertyDetail.viewPdf")}
                                 </a>
-                                <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Replace" />
+                                <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label={t("pages.propertyDetail.replace")} />
                               </div>
                             ) : (
-                              <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Upload" />
+                              <InlineCertUpload certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label={t("pages.propertyDetail.upload")} />
                             )}
                           </TableCell>
                           <TableCell>
@@ -3193,12 +3199,12 @@ export default function PropertyDetail() {
                           </TableCell>
                           <TableCell>
                             <ConfirmDeleteButton
-                              title="Delete this certificate?"
+                              title={t("pages.propertyDetail.deleteCertificate.title")}
                               description={
                                 <>
-                                  Remove the{" "}
-                                  <span className="font-medium text-foreground">{c.carrier || "insurance"}</span>{" "}
-                                  certificate from this property. You can't undo this.
+                                  {t("pages.propertyDetail.deleteCertificate.descriptionPrefix")}
+                                  <span className="font-medium text-foreground">{c.carrier || t("pages.propertyDetail.deleteCertificate.fallbackName")}</span>
+                                  {t("pages.propertyDetail.deleteCertificate.descriptionSuffix")}
                                 </>
                               }
                               onConfirm={() => deleteInsuranceCertificate(c.id)}
@@ -3241,42 +3247,42 @@ export default function PropertyDetail() {
           <TabsContent value="finance" className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2"><DollarSign className="h-4 w-4" />Monthly Financial Summary</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2"><DollarSign className="h-4 w-4" />{t("pages.propertyDetail.monthlyFinancialSummary")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                    <span className="text-muted-foreground">Active Occupants</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.activeOccupants")}</span>
                     <span className="font-medium">{propOccupants.length}</span>
                   </div>
                   <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                    <span className="text-muted-foreground">Occupied Beds</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.occupiedBeds")}</span>
                     <span className="font-medium">{occupiedBeds} / {propBeds.length}</span>
                   </div>
                   <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                    <span className="text-muted-foreground">Occupancy Rate</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.occupancyRate")}</span>
                     <span className="font-medium">{propBeds.length > 0 ? Math.round((occupiedBeds / propBeds.length) * 100) : 0}%</span>
                   </div>
                 </div>
 
                 <Separator />
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Revenue</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("pages.propertyDetail.revenue")}</p>
                 {propOccupants.map(occ => (
                   <div key={occ.id} className="flex justify-between text-sm py-1 border-b border-dashed border-border/40">
-                    <span className="text-muted-foreground">{occ.name} (Bed charge · {occ.billingFrequency ?? "Monthly"})</span>
-                    <span className="font-medium text-green-600">+{formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/mo</span>
+                    <span className="text-muted-foreground">{t("pages.propertyDetail.bedChargeRow", { name: occ.name, frequency: occ.billingFrequency ?? "Monthly" })}</span>
+                    <span className="font-medium text-green-600">+{formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}{t("pages.propertyDetail.perMonthSuffix")}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
-                  <span>Total Revenue</span>
+                  <span>{t("pages.propertyDetail.totalRevenue")}</span>
                   <span className="text-green-600">+{formatUsd(monthlyRevenue)}</span>
                 </div>
 
                 <Separator />
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Costs</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("pages.propertyDetail.costs")}</p>
                 <div className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                  <span className="text-muted-foreground">Lease (active)</span>
+                  <span className="text-muted-foreground">{t("pages.propertyDetail.leaseActive")}</span>
                   <span className="text-destructive">-{formatUsd(monthlyLeaseCost)}</span>
                 </div>
                 {hotelRateLeaseEstimates.map((h) => (
@@ -3288,8 +3294,8 @@ export default function PropertyDetail() {
                     <span className="inline-flex items-center gap-1">
                       <Hotel className="h-3 w-3" />
                       {h.month && h.nights > 0
-                        ? `Hotel-rate ${h.month} · ${h.nights} room-night${h.nights === 1 ? "" : "s"} × ${formatUsd(h.nightlyRate)}/night`
-                        : "Hotel-rate · no room-nights logged yet"}
+                        ? t("pages.propertyDetail.hotelRateRow", { count: h.nights, month: h.month, rate: formatUsd(h.nightlyRate) })
+                        : t("pages.propertyDetail.hotelRateNoNights")}
                     </span>
                     <span className="tabular-nums">
                       {h.month && h.nights > 0
@@ -3300,18 +3306,18 @@ export default function PropertyDetail() {
                 ))}
                 {propUtils.map(u => (
                   <div key={u.id} className="flex justify-between text-sm py-1.5 border-b border-dashed border-border/50">
-                    <span className="text-muted-foreground">{u.type} ({u.company})</span>
+                    <span className="text-muted-foreground">{t(`common.utilityTypes.${u.type}`)} ({u.company})</span>
                     <span className="text-destructive">-{formatUsd(u.monthlyCost)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-sm font-semibold py-2 border-b-2 border-border">
-                  <span>Total Costs</span>
+                  <span>{t("pages.propertyDetail.totalCosts")}</span>
                   <span className="text-destructive">-{formatUsd(totalCost)}</span>
                 </div>
 
                 <Separator />
                 <div className={`flex justify-between text-base font-bold py-2 ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
-                  <span>Net Profit / Loss</span>
+                  <span>{t("pages.propertyDetail.netProfitLoss")}</span>
                   <span>{profit >= 0 ? "+" : ""}{formatUsd(profit)}</span>
                 </div>
               </CardContent>
@@ -3332,6 +3338,7 @@ export default function PropertyDetail() {
 // pre-filled with name + company + weekly deduction.
 
 function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; onAdd: (u: Utility) => void; trigger?: React.ReactNode }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     type: "Electric" as Utility["type"],
@@ -3359,27 +3366,27 @@ function AddUtilityDialog({ propertyId, onAdd, trigger }: { propertyId: string; 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger ?? <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />Add Service</Button>}
+        {trigger ?? <Button size="sm"><Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addUtilityDialog.submit")}</Button>}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Add Utility Service</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("pages.propertyDetail.addUtilityDialog.title")}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-2">
           <div>
-            <Label>Type</Label>
+            <Label>{t("pages.propertyDetail.addUtilityDialog.type")}</Label>
             <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v as Utility["type"] }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{UTILITY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              <SelectContent>{UTILITY_TYPES.map(ut => <SelectItem key={ut} value={ut}>{t(`common.utilityTypes.${ut}`)}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Company</Label><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder="e.g. Austin Energy" /></div>
-            <div><Label>Monthly Cost ($)</Label><Input type="number" value={form.monthlyCost} onChange={e => setForm(f => ({ ...f, monthlyCost: e.target.value }))} placeholder="0.00" /></div>
-            <div><Label>Account Number</Label><Input value={form.accountNumber} onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))} placeholder="Optional" /></div>
+            <div><Label>{t("pages.propertyDetail.addUtilityDialog.company")}</Label><Input value={form.company} onChange={e => setForm(f => ({ ...f, company: e.target.value }))} placeholder={t("pages.propertyDetail.addUtilityDialog.companyPlaceholder")} /></div>
+            <div><Label>{t("pages.propertyDetail.addUtilityDialog.monthlyCost")}</Label><Input type="number" value={form.monthlyCost} onChange={e => setForm(f => ({ ...f, monthlyCost: e.target.value }))} placeholder="0.00" /></div>
+            <div><Label>{t("pages.propertyDetail.addUtilityDialog.accountNumber")}</Label><Input value={form.accountNumber} onChange={e => setForm(f => ({ ...f, accountNumber: e.target.value }))} placeholder={t("pages.propertyDetail.addUtilityDialog.accountPlaceholder")} /></div>
           </div>
-          <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></div>
+          <div><Label>{t("pages.propertyDetail.addUtilityDialog.notes")}</Label><Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder={t("pages.propertyDetail.addUtilityDialog.notesPlaceholder")} /></div>
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={submit}>Add Service</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("pages.propertyDetail.addUtilityDialog.cancel")}</Button>
+            <Button onClick={submit}>{t("pages.propertyDetail.addUtilityDialog.submit")}</Button>
           </div>
         </div>
       </DialogContent>
@@ -3440,6 +3447,7 @@ function AddInsuranceCertificateDialog({
   onAdd: (c: InsuranceCertificate) => void;
   trigger?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   // Sentinel because <SelectItem value=""> is disallowed by Radix — we
   // translate it back to an empty string when building the payload.
   const NO_LEASE = "__none__";
@@ -3501,43 +3509,43 @@ function AddInsuranceCertificateDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" data-testid="button-add-insurance">
-            <Plus className="h-4 w-4 mr-1.5" />Add Certificate
+            <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addInsuranceDialog.trigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Add Insurance Certificate</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t("pages.propertyDetail.addInsuranceDialog.title")}</DialogTitle></DialogHeader>
         <div className="space-y-3 pt-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Carrier</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.carrier")}</Label>
               <Input
                 value={form.carrier}
                 onChange={e => setForm(f => ({ ...f, carrier: e.target.value }))}
-                placeholder="e.g. Philadelphia Indemnity"
+                placeholder={t("pages.propertyDetail.addInsuranceDialog.carrierPlaceholder")}
                 data-testid="input-insurance-carrier"
               />
             </div>
             <div>
-              <Label>Policy #</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.policy")}</Label>
               <Input
                 value={form.policyNumber}
                 onChange={e => setForm(f => ({ ...f, policyNumber: e.target.value }))}
-                placeholder="Optional"
+                placeholder={t("pages.propertyDetail.addInsuranceDialog.policyPlaceholder")}
                 data-testid="input-insurance-policy"
               />
             </div>
             <div className="col-span-2">
-              <Label>Insured Name</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.insured")}</Label>
               <Input
                 value={form.insuredName}
                 onChange={e => setForm(f => ({ ...f, insuredName: e.target.value }))}
-                placeholder="Named insured on the certificate"
+                placeholder={t("pages.propertyDetail.addInsuranceDialog.insuredPlaceholder")}
                 data-testid="input-insurance-insured"
               />
             </div>
             <div>
-              <Label>Coverage Start</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.coverageStart")}</Label>
               <Input
                 type="date"
                 value={form.coverageStart}
@@ -3546,7 +3554,7 @@ function AddInsuranceCertificateDialog({
               />
             </div>
             <div>
-              <Label>Coverage End</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.coverageEnd")}</Label>
               <Input
                 type="date"
                 value={form.coverageEnd}
@@ -3555,7 +3563,7 @@ function AddInsuranceCertificateDialog({
               />
             </div>
             <div className="col-span-2">
-              <Label>Certificate PDF</Label>
+              <Label>{t("pages.propertyDetail.addInsuranceDialog.certificatePdf")}</Label>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -3567,7 +3575,7 @@ function AddInsuranceCertificateDialog({
               {form.documentUrl ? (
                 <div className="flex items-center gap-2 mt-1">
                   <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-sm truncate flex-1">{uploadedFileName || "PDF attached"}</span>
+                  <span className="text-sm truncate flex-1">{uploadedFileName || t("pages.propertyDetail.addInsuranceDialog.pdfAttached")}</span>
                   <Button
                     type="button"
                     variant="ghost"
@@ -3589,26 +3597,26 @@ function AddInsuranceCertificateDialog({
                   data-testid="button-insurance-upload"
                 >
                   {isUploading ? (
-                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Uploading… {progress}%</>
+                    <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />{t("pages.propertyDetail.addInsuranceDialog.uploading", { progress })}</>
                   ) : (
-                    <><Upload className="h-4 w-4 mr-1.5" />Upload PDF</>
+                    <><Upload className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addInsuranceDialog.uploadPdf")}</>
                   )}
                 </Button>
               )}
             </div>
             {leases.length > 0 && (
               <div className="col-span-2">
-                <Label>Linked Lease (optional)</Label>
+                <Label>{t("pages.propertyDetail.addInsuranceDialog.linkedLease")}</Label>
                 <Select
                   value={form.leaseId}
                   onValueChange={v => setForm(f => ({ ...f, leaseId: v }))}
                 >
                   <SelectTrigger data-testid="select-insurance-lease"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NO_LEASE}>(not lease-specific)</SelectItem>
+                    <SelectItem value={NO_LEASE}>{t("pages.propertyDetail.addInsuranceDialog.notLeaseSpecific")}</SelectItem>
                     {leases.map(l => (
                       <SelectItem key={l.id} value={l.id}>
-                        Lease {l.startDate || l.id}
+                        {t("pages.propertyDetail.addInsuranceDialog.leaseLabel", { label: l.startDate || l.id })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3617,17 +3625,17 @@ function AddInsuranceCertificateDialog({
             )}
           </div>
           <div>
-            <Label>Notes</Label>
+            <Label>{t("pages.propertyDetail.addInsuranceDialog.notes")}</Label>
             <Textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Optional notes"
+              placeholder={t("pages.propertyDetail.addInsuranceDialog.notesPlaceholder")}
               data-testid="input-insurance-notes"
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={submit} data-testid="button-insurance-submit">Add Certificate</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("pages.propertyDetail.addInsuranceDialog.cancel")}</Button>
+            <Button onClick={submit} data-testid="button-insurance-submit">{t("pages.propertyDetail.addInsuranceDialog.submit")}</Button>
           </div>
         </div>
       </DialogContent>
@@ -3932,6 +3940,7 @@ function ViolationsTab({
   onDelete: (id: string) => void;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   // Per-category counts power the summary card. Built from the
   // canonical category list so every bucket renders even when empty —
   // operators can see at a glance which categories are quiet vs hot.
@@ -4026,7 +4035,7 @@ function ViolationsTab({
                   <Icon className="h-4 w-4 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium truncate">
-                      {PROPERTY_VIOLATION_CATEGORY_LABELS[cat]}
+                      {t(`common.violationCategories.${cat}`)}
                     </div>
                     <div className="text-sm font-semibold tabular-nums">
                       {n}
@@ -4081,7 +4090,7 @@ function ViolationsTab({
                   {g.name}
                 </CardTitle>
                 <Badge variant="secondary" className="tabular-nums" data-testid={`badge-violation-group-${g.key}-count`}>
-                  {g.rows.length} {g.rows.length === 1 ? "notice" : "notices"}
+                  {t("pages.propertyDetail.violations.noticesCount", { count: g.rows.length })}
                 </Badge>
               </div>
             </CardHeader>
@@ -4089,9 +4098,9 @@ function ViolationsTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-32">Date</TableHead>
-                    <TableHead className="w-40">Category</TableHead>
-                    <TableHead>Notes</TableHead>
+                    <TableHead className="w-32">{t("pages.propertyDetail.violations.date")}</TableHead>
+                    <TableHead className="w-40">{t("pages.propertyDetail.violations.category")}</TableHead>
+                    <TableHead>{t("pages.propertyDetail.violations.notes")}</TableHead>
                     <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
@@ -4110,7 +4119,7 @@ function ViolationsTab({
                             data-testid={`badge-violation-${v.id}-category`}
                           >
                             <Icon className="h-3 w-3 mr-1" />
-                            {PROPERTY_VIOLATION_CATEGORY_LABELS[v.category]}
+                            {t(`common.violationCategories.${v.category}`)}
                             {v.category === "other" && v.details
                               ? ` · ${v.details}`
                               : ""}
@@ -4125,19 +4134,19 @@ function ViolationsTab({
                               {v.notes}
                             </pre>
                           ) : (
-                            <span className="text-xs text-muted-foreground italic">no notes</span>
+                            <span className="text-xs text-muted-foreground italic">{t("pages.propertyDetail.violations.noNotes")}</span>
                           )}
                         </TableCell>
                         <TableCell className="align-top">
                           <ConfirmDeleteButton
-                            title="Delete this violation?"
+                            title={t("pages.propertyDetail.violations.deleteTitle")}
                             description={
                               <>
-                                Remove the{" "}
+                                {t("pages.propertyDetail.violations.deleteDescriptionPrefix")}
                                 <span className="font-medium text-foreground">
-                                  {PROPERTY_VIOLATION_CATEGORY_LABELS[v.category]}
-                                </span>{" "}
-                                notice from {g.name}. You can't undo this.
+                                  {t(`common.violationCategories.${v.category}`)}
+                                </span>
+                                {t("pages.propertyDetail.violations.deleteDescriptionSuffix", { group: g.name })}
                               </>
                             }
                             onConfirm={() => onDelete(v.id)}
@@ -4178,6 +4187,7 @@ function AddPropertyViolationDialog({
   onAdd: (v: PropertyViolation) => void;
   trigger?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   // Sentinel — Radix's <SelectItem> can't take an empty string, so we
   // translate this back to "" + "Unknown" when building the payload.
   const NO_OCCUPANT = "__none__";
@@ -4227,37 +4237,37 @@ function AddPropertyViolationDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" data-testid="button-add-violation">
-            <Plus className="h-4 w-4 mr-1.5" />Log Violation
+            <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.violations.logTrigger")}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Log a property violation</DialogTitle>
+          <DialogTitle>{t("pages.propertyDetail.violations.addTitle")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Occupant</Label>
+              <Label>{t("pages.propertyDetail.violations.occupant")}</Label>
               <Select
                 value={form.occupantId}
                 onValueChange={(v) => setForm((f) => ({ ...f, occupantId: v }))}
               >
                 <SelectTrigger data-testid="select-violation-occupant">
-                  <SelectValue placeholder="Pick an occupant" />
+                  <SelectValue placeholder={t("pages.propertyDetail.violations.occupantPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_OCCUPANT}>(unknown / former)</SelectItem>
+                  <SelectItem value={NO_OCCUPANT}>{t("pages.propertyDetail.violations.occupantUnknown")}</SelectItem>
                   {occupants.map((o) => (
                     <SelectItem key={o.id} value={o.id}>
-                      {o.name || "Unnamed occupant"}
+                      {o.name || t("pages.propertyDetail.violations.occupantUnnamed")}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Category</Label>
+              <Label>{t("pages.propertyDetail.violations.categoryLabel")}</Label>
               <Select
                 value={form.category}
                 onValueChange={(v) =>
@@ -4270,7 +4280,7 @@ function AddPropertyViolationDialog({
                 <SelectContent>
                   {PROPERTY_VIOLATION_CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>
-                      {PROPERTY_VIOLATION_CATEGORY_LABELS[cat]}
+                      {t(`common.violationCategories.${cat}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -4278,19 +4288,19 @@ function AddPropertyViolationDialog({
             </div>
             {form.category === "other" && (
               <div className="col-span-2">
-                <Label>What kind?</Label>
+                <Label>{t("pages.propertyDetail.violations.whatKind")}</Label>
                 <Input
                   value={form.details}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, details: e.target.value }))
                   }
-                  placeholder="Short description of the rule that was broken"
+                  placeholder={t("pages.propertyDetail.violations.whatKindPlaceholder")}
                   data-testid="input-violation-details"
                 />
               </div>
             )}
             <div className="col-span-2">
-              <Label>Date</Label>
+              <Label>{t("pages.propertyDetail.violations.dateLabel")}</Label>
               <Input
                 type="date"
                 value={form.occurredOn}
@@ -4302,21 +4312,21 @@ function AddPropertyViolationDialog({
             </div>
           </div>
           <div>
-            <Label>Notes / pasted email</Label>
+            <Label>{t("pages.propertyDetail.violations.notesEmail")}</Label>
             <Textarea
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Paste the notification email body here, or jot down what the property manager said."
+              placeholder={t("pages.propertyDetail.violations.notesEmailPlaceholder")}
               className="min-h-[8rem]"
               data-testid="input-violation-notes"
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t("pages.propertyDetail.violations.cancel")}
             </Button>
             <Button onClick={submit} data-testid="button-violation-submit">
-              Log Violation
+              {t("pages.propertyDetail.violations.submit")}
             </Button>
           </div>
         </div>

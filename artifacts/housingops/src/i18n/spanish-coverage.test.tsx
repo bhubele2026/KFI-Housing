@@ -100,6 +100,10 @@ vi.mock("@workspace/api-client-react", () => ({
   useListUnplacedPayroll: () => ({ data: { unmatched: [], lowConfidenceMatches: [] } }),
   getListUnplacedPayrollQueryKey: () => ["/payroll/unplaced"],
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), isPending: false }),
+  getListPropertyViolationsQueryKey: (id: string) => ["/api/properties", id, "violations"] as const,
   useGetLastAutoMasterImport: () => ({ data: undefined, isLoading: false, isError: false }),
   useGetRuntimeConfig: () => ({
     data: { googleMapsApiKey: "test-key", googleMapsMapId: "test-map-id" },
@@ -122,7 +126,7 @@ vi.mock("@tanstack/react-query", async () => {
 
 const emptyStore = {
   customers: [], properties: [], beds: [], rooms: [], leases: [], utilities: [],
-  insuranceCertificates: [], occupants: [],
+  insuranceCertificates: [], occupants: [], otherCosts: [], roomNightLogs: [],
   isLoading: false,
   dataIssues: [] as Array<Record<string, unknown>>,
   addCustomer: vi.fn(), addProperty: vi.fn(), addLease: vi.fn(),
@@ -144,10 +148,31 @@ vi.mock("@workspace/object-storage-web", () => ({
   ObjectUploader: () => null,
 }));
 
+// Per-test mutable wouter overrides so a few specific tests can mount
+// pages that depend on `useParams()` (CustomerDetail, PropertyDetail)
+// against a seeded fixture instead of only the not-found branch.
+const wouterParams: { current: Record<string, string> } = { current: {} };
+vi.mock("wouter", async () => {
+  const actual = await vi.importActual<typeof import("wouter")>("wouter");
+  return {
+    ...actual,
+    useParams: () => wouterParams.current,
+    useLocation: () => ["/", () => {}] as const,
+  };
+});
+
 import Dashboard from "@/pages/dashboard";
 import Leases from "@/pages/leases";
 import Properties from "@/pages/properties";
 import Settings from "@/pages/settings";
+import Customers from "@/pages/customers";
+import Beds from "@/pages/beds";
+import Utilities from "@/pages/utilities";
+import Occupants from "@/pages/occupants";
+import Finance from "@/pages/finance";
+import InsuranceCertificates from "@/pages/insurance-certificates";
+import PropertyDetail from "@/pages/property-detail";
+import CustomerDetail from "@/pages/customer-detail";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 
 function mount(node: ReactNode, container: HTMLDivElement): Root {
@@ -429,6 +454,44 @@ describe("Spanish-language end-to-end coverage", () => {
     expect(spanishMissingKeys()).toEqual([]);
   });
 
+  it("Properties geocode toast strings translate to Spanish", () => {
+    expect(i18n.t("toasts.geocode.couldntLocateTitle")).toBe(
+      "No se pudo localizar la dirección",
+    );
+    expect(
+      i18n.t("toasts.geocode.couldntLocateDescription", { name: "Acme" }),
+    ).toContain("Acme");
+    expect(i18n.t("toasts.geocode.couldntRetryTitle")).toBe(
+      "No se pudo reintentar",
+    );
+    expect(i18n.t("toasts.geocode.stillCouldntPinpointTitle")).toBe(
+      "Aún no se pudo localizar",
+    );
+    expect(i18n.t("toasts.geocode.foundItTitle")).toBe("Encontrada");
+    expect(i18n.t("toasts.geocode.retryFailedTitle")).toBe(
+      "Falló el reintento",
+    );
+    expect(i18n.t("toasts.geocode.allPinpointedTitle")).toBe(
+      "Todas las direcciones localizadas",
+    );
+    expect(
+      i18n.t("toasts.geocode.allPinpointedDescription", { count: 1 }),
+    ).toBe("Se corrigió la 1 dirección marcada.");
+    expect(
+      i18n.t("toasts.geocode.allPinpointedDescription", { count: 5 }),
+    ).toBe("Se corrigieron las 5 direcciones marcadas.");
+    expect(i18n.t("toasts.geocode.nonePinpointedTitle")).toBe(
+      "No se pudo localizar ninguna dirección",
+    );
+    expect(
+      i18n.t("toasts.geocode.fixedSomeTitle", { fixed: 2, total: 5 }),
+    ).toBe("Corregidas 2 de 5");
+    expect(i18n.t("toasts.unknownCustomer")).toBe("Cliente desconocido");
+    expect(i18n.t("toasts.couldNotAddRecipient")).toBe(
+      "No se pudo añadir el destinatario.",
+    );
+  });
+
   it("Properties renders header and language toggle button labels in Spanish", async () => {
     await act(async () => { root = mount(<Properties />, container); });
 
@@ -438,7 +501,355 @@ describe("Spanish-language end-to-end coverage", () => {
     expect(languageButtonAria(container, "en")).toBe("Cambiar a Inglés");
     expect(languageButtonAria(container, "es")).toBe("Cambiar a Español");
 
+    const text = container.textContent ?? "";
+    expect(text).toContain("Tabla");
+    expect(text).toContain("Mapa");
+    expect(text).toContain("Descargar CSV");
+    // Rating filters
+    expect(text).toContain("Cualquier calificación");
+    expect(text).toContain("3+ estrellas");
+    expect(text).toContain("4+ estrellas");
+    expect(text).toContain("5 estrellas");
+    // Table headers
+    expect(text).toContain("Propiedad");
+    expect(text).toContain("Cliente");
+    expect(text).toContain("Camas totales");
+    expect(text).toContain("Vacantes");
+    expect(text).not.toContain("Download CSV");
+    expect(text).not.toContain(">Table<");
+    expect(text).not.toContain(">Map<");
+    expect(text).not.toContain("Any rating");
+    expect(text).not.toContain("3+ stars");
+    expect(text).not.toContain("Min rating");
+    expect(text).not.toContain("Rating category");
+    expect(text).not.toContain(">Property<");
+    expect(text).not.toContain(">Customer<");
+    expect(text).not.toContain(">Address<");
+    expect(text).not.toContain(">City<");
+    expect(text).not.toContain("Total Beds");
+    expect(text).not.toContain(">Status<");
+    expect(text).not.toContain("No properties match the current filters.");
+    expect(text).not.toContain("Missing address");
+    expect(text).not.toContain("Every property in view has an address");
+    // Add-property dialog and needs-review badge English originals
+    expect(text).not.toContain("Showing properties missing rent");
+    expect(text).not.toContain("Clear needs-review filter");
+    expect(text).not.toContain(">Add property<");
+    expect(text).not.toContain("Property name *");
+    expect(text).not.toContain("Customer *");
+    expect(text).not.toContain("Choose a customer");
+    expect(text).not.toContain("Create new customer");
+    expect(text).not.toContain("Company name *");
+    expect(text).not.toContain(">Contact<");
+    expect(text).not.toContain(">Phone<");
+    expect(text).not.toContain(">Type<");
+    expect(text).not.toContain("No type");
+
     expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Leases renders Download CSV button in Spanish", async () => {
+    await act(async () => { root = mount(<Leases />, container); });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Descargar CSV");
+    expect(text).not.toContain("Download CSV");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Customers renders header, action buttons, table headers and empty-state in Spanish", async () => {
+    await act(async () => { root = mount(<Customers />, container); });
+    expect(readTitle(container)).toBe("Clientes");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Aún no hay clientes");
+    expect(text).toContain("Descargar CSV");
+    expect(text).toContain("Agregar cliente");
+    expect(text).toContain("Cliente");
+    expect(text).toContain("Contacto principal");
+    expect(text).toContain("Correo");
+    expect(text).toContain("Teléfono");
+    expect(text).not.toContain("Add Customer");
+    expect(text).not.toContain("Download CSV");
+    expect(text).not.toContain("Primary Contact");
+    expect(text).not.toContain("Highest occupancy");
+    expect(text).not.toContain("Highest monthly revenue");
+    expect(text).not.toContain("Revenue / mo");
+    expect(text).not.toContain("No Housing / Reason");
+    expect(text).not.toContain(">Properties<");
+    expect(text).not.toContain(">Beds<");
+    expect(text).not.toContain(">Actions<");
+    // No-housing reason labels translate to ES (bundle-level guards
+    // since the dropdown options live inside Radix portals not rendered
+    // in this jsdom mount).
+    expect(i18n.t("common.noHousingReasons.provided_by_client")).toBe(
+      "Proporcionado por el cliente",
+    );
+    expect(i18n.t("common.noHousingReasons.kfis_property")).toBe(
+      "Propiedad de KFIS",
+    );
+    expect(i18n.t("common.noHousingReasons.all_associates_local")).toBe(
+      "Todos los empleados viven localmente",
+    );
+    // Unassigned-state group label translates to ES.
+    expect(i18n.t("pages.customers.unassignedStateLabel")).toBe(
+      "Otro / Sin asignar",
+    );
+    expect(text).not.toContain("Other / Unassigned");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Beds renders empty-state and filters in Spanish", async () => {
+    await act(async () => { root = mount(<Beds />, container); });
+    expect(readTitle(container)).toBe("Camas");
+    const text = container.textContent ?? "";
+    expect(text).toContain("No se encontraron camas");
+    expect(text).toContain("Descargar CSV");
+    expect(text).not.toContain("Download CSV");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Utilities renders empty-state and chrome in Spanish", async () => {
+    await act(async () => { root = mount(<Utilities />, container); });
+    expect(readTitle(container)).toBe("Servicios");
+    const text = container.textContent ?? "";
+    expect(text).toContain("No se encontraron servicios públicos");
+    expect(text).toContain("Descargar CSV");
+    // Utility type filter options translate to ES
+    expect(text).toContain("Electricidad");
+    expect(text).toContain("Agua");
+    expect(text).toContain("Basura");
+    expect(text).toContain("Propano");
+    expect(text).not.toContain("Download CSV");
+    expect(text).not.toContain("Total Monthly");
+    expect(text).not.toContain(">Electric<");
+    expect(text).not.toContain(">Water<");
+    expect(text).not.toContain(">Garbage<");
+    expect(text).not.toContain(">Propane<");
+    // Bundle-level guards for utility type labels
+    expect(i18n.t("common.utilityTypes.Electric")).toBe("Electricidad");
+    expect(i18n.t("common.utilityTypes.Water")).toBe("Agua");
+    expect(i18n.t("common.utilityTypes.Garbage")).toBe("Basura");
+    // Bundle-level guards for property-detail responsibilities + bed tooltip
+    expect(i18n.t("pages.propertyDetail.responsibilities.removeTitle")).toBe(
+      "Quitar responsabilidad",
+    );
+    expect(i18n.t("pages.propertyDetail.responsibilities.placeholder")).toBe(
+      "ej. Sacar la basura los lunes",
+    );
+    expect(
+      i18n.t("pages.propertyDetail.bedTooltipLabel", { number: 3, suffix: "" }),
+    ).toBe("Cama 3");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Occupants renders empty-state, filters and action buttons in Spanish", async () => {
+    await act(async () => { root = mount(<Occupants />, container); });
+    expect(readTitle(container)).toBe("Ocupantes");
+    const text = container.textContent ?? "";
+    expect(text).toContain("No se encontraron ocupantes");
+    expect(text).toContain("Descargar CSV");
+    expect(text).toContain("Agregar ocupante");
+    expect(text).not.toContain("Add Occupant");
+    expect(text).not.toContain("Download CSV");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Finance renders empty-state in Spanish", async () => {
+    await act(async () => { root = mount(<Finance />, container); });
+    expect(readTitle(container)).toBe("Finanzas");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Aún no hay propiedades");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Insurance Certificates renders empty-state and chrome in Spanish", async () => {
+    await act(async () => { root = mount(<InsuranceCertificates />, container); });
+    expect(readTitle(container)).toBe("Certificados de seguro");
+    const text = container.textContent ?? "";
+    expect(text).toContain("No hay certificados de seguro");
+    expect(text).toContain("Descargar CSV");
+    expect(text).not.toContain("Download CSV");
+    expect(text).not.toContain("Coverage Alerts");
+    // Bundle-level guards for conditionally-rendered alerts/badges:
+    expect(i18n.t("pages.insurance.coverageAlerts")).toBe("Alertas de cobertura");
+    expect(i18n.t("pages.insurance.expiredCount", { count: 1 })).toBe("1 vencido");
+    expect(i18n.t("pages.insurance.expiredCount", { count: 3 })).toBe("3 vencidos");
+    expect(i18n.t("pages.insurance.deleteTitle")).toBe(
+      i18n.t("pages.insurance.deleteTitle", { lng: "es" }),
+    );
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Property Detail renders not-found screen in Spanish", async () => {
+    await act(async () => { root = mount(<PropertyDetail />, container); });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Propiedad no encontrada");
+    expect(text).toContain("Volver a Propiedades");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Customer Detail renders not-found screen in Spanish", async () => {
+    await act(async () => { root = mount(<CustomerDetail />, container); });
+    const text = container.textContent ?? "";
+    expect(text).toContain("Cliente no encontrado");
+    expect(text).toContain("Volver a Clientes");
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Property Detail renders body content in Spanish when seeded", async () => {
+    const fixtureProperty = {
+      id: "pd-fixture",
+      customerId: "",
+      name: "Fixture House",
+      address: "1 Main St",
+      city: "Madison",
+      state: "WI",
+      zip: "53703",
+      totalBeds: 0,
+      monthlyRent: 0,
+      chargePerBed: 0,
+      status: "Active",
+      landlordName: "",
+      landlordEmail: "",
+      landlordPhone: "",
+      paymentMethod: "ACH",
+      paymentRecipient: "",
+      paymentDueDay: 1,
+      paymentNotes: "",
+      bankName: "",
+      bankRouting: "",
+      bankAccount: "",
+      portalUrl: "",
+      notes: "",
+      furnishings: [] as string[],
+    };
+    emptyStore.properties.push(fixtureProperty as never);
+    wouterParams.current = { id: "pd-fixture" };
+    try {
+      await act(async () => { root = mount(<PropertyDetail />, container); });
+      const text = container.textContent ?? "";
+      // Tabs
+      expect(text).toContain("Información");
+      expect(text).toContain("Contratos");
+      expect(text).toContain("Camas");
+      expect(text).toContain("Mobiliario");
+      expect(text).toContain("Finanzas");
+      // Stat cards
+      expect(text).toContain("Camas totales");
+      expect(text).toContain("Ocupadas");
+      expect(text).toContain("Disponibles");
+      expect(text).toContain("Ingresos mensuales");
+      // Property Details card
+      expect(text).toContain("Detalles de la propiedad");
+      expect(text).toContain("Nombre de la propiedad");
+      expect(text).toContain("Dirección");
+      expect(text).toContain("Ciudad");
+      expect(text).toContain("Notas");
+      // Payment Details card
+      expect(text).toContain("Detalles de pago");
+      expect(text).toContain("Método de pago");
+      expect(text).toContain("Núm. de ruta");
+      // Bed Occupancy card (BedMap)
+      expect(text).toContain("Ocupación de camas");
+      // Ratings card (renders on Info tab)
+      expect(text).toContain("Calificaciones");
+      expect(text).toContain("Aún sin calificaciones");
+      expect(text).toContain("Limpieza");
+      expect(text).toContain("Comodidades");
+      // No English leaks for the strings translated by this task
+      expect(text).not.toContain("No ratings yet");
+      expect(text).not.toContain(">Overall<");
+      expect(text).not.toContain(">Landlord<");
+      expect(text).not.toContain(">Cleanliness<");
+      expect(text).not.toContain(">Amenities<");
+      expect(text).not.toContain(">Occupants<");
+      expect(text).not.toContain("Value for Money");
+      expect(text).not.toContain("Total Beds");
+      expect(text).not.toContain("Property Details");
+      expect(text).not.toContain("Property Name");
+      expect(text).not.toContain("Payment Details");
+      expect(text).not.toContain("Payment Method");
+      expect(text).not.toContain("Routing #");
+      expect(text).not.toContain("Account #");
+      expect(text).not.toContain("Bed Occupancy");
+      // Property type / billing frequency / violation category labels
+      // translate to ES (bundle-level guards — these dropdown options
+      // and per-row badges live in tabs not visible on the default Info
+      // mount, but we still need to guarantee the keys resolve).
+      expect(i18n.t("common.propertyTypes.Town house")).toBe("Casa adosada");
+      expect(i18n.t("common.propertyTypes.Apartment")).toBe("Apartamento");
+      expect(i18n.t("common.propertyTypes.Motel")).toBe("Motel");
+      expect(i18n.t("common.billingFrequencies.Weekly")).toBe("Semanal");
+      expect(i18n.t("common.billingFrequencies.Biweekly")).toBe("Quincenal");
+      expect(i18n.t("common.billingFrequencies.Monthly")).toBe("Mensual");
+      expect(i18n.t("common.violationCategories.smoking")).toBe("Fumar");
+      expect(i18n.t("common.violationCategories.parking")).toBe(
+        "Estacionamiento",
+      );
+      expect(i18n.t("common.violationCategories.noise")).toBe("Ruido");
+      expect(i18n.t("common.violationCategories.cleanliness")).toBe(
+        "Limpieza",
+      );
+      expect(spanishMissingKeys()).toEqual([]);
+    } finally {
+      emptyStore.properties.length = 0;
+      wouterParams.current = {};
+    }
+  });
+
+  it("Customer Detail renders body content in Spanish when seeded", async () => {
+    const fixtureCustomer = {
+      id: "cd-fixture",
+      name: "Fixture Co",
+      contactName: "",
+      email: "",
+      phone: "",
+      notes: "",
+      state: "WI",
+      customShifts: [] as string[],
+      noHousingReason: null,
+    };
+    emptyStore.customers.push(fixtureCustomer as never);
+    wouterParams.current = { id: "cd-fixture" };
+    try {
+      await act(async () => { root = mount(<CustomerDetail />, container); });
+      const text = container.textContent ?? "";
+      // Header + breadcrumb
+      expect(text).toContain("Clientes");
+      // Stat cards (Spanish)
+      expect(text).toContain("Propiedades");
+      expect(text).toContain("Camas");
+      expect(text).toContain("Ocupación");
+      expect(text).toContain("Ingresos mensuales");
+      expect(text).toContain("en todas las propiedades");
+      // Customer-paid rent section
+      expect(text).toContain("Renta mensual pagada por el cliente");
+      expect(text).toContain("Ningún contrato está marcado");
+      // Revenue trend
+      expect(text).toContain("Tendencia de ingresos");
+      // Contact card
+      expect(text).toContain("Contacto");
+      expect(text).toContain("Contacto principal");
+      expect(text).toContain("Correo");
+      expect(text).toContain("Teléfono");
+      expect(text).toContain("Notas");
+      expect(text).toContain("Este cliente aún no tiene propiedades.");
+      // No English leaks for the body strings
+      expect(text).not.toContain("Highest occupancy");
+      expect(text).not.toContain("Monthly Revenue");
+      expect(text).not.toContain("Customer-paid monthly rent");
+      expect(text).not.toContain("No leases are currently flagged");
+      expect(text).not.toContain("Revenue Trend");
+      expect(text).not.toContain("This customer has no properties yet");
+      expect(text).not.toContain(">Contact<");
+      expect(text).not.toContain("Primary contact");
+      expect(text).not.toContain(">Email<");
+      expect(text).not.toContain(">Phone<");
+      expect(text).not.toContain(">Notes<");
+      expect(spanishMissingKeys()).toEqual([]);
+    } finally {
+      emptyStore.customers.length = 0;
+      wouterParams.current = {};
+    }
   });
 
   it("Settings renders header and the digest-recipients card in Spanish", async () => {
@@ -454,7 +865,161 @@ describe("Spanish-language end-to-end coverage", () => {
     expect(text).toContain("Destinatarios del resumen semanal de contratos");
     expect(text).toContain("Estos correos reciben el resumen semanal");
     expect(text).toContain("Añadir");
+    expect(text).toContain("Aún no hay destinatarios");
+    expect(text).not.toContain("No recipients configured yet");
+    expect(text).not.toContain("Loading recipients");
+
+    // Bundle-level guards for the remove-recipient confirm dialog
+    // (only visible when a delete is in-flight).
+    expect(i18n.t("pages.settings.removeTitle")).toBe("¿Eliminar destinatario?");
+    expect(i18n.t("pages.settings.cancel")).toBe("Cancelar");
+    expect(i18n.t("pages.settings.remove")).toBe("Eliminar");
 
     expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Leases bundle has Spanish copy for filter chrome and dialogs", () => {
+    expect(i18n.t("pages.leases.filteredByCustomer")).toBe(
+      "Filtrado por cliente:",
+    );
+    expect(i18n.t("pages.leases.missingDates")).toBe("Sin fechas");
+    expect(i18n.t("pages.leases.hotelRateAtRisk")).toBe(
+      "Tarifa hotel en riesgo este mes",
+    );
+    expect(i18n.t("pages.leases.clearAtRiskFilter")).toBe(
+      "Quitar filtro de en riesgo",
+    );
+  });
+
+  it("Properties bundle has Spanish copy for filters and dialog", () => {
+    expect(i18n.t("pages.properties.allCustomers")).toBe("Todos los clientes");
+    expect(i18n.t("pages.properties.allStatuses")).toBe("Todos los estados");
+    expect(i18n.t("pages.properties.statusActive")).toBe("Activa");
+    expect(i18n.t("pages.properties.statusInactive")).toBe("Inactiva");
+    expect(i18n.t("pages.properties.dialog.cancel")).toBe("Cancelar");
+    expect(i18n.t("pages.properties.dialog.addAction")).toBe(
+      "Agregar propiedad",
+    );
+    expect(i18n.t("pages.properties.viewLabel")).toBe("Vista de propiedades");
+    expect(i18n.t("pages.properties.tableView")).toBe("Tabla");
+    expect(i18n.t("pages.properties.mapView")).toBe("Mapa");
+    expect(i18n.t("pages.properties.downloadCsv")).toBe("Descargar CSV");
+    expect(i18n.t("pages.properties.addressReview.title")).toBe(
+      "Direcciones que Google no puede ubicar",
+    );
+    expect(i18n.t("pages.properties.addressReview.retryAll")).toBe(
+      "Reintentar todo",
+    );
+    expect(i18n.t("pages.properties.addressReview.dismiss")).toBe("Descartar");
+    expect(i18n.t("pages.properties.addressReview.undo")).toBe("Deshacer");
+    expect(i18n.t("pages.properties.addressReview.retry")).toBe("Reintentar");
+    expect(
+      i18n.t("pages.properties.addressReview.retryingProgress", {
+        done: 2,
+        total: 5,
+      }),
+    ).toBe("Reintentando 2 de 5…");
+  });
+
+  it("Customers bundle has Spanish copy for delete dialog and dialog footer", () => {
+    expect(i18n.t("pages.customers.dialog.cancel")).toBe("Cancelar");
+    expect(i18n.t("pages.customers.dialog.saveChanges")).toBe(
+      "Guardar cambios",
+    );
+    expect(i18n.t("pages.customers.dialog.addAction")).toBe("Agregar cliente");
+    expect(i18n.t("pages.customers.highestOccupancy")).toBe("Mayor ocupación");
+    expect(i18n.t("pages.customers.highestRevenue")).toBe(
+      "Mayores ingresos mensuales",
+    );
+    expect(
+      i18n.t("pages.customers.bedsOccupied", { occupied: 3, total: 8 }),
+    ).toBe("3/8 camas ocupadas");
+    expect(i18n.t("pages.customers.perMoAcrossAll")).toBe(
+      "/mes en todas las propiedades",
+    );
+    expect(
+      i18n.t("pages.customers.countOfTotal", {
+        shown: 1,
+        total: 4,
+        count: 4,
+      }),
+    ).toBe("1 de 4 clientes");
+    expect(i18n.t("pages.customers.table.properties")).toBe("Propiedades");
+    expect(i18n.t("pages.customers.table.beds")).toBe("Camas");
+    expect(i18n.t("pages.customers.table.revenuePerMo")).toBe("Ingresos / mes");
+    expect(i18n.t("pages.customers.table.noHousingReason")).toBe(
+      "Sin vivienda / Motivo",
+    );
+    expect(i18n.t("pages.customers.table.actions")).toBe("Acciones");
+    expect(
+      i18n.t("pages.customers.cantDeleteTooltip", { name: "Acme", count: 2 }),
+    ).toContain("No se puede eliminar");
+    expect(i18n.t("pages.customers.dialog.editTitle")).toBe("Editar cliente");
+    expect(i18n.t("pages.customers.dialog.addTitle")).toBe("Agregar cliente");
+    expect(i18n.t("pages.customers.dialog.companyName")).toBe(
+      "Nombre de la empresa *",
+    );
+    expect(i18n.t("pages.customers.dialog.primaryContact")).toBe(
+      "Contacto principal",
+    );
+    expect(i18n.t("pages.customers.dialog.phone")).toBe("Teléfono");
+    expect(i18n.t("pages.customers.dialog.state")).toBe("Estado");
+    expect(i18n.t("pages.customers.dialog.notes")).toBe("Notas");
+    expect(i18n.t("pages.customers.noHousingBadge")).toBe("Sin vivienda");
+    expect(
+      i18n.t("pages.customers.rowActions.viewAria", { name: "Acme" }),
+    ).toBe("Ver Acme");
+    expect(
+      i18n.t("pages.customers.rowActions.editAria", { name: "Acme" }),
+    ).toBe("Editar Acme");
+    expect(i18n.t("pages.customers.rowActions.viewProperties")).toBe(
+      "Ver propiedades",
+    );
+    expect(i18n.t("pages.customers.rowActions.viewLeases")).toBe(
+      "Ver contratos",
+    );
+    expect(i18n.t("pages.customers.rowActions.viewUtilities")).toBe(
+      "Ver servicios",
+    );
+    expect(i18n.t("pages.customerDetail.customerPaidTitle")).toBe(
+      "Renta mensual pagada por el cliente",
+    );
+    expect(i18n.t("pages.customerDetail.revenueTrend")).toBe(
+      "Tendencia de ingresos",
+    );
+    expect(i18n.t("pages.customerDetail.contact")).toBe("Contacto");
+    expect(
+      i18n.t("pages.customerDetail.headerSummary", {
+        propertyCount: 2,
+        bedCount: 5,
+        count: 2,
+      }),
+    ).toBe("2 propiedades · 5 camas");
+    expect(i18n.t("pages.properties.table.leaseRenewal")).toBe(
+      "Renovación de contrato",
+    );
+    expect(i18n.t("pages.properties.table.insurance")).toBe("Seguro");
+    expect(i18n.t("pages.properties.empty.tryClearing")).toBe(
+      "Intenta limpiar tu búsqueda o filtros de arriba.",
+    );
+    expect(i18n.t("pages.insurance.coverageStartPlaceholder")).toBe("inicio");
+    expect(i18n.t("pages.insurance.coverageEndPlaceholder")).toBe("fin");
+    expect(i18n.t("pages.customers.deleteDialog.title")).toBe(
+      "¿Eliminar este cliente?",
+    );
+    expect(i18n.t("pages.customers.deleteDialog.confirmDelete")).toBe(
+      "Eliminar cliente",
+    );
+    expect(
+      i18n.t("pages.customers.deleteDialog.stillOwns", {
+        name: "Acme",
+        count: 1,
+      }),
+    ).toContain("Acme");
+    expect(
+      i18n.t("pages.customers.deleteDialog.permanentlyRemove", {
+        name: "Acme",
+      }),
+    ).toContain("Acme");
   });
 });

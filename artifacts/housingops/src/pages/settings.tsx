@@ -73,7 +73,7 @@ export default function Settings() {
           const msg =
             err && typeof err === "object" && "message" in err
               ? (err as { message: string }).message
-              : "Could not add recipient.";
+              : t("toasts.couldNotAddRecipient");
           toast({
             title: t("toasts.failedToAddTitle"),
             description: msg.includes("409")
@@ -129,7 +129,7 @@ export default function Settings() {
             <div className="flex gap-2">
               <Input
                 type="email"
-                placeholder="operator@example.com"
+                placeholder={t("pages.settings.emailPlaceholder")}
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 onKeyDown={(e) => {
@@ -155,19 +155,18 @@ export default function Settings() {
             {isLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Loading recipients…
+                {t("pages.settings.loadingRecipients")}
               </div>
             ) : !recipients || recipients.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm">
-                No recipients configured yet. Add an email above to get
-                started.
+                {t("pages.settings.noRecipients")}
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead className="w-20 text-right">Actions</TableHead>
+                    <TableHead>{t("pages.settings.tableEmail")}</TableHead>
+                    <TableHead className="w-20 text-right">{t("pages.settings.tableActions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -201,19 +200,18 @@ export default function Settings() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove recipient?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.settings.removeTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletingRecipient?.email ?? "This recipient"} will no longer
-              receive the weekly lease-expiry digest.
+              {t("pages.settings.removeDescription", { email: deletingRecipient?.email ?? t("pages.settings.removeFallbackEmail") })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("pages.settings.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Remove
+              {t("pages.settings.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

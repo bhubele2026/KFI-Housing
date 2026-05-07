@@ -182,7 +182,7 @@ export default function InsuranceCertificates() {
                 data-testid="button-download-certificates-csv"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Download CSV
+                {t("pages.insurance.downloadCsv")}
               </Button>
               <AddCertificateDialog
                 properties={properties}
@@ -207,12 +207,12 @@ export default function InsuranceCertificates() {
             {activeCustomerName && (
               <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
                 <Briefcase className="h-3 w-3" />
-                Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.insurance.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
                 <button
                   type="button"
                   onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear customer filter"
+                  aria-label={t("pages.insurance.clearCustomerFilter")}
                   data-testid="button-clear-customer-filter"
                 >
                   <X className="h-3 w-3" />
@@ -222,12 +222,12 @@ export default function InsuranceCertificates() {
             {activePropertyName && (
               <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-property-filter">
                 <Home className="h-3 w-3" />
-                Filtered by property: <span className="font-semibold">{activePropertyName}</span>
+                {t("pages.insurance.filteredByProperty")} <span className="font-semibold">{activePropertyName}</span>
                 <button
                   type="button"
                   onClick={() => setPropertyFilter(ALL_PROPERTIES)}
                   className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                  aria-label="Clear property filter"
+                  aria-label={t("pages.insurance.clearPropertyFilter")}
                   data-testid="button-clear-property-filter"
                 >
                   <X className="h-3 w-3" />
@@ -247,7 +247,7 @@ export default function InsuranceCertificates() {
                 <div className="p-1.5 rounded-md bg-amber-100">
                   <AlertTriangle className="h-4 w-4 text-amber-700" />
                 </div>
-                <h2 className="text-base font-semibold">Coverage Alerts</h2>
+                <h2 className="text-base font-semibold">{t("pages.insurance.coverageAlerts")}</h2>
               </div>
               <div className="flex flex-wrap gap-3 text-sm">
                 {expiredCount > 0 && (
@@ -257,7 +257,7 @@ export default function InsuranceCertificates() {
                     className="text-red-700 hover:underline font-medium"
                     data-testid="link-expired-count"
                   >
-                    {expiredCount} expired
+                    {t("pages.insurance.expiredCount", { count: expiredCount })}
                   </button>
                 )}
                 {expiringCount > 0 && (
@@ -267,7 +267,7 @@ export default function InsuranceCertificates() {
                     className="text-amber-700 hover:underline font-medium"
                     data-testid="link-expiring-count"
                   >
-                    {expiringCount} expiring within 30 days
+                    {t("pages.insurance.expiringWithin30", { count: expiringCount })}
                   </button>
                 )}
               </div>
@@ -284,11 +284,11 @@ export default function InsuranceCertificates() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All">All Statuses ({enriched.length})</SelectItem>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="Expiring">Expiring Soon</SelectItem>
-              <SelectItem value="Expired">Expired</SelectItem>
-              <SelectItem value="NoDates">No Dates</SelectItem>
+              <SelectItem value="All">{t("pages.insurance.allStatusesCount", { count: enriched.length })}</SelectItem>
+              <SelectItem value="Active">{t("pages.insurance.statusActive")}</SelectItem>
+              <SelectItem value="Expiring">{t("pages.insurance.statusExpiring")}</SelectItem>
+              <SelectItem value="Expired">{t("pages.insurance.statusExpired")}</SelectItem>
+              <SelectItem value="NoDates">{t("pages.insurance.statusNoDates")}</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -299,14 +299,14 @@ export default function InsuranceCertificates() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL_PROPERTIES}>All Properties</SelectItem>
+              <SelectItem value={ALL_PROPERTIES}>{t("pages.insurance.allProperties")}</SelectItem>
               {propertiesWithCerts.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <span className="text-sm text-muted-foreground">
-            {sorted.length} certificate{sorted.length !== 1 ? "s" : ""}
+            {t("pages.insurance.certificatesCount", { count: sorted.length })}
           </span>
         </div>
 
@@ -320,27 +320,27 @@ export default function InsuranceCertificates() {
                     onClick={() => toggleSort("property")}
                     data-testid="th-property"
                   >
-                    Property{sortIndicator("property")}
+                    {t("pages.insurance.table.property")}{sortIndicator("property")}
                   </TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => toggleSort("carrier")}
                     data-testid="th-carrier"
                   >
-                    Carrier{sortIndicator("carrier")}
+                    {t("pages.insurance.table.carrier")}{sortIndicator("carrier")}
                   </TableHead>
-                  <TableHead>Policy #</TableHead>
-                  <TableHead>Insured</TableHead>
+                  <TableHead>{t("pages.insurance.table.policy")}</TableHead>
+                  <TableHead>{t("pages.insurance.table.insured")}</TableHead>
                   <TableHead
                     className="cursor-pointer select-none hover:text-foreground"
                     onClick={() => toggleSort("coverageEnd")}
                     data-testid="th-coverage-end"
                   >
-                    Coverage{sortIndicator("coverageEnd")}
+                    {t("pages.insurance.table.coverage")}{sortIndicator("coverageEnd")}
                   </TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Document</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>{t("pages.insurance.table.status")}</TableHead>
+                  <TableHead>{t("pages.insurance.table.document")}</TableHead>
+                  <TableHead>{t("pages.insurance.table.notes")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -349,8 +349,8 @@ export default function InsuranceCertificates() {
                   <EmptyStateRow
                     colSpan={9}
                     icon={ShieldCheck}
-                    title="No insurance certificates"
-                    description="Add a certificate to start tracking coverage across your properties."
+                    title={t("pages.insurance.empty.noCertificatesTitle")}
+                    description={t("pages.insurance.empty.noCertificatesDescription")}
                     testId="empty-certificates"
                     action={
                       <AddCertificateDialog
@@ -365,7 +365,7 @@ export default function InsuranceCertificates() {
                         }}
                         trigger={
                           <Button size="sm" data-testid="button-add-certificate-empty">
-                            <ShieldCheck className="h-4 w-4 mr-1.5" />Add Certificate
+                            <ShieldCheck className="h-4 w-4 mr-1.5" />{t("pages.insurance.addCertificate")}
                           </Button>
                         }
                       />
@@ -395,7 +395,7 @@ export default function InsuranceCertificates() {
                             {property.name}
                           </button>
                         ) : (
-                          <span className="text-muted-foreground text-sm">Unknown property</span>
+                          <span className="text-muted-foreground text-sm">{t("pages.insurance.unknownProperty")}</span>
                         )}
                         {property && customerById.get(property.customerId) && (
                           <p className="text-xs text-muted-foreground mt-0.5">
@@ -407,7 +407,7 @@ export default function InsuranceCertificates() {
                         <InlineEdit
                           value={c.carrier}
                           onSave={(v) => updateInsuranceCertificate(c.id, { carrier: v })}
-                          placeholder="Add carrier"
+                          placeholder={t("pages.insurance.addCarrier")}
                           testId={`edit-carrier-${c.id}`}
                         />
                       </TableCell>
@@ -415,7 +415,7 @@ export default function InsuranceCertificates() {
                         <InlineEdit
                           value={c.policyNumber}
                           onSave={(v) => updateInsuranceCertificate(c.id, { policyNumber: v })}
-                          placeholder="Add policy #"
+                          placeholder={t("pages.insurance.addPolicy")}
                           displayClassName="font-mono"
                           testId={`edit-policy-${c.id}`}
                         />
@@ -424,7 +424,7 @@ export default function InsuranceCertificates() {
                         <InlineEdit
                           value={c.insuredName}
                           onSave={(v) => updateInsuranceCertificate(c.id, { insuredName: v })}
-                          placeholder="Add insured"
+                          placeholder={t("pages.insurance.addInsured")}
                           testId={`edit-insured-${c.id}`}
                         />
                       </TableCell>
@@ -434,7 +434,7 @@ export default function InsuranceCertificates() {
                             value={c.coverageStart}
                             type="date"
                             onSave={(v) => updateInsuranceCertificate(c.id, { coverageStart: v })}
-                            placeholder="start"
+                            placeholder={t("pages.insurance.coverageStartPlaceholder")}
                             testId={`edit-start-${c.id}`}
                           />
                           <span className="text-muted-foreground">→</span>
@@ -442,7 +442,7 @@ export default function InsuranceCertificates() {
                             value={c.coverageEnd}
                             type="date"
                             onSave={(v) => updateInsuranceCertificate(c.id, { coverageEnd: v })}
-                            placeholder="end"
+                            placeholder={t("pages.insurance.coverageEndPlaceholder")}
                             testId={`edit-end-${c.id}`}
                           />
                         </div>
@@ -454,7 +454,7 @@ export default function InsuranceCertificates() {
                             className="bg-red-100 text-red-800 border-red-200"
                             data-testid={`badge-certificate-${c.id}-expired`}
                           >
-                            Expired {Math.abs(days!)}d ago
+                            {t("pages.insurance.expiredAgo", { days: Math.abs(days!) })}
                           </Badge>
                         ) : expiringSoon ? (
                           <Badge
@@ -462,7 +462,7 @@ export default function InsuranceCertificates() {
                             className="bg-amber-100 text-amber-800 border-amber-200"
                             data-testid={`badge-certificate-${c.id}-expiring`}
                           >
-                            Expiring · {days}d
+                            {t("pages.insurance.expiringDays", { days })}
                           </Badge>
                         ) : days !== null ? (
                           <Badge
@@ -470,7 +470,7 @@ export default function InsuranceCertificates() {
                             className="bg-emerald-50 text-emerald-700 border-emerald-200"
                             data-testid={`badge-certificate-${c.id}-active`}
                           >
-                            Active · {days}d left
+                            {t("pages.insurance.activeDaysLeft", { days })}
                           </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -486,32 +486,32 @@ export default function InsuranceCertificates() {
                               className="text-primary hover:underline text-sm inline-flex items-center gap-1"
                               data-testid={`link-certificate-${c.id}-doc`}
                             >
-                              <FileText className="h-3.5 w-3.5" />View PDF
+                              <FileText className="h-3.5 w-3.5" />{t("pages.insurance.viewPdf")}
                             </a>
-                            <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Replace" />
+                            <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label={t("pages.insurance.replaceLabel")} />
                           </div>
                         ) : (
-                          <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label="Upload" />
+                          <CertUploadButton certId={c.id} onUploaded={(url) => updateInsuranceCertificate(c.id, { documentUrl: url })} label={t("pages.insurance.uploadLabel")} />
                         )}
                       </TableCell>
                       <TableCell>
                         <InlineEdit
                           value={c.notes || ""}
                           onSave={(v) => updateInsuranceCertificate(c.id, { notes: v })}
-                          placeholder="Add notes"
+                          placeholder={t("pages.insurance.addNotes")}
                           testId={`edit-notes-${c.id}`}
                         />
                       </TableCell>
                       <TableCell>
                         <ConfirmDeleteButton
-                          title="Delete this certificate?"
+                          title={t("pages.insurance.deleteTitle")}
                           description={
                             <>
-                              Remove the{" "}
+                              {t("pages.insurance.deleteDescriptionPrefix")}
                               <span className="font-medium text-foreground">
-                                {c.carrier || "insurance"}
-                              </span>{" "}
-                              certificate. You can't undo this.
+                                {c.carrier || t("pages.insurance.deleteDescriptionFallback")}
+                              </span>
+                              {t("pages.insurance.deleteDescriptionSuffix")}
                             </>
                           }
                           onConfirm={() => deleteInsuranceCertificate(c.id)}

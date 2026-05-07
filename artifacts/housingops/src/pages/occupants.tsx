@@ -221,7 +221,7 @@ export default function Occupants() {
                 data-testid="button-download-occupants-csv"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Download CSV
+                {t("pages.occupants.downloadCsv")}
               </Button>
               <Button
                 asChild
@@ -229,13 +229,13 @@ export default function Occupants() {
                 data-testid="button-add-occupant"
                 title={
                   properties.length === 0
-                    ? "Add a property first — occupants are assigned to beds inside a property."
-                    : "Open a property to assign an occupant to one of its beds."
+                    ? t("pages.occupants.addPropertyFirstTooltip")
+                    : t("pages.occupants.addOccupantTooltip")
                 }
               >
                 <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
                   <UserPlus className="mr-2 h-4 w-4" />
-                  Add Occupant
+                  {t("pages.occupants.addOccupant")}
                 </Link>
               </Button>
             </>
@@ -248,7 +248,7 @@ export default function Occupants() {
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search occupants..."
+                  placeholder={t("pages.occupants.searchPlaceholder")}
                   className="pl-9"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -256,10 +256,10 @@ export default function Occupants() {
               </div>
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
                 <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Property" />
+                  <SelectValue placeholder={t("pages.occupants.propertyPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Properties</SelectItem>
+                  <SelectItem value="All">{t("pages.occupants.allProperties")}</SelectItem>
                   {properties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{shortPropertyName(p.name)}</SelectItem>
                   ))}
@@ -267,12 +267,12 @@ export default function Occupants() {
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t("pages.occupants.statusPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Former">Former</SelectItem>
+                  <SelectItem value="All">{t("pages.occupants.allStatuses")}</SelectItem>
+                  <SelectItem value="Active">{t("pages.occupants.statusActive")}</SelectItem>
+                  <SelectItem value="Former">{t("pages.occupants.statusFormer")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -283,16 +283,16 @@ export default function Occupants() {
                   className="w-full sm:w-44"
                   data-testid="select-shift-filter"
                 >
-                  <SelectValue placeholder="Shift" />
+                  <SelectValue placeholder={t("pages.occupants.shiftPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Shifts</SelectItem>
+                  <SelectItem value="All">{t("pages.occupants.allShifts")}</SelectItem>
                   {shiftFilterOptions.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s} ({shiftCounts[s] ?? 0})
                     </SelectItem>
                   ))}
-                  <SelectItem value="Unassigned">Unassigned ({shiftCounts.Unassigned})</SelectItem>
+                  <SelectItem value="Unassigned">{t("pages.occupants.shiftUnassigned")} ({shiftCounts.Unassigned})</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -303,11 +303,11 @@ export default function Occupants() {
                   className="w-full sm:w-44"
                   data-testid="select-move-in-filter"
                 >
-                  <SelectValue placeholder="Move-in" />
+                  <SelectValue placeholder={t("pages.occupants.moveInPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Move-ins</SelectItem>
-                  <SelectItem value="NeedsReview">Needs review</SelectItem>
+                  <SelectItem value="All">{t("pages.occupants.allMoveIns")}</SelectItem>
+                  <SelectItem value="NeedsReview">{t("pages.occupants.needsReview")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -318,12 +318,12 @@ export default function Occupants() {
                   className="w-full sm:w-44"
                   data-testid="select-charge-source-filter"
                 >
-                  <SelectValue placeholder="Charge source" />
+                  <SelectValue placeholder={t("pages.occupants.chargeSourcePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Sources</SelectItem>
-                  <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="payroll">Payroll</SelectItem>
+                  <SelectItem value="All">{t("pages.occupants.allSources")}</SelectItem>
+                  <SelectItem value="manual">{t("pages.occupants.sourceManual")}</SelectItem>
+                  <SelectItem value="payroll">{t("pages.occupants.sourcePayroll")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -331,15 +331,15 @@ export default function Occupants() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Property</TableHead>
-                  <TableHead>Bed</TableHead>
-                  <TableHead>Move In</TableHead>
-                  <TableHead>Shift</TableHead>
-                  <TableHead className="text-right">Weekly Deduction</TableHead>
-                  <TableHead className="text-right">Monthly Equivalent</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead>{t("pages.occupants.table.name")}</TableHead>
+                  <TableHead>{t("pages.occupants.table.title")}</TableHead>
+                  <TableHead>{t("pages.occupants.table.property")}</TableHead>
+                  <TableHead>{t("pages.occupants.table.bed")}</TableHead>
+                  <TableHead>{t("pages.occupants.table.moveIn")}</TableHead>
+                  <TableHead>{t("pages.occupants.table.shift")}</TableHead>
+                  <TableHead className="text-right">{t("pages.occupants.table.weeklyDeduction")}</TableHead>
+                  <TableHead className="text-right">{t("pages.occupants.table.monthlyEquivalent")}</TableHead>
+                  <TableHead className="text-center">{t("pages.occupants.table.status")}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -350,17 +350,17 @@ export default function Occupants() {
                   <EmptyStateRow
                     colSpan={10}
                     icon={Users}
-                    title="No occupants found"
+                    title={t("pages.occupants.empty.noOccupantsFound")}
                     description={
                       occupants.length === 0
-                        ? "Assign your first occupant to a bed to see them here."
-                        : "Try clearing your search or filters above."
+                        ? t("pages.occupants.empty.noOccupantsDescription")
+                        : t("pages.occupants.empty.noMatchDescription")
                     }
                     action={
                       occupants.length === 0 ? (
                         <Button asChild data-testid="button-empty-occupants-cta">
                           <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
-                            {properties.length === 0 ? "Add Property" : "Assign Occupant"}
+                            {properties.length === 0 ? t("pages.occupants.empty.addProperty") : t("pages.occupants.empty.assignOccupant")}
                           </Link>
                         </Button>
                       ) : undefined
@@ -382,7 +382,7 @@ export default function Occupants() {
                                 variant="secondary"
                                 className="font-normal text-xs"
                                 data-testid={`badge-occupant-language-${occupant.id}`}
-                                title={`Language: ${occupant.language}`}
+                                title={t("pages.occupants.languageBadgeTitle", { lang: occupant.language })}
                               >
                                 {occupant.language}
                               </Badge>
@@ -397,7 +397,7 @@ export default function Occupants() {
                           )}
                         </TableCell>
                         <TableCell>{property ? <PropertyNameCell name={property.name} /> : <span className="italic text-muted-foreground">—</span>}</TableCell>
-                        <TableCell>{bed ? `Bed ${bed.bedNumber}` : "-"}</TableCell>
+                        <TableCell>{bed ? t("pages.occupants.bedNumberPrefix", { number: bed.bedNumber }) : "-"}</TableCell>
                         <TableCell>
                           {occupant.moveInDate ? (
                             occupant.moveInDate
@@ -408,12 +408,12 @@ export default function Occupants() {
                                 className="border-amber-500 text-amber-700 dark:text-amber-400"
                                 data-testid={`badge-move-in-needs-review-${occupant.id}`}
                               >
-                                Needs review
+                                {t("pages.occupants.needsReview")}
                               </Badge>
                               <Input
                                 type="date"
-                                aria-label={`Set move-in date for ${occupant.name}`}
-                                title="Set a move-in date"
+                                aria-label={t("pages.occupants.setMoveInDateAria", { name: occupant.name })}
+                                title={t("pages.occupants.setMoveInDateTitle")}
                                 className="h-7 w-36 text-xs"
                                 data-testid={`input-move-in-date-${occupant.id}`}
                                 onChange={(e) => {
@@ -433,7 +433,7 @@ export default function Occupants() {
                         </TableCell>
                         <TableCell data-testid={`cell-occupant-shift-${occupant.id}`}>
                           {occupant.shift ? (
-                            <Badge variant="outline" className="font-normal">{occupant.shift} shift</Badge>
+                            <Badge variant="outline" className="font-normal">{t("pages.occupants.shiftSuffix", { shift: occupant.shift })}</Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -452,7 +452,7 @@ export default function Occupants() {
                         <TableCell
                           className="text-right tabular-nums text-muted-foreground"
                           data-testid={`cell-occupant-monthly-${occupant.id}`}
-                          title="Monthly equivalent = weekly × 52 / 12"
+                          title={t("pages.occupants.monthlyEquivalentTitle")}
                         >
                           {formatUsd(
                             toMonthlyCharge(
@@ -463,13 +463,13 @@ export default function Occupants() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={occupant.status === "Active" ? "default" : "secondary"}>
-                            {occupant.status}
+                            {occupant.status === "Active" ? t("pages.occupants.statusActive") : t("pages.occupants.statusFormer")}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <ConfirmDeleteButton
-                            title={`Delete ${occupant.name}?`}
-                            description="This permanently removes the occupant record. Any bed currently assigned to them will be cleared. You can't undo this."
+                            title={t("pages.occupants.deleteOccupantConfirmTitle", { name: occupant.name })}
+                            description={t("pages.occupants.deleteOccupantConfirmDescription")}
                             onConfirm={() => deleteOccupant(occupant.id)}
                             testId={`dialog-confirm-delete-occupant-${occupant.id}`}
                             trigger={
@@ -478,7 +478,7 @@ export default function Occupants() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                                 data-testid={`button-delete-occupant-${occupant.id}`}
-                                title="Delete occupant"
+                                title={t("pages.occupants.deleteOccupantTitle")}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>

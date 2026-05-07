@@ -125,17 +125,17 @@ export default function Utilities() {
                 data-testid="text-utilities-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
-                Showing only <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.utilities.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
               </p>
             ) : null
           }
           actions={<>
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-customer-filter">
-                <SelectValue placeholder="Customer" />
+                <SelectValue placeholder={t("pages.utilities.customerPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>{t("pages.utilities.allCustomers")}</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -148,10 +148,10 @@ export default function Utilities() {
               data-testid="button-download-utilities-csv"
             >
               <Download className="mr-2 h-4 w-4" />
-              Download CSV
+              {t("pages.utilities.downloadCsv")}
             </Button>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Monthly</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.utilities.totalMonthly")}</p>
               {isLoading ? (
                 <Skeleton className="h-8 w-28 mt-1 ml-auto" />
               ) : (
@@ -165,12 +165,12 @@ export default function Utilities() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
               <Briefcase className="h-3 w-3" />
-              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              {t("pages.utilities.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
                 onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                aria-label="Clear customer filter"
+                aria-label={t("pages.utilities.clearCustomerFilter")}
                 data-testid="button-clear-customer-filter"
               >
                 <X className="h-3 w-3" />
@@ -184,10 +184,10 @@ export default function Utilities() {
             <div className="p-4 border-b flex flex-col sm:flex-row gap-3 items-center">
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
                 <SelectTrigger className="w-full sm:w-56" data-testid="select-utilities-property-filter">
-                  <SelectValue placeholder="All Properties" />
+                  <SelectValue placeholder={t("pages.utilities.propertyPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Properties</SelectItem>
+                  <SelectItem value="All">{t("pages.utilities.allProperties")}</SelectItem>
                   {availableProperties.map(p => (
                     <SelectItem key={p.id} value={p.id}>{shortPropertyName(p.name)}</SelectItem>
                   ))}
@@ -196,12 +196,12 @@ export default function Utilities() {
 
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-full sm:w-44">
-                  <SelectValue placeholder="All Types" />
+                  <SelectValue placeholder={t("pages.utilities.typePlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Types</SelectItem>
-                  {UTILITY_TYPES.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  <SelectItem value="All">{t("pages.utilities.allTypes")}</SelectItem>
+                  {UTILITY_TYPES.map(ut => (
+                    <SelectItem key={ut} value={ut}>{t(`common.utilityTypes.${ut}`)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -210,13 +210,13 @@ export default function Utilities() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property</TableHead>
-                  {showCustomerColumn && <TableHead>Customer</TableHead>}
-                  <TableHead>Type</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Account #</TableHead>
-                  <TableHead className="text-right">Monthly Cost</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>{t("pages.utilities.table.property")}</TableHead>
+                  {showCustomerColumn && <TableHead>{t("pages.utilities.table.customer")}</TableHead>}
+                  <TableHead>{t("pages.utilities.table.type")}</TableHead>
+                  <TableHead>{t("pages.utilities.table.company")}</TableHead>
+                  <TableHead>{t("pages.utilities.table.account")}</TableHead>
+                  <TableHead className="text-right">{t("pages.utilities.table.monthlyCost")}</TableHead>
+                  <TableHead>{t("pages.utilities.table.notes")}</TableHead>
                   <TableHead className="w-8" />
                 </TableRow>
               </TableHeader>
@@ -227,13 +227,13 @@ export default function Utilities() {
                   <EmptyStateRow
                     colSpan={columnCount}
                     icon={Zap}
-                    title="No utility services found"
-                    description="Utilities you add to a property will show up here."
+                    title={t("pages.utilities.empty.noUtilitiesFound")}
+                    description={t("pages.utilities.empty.noUtilitiesDescription")}
                     action={
                       utilities.length === 0 ? (
                         <Button asChild data-testid="button-empty-utilities-cta">
                           <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}?tab=utilities`}>
-                            {properties.length === 0 ? "Add Property" : "Add Utility"}
+                            {properties.length === 0 ? t("pages.utilities.empty.addProperty") : t("pages.utilities.empty.addUtility")}
                           </Link>
                         </Button>
                       ) : undefined
@@ -269,7 +269,7 @@ export default function Utilities() {
                                   }}
                                   className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                   data-testid={`button-filter-customer-${u.id}`}
-                                  aria-label={`Filter by customer ${customerName}`}
+                                  aria-label={t("pages.utilities.filterByCustomerAria", { customer: customerName })}
                                 >
                                   {customerName}
                                 </button>
@@ -281,7 +281,7 @@ export default function Utilities() {
                           <td className="p-4">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}>
                               <Zap className="h-3 w-3" />
-                              {u.type}
+                              {t(`common.utilityTypes.${u.type}`)}
                             </span>
                           </td>
                           <td className="p-4 text-sm">{u.company}</td>
@@ -296,9 +296,9 @@ export default function Utilities() {
                     })}
                     <tr className="bg-muted/40 border-t-2 border-border">
                       <td colSpan={showCustomerColumn ? 5 : 4} className="p-4 text-sm font-semibold text-right text-muted-foreground">
-                        {filtered.length} service{filtered.length !== 1 ? "s" : ""} total
+                        {t("pages.utilities.totalsRow", { count: filtered.length })}
                       </td>
-                      <td className="p-4 text-right font-bold">{formatUsd(totalMonthly)}/mo</td>
+                      <td className="p-4 text-right font-bold">{formatUsd(totalMonthly)}{t("pages.utilities.perMonthSuffix")}</td>
                       <td colSpan={2} />
                     </tr>
                   </>

@@ -128,17 +128,17 @@ export default function Beds() {
                 data-testid="text-beds-active-customer"
               >
                 <Briefcase className="h-3 w-3" />
-                Showing only <span className="font-semibold">{activeCustomerName}</span>
+                {t("pages.beds.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
               </p>
             ) : null
           }
           actions={<>
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>
               <SelectTrigger className="w-full sm:w-56" data-testid="select-beds-customer-filter">
-                <SelectValue placeholder="Customer" />
+                <SelectValue placeholder={t("pages.beds.customerPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                <SelectItem value={ALL_CUSTOMERS}>{t("pages.beds.allCustomers")}</SelectItem>
                 {customers.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
@@ -151,7 +151,7 @@ export default function Beds() {
               data-testid="button-download-beds-csv"
             >
               <Download className="mr-2 h-4 w-4" />
-              Download CSV
+              {t("pages.beds.downloadCsv")}
             </Button>
           </>}
         />
@@ -160,12 +160,12 @@ export default function Beds() {
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
               <Briefcase className="h-3 w-3" />
-              Filtered by customer: <span className="font-semibold">{activeCustomerName}</span>
+              {t("pages.beds.filteredByCustomer")} <span className="font-semibold">{activeCustomerName}</span>
               <button
                 type="button"
                 onClick={() => updateCustomerFilter(ALL_CUSTOMERS)}
                 className="ml-1 rounded-sm p-0.5 hover:bg-background/40"
-                aria-label="Clear customer filter"
+                aria-label={t("pages.beds.clearCustomerFilter")}
                 data-testid="button-clear-customer-filter"
               >
                 <X className="h-3 w-3" />
@@ -187,8 +187,8 @@ export default function Beds() {
             ) : (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="font-medium">Total Occupancy</span>
-                  <span className="text-muted-foreground">{occupiedCount} of {scopedBeds.length} beds occupied ({occupancyRate.toFixed(1)}%)</span>
+                  <span className="font-medium">{t("pages.beds.totalOccupancy")}</span>
+                  <span className="text-muted-foreground">{t("pages.beds.occupancySummary", { occupied: occupiedCount, total: scopedBeds.length, rate: occupancyRate.toFixed(1) })}</span>
                 </div>
                 <Progress value={occupancyRate} className="h-3" />
               </div>
@@ -201,10 +201,10 @@ export default function Beds() {
             <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center">
               <Select value={propertyFilter} onValueChange={setPropertyFilter}>
                 <SelectTrigger className="w-full sm:w-64" data-testid="select-beds-property-filter">
-                  <SelectValue placeholder="Property" />
+                  <SelectValue placeholder={t("pages.beds.propertyPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Properties</SelectItem>
+                  <SelectItem value="All">{t("pages.beds.allProperties")}</SelectItem>
                   {propertiesForFilter.map(p => (
                     <SelectItem key={p.id} value={p.id}>{shortPropertyName(p.name)}</SelectItem>
                   ))}
@@ -213,12 +213,12 @@ export default function Beds() {
               
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t("pages.beds.statusPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  <SelectItem value="Occupied">Occupied</SelectItem>
-                  <SelectItem value="Vacant">Vacant</SelectItem>
+                  <SelectItem value="All">{t("pages.beds.allStatuses")}</SelectItem>
+                  <SelectItem value="Occupied">{t("pages.beds.statusOccupied")}</SelectItem>
+                  <SelectItem value="Vacant">{t("pages.beds.statusVacant")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -226,12 +226,12 @@ export default function Beds() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Property</TableHead>
-                  {showCustomerColumn && <TableHead>Customer</TableHead>}
-                  <TableHead>Room</TableHead>
-                  <TableHead>Bed #</TableHead>
-                  <TableHead>Occupant</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead>{t("pages.beds.table.property")}</TableHead>
+                  {showCustomerColumn && <TableHead>{t("pages.beds.table.customer")}</TableHead>}
+                  <TableHead>{t("pages.beds.table.room")}</TableHead>
+                  <TableHead>{t("pages.beds.table.bedNumber")}</TableHead>
+                  <TableHead>{t("pages.beds.table.occupant")}</TableHead>
+                  <TableHead className="text-center">{t("pages.beds.table.status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,17 +241,17 @@ export default function Beds() {
                   <EmptyStateRow
                     colSpan={columnCount}
                     icon={BedDouble}
-                    title="No beds found"
+                    title={t("pages.beds.empty.noBedsFound")}
                     description={
                       beds.length === 0
-                        ? "Add a property and its rooms to start tracking beds."
-                        : "Try clearing your search or filters above."
+                        ? t("pages.beds.empty.noBedsDescription")
+                        : t("pages.beds.empty.noMatchDescription")
                     }
                     action={
                       beds.length === 0 ? (
                         <Button asChild data-testid="button-empty-beds-cta">
                           <Link href={properties.length === 0 ? "/properties" : `/properties/${properties[0].id}`}>
-                            {properties.length === 0 ? "Add Property" : "Add Beds"}
+                            {properties.length === 0 ? t("pages.beds.empty.addProperty") : t("pages.beds.empty.addBeds")}
                           </Link>
                         </Button>
                       ) : undefined
@@ -280,7 +280,7 @@ export default function Beds() {
                                 }}
                                 className="rounded-sm hover:underline hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 data-testid={`button-filter-customer-${bed.id}`}
-                                aria-label={`Filter by customer ${customerName}`}
+                                aria-label={t("pages.beds.filterByCustomerAria", { customer: customerName })}
                               >
                                 {customerName}
                               </button>
@@ -292,13 +292,13 @@ export default function Beds() {
                         <TableCell className="text-muted-foreground" data-testid={`text-bed-room-${bed.id}`}>
                           {roomById.get(bed.roomId) ?? "—"}
                         </TableCell>
-                        <TableCell>Bed {bed.bedNumber}</TableCell>
+                        <TableCell>{t("pages.beds.bedNumberPrefix", { number: bed.bedNumber })}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {occupant ? occupant.name : "-"}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={bed.status === "Occupied" ? "default" : "outline"} className={bed.status === "Vacant" ? "text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30" : ""}>
-                            {bed.status}
+                            {bed.status === "Occupied" ? t("pages.beds.statusOccupied") : t("pages.beds.statusVacant")}
                           </Badge>
                         </TableCell>
                       </TableRow>

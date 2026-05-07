@@ -57,14 +57,15 @@ const EMPTY_DRAFT: Customer = {
   noHousingReason: null,
 };
 
-const UNASSIGNED_STATE_LABEL = "Other / Unassigned";
+const UNASSIGNED_STATE_KEY = "__unassigned__";
 
 // Normalize whatever the importer / operator typed into a stable two-letter
-// bucket key. Empty / whitespace-only values fall through to the
-// "Other / Unassigned" bucket so we never render a blank section header.
+// bucket key. Empty / whitespace-only values fall through to a sentinel
+// bucket key so we never render a blank section header. The sentinel is
+// translated for display via `pages.customers.unassignedStateLabel`.
 function stateBucketKey(raw: string | undefined): string {
   const trimmed = (raw ?? "").trim().toUpperCase();
-  return trimmed === "" ? UNASSIGNED_STATE_LABEL : trimmed;
+  return trimmed === "" ? UNASSIGNED_STATE_KEY : trimmed;
 }
 
 export default function Customers() {
@@ -235,8 +236,8 @@ export default function Customers() {
     }
     return Array.from(buckets.entries())
       .sort(([a], [b]) => {
-        if (a === UNASSIGNED_STATE_LABEL) return 1;
-        if (b === UNASSIGNED_STATE_LABEL) return -1;
+        if (a === UNASSIGNED_STATE_KEY) return 1;
+        if (b === UNASSIGNED_STATE_KEY) return -1;
         return a.localeCompare(b);
       })
       .map(([state, rows]) => ({ state, rows }));
@@ -330,7 +331,7 @@ export default function Customers() {
       { header: "Monthly Revenue", value: (c) => statsByCustomer.get(c.id)?.monthlyRevenue ?? 0 },
       { header: "No Housing Reason", value: (c) => {
           if ((statsByCustomer.get(c.id)?.propertyCount ?? 0) > 0) return "";
-          return c.noHousingReason ? NO_HOUSING_REASON_LABELS[c.noHousingReason] : "";
+          return c.noHousingReason ? t(`common.noHousingReasons.${c.noHousingReason}`) : "";
         } },
       { header: "Notes",           value: (c) => c.notes },
     ]);
@@ -385,11 +386,11 @@ export default function Customers() {
                 data-testid="button-download-customers-csv"
               >
                 <Download className="mr-2 h-4 w-4" />
-                Download CSV
+                {t("pages.customers.downloadCsv")}
               </Button>
               <Button onClick={openAdd} data-testid="button-add-customer">
                 <Plus className="mr-2 h-4 w-4" />
-                Add Customer
+                {t("pages.customers.addCustomer")}
               </Button>
             </>
           }
@@ -407,11 +408,11 @@ export default function Customers() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                        Highest occupancy
+                        {t("pages.customers.highestOccupancy")}
                       </p>
                       <p className="text-lg font-semibold">{topCustomers.topOccupancy.customer.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {topCustomers.topOccupancy.occupied}/{topCustomers.topOccupancy.total} beds occupied
+                        {t("pages.customers.bedsOccupied", { occupied: topCustomers.topOccupancy.occupied, total: topCustomers.topOccupancy.total })}
                         {" · "}
                         <span className="font-medium text-foreground">
                           {topCustomers.topOccupancy.pct.toFixed(0)}%
@@ -431,14 +432,14 @@ export default function Customers() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                        Highest monthly revenue
+                        {t("pages.customers.highestRevenue")}
                       </p>
                       <p className="text-lg font-semibold">{topCustomers.topRevenue.customer.name}</p>
                       <p className="text-sm text-muted-foreground">
                         <span className="font-medium text-foreground">
                           {formatUsd(topCustomers.topRevenue.revenue)}
                         </span>
-                        /mo across all properties
+                        {t("pages.customers.perMoAcrossAll")}
                       </p>
                     </div>
                     <div className="p-2 rounded-md bg-primary/10 text-primary">
@@ -457,7 +458,7 @@ export default function Customers() {
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search customers..."
+                  placeholder={t("pages.customers.searchPlaceholder")}
                   className="pl-9"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -465,17 +466,17 @@ export default function Customers() {
                 />
               </div>
               <span className="text-xs text-muted-foreground">
-                {filtered.length} of {customers.length} customer{customers.length === 1 ? "" : "s"}
+                {t("pages.customers.countOfTotal", { shown: filtered.length, total: customers.length, count: customers.length })}
               </span>
             </div>
 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Primary Contact</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
+                  <TableHead>{t("pages.customers.table.customer")}</TableHead>
+                  <TableHead>{t("pages.customers.table.primaryContact")}</TableHead>
+                  <TableHead>{t("pages.customers.table.email")}</TableHead>
+                  <TableHead>{t("pages.customers.table.phone")}</TableHead>
                   <TableHead className="text-center">
                     <button
                       type="button"
@@ -490,7 +491,7 @@ export default function Customers() {
                             : ""
                       }`}
                     >
-                      Properties
+                      {t("pages.customers.table.properties")}
                       {sortIcon(dirFor("properties"))}
                     </button>
                   </TableHead>
@@ -508,7 +509,7 @@ export default function Customers() {
                             : ""
                       }`}
                     >
-                      Beds
+                      {t("pages.customers.table.beds")}
                       {sortIcon(dirFor("occupancy"))}
                     </button>
                   </TableHead>
@@ -526,12 +527,12 @@ export default function Customers() {
                             : ""
                       }`}
                     >
-                      Revenue / mo
+                      {t("pages.customers.table.revenuePerMo")}
                       {sortIcon(dirFor("revenue"))}
                     </button>
                   </TableHead>
-                  <TableHead>No Housing / Reason</TableHead>
-                  <TableHead className="w-32 text-right">Actions</TableHead>
+                  <TableHead>{t("pages.customers.table.noHousingReason")}</TableHead>
+                  <TableHead className="w-32 text-right">{t("pages.customers.table.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -541,19 +542,19 @@ export default function Customers() {
                     icon={Briefcase}
                     title={
                       customers.length === 0
-                        ? "No customers yet"
-                        : "No customers match your search"
+                        ? t("pages.customers.empty.noCustomersTitle")
+                        : t("pages.customers.empty.noMatchTitle")
                     }
                     description={
                       customers.length === 0
-                        ? "Add your first customer to start grouping properties and leases by client."
-                        : "Try clearing your search above."
+                        ? t("pages.customers.empty.noCustomersDescription")
+                        : t("pages.customers.empty.noMatchDescription")
                     }
                     action={
                       customers.length === 0 ? (
                         <Button onClick={openAdd} data-testid="button-add-customer-empty">
                           <Plus className="mr-2 h-4 w-4" />
-                          Add Customer
+                          {t("pages.customers.addCustomer")}
                         </Button>
                       ) : undefined
                     }
@@ -575,10 +576,12 @@ export default function Customers() {
                         >
                           <span className="inline-flex items-center gap-2">
                             <span data-testid={`text-state-group-label-${group.state}`}>
-                              {group.state}
+                              {group.state === UNASSIGNED_STATE_KEY
+                                ? t("pages.customers.unassignedStateLabel")
+                                : group.state}
                             </span>
                             <span className="text-muted-foreground/70 normal-case font-normal">
-                              · {group.rows.length} customer{group.rows.length === 1 ? "" : "s"}
+                              {t("pages.customers.groupCustomerCount", { count: group.rows.length })}
                             </span>
                           </span>
                         </th>
@@ -650,7 +653,7 @@ export default function Customers() {
                                   type="button"
                                   className="inline-flex items-center"
                                   data-testid={`link-customer-properties-${c.id}`}
-                                  aria-label={`View ${c.name}'s properties or leases`}
+                                  aria-label={t("pages.customers.rowActions.viewPropertiesOrLeasesAria", { name: c.name })}
                                 >
                                   <Badge variant="secondary" className="gap-1 cursor-pointer hover:bg-secondary/70">
                                     {count}
@@ -664,21 +667,21 @@ export default function Customers() {
                                   data-testid={`link-customer-goto-properties-${c.id}`}
                                 >
                                   <Building2 className="mr-2 h-4 w-4" />
-                                  View properties
+                                  {t("pages.customers.rowActions.viewProperties")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => navigate(`/leases?customer=${encodeURIComponent(c.id)}`)}
                                   data-testid={`link-customer-goto-leases-${c.id}`}
                                 >
                                   <FileText className="mr-2 h-4 w-4" />
-                                  View leases
+                                  {t("pages.customers.rowActions.viewLeases")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => navigate(`/utilities?customer=${encodeURIComponent(c.id)}`)}
                                   data-testid={`link-customer-goto-utilities-${c.id}`}
                                 >
                                   <Zap className="mr-2 h-4 w-4" />
-                                  View utilities
+                                  {t("pages.customers.rowActions.viewUtilities")}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -711,7 +714,7 @@ export default function Customers() {
                           {count === 0 ? (
                             <div className="flex items-center gap-2">
                               <Badge variant="outline" data-testid={`badge-no-housing-${c.id}`}>
-                                No Housing
+                                {t("pages.customers.noHousingBadge")}
                               </Badge>
                               <Select
                                 value={c.noHousingReason ?? ""}
@@ -724,13 +727,13 @@ export default function Customers() {
                                 <SelectTrigger
                                   className="h-8 w-[200px] text-xs"
                                   data-testid={`select-no-housing-reason-${c.id}`}
-                                  aria-label={`Set no-housing reason for ${c.name}`}
+                                  aria-label={t("pages.customers.rowActions.setNoHousingReasonAria", { name: c.name })}
                                 >
                                   {c.noHousingReason ? (
                                     <SelectValue />
                                   ) : (
                                     <span className="text-muted-foreground italic">
-                                      — Set reason
+                                      {t("pages.customers.table.setReasonPlaceholder")}
                                     </span>
                                   )}
                                 </SelectTrigger>
@@ -741,7 +744,7 @@ export default function Customers() {
                                       value={reason}
                                       data-testid={`select-no-housing-reason-${c.id}-${reason}`}
                                     >
-                                      {NO_HOUSING_REASON_LABELS[reason]}
+                                      {t(`common.noHousingReasons.${reason}`)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -756,7 +759,7 @@ export default function Customers() {
                               variant="ghost"
                               className="h-8 w-8 p-0"
                               onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}
-                              aria-label={`View ${c.name}`}
+                              aria-label={t("pages.customers.rowActions.viewAria", { name: c.name })}
                               data-testid={`button-view-customer-${c.id}`}
                             >
                               <Eye className="h-4 w-4" />
@@ -766,7 +769,7 @@ export default function Customers() {
                               variant="ghost"
                               className="h-8 w-8 p-0"
                               onClick={() => openEdit(c)}
-                              aria-label={`Edit ${c.name}`}
+                              aria-label={t("pages.customers.rowActions.editAria", { name: c.name })}
                               data-testid={`button-edit-customer-${c.id}`}
                             >
                               <Edit2 className="h-4 w-4" />
@@ -781,7 +784,7 @@ export default function Customers() {
                                       variant="ghost"
                                       className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                       disabled
-                                      aria-label={`Delete ${c.name}`}
+                                      aria-label={t("pages.customers.rowActions.deleteAria", { name: c.name })}
                                       aria-disabled="true"
                                       data-testid={`button-delete-customer-${c.id}`}
                                     >
@@ -790,8 +793,7 @@ export default function Customers() {
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="left" className="max-w-xs">
-                                  Can't delete — {c.name} still owns {count} propert{count === 1 ? "y" : "ies"}.
-                                  Reassign or remove those properties first.
+                                  {t("pages.customers.cantDeleteTooltip", { name: c.name, count })}
                                 </TooltipContent>
                               </Tooltip>
                             ) : (
@@ -800,7 +802,7 @@ export default function Customers() {
                                 variant="ghost"
                                 className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                 onClick={() => setDeleteTarget(c)}
-                                aria-label={`Delete ${c.name}`}
+                                aria-label={t("pages.customers.rowActions.deleteAria", { name: c.name })}
                                 data-testid={`button-delete-customer-${c.id}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -824,46 +826,46 @@ export default function Customers() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit customer" : "Add customer"}</DialogTitle>
+            <DialogTitle>{editing ? t("pages.customers.dialog.editTitle") : t("pages.customers.dialog.addTitle")}</DialogTitle>
             <DialogDescription>
               {editing
-                ? "Update this customer's contact details."
-                : "Customers represent the companies that lease beds in your properties."}
+                ? t("pages.customers.dialog.editDescription")
+                : t("pages.customers.dialog.addDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
             <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="cust-name">Company name *</Label>
+              <Label htmlFor="cust-name">{t("pages.customers.dialog.companyName")}</Label>
               <Input
                 id="cust-name"
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="Acme Energy"
+                placeholder={t("pages.customers.dialog.companyNamePlaceholder")}
                 data-testid="input-customer-name"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cust-contact">Primary contact</Label>
+              <Label htmlFor="cust-contact">{t("pages.customers.dialog.primaryContact")}</Label>
               <Input
                 id="cust-contact"
                 value={draft.contactName}
                 onChange={(e) => setDraft({ ...draft, contactName: e.target.value })}
-                placeholder="Dana Rivera"
+                placeholder={t("pages.customers.dialog.primaryContactPlaceholder")}
                 data-testid="input-customer-contact"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cust-phone">Phone</Label>
+              <Label htmlFor="cust-phone">{t("pages.customers.dialog.phone")}</Label>
               <Input
                 id="cust-phone"
                 value={draft.phone}
                 onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
-                placeholder="555-555-1234"
+                placeholder={t("pages.customers.dialog.phonePlaceholder")}
                 data-testid="input-customer-phone"
               />
             </div>
             <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="cust-state">State</Label>
+              <Label htmlFor="cust-state">{t("pages.customers.dialog.state")}</Label>
               <Input
                 id="cust-state"
                 value={draft.state ?? ""}
@@ -877,28 +879,28 @@ export default function Customers() {
                     state: e.target.value.toUpperCase().slice(0, 2),
                   })
                 }
-                placeholder="WI"
+                placeholder={t("pages.customers.dialog.statePlaceholder")}
                 maxLength={2}
                 className="uppercase"
                 data-testid="input-customer-state"
               />
               <p className="text-xs text-muted-foreground">
-                Two-letter US state code. Used to group customers on the Customers page.
+                {t("pages.customers.dialog.stateHint")}
               </p>
             </div>
             <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="cust-email">Email</Label>
+              <Label htmlFor="cust-email">{t("pages.customers.dialog.email")}</Label>
               <Input
                 id="cust-email"
                 type="email"
                 value={draft.email}
                 onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-                placeholder="contact@company.com"
+                placeholder={t("pages.customers.dialog.emailPlaceholder")}
                 data-testid="input-customer-email"
               />
             </div>
             <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="cust-no-housing-reason">No-housing reason</Label>
+              <Label htmlFor="cust-no-housing-reason">{t("pages.customers.dialog.noHousingReason")}</Label>
               <Select
                 value={draft.noHousingReason ?? "__none__"}
                 onValueChange={(value) =>
@@ -913,28 +915,28 @@ export default function Customers() {
                   id="cust-no-housing-reason"
                   data-testid="select-customer-no-housing-reason"
                 >
-                  <SelectValue placeholder="— Set reason" />
+                  <SelectValue placeholder={t("pages.customers.table.setReasonPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">— No reason recorded</SelectItem>
+                  <SelectItem value="__none__">{t("pages.customers.dialog.noHousingNoneOption")}</SelectItem>
                   {NO_HOUSING_REASONS.map((reason) => (
                     <SelectItem key={reason} value={reason}>
-                      {NO_HOUSING_REASON_LABELS[reason]}
+                      {t(`common.noHousingReasons.${reason}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Only meaningful for customers with no properties managed in HousingOps.
+                {t("pages.customers.dialog.noHousingHint")}
               </p>
             </div>
             <div className="sm:col-span-2 space-y-1.5">
-              <Label htmlFor="cust-notes">Notes</Label>
+              <Label htmlFor="cust-notes">{t("pages.customers.dialog.notes")}</Label>
               <Textarea
                 id="cust-notes"
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                placeholder="Billing terms, preferences, etc."
+                placeholder={t("pages.customers.dialog.notesPlaceholder")}
                 className="min-h-[72px]"
                 data-testid="input-customer-notes"
               />
@@ -942,10 +944,10 @@ export default function Customers() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
+              {t("pages.customers.dialog.cancel")}
             </Button>
             <Button onClick={handleSave} data-testid="button-save-customer">
-              {editing ? "Save changes" : "Add customer"}
+              {editing ? t("pages.customers.dialog.saveChanges") : t("pages.customers.dialog.addAction")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -958,33 +960,26 @@ export default function Customers() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this customer?</AlertDialogTitle>
+            <AlertDialogTitle>{t("pages.customers.deleteDialog.title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget && (statsByCustomer.get(deleteTarget.id)?.propertyCount ?? 0) > 0 ? (
-                <>
-                  <span className="font-medium">{deleteTarget.name}</span> still owns{" "}
-                  {statsByCustomer.get(deleteTarget.id)?.propertyCount} propert
-                  {statsByCustomer.get(deleteTarget.id)?.propertyCount === 1 ? "y" : "ies"}.
-                  You'll need to reassign or remove those properties before this customer
-                  can be deleted.
-                </>
+                t("pages.customers.deleteDialog.stillOwns", {
+                  name: deleteTarget.name,
+                  count: statsByCustomer.get(deleteTarget.id)?.propertyCount ?? 0,
+                })
               ) : (
-                <>
-                  This permanently removes{" "}
-                  <span className="font-medium">{deleteTarget?.name}</span>. This action
-                  cannot be undone.
-                </>
+                t("pages.customers.deleteDialog.permanentlyRemove", { name: deleteTarget?.name ?? "" })
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-delete-customer-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogCancel data-testid="button-delete-customer-cancel">{t("pages.customers.deleteDialog.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-delete-customer-confirm"
             >
-              Delete customer
+              {t("pages.customers.deleteDialog.confirmDelete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

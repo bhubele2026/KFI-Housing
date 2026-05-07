@@ -14,6 +14,16 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// PropertyDetail calls useListRoomNightLogs() at the top of the
+// component for the hotel-rate revenue estimate. The hook hits
+// useQueryClient(), which throws under jsdom unless the test wraps
+// the tree in a QueryClientProvider. Stub it out with a static empty
+// dataset so this suite doesn't have to set up React Query just to
+// exercise the pending-placement short-circuit.
+vi.mock("@workspace/api-client-react", () => ({
+  useListRoomNightLogs: () => ({ data: [] }),
+}));
+
 vi.mock("@/components/property-location-map", () => ({
   PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
 }));
@@ -190,6 +200,7 @@ vi.mock("@/context/data-store", () => ({
     beds: [vacantBed],
     occupants: [pendingOccupant],
     utilities: [],
+    insuranceCertificates: [],
     isLoading: false,
     updateProperty: vi.fn(),
     updateLease: vi.fn(),
@@ -207,6 +218,9 @@ vi.mock("@/context/data-store", () => ({
     updateUtility: vi.fn(),
     addUtility: vi.fn(),
     deleteUtility: vi.fn(),
+    addInsuranceCertificate: vi.fn(),
+    updateInsuranceCertificate: vi.fn(),
+    deleteInsuranceCertificate: vi.fn(),
     deleteProperty,
     dataIssues: [],
   }),

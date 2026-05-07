@@ -139,6 +139,7 @@ const emptyState = {
   updateBed: vi.fn(),
   updateOccupant: vi.fn(),
   addOccupant: vi.fn(),
+  deleteOccupant: vi.fn(),
   updateUtility: vi.fn(),
   addUtility: vi.fn(),
   deleteUtility: vi.fn(),

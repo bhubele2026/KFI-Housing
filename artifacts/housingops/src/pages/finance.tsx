@@ -508,6 +508,14 @@ export default function Finance() {
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.finance.totalCosts")}</p>
                 <p className="text-xl font-bold text-destructive">{formatUsd(totals.totalCost)}</p>
+                {totals.hotelRateCost > 0 && (
+                  <p
+                    className="text-xs font-normal text-muted-foreground"
+                    data-testid="text-finance-header-hotel-rate-share"
+                  >
+                    {t("pages.finance.table.hotelRateLabel")} {formatUsd(totals.hotelRateCost)} {t("pages.finance.table.hotelRateSuffix")}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("pages.finance.netProfit")}</p>

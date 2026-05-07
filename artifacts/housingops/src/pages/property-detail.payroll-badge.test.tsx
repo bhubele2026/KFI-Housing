@@ -22,6 +22,10 @@ vi.mock("@/components/layout/main-layout", () => ({
 // other property-detail test files stub it the same way; mirror that.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

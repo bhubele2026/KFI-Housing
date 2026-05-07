@@ -261,6 +261,10 @@ vi.mock("@/components/renew-lease-popover", () => ({
 // but the hook must still resolve cleanly — return an empty array.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
   useGetLastAutoMasterImport: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 

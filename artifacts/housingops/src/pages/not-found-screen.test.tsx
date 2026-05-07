@@ -49,6 +49,10 @@ vi.mock("@/hooks/use-unsaved-changes-prompt", () => ({
 // property and lease detail pages take their not-found branches.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("@/context/data-store", () => ({

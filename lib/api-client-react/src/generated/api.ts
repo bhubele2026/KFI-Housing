@@ -48,6 +48,8 @@ import type {
   OtherCostUpdate,
   Property,
   PropertyUpdate,
+  PropertyViolation,
+  PropertyViolationCreate,
   Room,
   RoomNightLog,
   RoomNightLogUpdate,
@@ -2721,6 +2723,282 @@ export const useDeleteInsuranceCertificate = <
   TContext
 > => {
   return useMutation(getDeleteInsuranceCertificateMutationOptions(options));
+};
+
+/**
+ * Returns every violation row recorded for the given property, in
+reverse chronological order (most recent `occurredOn` first).
+Rows are tied to a specific occupant when known, but
+`occupantId` may be empty if the offender has since moved out
+— the snapshot in `occupantName` keeps the row readable.
+
+ * @summary List rule violations logged against a property
+ */
+export const getListPropertyViolationsUrl = (id: string) => {
+  return `/api/properties/${id}/violations`;
+};
+
+export const listPropertyViolations = async (
+  id: string,
+  options?: RequestInit,
+): Promise<PropertyViolation[]> => {
+  return customFetch<PropertyViolation[]>(getListPropertyViolationsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPropertyViolationsQueryKey = (id: string) => {
+  return [`/api/properties/${id}/violations`] as const;
+};
+
+export const getListPropertyViolationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPropertyViolations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPropertyViolations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPropertyViolationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPropertyViolations>>
+  > = ({ signal }) => listPropertyViolations(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPropertyViolations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPropertyViolationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPropertyViolations>>
+>;
+export type ListPropertyViolationsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List rule violations logged against a property
+ */
+
+export function useListPropertyViolations<
+  TData = Awaited<ReturnType<typeof listPropertyViolations>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPropertyViolations>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPropertyViolationsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Records a new violation entry for the given property. The
+client supplies the occupant id (or empty when the offender
+has moved out), the canonical category, the date the
+violation occurred, and the pasted notification body. The
+server fills in `createdAt` automatically.
+
+ * @summary Log a new rule violation against a property
+ */
+export const getCreatePropertyViolationUrl = (id: string) => {
+  return `/api/properties/${id}/violations`;
+};
+
+export const createPropertyViolation = async (
+  id: string,
+  propertyViolationCreate: PropertyViolationCreate,
+  options?: RequestInit,
+): Promise<PropertyViolation> => {
+  return customFetch<PropertyViolation>(getCreatePropertyViolationUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(propertyViolationCreate),
+  });
+};
+
+export const getCreatePropertyViolationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPropertyViolation>>,
+    TError,
+    { id: string; data: BodyType<PropertyViolationCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPropertyViolation>>,
+  TError,
+  { id: string; data: BodyType<PropertyViolationCreate> },
+  TContext
+> => {
+  const mutationKey = ["createPropertyViolation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPropertyViolation>>,
+    { id: string; data: BodyType<PropertyViolationCreate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createPropertyViolation(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreatePropertyViolationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPropertyViolation>>
+>;
+export type CreatePropertyViolationMutationBody =
+  BodyType<PropertyViolationCreate>;
+export type CreatePropertyViolationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Log a new rule violation against a property
+ */
+export const useCreatePropertyViolation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPropertyViolation>>,
+    TError,
+    { id: string; data: BodyType<PropertyViolationCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createPropertyViolation>>,
+  TError,
+  { id: string; data: BodyType<PropertyViolationCreate> },
+  TContext
+> => {
+  return useMutation(getCreatePropertyViolationMutationOptions(options));
+};
+
+/**
+ * @summary Delete a property violation
+ */
+export const getDeletePropertyViolationUrl = (
+  id: string,
+  violationId: string,
+) => {
+  return `/api/properties/${id}/violations/${violationId}`;
+};
+
+export const deletePropertyViolation = async (
+  id: string,
+  violationId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeletePropertyViolationUrl(id, violationId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeletePropertyViolationMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePropertyViolation>>,
+    TError,
+    { id: string; violationId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePropertyViolation>>,
+  TError,
+  { id: string; violationId: string },
+  TContext
+> => {
+  const mutationKey = ["deletePropertyViolation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deletePropertyViolation>>,
+    { id: string; violationId: string }
+  > = (props) => {
+    const { id, violationId } = props ?? {};
+
+    return deletePropertyViolation(id, violationId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePropertyViolationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deletePropertyViolation>>
+>;
+
+export type DeletePropertyViolationMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a property violation
+ */
+export const useDeletePropertyViolation = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePropertyViolation>>,
+    TError,
+    { id: string; violationId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deletePropertyViolation>>,
+  TError,
+  { id: string; violationId: string },
+  TContext
+> => {
+  return useMutation(getDeletePropertyViolationMutationOptions(options));
 };
 
 /**

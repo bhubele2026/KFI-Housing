@@ -32,6 +32,10 @@ vi.mock("@/components/layout/main-layout", () => ({
 // to avoid pulling react-query into every property-detail test setup.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

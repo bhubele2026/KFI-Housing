@@ -193,6 +193,10 @@ vi.mock("@/context/data-store", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 import Finance from "./finance";

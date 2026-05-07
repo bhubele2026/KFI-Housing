@@ -251,6 +251,10 @@ vi.mock("@workspace/api-client-react", () => ({
   // reads from this hook. Tests in this file don't exercise it
   // directly but the hook must still resolve cleanly.
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 // Task #492: the dashboard subscribes to /api/config so its alert-card

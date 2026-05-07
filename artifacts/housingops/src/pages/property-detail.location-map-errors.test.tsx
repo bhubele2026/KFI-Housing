@@ -79,6 +79,10 @@ vi.mock("@workspace/api-client-react", () => ({
   }),
   getGetRuntimeConfigQueryKey: () => ["/api/config"] as const,
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("framer-motion", async () => {

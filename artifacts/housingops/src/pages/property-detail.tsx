@@ -19,12 +19,21 @@ import {
   Home, Phone, Mail, Globe, Calendar, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus,
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
   ShieldCheck, Trees, Sparkles, CheckCircle2, Star, Briefcase,
+  Cigarette, Car, Volume2, Siren, Wrench, Sparkle, MoreHorizontal,
+  ShieldAlert,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, UTILITY_TYPES, BILLING_FREQUENCIES, PROPERTY_TYPE_OPTIONS, type PropertyType, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
+import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, PropertyViolation, PropertyViolationCategory, PROPERTY_VIOLATION_CATEGORIES, PROPERTY_VIOLATION_CATEGORY_LABELS, UTILITY_TYPES, BILLING_FREQUENCIES, PROPERTY_TYPE_OPTIONS, type PropertyType, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
-import { useListRoomNightLogs } from "@workspace/api-client-react";
+import {
+  useListRoomNightLogs,
+  useListPropertyViolations,
+  useCreatePropertyViolation,
+  useDeletePropertyViolation,
+  getListPropertyViolationsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { RoomInUseError } from "@/context/data-store";
 import { motion } from "framer-motion";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
@@ -533,6 +542,84 @@ export default function PropertyDetail() {
   const roomNightLogs = roomNightLogsQuery.data ?? [];
   const { toast } = useToast();
 
+  // Property violations are scoped per-property (Task #499). The
+  // /properties/:id/violations endpoint returns just this property's
+  // rows, so unlike the global lists in the data-store we fetch
+  // straight from the orval hook here. Optimistic add/delete write
+  // through the same query key so the Violations tab renders the new
+  // row immediately without waiting for a refetch.
+  const violationsKey = useMemo(
+    () => getListPropertyViolationsQueryKey(id ?? ""),
+    [id],
+  );
+  const violationsQuery = useListPropertyViolations(id ?? "", {
+    query: { queryKey: violationsKey, enabled: Boolean(id) },
+  });
+  const propertyViolations: PropertyViolation[] = violationsQuery.data ?? [];
+  const queryClient = useQueryClient();
+  const createViolationMut = useCreatePropertyViolation();
+  const deleteViolationMut = useDeletePropertyViolation();
+  const addPropertyViolation = (v: PropertyViolation) => {
+    const snapshot = queryClient.getQueryData<PropertyViolation[]>(violationsKey);
+    queryClient.setQueryData<PropertyViolation[]>(violationsKey, (prev) =>
+      [v, ...(prev ?? [])],
+    );
+    createViolationMut.mutate(
+      {
+        id: id!,
+        data: {
+          id: v.id,
+          occupantId: v.occupantId,
+          occupantName: v.occupantName,
+          category: v.category,
+          details: v.details,
+          notes: v.notes,
+          occurredOn: v.occurredOn,
+          createdBy: v.createdBy,
+        },
+      },
+      {
+        onError: () => {
+          if (snapshot !== undefined) {
+            queryClient.setQueryData<PropertyViolation[]>(violationsKey, snapshot);
+          }
+          toast({
+            title: "Save failed",
+            description: "Couldn't log the violation. Your change was reverted.",
+            variant: "destructive",
+          });
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: violationsKey });
+        },
+      },
+    );
+  };
+  const deletePropertyViolation = (violationId: string) => {
+    const snapshot = queryClient.getQueryData<PropertyViolation[]>(violationsKey);
+    queryClient.setQueryData<PropertyViolation[]>(violationsKey, (prev) =>
+      (prev ?? []).filter((v) => v.id !== violationId),
+    );
+    deleteViolationMut.mutate(
+      { id: id!, violationId },
+      {
+        onError: () => {
+          if (snapshot !== undefined) {
+            queryClient.setQueryData<PropertyViolation[]>(violationsKey, snapshot);
+          }
+          toast({
+            title: "Save failed",
+            description: "Couldn't delete the violation. Your change was reverted.",
+            variant: "destructive",
+          });
+        },
+        onSettled: () => {
+          queryClient.invalidateQueries({ queryKey: violationsKey });
+        },
+      },
+    );
+  };
+
   // Beds-tab sort selection. Hydrated once from localStorage so the
   // user's last choice survives refresh AND navigation between
   // properties — same persistence approach as the Properties list's
@@ -566,7 +653,7 @@ export default function PropertyDetail() {
   // at first render because the browser's location is the source of
   // truth.
   const PROPERTY_TABS = useMemo(
-    () => new Set(["overview", "leases", "units", "beds", "furnishings", "utilities", "finance"]),
+    () => new Set(["overview", "leases", "units", "beds", "furnishings", "utilities", "insurance", "violations", "finance"]),
     [],
   );
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -1186,7 +1273,7 @@ export default function PropertyDetail() {
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList
-            className={`grid w-full max-w-3xl ${propertyUnits.length > 0 ? "grid-cols-8" : "grid-cols-7"}`}
+            className={`grid w-full max-w-4xl ${propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"}`}
           >
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />Info</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Leases</TabsTrigger>
@@ -1199,6 +1286,18 @@ export default function PropertyDetail() {
             <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />Furnishings</TabsTrigger>
             <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />Utilities</TabsTrigger>
             <TabsTrigger value="insurance" data-testid="tab-trigger-insurance"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />Insurance</TabsTrigger>
+            <TabsTrigger value="violations" data-testid="tab-trigger-violations">
+              <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />Violations
+              {propertyViolations.length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1.5 h-4 px-1 text-[10px] tabular-nums"
+                  data-testid="badge-violations-count"
+                >
+                  {propertyViolations.length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />Finance</TabsTrigger>
           </TabsList>
 
@@ -2862,6 +2961,24 @@ export default function PropertyDetail() {
             </Card>
           </TabsContent>
 
+          {/* ── VIOLATIONS TAB (Task #499) ── */}
+          {/* Per-property rule violations the operator has been notified
+              about (typically by email). Summary card shows the running
+              total plus a per-category breakdown so the worst offending
+              category jumps out at a glance. Below that, rows are
+              grouped by occupant so a single tenant generating multiple
+              notices is easy to spot. */}
+          <TabsContent value="violations" className="space-y-4">
+            <ViolationsTab
+              propertyId={id}
+              violations={propertyViolations}
+              occupants={propOccupants}
+              onAdd={addPropertyViolation}
+              onDelete={deletePropertyViolation}
+              isLoading={violationsQuery.isLoading}
+            />
+          </TabsContent>
+
           {/* ── FINANCE TAB ── */}
           <TabsContent value="finance" className="space-y-4">
             <Card>
@@ -3517,5 +3634,435 @@ function FurnishingsPanel({ selected, onChange }: { selected: string[]; onChange
         })}
       </div>
     </div>
+  );
+}
+
+// ── Violations Tab (Task #499) ──────────────────────────────────────────
+
+const VIOLATION_CATEGORY_ICONS: Record<PropertyViolationCategory, LucideIcon> = {
+  smoking: Cigarette,
+  parking: Car,
+  noise: Volume2,
+  police: Siren,
+  maintenance: Wrench,
+  cleanliness: Sparkle,
+  other: MoreHorizontal,
+};
+
+const VIOLATION_CATEGORY_BADGE_CLASSES: Record<PropertyViolationCategory, string> = {
+  smoking: "bg-orange-50 text-orange-700 border-orange-200",
+  parking: "bg-blue-50 text-blue-700 border-blue-200",
+  noise: "bg-purple-50 text-purple-700 border-purple-200",
+  police: "bg-red-50 text-red-700 border-red-200",
+  maintenance: "bg-amber-50 text-amber-700 border-amber-200",
+  cleanliness: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  other: "bg-slate-50 text-slate-700 border-slate-200",
+};
+
+function ViolationsTab({
+  propertyId,
+  violations,
+  occupants,
+  onAdd,
+  onDelete,
+  isLoading,
+}: {
+  propertyId: string;
+  violations: PropertyViolation[];
+  occupants: Occupant[];
+  onAdd: (v: PropertyViolation) => void;
+  onDelete: (id: string) => void;
+  isLoading: boolean;
+}) {
+  // Per-category counts power the summary card. Built from the
+  // canonical category list so every bucket renders even when empty —
+  // operators can see at a glance which categories are quiet vs hot.
+  const counts = useMemo(() => {
+    const c: Record<PropertyViolationCategory, number> = {
+      smoking: 0, parking: 0, noise: 0, police: 0,
+      maintenance: 0, cleanliness: 0, other: 0,
+    };
+    for (const v of violations) c[v.category] += 1;
+    return c;
+  }, [violations]);
+
+  // Group rows by occupant. Rows whose `occupantId` no longer matches
+  // an active occupant land in a "Former / unknown occupant" bucket so
+  // the historical record stays visible. Within each group, rows are
+  // sorted by `occurredOn` desc so the most recent notice surfaces
+  // first.
+  const grouped = useMemo(() => {
+    type Group = { key: string; name: string; rows: PropertyViolation[] };
+    const byKey = new Map<string, Group>();
+    for (const v of violations) {
+      const key = v.occupantId || `__unknown__:${v.occupantName || "Unknown"}`;
+      const existing = byKey.get(key);
+      const name = v.occupantId
+        ? occupants.find((o) => o.id === v.occupantId)?.name ||
+          v.occupantName ||
+          "Former occupant"
+        : v.occupantName || "Unknown occupant";
+      if (existing) {
+        existing.rows.push(v);
+      } else {
+        byKey.set(key, { key, name, rows: [v] });
+      }
+    }
+    for (const g of byKey.values()) {
+      g.rows.sort((a, b) => b.occurredOn.localeCompare(a.occurredOn));
+    }
+    return [...byKey.values()].sort(
+      (a, b) => b.rows.length - a.rows.length || a.name.localeCompare(b.name),
+    );
+  }, [violations, occupants]);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary card */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-rose-600" />
+                Rule Violations
+              </h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Smoking, parking, noise, police and other notices logged
+                against this property.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div
+                  className="text-2xl font-bold tabular-nums"
+                  data-testid="text-violations-total"
+                >
+                  {violations.length}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  total {violations.length === 1 ? "notice" : "notices"}
+                </div>
+              </div>
+              <AddPropertyViolationDialog
+                propertyId={propertyId}
+                occupants={occupants}
+                onAdd={onAdd}
+              />
+            </div>
+          </div>
+          <Separator className="my-4" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {PROPERTY_VIOLATION_CATEGORIES.map((cat) => {
+              const Icon = VIOLATION_CATEGORY_ICONS[cat];
+              const n = counts[cat];
+              return (
+                <div
+                  key={cat}
+                  className={
+                    "rounded-md border px-2 py-2 flex items-center gap-2 " +
+                    (n > 0 ? VIOLATION_CATEGORY_BADGE_CLASSES[cat] : "bg-muted/30 text-muted-foreground border-border")
+                  }
+                  data-testid={`stat-violations-${cat}`}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium truncate">
+                      {PROPERTY_VIOLATION_CATEGORY_LABELS[cat]}
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums">
+                      {n}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Per-occupant grouped list */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="p-6 space-y-3">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardContent>
+        </Card>
+      ) : violations.length === 0 ? (
+        <Card>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={ShieldAlert}
+              title="No violations on file"
+              description="Log a notice from the property manager here so a paper trail builds up against the offending occupant."
+              testId="empty-property-violations"
+              action={
+                <AddPropertyViolationDialog
+                  propertyId={propertyId}
+                  occupants={occupants}
+                  onAdd={onAdd}
+                  trigger={
+                    <Button size="sm" data-testid="button-add-violation-empty">
+                      <Plus className="h-4 w-4 mr-1.5" />Log Violation
+                    </Button>
+                  }
+                />
+              }
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        grouped.map((g) => (
+          <Card key={g.key} data-testid={`violation-group-${g.key}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  {g.name}
+                </CardTitle>
+                <Badge variant="secondary" className="tabular-nums" data-testid={`badge-violation-group-${g.key}-count`}>
+                  {g.rows.length} {g.rows.length === 1 ? "notice" : "notices"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-32">Date</TableHead>
+                    <TableHead className="w-40">Category</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {g.rows.map((v) => {
+                    const Icon = VIOLATION_CATEGORY_ICONS[v.category];
+                    return (
+                      <TableRow key={v.id} data-testid={`row-violation-${v.id}`}>
+                        <TableCell className="text-sm tabular-nums text-muted-foreground align-top">
+                          {v.occurredOn ? formatYMDPretty(v.occurredOn) : "—"}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <Badge
+                            variant="outline"
+                            className={VIOLATION_CATEGORY_BADGE_CLASSES[v.category]}
+                            data-testid={`badge-violation-${v.id}-category`}
+                          >
+                            <Icon className="h-3 w-3 mr-1" />
+                            {PROPERTY_VIOLATION_CATEGORY_LABELS[v.category]}
+                            {v.category === "other" && v.details
+                              ? ` · ${v.details}`
+                              : ""}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {v.notes ? (
+                            <pre
+                              className="whitespace-pre-wrap font-sans text-sm text-foreground/90 max-w-xl"
+                              data-testid={`text-violation-${v.id}-notes`}
+                            >
+                              {v.notes}
+                            </pre>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">no notes</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <ConfirmDeleteButton
+                            title="Delete this violation?"
+                            description={
+                              <>
+                                Remove the{" "}
+                                <span className="font-medium text-foreground">
+                                  {PROPERTY_VIOLATION_CATEGORY_LABELS[v.category]}
+                                </span>{" "}
+                                notice from {g.name}. You can't undo this.
+                              </>
+                            }
+                            onConfirm={() => onDelete(v.id)}
+                            testId={`dialog-confirm-delete-violation-${v.id}`}
+                            trigger={
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                data-testid={`button-delete-violation-${v.id}`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
+function AddPropertyViolationDialog({
+  propertyId,
+  occupants,
+  onAdd,
+  trigger,
+}: {
+  propertyId: string;
+  occupants: Occupant[];
+  onAdd: (v: PropertyViolation) => void;
+  trigger?: React.ReactNode;
+}) {
+  // Sentinel — Radix's <SelectItem> can't take an empty string, so we
+  // translate this back to "" + "Unknown" when building the payload.
+  const NO_OCCUPANT = "__none__";
+  const todayYMD = () => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  };
+  const initialForm = () => ({
+    occupantId: occupants[0]?.id ?? NO_OCCUPANT,
+    category: "smoking" as PropertyViolationCategory,
+    details: "",
+    occurredOn: todayYMD(),
+    notes: "",
+  });
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(initialForm);
+
+  const reset = () => setForm(initialForm());
+  const submit = () => {
+    if (!form.occurredOn) return;
+    const occupant = occupants.find((o) => o.id === form.occupantId);
+    onAdd({
+      id: `viol-${Date.now()}`,
+      propertyId,
+      occupantId: occupant?.id ?? "",
+      occupantName: occupant?.name ?? "",
+      category: form.category,
+      details: form.category === "other" ? form.details : "",
+      notes: form.notes,
+      occurredOn: form.occurredOn,
+      createdBy: "",
+    });
+    setOpen(false);
+    reset();
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
+      }}
+    >
+      <DialogTrigger asChild>
+        {trigger ?? (
+          <Button size="sm" data-testid="button-add-violation">
+            <Plus className="h-4 w-4 mr-1.5" />Log Violation
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Log a property violation</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Occupant</Label>
+              <Select
+                value={form.occupantId}
+                onValueChange={(v) => setForm((f) => ({ ...f, occupantId: v }))}
+              >
+                <SelectTrigger data-testid="select-violation-occupant">
+                  <SelectValue placeholder="Pick an occupant" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_OCCUPANT}>(unknown / former)</SelectItem>
+                  {occupants.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name || "Unnamed occupant"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Select
+                value={form.category}
+                onValueChange={(v) =>
+                  setForm((f) => ({ ...f, category: v as PropertyViolationCategory }))
+                }
+              >
+                <SelectTrigger data-testid="select-violation-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROPERTY_VIOLATION_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {PROPERTY_VIOLATION_CATEGORY_LABELS[cat]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {form.category === "other" && (
+              <div className="col-span-2">
+                <Label>What kind?</Label>
+                <Input
+                  value={form.details}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, details: e.target.value }))
+                  }
+                  placeholder="Short description of the rule that was broken"
+                  data-testid="input-violation-details"
+                />
+              </div>
+            )}
+            <div className="col-span-2">
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={form.occurredOn}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, occurredOn: e.target.value }))
+                }
+                data-testid="input-violation-date"
+              />
+            </div>
+          </div>
+          <div>
+            <Label>Notes / pasted email</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="Paste the notification email body here, or jot down what the property manager said."
+              className="min-h-[8rem]"
+              data-testid="input-violation-notes"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submit} data-testid="button-violation-submit">
+              Log Violation
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

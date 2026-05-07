@@ -152,6 +152,10 @@ vi.mock("@workspace/api-client-react", () => ({
   // Empty logs → every hotel-rate lease is `missing` for the current
   // month, which is exactly the at-risk case under test.
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
   useListUnplacedPayroll: () => ({
     data: { unmatched: [], lowConfidenceMatches: [] },
   }),

@@ -43,6 +43,10 @@ vi.mock("@/components/layout/main-layout", () => ({
 // stand up a QueryClientProvider, so render it as a benign placeholder.
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

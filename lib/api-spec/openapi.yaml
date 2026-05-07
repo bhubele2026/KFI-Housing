@@ -26,6 +26,8 @@ tags:
     description: Payroll-derived housing deductions
   - name: insurance
     description: Renter's / liability insurance certificates on file
+  - name: violations
+    description: Per-property rule violations logged against an occupant
   - name: digest
     description: Weekly lease-expiry digest configuration
   - name: Storage
@@ -647,6 +649,74 @@ paths:
       parameters:
         - in: path
           name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
+  /properties/{id}/violations:
+    get:
+      operationId: listPropertyViolations
+      tags: [violations]
+      summary: List rule violations logged against a property
+      description: |
+        Returns every violation row recorded for the given property, in
+        reverse chronological order (most recent `occurredOn` first).
+        Rows are tied to a specific occupant when known, but
+        `occupantId` may be empty if the offender has since moved out
+        — the snapshot in `occupantName` keeps the row readable.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PropertyViolation" }
+    post:
+      operationId: createPropertyViolation
+      tags: [violations]
+      summary: Log a new rule violation against a property
+      description: |
+        Records a new violation entry for the given property. The
+        client supplies the occupant id (or empty when the offender
+        has moved out), the canonical category, the date the
+        violation occurred, and the pasted notification body. The
+        server fills in `createdAt` automatically.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PropertyViolationCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PropertyViolation" }
+  /properties/{id}/violations/{violationId}:
+    delete:
+      operationId: deletePropertyViolation
+      tags: [violations]
+      summary: Delete a property violation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: violationId
           required: true
           schema: { type: string }
       responses:
@@ -1761,6 +1831,63 @@ components:
         coverageEnd: { type: string }
         documentUrl: { type: string }
         notes: { type: string }
+
+    PropertyViolationCategory:
+      type: string
+      enum: [smoking, parking, noise, police, maintenance, cleanliness, other]
+      description: |
+        Canonical category for a property violation. The "other"
+        bucket is paired with a free-text `details` field so unusual
+        notices still end up in the log.
+    PropertyViolation:
+      type: object
+      required: [id, propertyId, occupantId, occupantName, category, details, notes, occurredOn, createdBy]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        occupantId:
+          type: string
+          description: |
+            Empty string when the offender has moved out / is unknown.
+            Use `occupantName` for display in that case.
+        occupantName:
+          type: string
+          description: |
+            Snapshot of the occupant's name at logging time, so the
+            row stays readable even after the occupant row is deleted.
+        category: { $ref: "#/components/schemas/PropertyViolationCategory" }
+        details:
+          type: string
+          description: |
+            Free-text "what kind?" follow-up. Only meaningful when
+            `category === "other"`. Empty otherwise.
+        notes:
+          type: string
+          description: The pasted notification email body.
+        occurredOn:
+          type: string
+          description: YYYY-MM-DD date the violation was recorded / observed.
+        createdAt:
+          type: string
+          format: date-time
+          description: Server-assigned timestamp the row was inserted.
+        createdBy:
+          type: string
+          description: |
+            Free-text operator name. Empty until proper user
+            identity is wired in.
+    PropertyViolationCreate:
+      type: object
+      required: [id, category, occurredOn]
+      properties:
+        id: { type: string }
+        occupantId: { type: string }
+        occupantName: { type: string }
+        category: { $ref: "#/components/schemas/PropertyViolationCategory" }
+        details: { type: string }
+        notes: { type: string }
+        occurredOn: { type: string }
+        createdBy: { type: string }
 
     Room:
       type: object

@@ -145,6 +145,10 @@ vi.mock("@/components/assign-occupant-dialog", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
   useListUnplacedPayroll: () => ({
     data: { unmatched: [], lowConfidenceMatches: [] },
   }),

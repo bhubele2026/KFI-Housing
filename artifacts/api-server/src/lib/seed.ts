@@ -11,6 +11,7 @@ import {
   utilitiesTable,
   otherCostsTable,
   insuranceCertificatesTable,
+  propertyViolationsTable,
   schedulerStateTable,
   type InsertCustomerRow,
   type InsertPropertyRow,
@@ -608,6 +609,10 @@ async function wipeAllInTx(
   // leases) by id — wipe before properties so a future FK doesn't
   // trip on cascade order.
   await tx.delete(insuranceCertificatesTable);
+  // Property violations reference properties (and optionally
+  // occupants) by id — wipe before properties so a future FK
+  // doesn't trip on cascade order (Task #499).
+  await tx.delete(propertyViolationsTable);
   await tx.delete(roomsTable);
   await tx.delete(propertiesTable);
   await tx.delete(customersTable);

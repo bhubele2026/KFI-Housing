@@ -2312,6 +2312,112 @@ export const DeleteInsuranceCertificateParams = zod.object({
 });
 
 /**
+ * Returns every violation row recorded for the given property, in
+reverse chronological order (most recent `occurredOn` first).
+Rows are tied to a specific occupant when known, but
+`occupantId` may be empty if the offender has since moved out
+— the snapshot in `occupantName` keeps the row readable.
+
+ * @summary List rule violations logged against a property
+ */
+export const ListPropertyViolationsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListPropertyViolationsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  occupantId: zod
+    .string()
+    .describe(
+      "Empty string when the offender has moved out \/ is unknown.\nUse `occupantName` for display in that case.\n",
+    ),
+  occupantName: zod
+    .string()
+    .describe(
+      "Snapshot of the occupant's name at logging time, so the\nrow stays readable even after the occupant row is deleted.\n",
+    ),
+  category: zod
+    .enum([
+      "smoking",
+      "parking",
+      "noise",
+      "police",
+      "maintenance",
+      "cleanliness",
+      "other",
+    ])
+    .describe(
+      'Canonical category for a property violation. The \"other\"\nbucket is paired with a free-text `details` field so unusual\nnotices still end up in the log.\n',
+    ),
+  details: zod
+    .string()
+    .describe(
+      'Free-text \"what kind?\" follow-up. Only meaningful when\n`category === \"other\"`. Empty otherwise.\n',
+    ),
+  notes: zod.string().describe("The pasted notification email body."),
+  occurredOn: zod
+    .string()
+    .describe("YYYY-MM-DD date the violation was recorded \/ observed."),
+  createdAt: zod.coerce
+    .date()
+    .optional()
+    .describe("Server-assigned timestamp the row was inserted."),
+  createdBy: zod
+    .string()
+    .describe(
+      "Free-text operator name. Empty until proper user\nidentity is wired in.\n",
+    ),
+});
+export const ListPropertyViolationsResponse = zod.array(
+  ListPropertyViolationsResponseItem,
+);
+
+/**
+ * Records a new violation entry for the given property. The
+client supplies the occupant id (or empty when the offender
+has moved out), the canonical category, the date the
+violation occurred, and the pasted notification body. The
+server fills in `createdAt` automatically.
+
+ * @summary Log a new rule violation against a property
+ */
+export const CreatePropertyViolationParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreatePropertyViolationBody = zod.object({
+  id: zod.string(),
+  occupantId: zod.string().optional(),
+  occupantName: zod.string().optional(),
+  category: zod
+    .enum([
+      "smoking",
+      "parking",
+      "noise",
+      "police",
+      "maintenance",
+      "cleanliness",
+      "other",
+    ])
+    .describe(
+      'Canonical category for a property violation. The \"other\"\nbucket is paired with a free-text `details` field so unusual\nnotices still end up in the log.\n',
+    ),
+  details: zod.string().optional(),
+  notes: zod.string().optional(),
+  occurredOn: zod.string(),
+  createdBy: zod.string().optional(),
+});
+
+/**
+ * @summary Delete a property violation
+ */
+export const DeletePropertyViolationParams = zod.object({
+  id: zod.coerce.string(),
+  violationId: zod.coerce.string(),
+});
+
+/**
  * @summary List all rooms
  */
 export const ListRoomsResponseItem = zod.object({

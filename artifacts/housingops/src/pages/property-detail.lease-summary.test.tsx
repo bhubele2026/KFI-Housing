@@ -40,6 +40,10 @@ vi.mock("@/components/layout/main-layout", () => ({
 let mockRoomNightLogs: Array<Record<string, unknown>> = [];
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: mockRoomNightLogs }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

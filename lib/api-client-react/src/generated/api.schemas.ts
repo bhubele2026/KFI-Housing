@@ -721,6 +721,64 @@ export interface InsuranceCertificateUpdate {
   notes?: string;
 }
 
+/**
+ * Canonical category for a property violation. The "other"
+bucket is paired with a free-text `details` field so unusual
+notices still end up in the log.
+
+ */
+export type PropertyViolationCategory =
+  (typeof PropertyViolationCategory)[keyof typeof PropertyViolationCategory];
+
+export const PropertyViolationCategory = {
+  smoking: "smoking",
+  parking: "parking",
+  noise: "noise",
+  police: "police",
+  maintenance: "maintenance",
+  cleanliness: "cleanliness",
+  other: "other",
+} as const;
+
+export interface PropertyViolation {
+  id: string;
+  propertyId: string;
+  /** Empty string when the offender has moved out / is unknown.
+Use `occupantName` for display in that case.
+ */
+  occupantId: string;
+  /** Snapshot of the occupant's name at logging time, so the
+row stays readable even after the occupant row is deleted.
+ */
+  occupantName: string;
+  category: PropertyViolationCategory;
+  /** Free-text "what kind?" follow-up. Only meaningful when
+`category === "other"`. Empty otherwise.
+ */
+  details: string;
+  /** The pasted notification email body. */
+  notes: string;
+  /** YYYY-MM-DD date the violation was recorded / observed. */
+  occurredOn: string;
+  /** Server-assigned timestamp the row was inserted. */
+  createdAt?: string;
+  /** Free-text operator name. Empty until proper user
+identity is wired in.
+ */
+  createdBy: string;
+}
+
+export interface PropertyViolationCreate {
+  id: string;
+  occupantId?: string;
+  occupantName?: string;
+  category: PropertyViolationCategory;
+  details?: string;
+  notes?: string;
+  occurredOn: string;
+  createdBy?: string;
+}
+
 export interface Room {
   id: string;
   propertyId: string;

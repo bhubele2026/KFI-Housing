@@ -89,6 +89,10 @@ vi.mock("@/context/data-store", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: mockLogs }),
+  useListPropertyViolations: () => ({ data: [] }),
+  useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListPropertyViolationsQueryKey: () => [],
   useListUnplacedPayroll: () => ({
     data: { unmatched: [], lowConfidenceMatches: [] },
   }),

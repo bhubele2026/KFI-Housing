@@ -935,6 +935,57 @@ export const InsuranceCertificateSchema = z.object({
 });
 export type InsuranceCertificate = z.infer<typeof InsuranceCertificateSchema>;
 
+/**
+ * Canonical categories for property-level rule violations
+ * (Task #499). Mirrors `PropertyViolationCategory` in
+ * `lib/api-spec/openapi.yaml`. The "other" bucket pairs with the
+ * `details` follow-up so unusual notices still end up in the log.
+ */
+export const PROPERTY_VIOLATION_CATEGORIES = [
+  "smoking",
+  "parking",
+  "noise",
+  "police",
+  "maintenance",
+  "cleanliness",
+  "other",
+] as const;
+
+export const PROPERTY_VIOLATION_CATEGORY_LABELS: Record<
+  (typeof PROPERTY_VIOLATION_CATEGORIES)[number],
+  string
+> = {
+  smoking: "Smoking",
+  parking: "Parking",
+  noise: "Noise",
+  police: "Police",
+  maintenance: "Maintenance",
+  cleanliness: "Cleanliness",
+  other: "Other",
+};
+
+/**
+ * Per-property rule violation logged against an occupant. Mirrors
+ * `PropertyViolation` in `lib/api-spec/openapi.yaml`. `occupantId`
+ * may be empty when the offender has moved out — the snapshot in
+ * `occupantName` keeps the row readable.
+ */
+export const PropertyViolationSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  occupantId: z.string(),
+  occupantName: z.string(),
+  category: z.enum(PROPERTY_VIOLATION_CATEGORIES),
+  details: z.string(),
+  notes: z.string(),
+  occurredOn: z.string(),
+  createdAt: z.string().optional(),
+  createdBy: z.string(),
+});
+export type PropertyViolation = z.infer<typeof PropertyViolationSchema>;
+export type PropertyViolationCategory =
+  (typeof PROPERTY_VIOLATION_CATEGORIES)[number];
+
 export const MOCK_CUSTOMERS: Customer[] = [
   { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX" },
   { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX" },

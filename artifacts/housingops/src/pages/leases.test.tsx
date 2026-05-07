@@ -869,6 +869,213 @@ describe("Leases page — placeholder rows for properties without a lease", () =
     ).toBeNull();
   });
 
+  // ── Missing-dates filter (?needsDates=1) (task #363) ─────────────────
+  // The "Needs dates" column-level badge + Fix-dates link are covered by
+  // `leases-table.needs-dates.test.tsx`. These tests pin down the page
+  // wiring around them: the dropdown narrows the list, the dismissable
+  // chip clears the selection, and blank-date rows always float to the
+  // top of the table regardless of their status (so the triage queue is
+  // visible without scrolling past Active rows).
+  it("?needsDates=1 deep-link filters to blank-date leases and the Missing-dates select stays in sync", async () => {
+    // Two blank-date leases on different properties so the filter has
+    // more than one row to keep. Both are Expired because the renewal-
+    // alerts panel runs daysUntil() on Active/Upcoming leases' endDate
+    // and would throw on the empty string — real blank-date leases
+    // imported from a partial source row are never Active anyway.
+    state.leases.push({
+      id: "lBlankA",
+      propertyId: "p2",
+      startDate: "",
+      endDate: "",
+      monthlyRent: 900,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+    state.leases.push({
+      id: "lBlankB",
+      propertyId: "p3",
+      startDate: "",
+      endDate: "",
+      monthlyRent: 1000,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    const { Harness } = makeHarness("/leases?needsDates=1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+
+    // Only the two blank-date leases survive the filter; both fully-dated
+    // leases (l1, l2) are gone.
+    expect(
+      container.querySelector('[data-testid="row-lease-lBlankA"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="row-lease-lBlankB"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();
+
+    // The dropdown reflects the URL state — without this the operator
+    // would see a truncated list with the select still reading "All",
+    // and assume the page was broken.
+    expect(
+      container
+        .querySelector('[data-testid="select-needs-dates-filter"]')
+        ?.getAttribute("data-current"),
+    ).toBe("NeedsDates");
+
+    // Placeholder rows (p2/p3) should also be hidden while a value
+    // filter is active, because they have no lease state to test.
+    expect(
+      container.querySelector('[data-testid="row-lease-placeholder-p2"]'),
+    ).toBeNull();
+  });
+
+  it("clicking the Missing-dates option in the dropdown narrows the list to blank-date leases", async () => {
+    state.leases.push({
+      // Non-Active status to keep the renewal-alerts panel's date math
+      // off this row (it throws on empty endDate for Active/Upcoming).
+      id: "lBlank",
+      propertyId: "p2",
+      startDate: "",
+      endDate: "",
+      monthlyRent: 900,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    await renderPage();
+
+    // Sanity — all three lease rows render before filtering.
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-lBlank"]')).not.toBeNull();
+
+    const opt = container.querySelector(
+      '[data-testid="select-needs-dates-filter"] [data-select-item="NeedsDates"]',
+    ) as HTMLButtonElement | null;
+    expect(opt).not.toBeNull();
+    await act(async () => {
+      opt!.click();
+    });
+
+    // Only the blank-date lease survives. Dated leases are hidden.
+    expect(container.querySelector('[data-testid="row-lease-lBlank"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).toBeNull();
+  });
+
+  it("clicking the Missing-dates chip's clear button restores the full list", async () => {
+    state.leases.push({
+      // See note above re: avoiding Active on blank-date leases.
+      id: "lBlank",
+      propertyId: "p2",
+      startDate: "",
+      endDate: "",
+      monthlyRent: 900,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    // Land directly on the filtered URL so the chip is showing without
+    // having to drive the dropdown.
+    const { Harness } = makeHarness("/leases?needsDates=1");
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<Harness />);
+    });
+
+    const chip = container.querySelector(
+      '[data-testid="badge-needs-dates-filter"]',
+    );
+    expect(chip).not.toBeNull();
+    const clearBtn = container.querySelector(
+      '[data-testid="button-clear-needs-dates-filter"]',
+    ) as HTMLButtonElement | null;
+    expect(clearBtn).not.toBeNull();
+
+    await act(async () => {
+      clearBtn!.click();
+    });
+
+    // Chip is gone and the dated leases that were hidden are back.
+    expect(
+      container.querySelector('[data-testid="badge-needs-dates-filter"]'),
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="row-lease-l2"]')).not.toBeNull();
+    // Select dropdown is back to "All".
+    expect(
+      container
+        .querySelector('[data-testid="select-needs-dates-filter"]')
+        ?.getAttribute("data-current"),
+    ).toBe("All");
+  });
+
+  it("blank-date leases always sort to the top of the table regardless of status (Expired blank above Active dated)", async () => {
+    // An Expired lease with no dates would normally sort below every
+    // Active row. The page lifts blank-date rows to the top so the
+    // triage queue is the first thing the operator sees — without that
+    // override, missing-dates rows would be hidden behind Active leases
+    // and the `?needsDates=1` deep-link would feel like a search.
+    state.leases.push({
+      id: "lBlankExpired",
+      propertyId: "p2",
+      startDate: "",
+      endDate: "",
+      monthlyRent: 900,
+      securityDeposit: 0,
+      status: "Expired",
+      notes: "",
+      clauses: "",
+      buyoutAvailable: false,
+      buyoutCost: null,
+    });
+
+    await renderPage();
+
+    // Read the rendered row order from the lease table body. Placeholder
+    // rows are rendered after lease rows by the table component, so the
+    // first lease rows in DOM order are the ones we care about.
+    const leaseRows = Array.from(
+      container.querySelectorAll<HTMLTableRowElement>(
+        'tr[data-testid^="row-lease-"]',
+      ),
+    )
+      .map((tr) => tr.getAttribute("data-testid") ?? "")
+      .filter((id) => !id.startsWith("row-lease-placeholder-"));
+
+    // The Expired blank-date lease must come before either of the
+    // Active dated leases.
+    const blankIdx = leaseRows.indexOf("row-lease-lBlankExpired");
+    const l1Idx = leaseRows.indexOf("row-lease-l1");
+    const l2Idx = leaseRows.indexOf("row-lease-l2");
+    expect(blankIdx).toBeGreaterThanOrEqual(0);
+    expect(l1Idx).toBeGreaterThanOrEqual(0);
+    expect(l2Idx).toBeGreaterThanOrEqual(0);
+    expect(blankIdx).toBeLessThan(l1Idx);
+    expect(blankIdx).toBeLessThan(l2Idx);
+  });
+
   it("by-customer view hides customers whose only filtered leases are non-Active", async () => {
     state.customers.push({
       id: "c2",

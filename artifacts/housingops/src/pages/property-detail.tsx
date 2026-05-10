@@ -1207,7 +1207,7 @@ export default function PropertyDetail() {
           >
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
-              <p className="font-medium">Some records for this property were hidden due to data issues</p>
+              <p className="font-medium">{t("pages.propertyDetail.droppedNotice")}</p>
               <ul className="mt-1 list-disc list-inside space-y-0.5 text-xs">
                 {droppedRoomsForProperty.droppedRooms.map((row, i) => (
                   <li key={`room-${row.id ?? i}`}>
@@ -1817,7 +1817,7 @@ export default function PropertyDetail() {
                   {property.rentFree && (
                     <div className="mb-4" data-testid="other-costs-editor">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">Other Costs</span>
+                        <span className="text-sm font-medium">{t("pages.propertyDetail.statOtherCosts")}</span>
                         <Button
                           size="sm"
                           variant="outline"
@@ -2814,7 +2814,7 @@ export default function PropertyDetail() {
                                                       </Badge>
                                                     </TooltipTrigger>
                                                     <TooltipContent side="top" className="text-xs">
-                                                      <p className="font-semibold">Manually overridden</p>
+                                                      <p className="font-semibold">{t("pages.propertyDetail.manuallyOverridden")}</p>
                                                       <p className="text-muted-foreground">
                                                         was payroll for {occ.chargeSourceCustomer || "—"} · Person {occ.chargeSourcePersonId || "—"}
                                                       </p>

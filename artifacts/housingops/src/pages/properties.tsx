@@ -2264,7 +2264,7 @@ export default function Properties() {
                                               <span className="font-medium tabular-nums w-4 text-right">{v}</span>
                                             </>
                                           ) : (
-                                            <span className="text-muted-foreground italic">Not rated</span>
+                                            <span className="text-muted-foreground italic">{t("pages.properties.notRated")}</span>
                                           )}
                                         </span>
                                       </li>

@@ -631,7 +631,8 @@
         "city": "City",
         "state": "State",
         "zip": "ZIP"
-      }
+      },
+      "notRated": "Not rated"
     },
     "propertyDetail": {
       "notFoundTitle": "Property not found",
@@ -767,7 +768,7 @@
       "bedsCount_other": "{{count}} beds",
       "occupiedCount": "{{count}} occupied",
       "sqftLabel": "Sqft",
-      "addBed": "Add Bed",
+      "addBed": "Add bed",
       "statusOccupied": "Occupied",
       "statusVacant": "Vacant",
       "cleaningReady": "Ready",
@@ -837,11 +838,8 @@
       "bedOccupancy": "Bed Occupancy",
       "bedOccupiedCount": "Occupied ({{count}})",
       "bedVacantCount": "Vacant ({{count}})",
-      "bedsCount_one": "{{count}} bed",
-      "bedsCount_other": "{{count}} beds",
       "pctFull": "{{pct}}% full",
       "vacantLabel": "Vacant",
-      "addBed": "Add bed",
       "addRoomFirst": "Add a room first",
       "bedAriaLabelOccupied": "Bed {{number}} — {{name}}. Open in Beds tab.",
       "bedAriaLabelVacant": "Bed {{number}} — Vacant. Open in Beds tab.",
@@ -936,7 +934,8 @@
         "notesEmailPlaceholder": "Paste the notification email body here, or jot down what the property manager said.",
         "cancel": "Cancel",
         "submit": "Log Violation"
-      }
+      },
+      "manuallyOverridden": "Manually overridden"
     },
     "leases": {
       "title": "Leases",
@@ -947,7 +946,36 @@
       "clearMissingDatesFilter": "Clear missing-dates filter",
       "hotelRateAtRisk": "Hotel-rate at risk this month",
       "clearAtRiskFilter": "Clear at-risk filter",
-      "downloadCsv": "Download CSV"
+      "downloadCsv": "Download CSV",
+      "renewalAlerts": "Renewal Alerts",
+      "renew": "Renew",
+      "unknownProperty": "Unknown property",
+      "viewModeAria": "Lease view mode",
+      "viewModeAll": "All",
+      "viewModeByCustomer": "By customer",
+      "customerPlaceholder": "Customer",
+      "statusPlaceholder": "Status",
+      "buyoutPlaceholder": "Buyout",
+      "customerPaysPlaceholder": "Customer pays",
+      "needsReviewPlaceholder": "Needs review",
+      "missingDatesPlaceholder": "Missing dates",
+      "hotelRiskPlaceholder": "Hotel-rate risk",
+      "allCustomers": "All Customers",
+      "allStatuses": "All Statuses",
+      "allLeases": "All Leases",
+      "statusActive": "Active",
+      "statusExpired": "Expired",
+      "statusUpcoming": "Upcoming",
+      "anyBuyout": "Any Buyout",
+      "buyoutAvailable": "Buyout available",
+      "noBuyout": "No buyout",
+      "anyPayer": "Any payer",
+      "customerPaysOption": "Customer pays",
+      "notCustomerPaid": "Not customer-paid",
+      "needsReviewOption": "Needs review",
+      "missingDatesOption": "Missing dates",
+      "atRiskOption": "At risk this month",
+      "noActiveLeaseInScope": "No customer has an Active lease in the current filter scope."
     },
     "beds": {
       "title": "Beds",

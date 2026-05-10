@@ -631,7 +631,8 @@
         "city": "Ciudad",
         "state": "Estado",
         "zip": "Código postal"
-      }
+      },
+      "notRated": "Sin calificar"
     },
     "propertyDetail": {
       "notFoundTitle": "Propiedad no encontrada",
@@ -837,11 +838,8 @@
       "bedOccupancy": "Ocupación de camas",
       "bedOccupiedCount": "Ocupadas ({{count}})",
       "bedVacantCount": "Vacantes ({{count}})",
-      "bedsCount_one": "{{count}} cama",
-      "bedsCount_other": "{{count}} camas",
       "pctFull": "{{pct}}% lleno",
       "vacantLabel": "Vacante",
-      "addBed": "Agregar cama",
       "addRoomFirst": "Agrega una habitación primero",
       "bedAriaLabelOccupied": "Cama {{number}} — {{name}}. Abrir en la pestaña Camas.",
       "bedAriaLabelVacant": "Cama {{number}} — Vacante. Abrir en la pestaña Camas.",
@@ -936,7 +934,8 @@
         "notesEmailPlaceholder": "Pega aquí el cuerpo del correo de notificación, o anota lo que dijo el administrador de la propiedad.",
         "cancel": "Cancelar",
         "submit": "Registrar infracción"
-      }
+      },
+      "manuallyOverridden": "Anulado manualmente"
     },
     "leases": {
       "title": "Contratos",
@@ -947,7 +946,36 @@
       "clearMissingDatesFilter": "Quitar filtro de sin fechas",
       "hotelRateAtRisk": "Tarifa hotel en riesgo este mes",
       "clearAtRiskFilter": "Quitar filtro de en riesgo",
-      "downloadCsv": "Descargar CSV"
+      "downloadCsv": "Descargar CSV",
+      "renewalAlerts": "Alertas de renovación",
+      "renew": "Renovar",
+      "unknownProperty": "Propiedad desconocida",
+      "viewModeAria": "Modo de vista de contratos",
+      "viewModeAll": "Todos",
+      "viewModeByCustomer": "Por cliente",
+      "customerPlaceholder": "Cliente",
+      "statusPlaceholder": "Estado",
+      "buyoutPlaceholder": "Cláusula de salida",
+      "customerPaysPlaceholder": "Cliente paga",
+      "needsReviewPlaceholder": "Necesita revisión",
+      "missingDatesPlaceholder": "Sin fechas",
+      "hotelRiskPlaceholder": "Riesgo tarifa hotel",
+      "allCustomers": "Todos los clientes",
+      "allStatuses": "Todos los estados",
+      "allLeases": "Todos los contratos",
+      "statusActive": "Activo",
+      "statusExpired": "Vencido",
+      "statusUpcoming": "Próximo",
+      "anyBuyout": "Cualquier cláusula de salida",
+      "buyoutAvailable": "Con cláusula de salida",
+      "noBuyout": "Sin cláusula de salida",
+      "anyPayer": "Cualquier pagador",
+      "customerPaysOption": "Cliente paga",
+      "notCustomerPaid": "No pagado por cliente",
+      "needsReviewOption": "Necesita revisión",
+      "missingDatesOption": "Sin fechas",
+      "atRiskOption": "En riesgo este mes",
+      "noActiveLeaseInScope": "Ningún cliente tiene un contrato activo en el alcance del filtro actual."
     },
     "beds": {
       "title": "Camas",

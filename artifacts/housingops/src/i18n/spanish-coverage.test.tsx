@@ -891,6 +891,69 @@ describe("Spanish-language end-to-end coverage", () => {
     );
   });
 
+  it("Leases renders filter labels, view toggle and renewal alerts in Spanish", async () => {
+    await act(async () => { root = mount(<Leases />, container); });
+    const text = container.textContent ?? "";
+    // Filter SelectItem labels
+    expect(text).toContain("Todos los clientes");
+    expect(text).toContain("Todos los estados");
+    expect(text).toContain("Todos los contratos");
+    expect(text).toContain("Activo");
+    expect(text).toContain("Vencido");
+    expect(text).toContain("Próximo");
+    expect(text).toContain("Cualquier cláusula de salida");
+    expect(text).toContain("Con cláusula de salida");
+    expect(text).toContain("Sin cláusula de salida");
+    expect(text).toContain("Cualquier pagador");
+    expect(text).toContain("No pagado por cliente");
+    expect(text).toContain("Necesita revisión");
+    expect(text).toContain("Sin fechas");
+    expect(text).toContain("En riesgo este mes");
+    // View mode toggle
+    expect(text).toContain("Por cliente");
+    // No English leaks for the translated labels (textContent has no
+    // markup delimiters, so assert the plain strings)
+    expect(text).not.toContain("All Customers");
+    expect(text).not.toContain("All Statuses");
+    expect(text).not.toContain("All Leases");
+    expect(text).not.toContain("Any Buyout");
+    expect(text).not.toContain("Buyout available");
+    expect(text).not.toContain("No buyout");
+    expect(text).not.toContain("Any payer");
+    expect(text).not.toContain("Not customer-paid");
+    expect(text).not.toContain("Needs review");
+    expect(text).not.toContain("Missing dates");
+    expect(text).not.toContain("At risk this month");
+    expect(text).not.toContain("By customer");
+    // Bundle-level guards for conditionally-rendered chrome
+    expect(i18n.t("pages.leases.renewalAlerts")).toBe("Alertas de renovación");
+    expect(i18n.t("pages.leases.renew")).toBe("Renovar");
+    expect(i18n.t("pages.leases.unknownProperty")).toBe(
+      "Propiedad desconocida",
+    );
+    expect(i18n.t("pages.leases.viewModeAria")).toBe(
+      "Modo de vista de contratos",
+    );
+    expect(i18n.t("pages.leases.noActiveLeaseInScope")).toContain(
+      "Ningún cliente",
+    );
+    expect(spanishMissingKeys()).toEqual([]);
+  });
+
+  it("Properties renders the 'Not rated' tooltip copy in Spanish", () => {
+    expect(i18n.t("pages.properties.notRated")).toBe("Sin calificar");
+  });
+
+  it("Property Detail bundle has Spanish copy for hidden-records, other-costs and manual-override", () => {
+    expect(i18n.t("pages.propertyDetail.droppedNotice")).toContain(
+      "ocultados",
+    );
+    expect(i18n.t("pages.propertyDetail.statOtherCosts")).toBe("Otros costos");
+    expect(i18n.t("pages.propertyDetail.manuallyOverridden")).toBe(
+      "Anulado manualmente",
+    );
+  });
+
   it("Properties bundle has Spanish copy for filters and dialog", () => {
     expect(i18n.t("pages.properties.allCustomers")).toBe("Todos los clientes");
     expect(i18n.t("pages.properties.allStatuses")).toBe("Todos los estados");

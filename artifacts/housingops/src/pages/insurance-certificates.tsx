@@ -546,7 +546,7 @@ function certPdfHref(documentUrl: string): string {
   return `/api/attached-assets/${encodeURIComponent(documentUrl)}`;
 }
 
-function CertUploadButton({ certId, onUploaded, label = "Upload" }: { certId: string; onUploaded: (url: string) => void; label?: string }) {
+function CertUploadButton({ certId, onUploaded, label }: { certId: string; onUploaded: (url: string) => void; label: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const { uploadFile, isUploading } = useUpload({
     basePath: "/api/storage",

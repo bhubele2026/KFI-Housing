@@ -520,7 +520,7 @@ export default function Leases() {
                 </div>
                 <div>
                   <h2 className="text-base font-semibold">
-                    Hotel-rate at risk this month
+                    {t("pages.leases.hotelRateAtRisk")}
                   </h2>
                   <p
                     className="text-xs text-muted-foreground"
@@ -546,7 +546,7 @@ export default function Leases() {
                       data-testid={`tile-hotel-rate-at-risk-${lease.id}`}
                     >
                       <p className="font-semibold text-sm truncate">
-                        {property?.name ?? "Unknown property"}
+                        {property?.name ?? t("pages.leases.unknownProperty")}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         {risk.kind === "missing"
@@ -570,7 +570,7 @@ export default function Leases() {
                     <AlertTriangle className="h-4 w-4 text-amber-700" />
                   </div>
                   <div>
-                    <h2 className="text-base font-semibold">Renewal Alerts</h2>
+                    <h2 className="text-base font-semibold">{t("pages.leases.renewalAlerts")}</h2>
                     <p className="text-xs text-muted-foreground">
                       {renewalAlerts.length} lease{renewalAlerts.length !== 1 ? "s" : ""} expiring within 90 days or already past
                     </p>
@@ -597,7 +597,7 @@ export default function Leases() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{property?.name ?? "Unknown property"}</p>
+                            <p className="font-semibold text-sm truncate">{property?.name ?? t("pages.leases.unknownProperty")}</p>
                             {customer && (
                               <p className="text-[11px] text-muted-foreground truncate mt-0.5">{customer.name}</p>
                             )}
@@ -633,7 +633,7 @@ export default function Leases() {
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <CalendarPlus className="h-3 w-3" />
-                                  Renew
+                                  {t("pages.leases.renew")}
                                 </Button>
                               }
                             />
@@ -654,10 +654,10 @@ export default function Leases() {
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Select value={customerFilter} onValueChange={updateCustomerFilter}>
                   <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
-                    <SelectValue placeholder="Customer" />
+                    <SelectValue placeholder={t("pages.leases.customerPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={ALL_CUSTOMERS}>All Customers</SelectItem>
+                    <SelectItem value={ALL_CUSTOMERS}>{t("pages.leases.allCustomers")}</SelectItem>
                     {customers.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
@@ -665,13 +665,13 @@ export default function Leases() {
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-48" data-testid="select-status-filter">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder={t("pages.leases.statusPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Expired">Expired</SelectItem>
-                    <SelectItem value="Upcoming">Upcoming</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.allStatuses")}</SelectItem>
+                    <SelectItem value="Active">{t("pages.leases.statusActive")}</SelectItem>
+                    <SelectItem value="Expired">{t("pages.leases.statusExpired")}</SelectItem>
+                    <SelectItem value="Upcoming">{t("pages.leases.statusUpcoming")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -682,12 +682,12 @@ export default function Leases() {
                     className="w-full sm:w-48"
                     data-testid="select-buyout-filter"
                   >
-                    <SelectValue placeholder="Buyout" />
+                    <SelectValue placeholder={t("pages.leases.buyoutPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">Any Buyout</SelectItem>
-                    <SelectItem value="Yes">Buyout available</SelectItem>
-                    <SelectItem value="No">No buyout</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.anyBuyout")}</SelectItem>
+                    <SelectItem value="Yes">{t("pages.leases.buyoutAvailable")}</SelectItem>
+                    <SelectItem value="No">{t("pages.leases.noBuyout")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -700,12 +700,12 @@ export default function Leases() {
                     className="w-full sm:w-44"
                     data-testid="select-customer-responsible-filter"
                   >
-                    <SelectValue placeholder="Customer pays" />
+                    <SelectValue placeholder={t("pages.leases.customerPaysPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">Any payer</SelectItem>
-                    <SelectItem value="Yes">Customer pays</SelectItem>
-                    <SelectItem value="No">Not customer-paid</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.anyPayer")}</SelectItem>
+                    <SelectItem value="Yes">{t("pages.leases.customerPaysOption")}</SelectItem>
+                    <SelectItem value="No">{t("pages.leases.notCustomerPaid")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -718,11 +718,11 @@ export default function Leases() {
                     className="w-full sm:w-44"
                     data-testid="select-needs-review-filter"
                   >
-                    <SelectValue placeholder="Needs review" />
+                    <SelectValue placeholder={t("pages.leases.needsReviewPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Leases</SelectItem>
-                    <SelectItem value="NeedsReview">Needs review</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.allLeases")}</SelectItem>
+                    <SelectItem value="NeedsReview">{t("pages.leases.needsReviewOption")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -735,11 +735,11 @@ export default function Leases() {
                     className="w-full sm:w-44"
                     data-testid="select-needs-dates-filter"
                   >
-                    <SelectValue placeholder="Missing dates" />
+                    <SelectValue placeholder={t("pages.leases.missingDatesPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Leases</SelectItem>
-                    <SelectItem value="NeedsDates">Missing dates</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.allLeases")}</SelectItem>
+                    <SelectItem value="NeedsDates">{t("pages.leases.missingDatesOption")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -750,11 +750,11 @@ export default function Leases() {
                     className="w-full sm:w-52"
                     data-testid="select-at-risk-filter"
                   >
-                    <SelectValue placeholder="Hotel-rate risk" />
+                    <SelectValue placeholder={t("pages.leases.hotelRiskPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">All Leases</SelectItem>
-                    <SelectItem value="AtRisk">At risk this month</SelectItem>
+                    <SelectItem value="All">{t("pages.leases.allLeases")}</SelectItem>
+                    <SelectItem value="AtRisk">{t("pages.leases.atRiskOption")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -762,7 +762,7 @@ export default function Leases() {
                 <div
                   className="inline-flex rounded-md border bg-background p-0.5"
                   role="group"
-                  aria-label="Lease view mode"
+                  aria-label={t("pages.leases.viewModeAria")}
                   data-testid="leases-view-toggle"
                 >
                   <Button
@@ -775,7 +775,7 @@ export default function Leases() {
                     data-testid="button-view-mode-flat"
                   >
                     <Rows3 className="h-3.5 w-3.5" />
-                    All
+                    {t("pages.leases.viewModeAll")}
                   </Button>
                   <Button
                     type="button"
@@ -787,7 +787,7 @@ export default function Leases() {
                     data-testid="button-view-mode-by-customer"
                   >
                     <Users className="h-3.5 w-3.5" />
-                    By customer
+                    {t("pages.leases.viewModeByCustomer")}
                   </Button>
                 </div>
                 <span className="text-xs text-muted-foreground">
@@ -866,7 +866,7 @@ export default function Leases() {
                 className="p-8 text-center text-sm text-muted-foreground"
                 data-testid="leases-by-customer-empty"
               >
-                No customer has an Active lease in the current filter scope.
+                {t("pages.leases.noActiveLeaseInScope")}
               </div>
             ) : (
               <Accordion

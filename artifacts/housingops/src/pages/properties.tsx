@@ -262,7 +262,7 @@ export default function Properties() {
   // Defensive fallback to `[]` for `utilities` keeps existing tests
   // with partial `useData` mocks from crashing on the per-bed-electric
   // pre-compute below — production always returns an array.
-  const { properties, beds, leases, customers, utilities = [], insuranceCertificates, addProperty, addCustomer, updateProperty, updateLease, isLoading } = useData();
+  const { properties, beds, leases, customers, buildings, utilities = [], insuranceCertificates, addProperty, addCustomer, updateProperty, updateLease, isLoading } = useData();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const { toast } = useToast();
@@ -2117,17 +2117,36 @@ export default function Properties() {
                               !!customer?.name &&
                               formatted.secondary === null &&
                               formatted.primary !== (property.name ?? "").trim();
+                            // Multi-building properties (Task #570) get a
+                            // small "N buildings" badge after the name so
+                            // operators can spot duplexes / multi-units
+                            // without drilling in. Single-building rows
+                            // (the back-filled common case) stay clean.
+                            const propertyBuildingCount = buildings.filter(
+                              (b) => b.propertyId === property.id,
+                            ).length;
                             return (
-                              <InlineEdit
-                                value={property.name}
-                                displayValue={stripped ? formatted.primary : undefined}
-                                onSave={(v) =>
-                                  updateProperty(property.id, { name: v })
-                                }
-                                displayClassName="font-semibold"
-                                inputClassName="w-56"
-                                testId={`inline-edit-property-name-${property.id}`}
-                              />
+                              <div className="flex items-center gap-2">
+                                <InlineEdit
+                                  value={property.name}
+                                  displayValue={stripped ? formatted.primary : undefined}
+                                  onSave={(v) =>
+                                    updateProperty(property.id, { name: v })
+                                  }
+                                  displayClassName="font-semibold"
+                                  inputClassName="w-56"
+                                  testId={`inline-edit-property-name-${property.id}`}
+                                />
+                                {propertyBuildingCount > 1 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] font-medium"
+                                    data-testid={`badge-property-buildings-${property.id}`}
+                                  >
+                                    {propertyBuildingCount} buildings
+                                  </Badge>
+                                )}
+                              </div>
                             );
                           })()}
                         </td>

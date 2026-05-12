@@ -104,6 +104,15 @@ export const leasesTable = pgTable("leases", {
   utilitiesIncludedInRent: boolean("utilities_included_in_rent")
     .notNull()
     .default(false),
+  // Optional building scope for the lease (Task #570). NULL means the
+  // lease is not pinned to a specific building under the property —
+  // the common single-building case leaves this NULL. For multi-
+  // building properties (e.g. Schuette Metals' 1331 vs 1341 S 8th
+  // Ave) the add-lease dialog surfaces a building picker and persists
+  // the selection here so the property detail page can group leases
+  // per building. The boundary normalizer coerces blank strings to
+  // NULL on write.
+  buildingId: text("building_id"),
 });
 
 export type LeaseRow = typeof leasesTable.$inferSelect;

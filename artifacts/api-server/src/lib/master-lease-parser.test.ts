@@ -163,3 +163,58 @@ describe("parseMasterRows on the real workbook", () => {
     expect(parsed.every((r) => r.state !== "NC")).toBe(true);
   });
 });
+
+describe("parseMasterRows ***Different address*** marker (Task #570)", () => {
+  // Build a minimal 22-column row so column F (index 5 = address) and
+  // column A (index 0 = customer name / marker) are populated. We need
+  // the state header first so `currentState` is set.
+  function row(cells: Record<number, string>): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < 22; i++) out.push(cells[i] ?? "");
+    return out;
+  }
+
+  it("folds a marker row onto the previous customer as a new BUILDING (not a secondary property)", () => {
+    const rows: string[][] = [
+      row({ 0: "Header" }), // skipped
+      row({ 0: "Wisconsin" }), // state header
+      row({
+        0: "Schuette Metals",
+        1: "$130",
+        5: "1331 S 8th Ave\nManitowoc, WI 54220",
+      }),
+      // Continuation with the marker — should NOT become a secondary property.
+      row({
+        0: "***Different address***",
+        5: "1341 S 8th Ave\nManitowoc, WI 54220",
+      }),
+    ];
+    const parsed = parseMasterRows(rows);
+    expect(parsed).toHaveLength(1);
+    const schuette = parsed[0]!;
+    expect(schuette.customerName).toBe("Schuette Metals");
+    expect(schuette.secondary).toBeNull();
+    expect(schuette.newBuildings).toHaveLength(1);
+    expect(schuette.newBuildings?.[0]?.address.street).toContain("1341");
+  });
+
+  it("still treats an unmarked continuation row as a secondary property (legacy behavior)", () => {
+    const rows: string[][] = [
+      row({ 0: "Header" }),
+      row({ 0: "Wisconsin" }),
+      row({
+        0: "Burnett",
+        1: "$130",
+        5: "100 Main St\nGrantsburg, WI 54840",
+      }),
+      // No marker — falls through to the secondary-property branch.
+      row({ 5: "200 Other St\nGrantsburg, WI 54840" }),
+    ];
+    const parsed = parseMasterRows(rows);
+    expect(parsed).toHaveLength(1);
+    const burnett = parsed[0]!;
+    expect(burnett.secondary).not.toBeNull();
+    expect(burnett.secondary?.address.street).toContain("200 Other St");
+    expect(burnett.newBuildings ?? []).toHaveLength(0);
+  });
+});

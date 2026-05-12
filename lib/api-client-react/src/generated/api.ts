@@ -20,10 +20,13 @@ import type {
   BackfillPropertyCoords200,
   Bed,
   BedUpdate,
+  Building,
+  BuildingUpdate,
   ConvertProjectedMoveIn200,
   CreateDigestRecipient409,
   Customer,
   CustomerUpdate,
+  DeleteBuilding409,
   DeleteCustomer409,
   DeleteRoom409,
   DigestRecipient,
@@ -3548,6 +3551,342 @@ export const useDeletePropertyViolation = <
   TContext
 > => {
   return useMutation(getDeletePropertyViolationMutationOptions(options));
+};
+
+/**
+ * @summary List all buildings across every property
+ */
+export const getListBuildingsUrl = () => {
+  return `/api/buildings`;
+};
+
+export const listBuildings = async (
+  options?: RequestInit,
+): Promise<Building[]> => {
+  return customFetch<Building[]>(getListBuildingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListBuildingsQueryKey = () => {
+  return [`/api/buildings`] as const;
+};
+
+export const getListBuildingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBuildings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBuildings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListBuildingsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listBuildings>>> = ({
+    signal,
+  }) => listBuildings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBuildings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBuildingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBuildings>>
+>;
+export type ListBuildingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all buildings across every property
+ */
+
+export function useListBuildings<
+  TData = Awaited<ReturnType<typeof listBuildings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBuildings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBuildingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a building under a property
+ */
+export const getCreateBuildingUrl = () => {
+  return `/api/buildings`;
+};
+
+export const createBuilding = async (
+  building: Building,
+  options?: RequestInit,
+): Promise<Building> => {
+  return customFetch<Building>(getCreateBuildingUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(building),
+  });
+};
+
+export const getCreateBuildingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBuilding>>,
+    TError,
+    { data: BodyType<Building> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createBuilding>>,
+  TError,
+  { data: BodyType<Building> },
+  TContext
+> => {
+  const mutationKey = ["createBuilding"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createBuilding>>,
+    { data: BodyType<Building> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createBuilding(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateBuildingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createBuilding>>
+>;
+export type CreateBuildingMutationBody = BodyType<Building>;
+export type CreateBuildingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a building under a property
+ */
+export const useCreateBuilding = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBuilding>>,
+    TError,
+    { data: BodyType<Building> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createBuilding>>,
+  TError,
+  { data: BodyType<Building> },
+  TContext
+> => {
+  return useMutation(getCreateBuildingMutationOptions(options));
+};
+
+/**
+ * @summary Update a building
+ */
+export const getUpdateBuildingUrl = (id: string) => {
+  return `/api/buildings/${id}`;
+};
+
+export const updateBuilding = async (
+  id: string,
+  buildingUpdate: BuildingUpdate,
+  options?: RequestInit,
+): Promise<Building> => {
+  return customFetch<Building>(getUpdateBuildingUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(buildingUpdate),
+  });
+};
+
+export const getUpdateBuildingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBuilding>>,
+    TError,
+    { id: string; data: BodyType<BuildingUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateBuilding>>,
+  TError,
+  { id: string; data: BodyType<BuildingUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateBuilding"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateBuilding>>,
+    { id: string; data: BodyType<BuildingUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateBuilding(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateBuildingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateBuilding>>
+>;
+export type UpdateBuildingMutationBody = BodyType<BuildingUpdate>;
+export type UpdateBuildingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a building
+ */
+export const useUpdateBuilding = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateBuilding>>,
+    TError,
+    { id: string; data: BodyType<BuildingUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateBuilding>>,
+  TError,
+  { id: string; data: BodyType<BuildingUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateBuildingMutationOptions(options));
+};
+
+/**
+ * Fails with 409 if any rooms reference this building or if it is
+the last building on the property (every property must keep at
+least one building so existing rooms always have a home).
+
+ * @summary Delete a building
+ */
+export const getDeleteBuildingUrl = (id: string) => {
+  return `/api/buildings/${id}`;
+};
+
+export const deleteBuilding = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteBuildingUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteBuildingMutationOptions = <
+  TError = ErrorType<DeleteBuilding409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBuilding>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteBuilding>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteBuilding"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteBuilding>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteBuilding(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteBuildingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteBuilding>>
+>;
+
+export type DeleteBuildingMutationError = ErrorType<DeleteBuilding409>;
+
+/**
+ * @summary Delete a building
+ */
+export const useDeleteBuilding = <
+  TError = ErrorType<DeleteBuilding409>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteBuilding>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteBuilding>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteBuildingMutationOptions(options));
 };
 
 /**

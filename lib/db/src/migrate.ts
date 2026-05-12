@@ -6,6 +6,7 @@ import { dropLeaseIncludedItemsIfNeeded } from "./migrations/drop-lease-included
 import { migrateLeasesCustomerIdNullableIfNeeded } from "./migrations/leases-customer-id-nullable";
 import { backfillUtilitiesIncludedInRent } from "./migrations/backfill-utilities-included-in-rent";
 import { addOccupantProfileFieldsIfNeeded } from "./migrations/add-occupant-profile-fields";
+import { backfillBuildingsIfNeeded } from "./migrations/backfill-buildings";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -55,6 +56,13 @@ export async function pushSchemaIfNeeded(
   // old shape catches up at boot rather than waiting for a separate
   // pushSchema run. Idempotent — no-op once all four columns exist.
   await addOccupantProfileFieldsIfNeeded(pool, log);
+
+  // Create the buildings table, add building_id columns to rooms /
+  // leases, and back-fill one default building per existing property
+  // (Task #570) BEFORE drizzle's pushSchema so the diff afterwards is
+  // empty. Idempotent — re-runs are no-ops once every property has at
+  // least one building and every room.building_id is populated.
+  await backfillBuildingsIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

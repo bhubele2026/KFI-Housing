@@ -48,6 +48,8 @@ function Router() {
       <Route path="/customers/:id" component={CustomerDetail} />
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
+      {/* Drill-down to a single building under a property (Task #570). */}
+      <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
       <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
       {/* Create-mode route is registered BEFORE the parameterized one so

@@ -24,7 +24,8 @@ type TableName =
   | "occupants"
   | "utilities"
   | "roomNightLogs"
-  | "insuranceCertificates";
+  | "insuranceCertificates"
+  | "buildings";
 
 interface Row {
   id: string;
@@ -41,6 +42,9 @@ const stores: Record<TableName, Map<string, Row>> = {
   utilities: new Map(),
   roomNightLogs: new Map(),
   insuranceCertificates: new Map(),
+  // Buildings (Task #570) — wiped + reinserted alongside the other
+  // tables when the importer round-trips a bundle.
+  buildings: new Map(),
 };
 
 function tableNameOf(t: unknown): TableName {
@@ -188,6 +192,7 @@ vi.mock("@workspace/db", () => ({
     "notes",
   ]),
   insuranceCertificatesTable: makeColumns("insuranceCertificates", ["id"]),
+  buildingsTable: makeColumns("buildings", ["id"]),
 }));
 
 vi.mock("../lib/logger", () => ({

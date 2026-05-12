@@ -79,9 +79,26 @@ export interface MasterRow {
    * in the lease notes.
    */
   reviewReasons: string[];
+  /**
+   * Additional buildings folded onto the same property when the source
+   * spreadsheet uses the literal "***Different address***" marker on a
+   * continuation row (Task #570). The marker tells the importer that
+   * the address is a SEPARATE building under the previous property
+   * rather than a brand-new property — used by Schuette Metals
+   * (1331/1341 S 8th Ave) and similar multi-building setups.
+   */
+  newBuildings?: { complexName: string; address: ParsedAddress }[];
   /** 1-based row number from the spreadsheet for traceability. */
   sourceRow: number;
 }
+
+/**
+ * Sentinel marker (case-insensitive, asterisks normalized) the spreadsheet
+ * uses in column A of a continuation row to flag "this address is a new
+ * BUILDING under the previous property" rather than a new property. Kept
+ * here so tests can assert against the same constant.
+ */
+export const DIFFERENT_ADDRESS_MARKER = "***different address***";
 
 /**
  * Splits a multi-line `Housing Address` cell (column F or column V) into
@@ -348,18 +365,30 @@ export function parseMasterRows(rows: string[][]): MasterRow[] {
     const secondaryComplexCell = (row[20] ?? "").trim();
     const secondaryAddressCell = (row[21] ?? "").trim();
 
-    // Continuation row: no customer name but does have an address.
-    // Fold its primary address into the previous customer as a second
-    // property (Schuette Metals second unit, Burnett Grantsburg
-    // second address, DeLallo "Auto Zone House" etc.).
-    if (!customerCell && (addressCell || (row[4] ?? "").trim())) {
+    // Continuation row: no customer name OR the explicit
+    // "***Different address***" marker, plus an address payload.
+    // The marker (Task #570) means "this address is another BUILDING
+    // under the previous property"; without the marker we keep the
+    // legacy behavior of folding the address into the previous
+    // customer as a *secondary property*.
+    const isDifferentAddressMarker =
+      customerCell.replace(/\s+/g, " ").toLowerCase() === DIFFERENT_ADDRESS_MARKER;
+    if (
+      (isDifferentAddressMarker || !customerCell) &&
+      (addressCell || (row[4] ?? "").trim())
+    ) {
       if (!last) continue;
       const complexName = (row[4] ?? "").trim();
       const parsed = parseAddressCell(addressCell);
       if (parsed) {
-        // Prefer overwriting `secondary` if empty; otherwise drop into
-        // `last.primary` only when the previous primary was empty.
-        if (!last.secondary) {
+        if (isDifferentAddressMarker) {
+          // Tack onto the last row as an additional building rather
+          // than as a secondary property. The downstream importer is
+          // responsible for materializing one Building row per entry.
+          (last.newBuildings ??= []).push({ complexName, address: parsed });
+        } else if (!last.secondary) {
+          // Prefer overwriting `secondary` if empty; otherwise drop
+          // into `last.primary` only when the previous primary was empty.
           last.secondary = {
             complexName,
             address: parsed,

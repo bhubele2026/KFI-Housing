@@ -6,12 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface Room {
+export interface Building {
   id: string;
   propertyId: string;
-  buildingId?: string;
   name: string;
-  sqft: number;
-  bathrooms: number;
-  monthlyRent: number;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  notes: string;
 }

@@ -5,6 +5,7 @@ import {
   useListCustomers, getListCustomersQueryKey, useCreateCustomer, useUpdateCustomer, useDeleteCustomer,
   useListProperties, getListPropertiesQueryKey, useCreateProperty, useUpdateProperty, useDeleteProperty,
   useListLeases, getListLeasesQueryKey, useCreateLease, useUpdateLease, useDeleteLease,
+  useListBuildings, getListBuildingsQueryKey, useCreateBuilding, useUpdateBuilding, useDeleteBuilding,
   useListRooms, getListRoomsQueryKey, useCreateRoom, useUpdateRoom, useDeleteRoom,
   useListBeds, getListBedsQueryKey, useCreateBed, useUpdateBed, useDeleteBed,
   useListOccupants, getListOccupantsQueryKey, useCreateOccupant, useUpdateOccupant, useDeleteOccupant,
@@ -22,10 +23,12 @@ import {
   InsuranceCertificateSchema,
   RoomNightLogSchema,
   RatingsSchema,
+  BuildingSchema,
   type Customer, type Property, type Lease, type Room, type Bed, type Occupant, type Utility,
   type OtherCost,
   type InsuranceCertificate,
   type RoomNightLog,
+  type Building,
 } from "@/data/mockData";
 import { useToast } from "@/hooks/use-toast";
 
@@ -38,6 +41,12 @@ export const ExportPayloadSchema = z.object({
   data: z.object({
     customers: z.array(CustomerSchema),
     properties: z.array(PropertySchema),
+    // Optional for backward compatibility: backups taken before
+    // task #570 (buildings) shipped this field. Default to empty so
+    // older v3 files (and the v1/v2 migration paths) parse cleanly —
+    // the API import path back-fills a default building per property
+    // when none are present.
+    buildings: z.array(BuildingSchema).optional().default([]),
     leases: z.array(LeaseSchema),
     rooms: z.array(RoomSchema),
     beds: z.array(BedSchema),
@@ -256,6 +265,7 @@ export class UnsupportedImportError extends Error {
 export interface ImportSummary {
   customers: number;
   properties: number;
+  buildings: number;
   leases: number;
   rooms: number;
   beds: number;
@@ -292,7 +302,7 @@ export interface ImportPreview {
 
 /** Sums two ImportSummary objects field-by-field. */
 export function totalImportSummary(s: ImportSummary): number {
-  return s.customers + s.properties + s.leases + s.rooms + s.beds + s.occupants + s.utilities + s.roomNightLogs + s.insuranceCertificates + s.otherCosts;
+  return s.customers + s.properties + s.buildings + s.leases + s.rooms + s.beds + s.occupants + s.utilities + s.roomNightLogs + s.insuranceCertificates + s.otherCosts;
 }
 
 /** A single record affected by a merge dry-run, with a human-readable label. */
@@ -315,6 +325,7 @@ export interface MergeImpactCategory {
 export interface MergeDryRun {
   customers: MergeImpactCategory;
   properties: MergeImpactCategory;
+  buildings: MergeImpactCategory;
   leases: MergeImpactCategory;
   rooms: MergeImpactCategory;
   beds: MergeImpactCategory;
@@ -328,7 +339,7 @@ export interface MergeDryRun {
 /** Total counts across every record type in a dry run. */
 export function totalMergeDryRun(dry: MergeDryRun): { added: number; updated: number; unchanged: number } {
   let added = 0, updated = 0, unchanged = 0;
-  for (const k of ["customers", "properties", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates", "otherCosts"] as const) {
+  for (const k of ["customers", "properties", "buildings", "leases", "rooms", "beds", "occupants", "utilities", "roomNightLogs", "insuranceCertificates", "otherCosts"] as const) {
     added += dry[k].added;
     updated += dry[k].updated;
     unchanged += dry[k].unchanged;
@@ -339,6 +350,7 @@ export function totalMergeDryRun(dry: MergeDryRun): { added: number; updated: nu
 const EMPTY_SUMMARY: ImportSummary = {
   customers: 0,
   properties: 0,
+  buildings: 0,
   leases: 0,
   rooms: 0,
   beds: 0,
@@ -388,6 +400,7 @@ export function mergeImportBundles(
   const data: ExportData = {
     customers: mergeList(current.customers, incoming.customers, "customers"),
     properties: mergeList(current.properties, incoming.properties, "properties"),
+    buildings: mergeList(current.buildings, incoming.buildings, "buildings"),
     leases: mergeList(current.leases, incoming.leases, "leases"),
     rooms: mergeList(current.rooms, incoming.rooms, "rooms"),
     beds: mergeList(current.beds, incoming.beds, "beds"),
@@ -408,6 +421,7 @@ export function mergeImportBundles(
 const MERGE_LABELS = {
   customers: (c: Customer) => c.name || c.id,
   properties: (p: Property) => p.name || p.id,
+  buildings: (b: Building) => b.name || b.id,
   leases: (l: Lease) => `Lease ${l.startDate || l.id}`,
   rooms: (r: Room) => r.name || r.id,
   beds: (b: Bed) => `Bed #${b.bedNumber}`,
@@ -463,6 +477,7 @@ export function dryRunMergeImport(current: ExportData, incoming: ExportData): Me
   return {
     customers: diffList(current.customers, incoming.customers, MERGE_LABELS.customers),
     properties: diffList(current.properties, incoming.properties, MERGE_LABELS.properties),
+    buildings: diffList(current.buildings, incoming.buildings, MERGE_LABELS.buildings),
     leases: diffList(current.leases, incoming.leases, MERGE_LABELS.leases),
     rooms: diffList(current.rooms, incoming.rooms, MERGE_LABELS.rooms),
     beds: diffList(current.beds, incoming.beds, MERGE_LABELS.beds),
@@ -517,6 +532,10 @@ function migrateBedsToRooms(legacyBeds: z.infer<typeof V2BedSchema>[]): { rooms:
       rooms.push({
         id: roomId,
         propertyId: b.propertyId,
+        // Pre-buildings backups have no building info; the API back-fills
+        // a default building per property on read, so synthesize the
+        // matching id here so the FK lines up (Task #570).
+        buildingId: `bldg_${b.propertyId}_1`,
         name,
         sqft: 0,
         bathrooms: 0,
@@ -553,6 +572,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       summary: {
         customers: d.customers.length,
         properties: d.properties.length,
+        buildings: d.buildings.length,
         leases: d.leases.length,
         rooms: d.rooms.length,
         beds: d.beds.length,
@@ -573,6 +593,9 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
     const data: ExportData = {
       customers: old.customers,
       properties: old.properties,
+      // v2 backups predate buildings (Task #570); the API back-fills
+      // a default building per property on the next /properties read.
+      buildings: [],
       leases: old.leases,
       rooms,
       beds,
@@ -589,6 +612,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       summary: {
         customers: data.customers.length,
         properties: data.properties.length,
+        buildings: 0,
         leases: data.leases.length,
         rooms: data.rooms.length,
         beds: data.beds.length,
@@ -613,6 +637,9 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
     const data: ExportData = {
       customers: [LEGACY_CUSTOMER],
       properties: migratedProperties,
+      // v1 backups predate buildings (Task #570); the API back-fills
+      // a default building per property on the next /properties read.
+      buildings: [],
       leases: old.leases,
       rooms,
       beds,
@@ -629,6 +656,7 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
       summary: {
         customers: 1,
         properties: data.properties.length,
+        buildings: 0,
         leases: data.leases.length,
         rooms: data.rooms.length,
         beds: data.beds.length,
@@ -679,6 +707,7 @@ export class RoomInUseError extends Error {
 interface DataStore {
   customers: Customer[];
   properties: Property[];
+  buildings: Building[];
   leases: Lease[];
   rooms: Room[];
   beds: Bed[];
@@ -704,6 +733,9 @@ interface DataStore {
   updateLease: (id: string, updates: Partial<Lease>) => void;
   addLease: (lease: Lease) => void;
   deleteLease: (id: string) => void;
+  addBuilding: (building: Building) => Promise<Building>;
+  updateBuilding: (id: string, updates: Partial<Building>) => void;
+  deleteBuilding: (id: string) => Promise<void>;
   addRoom: (room: Room) => Promise<Room>;
   updateRoom: (id: string, updates: Partial<Room>) => void;
   deleteRoom: (id: string) => Promise<void>;
@@ -766,6 +798,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const customersQuery = useListCustomers();
   const propertiesQuery = useListProperties();
   const leasesQuery = useListLeases();
+  const buildingsQuery = useListBuildings();
   const roomsQuery = useListRooms();
   const bedsQuery = useListBeds();
   const occupantsQuery = useListOccupants();
@@ -777,6 +810,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const customersKey = getListCustomersQueryKey();
   const propertiesKey = getListPropertiesQueryKey();
   const leasesKey = getListLeasesQueryKey();
+  const buildingsKey = getListBuildingsQueryKey();
   const roomsKey = getListRoomsQueryKey();
   const bedsKey = getListBedsQueryKey();
   const occupantsKey = getListOccupantsQueryKey();
@@ -794,6 +828,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const createLeaseMut = useCreateLease();
   const updateLeaseMut = useUpdateLease();
   const deleteLeaseMut = useDeleteLease();
+  const createBuildingMut = useCreateBuilding();
+  const updateBuildingMut = useUpdateBuilding();
+  const deleteBuildingMut = useDeleteBuilding();
   const createRoomMut = useCreateRoom();
   const updateRoomMut = useUpdateRoom();
   const deleteRoomMut = useDeleteRoom();
@@ -831,6 +868,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const { rows: leases, droppedRaw: leasesDroppedRaw } = useMemo(
     () => safeParseList(LeaseSchema, leasesQuery.data, "leases"),
     [leasesQuery.data],
+  );
+  const { rows: buildings } = useMemo(
+    () => safeParseList(BuildingSchema, buildingsQuery.data, "buildings"),
+    [buildingsQuery.data],
   );
   const { rows: rooms, droppedRaw: roomsDroppedRaw } = useMemo(
     () => safeParseList(RoomSchema, roomsQuery.data, "rooms"),
@@ -977,6 +1018,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     customersQuery.isLoading ||
     propertiesQuery.isLoading ||
     leasesQuery.isLoading ||
+    buildingsQuery.isLoading ||
     roomsQuery.isLoading ||
     bedsQuery.isLoading ||
     occupantsQuery.isLoading ||
@@ -1029,6 +1071,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: customersKey });
     queryClient.invalidateQueries({ queryKey: propertiesKey });
     queryClient.invalidateQueries({ queryKey: leasesKey });
+    queryClient.invalidateQueries({ queryKey: buildingsKey });
     queryClient.invalidateQueries({ queryKey: roomsKey });
     queryClient.invalidateQueries({ queryKey: bedsKey });
     queryClient.invalidateQueries({ queryKey: occupantsKey });
@@ -1144,6 +1187,43 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const handlers = captureRollback<Lease[]>(leasesKey, "delete the lease");
     removeFromList<Lease>(leasesKey, id);
     deleteLeaseMut.mutate({ id }, handlers);
+  };
+
+  // ── Building mutations (Task #570) ─────────────────────────────────────
+  // addBuilding returns a promise so the UI can await the server-confirmed
+  // Building (and its id) before adding a room that references it.
+  const addBuilding = async (building: Building): Promise<Building> => {
+    pushToList<Building>(buildingsKey, building);
+    try {
+      const saved = await createBuildingMut.mutateAsync({ data: building });
+      return saved as Building;
+    } catch (err) {
+      removeFromList<Building>(buildingsKey, building.id);
+      notifySaveError("add the new building");
+      throw err;
+    } finally {
+      queryClient.invalidateQueries({ queryKey: buildingsKey });
+    }
+  };
+  const updateBuilding = (id: string, updates: Partial<Building>) => {
+    const handlers = captureRollback<Building[]>(buildingsKey, "save your building changes");
+    patchInList<Building>(buildingsKey, id, updates);
+    updateBuildingMut.mutate({ id, data: updates }, handlers);
+  };
+  const deleteBuilding = async (id: string): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      deleteBuildingMut.mutate(
+        { id },
+        {
+          onSuccess: () => {
+            removeFromList<Building>(buildingsKey, id);
+            resolve();
+          },
+          onError: (err: unknown) => reject(err),
+          onSettled: () => queryClient.invalidateQueries({ queryKey: buildingsKey }),
+        },
+      );
+    });
   };
 
   // ── Room mutations ──────────────────────────────────────────────────────
@@ -1318,7 +1398,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     format: "housingops-export",
     version: EXPORT_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    data: { customers, properties, leases, rooms, beds, occupants, utilities, roomNightLogs, insuranceCertificates, otherCosts },
+    data: { customers, properties, buildings, leases, rooms, beds, occupants, utilities, roomNightLogs, insuranceCertificates, otherCosts },
   });
 
   // Holds the pre-import bundle plus the timer that drops it after the
@@ -1350,6 +1430,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const writeBundle = (dataToWrite: ExportData) => {
     queryClient.setQueryData<Customer[]>(customersKey, dataToWrite.customers);
     queryClient.setQueryData<Property[]>(propertiesKey, dataToWrite.properties);
+    queryClient.setQueryData<Building[]>(buildingsKey, dataToWrite.buildings);
     queryClient.setQueryData<Lease[]>(leasesKey, dataToWrite.leases);
     queryClient.setQueryData<Room[]>(roomsKey, dataToWrite.rooms);
     queryClient.setQueryData<Bed[]>(bedsKey, dataToWrite.beds);
@@ -1389,6 +1470,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const previousBundle: ExportData = {
       customers: [...customers],
       properties: [...properties],
+      buildings: [...buildings],
       leases: [...leases],
       rooms: [...rooms],
       beds: [...beds],
@@ -1438,17 +1520,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const previewMergeImport = (preview: ImportPreview): MergeDryRun =>
     dryRunMergeImport(
-      { customers, properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs },
+      { customers, properties, buildings, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs },
       preview.data,
     );
 
   return (
     <DataContext.Provider value={{
-      customers, properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs, isLoading,
+      customers, properties, buildings, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs, isLoading,
       dataIssues,
       addCustomer, updateCustomer, deleteCustomer,
       addProperty, updateProperty, deleteProperty,
       updateLease, addLease, deleteLease,
+      addBuilding, updateBuilding, deleteBuilding,
       addRoom, updateRoom, deleteRoom,
       addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant,
       updateUtility, addUtility, deleteUtility,

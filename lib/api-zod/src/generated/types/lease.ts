@@ -138,4 +138,14 @@ utility expenses for this lease so the same dollars aren't
 counted twice. Defaults to false. Added by task #518.
  */
   utilitiesIncludedInRent?: boolean;
+  /**
+   * Optional building scope for this lease (Task #570). `null`
+(or absent) means the lease is not pinned to a specific
+building under the property — the common single-building
+case. Multi-building properties surface a building picker
+on the add-lease dialog and persist the selection here.
+
+   * @nullable
+   */
+  buildingId?: string | null;
 }

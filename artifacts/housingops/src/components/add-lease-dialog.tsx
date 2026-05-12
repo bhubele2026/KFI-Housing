@@ -7,12 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
-import type { Customer, Lease, Property } from "@/data/mockData";
+import type { Building, Customer, Lease, Property } from "@/data/mockData";
 
 export interface AddLeaseDialogProps {
   propertyId?: string;
   properties?: readonly Property[];
   customers?: readonly Customer[];
+  // Building roster (Task #570). Optional so callers that haven't been
+  // upgraded keep working as before — the picker only renders when the
+  // selected property has more than one building.
+  buildings?: readonly Building[];
   onAdd: (lease: Lease) => void;
   trigger?: React.ReactNode;
   open?: boolean;
@@ -21,6 +25,9 @@ export interface AddLeaseDialogProps {
 
 interface DraftState {
   propertyId: string;
+  // Empty string = "All buildings / unassigned"; sent as null on the
+  // wire so single-building properties don't have to remember an id.
+  buildingId: string;
   startDate: string;
   endDate: string;
   monthlyRent: string;
@@ -31,6 +38,7 @@ interface DraftState {
 
 const EMPTY_DRAFT: DraftState = {
   propertyId: "",
+  buildingId: "",
   startDate: "",
   endDate: "",
   monthlyRent: "",
@@ -43,6 +51,7 @@ export function AddLeaseDialog({
   propertyId,
   properties,
   customers,
+  buildings,
   onAdd,
   trigger,
   open: controlledOpen,
@@ -73,6 +82,13 @@ export function AddLeaseDialog({
 
   const showPicker = !propertyId;
   const propertyList = properties ?? [];
+  // Buildings under whichever property is currently selected. When the
+  // property has 0–1 buildings we hide the picker entirely so the
+  // single-building flow stays one click (Task #570).
+  const propertyBuildings = (buildings ?? []).filter(
+    (b) => b.propertyId === form.propertyId,
+  );
+  const showBuildingPicker = propertyBuildings.length > 1;
 
   const canSubmit =
     !!form.propertyId &&
@@ -95,6 +111,10 @@ export function AddLeaseDialog({
     onAdd({
       id: `l-${Date.now()}`,
       propertyId: form.propertyId,
+      // Persist the explicit picker choice when the operator picked one;
+      // null means "lease applies at the property level / single
+      // building" so we don't fabricate a bldg_*_1 id (Task #570).
+      buildingId: form.buildingId ? form.buildingId : null,
       startDate: form.startDate,
       endDate: form.endDate,
       monthlyRent: parseFloat(form.monthlyRent) || 0,
@@ -166,6 +186,25 @@ export function AddLeaseDialog({
                       );
                     })
                   )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {showBuildingPicker && (
+            <div>
+              <Label htmlFor="add-lease-building">Building</Label>
+              <Select
+                value={form.buildingId}
+                onValueChange={(v) => setForm((f) => ({ ...f, buildingId: v === "__all__" ? "" : v }))}
+              >
+                <SelectTrigger id="add-lease-building" data-testid="select-add-lease-building">
+                  <SelectValue placeholder="All buildings" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All buildings</SelectItem>
+                  {propertyBuildings.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

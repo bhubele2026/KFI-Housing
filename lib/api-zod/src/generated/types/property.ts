@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { Building } from "./building";
 import type { PropertyGeocodeStatus } from "./propertyGeocodeStatus";
 import type { PropertyPaymentMethod } from "./propertyPaymentMethod";
 import type { PropertyPropertyType } from "./propertyPropertyType";
@@ -93,6 +94,13 @@ no value is set. Operators pick from a fixed list of
 three options.
  */
   propertyType?: PropertyPropertyType;
+  /** Buildings under this property (Task #570). Always present
+on responses (back-fill creates one default building per
+property). Optional on write so older clients keep
+working — buildings are managed via the dedicated
+`/properties/{id}/buildings` CRUD endpoints.
+ */
+  buildings?: Building[];
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time

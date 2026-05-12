@@ -384,6 +384,11 @@ export const LeaseSchema = z.object({
   // parsing — `null`/`undefined` mean "no notice tracking on this
   // lease". Drives the dashboard "Notice deadline approaching" alert.
   noticePeriodDays: z.number().int().min(0).nullable().optional(),
+  // Building this lease applies to (Task #570). Nullable because most
+  // leases live at the property level — only multi-building properties
+  // (e.g. the Schuette duplex) use this. Optional so legacy backups
+  // parse unchanged.
+  buildingId: z.string().nullable().optional(),
 });
 export type Lease = z.infer<typeof LeaseSchema>;
 
@@ -582,12 +587,37 @@ export function sortLeases(leases: readonly Lease[]): Lease[] {
 export const RoomSchema = z.object({
   id: z.string(),
   propertyId: z.string(),
+  // Building this room belongs to (Task #570). Optional + defaults to
+  // "" for backward compatibility so legacy export bundles taken
+  // before buildings shipped still parse — the API back-fill on the
+  // server side ensures live rows always carry a real building id.
+  buildingId: z.string().optional().default(""),
   name: z.string(),
   sqft: z.number(),
   bathrooms: z.number(),
   monthlyRent: z.number(),
 });
 export type Room = z.infer<typeof RoomSchema>;
+
+// Buildings (Task #570). A property has one or more buildings; each
+// building has its own physical address. Multi-building properties
+// (e.g. Schuette Metals' 1331 + 1341 S 8th Ave) use this hierarchy
+// without breaking single-building flows: the property-level address
+// always mirrors the property's default (first) building.
+export const BuildingSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  name: z.string(),
+  // Address parts are all optional with safe defaults so the common
+  // single-building back-fill (Task #570) and the in-app "Add building"
+  // button can leave them blank without burdening callers.
+  address: z.string().optional().default(""),
+  city: z.string().optional().default(""),
+  state: z.string().optional().default(""),
+  zip: z.string().optional().default(""),
+  notes: z.string().optional().default(""),
+});
+export type Building = z.infer<typeof BuildingSchema>;
 
 /**
  * Aggregate room metrics for a property. Returns zeros for an empty list so
@@ -1330,12 +1360,27 @@ export const MOCK_ROOMS: Room[] = Object.entries(ROOM_LAYOUTS).flatMap(([propert
   Array.from({ length: layout.rooms }, (_, r) => ({
     id: `r_${propertyId}_${r + 1}`,
     propertyId,
+    buildingId: `bldg_${propertyId}_1`,
     name: `Room ${r + 1}`,
     sqft: layout.sqft,
     bathrooms: layout.bathrooms,
     monthlyRent: layout.monthlyRent,
   })),
 );
+
+// One default building per mock property (Task #570). Mirrors the
+// per-property address so legacy single-building flows on the
+// front-end continue to render the property card untouched.
+export const MOCK_BUILDINGS: Building[] = MOCK_PROPERTIES.map((p) => ({
+  id: `bldg_${p.id}_1`,
+  propertyId: p.id,
+  name: "Main building",
+  address: p.address,
+  city: p.city,
+  state: p.state,
+  zip: p.zip,
+  notes: "",
+}));
 
 function bedsForProperty(propertyId: string, occupiedCount: number): Bed[] {
   const layout = ROOM_LAYOUTS[propertyId];

@@ -260,6 +260,17 @@ export interface Ratings {
   valueForMoney: number;
 }
 
+export interface Building {
+  id: string;
+  propertyId: string;
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  notes: string;
+}
+
 export interface Property {
   id: string;
   name: string;
@@ -341,6 +352,13 @@ no value is set. Operators pick from a fixed list of
 three options.
  */
   propertyType?: PropertyPropertyType;
+  /** Buildings under this property (Task #570). Always present
+on responses (back-fill creates one default building per
+property). Optional on write so older clients keep
+working — buildings are managed via the dedicated
+`/properties/{id}/buildings` CRUD endpoints.
+ */
+  buildings?: Building[];
   /** Outcome of the server-side geocode the route ran on this
 create/update (Task #228). Transient — set only on the
 POST/PATCH response so the client can surface a save-time
@@ -620,6 +638,16 @@ utility expenses for this lease so the same dollars aren't
 counted twice. Defaults to false. Added by task #518.
  */
   utilitiesIncludedInRent?: boolean;
+  /**
+   * Optional building scope for this lease (Task #570). `null`
+(or absent) means the lease is not pinned to a specific
+building under the property — the common single-building
+case. Multi-building properties surface a building picker
+on the add-lease dialog and persist the selection here.
+
+   * @nullable
+   */
+  buildingId?: string | null;
 }
 
 export type LeaseUpdateStatus =
@@ -674,6 +702,8 @@ export interface LeaseUpdate {
    */
   noticePeriodDays?: number | null;
   utilitiesIncludedInRent?: boolean;
+  /** @nullable */
+  buildingId?: string | null;
 }
 
 export interface RoomNightLog {
@@ -854,9 +884,20 @@ export interface PropertyViolationCreate {
   createdBy?: string;
 }
 
+export interface BuildingUpdate {
+  propertyId?: string;
+  name?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+}
+
 export interface Room {
   id: string;
   propertyId: string;
+  buildingId?: string;
   name: string;
   sqft: number;
   bathrooms: number;
@@ -865,6 +906,7 @@ export interface Room {
 
 export interface RoomUpdate {
   propertyId?: string;
+  buildingId?: string;
   name?: string;
   sqft?: number;
   bathrooms?: number;
@@ -1775,6 +1817,10 @@ export type CreateDigestRecipient409 = {
 export type ConvertProjectedMoveIn200 = {
   projectedMoveIn: ProjectedMoveIn;
   occupant: Occupant;
+};
+
+export type DeleteBuilding409 = {
+  error: string;
 };
 
 export type DeleteRoom409 = {

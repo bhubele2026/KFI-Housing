@@ -45,4 +45,6 @@ export interface LeaseUpdate {
    */
   noticePeriodDays?: number | null;
   utilitiesIncludedInRent?: boolean;
+  /** @nullable */
+  buildingId?: string | null;
 }

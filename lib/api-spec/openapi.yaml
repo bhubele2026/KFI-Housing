@@ -871,6 +871,81 @@ paths:
         "204":
           description: Deleted
 
+  /buildings:
+    get:
+      operationId: listBuildings
+      tags: [properties]
+      summary: List all buildings across every property
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Building" }
+    post:
+      operationId: createBuilding
+      tags: [properties]
+      summary: Create a building under a property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Building" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Building" }
+  /buildings/{id}:
+    patch:
+      operationId: updateBuilding
+      tags: [properties]
+      summary: Update a building
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BuildingUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Building" }
+    delete:
+      operationId: deleteBuilding
+      tags: [properties]
+      summary: Delete a building
+      description: |
+        Fails with 409 if any rooms reference this building or if it is
+        the last building on the property (every property must keep at
+        least one building so existing rooms always have a home).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+
   /rooms:
     get:
       operationId: listRooms
@@ -1594,6 +1669,15 @@ components:
             default to `null`, and the UI hides the type badge when
             no value is set. Operators pick from a fixed list of
             three options.
+        buildings:
+          type: array
+          items: { $ref: "#/components/schemas/Building" }
+          description: |
+            Buildings under this property (Task #570). Always present
+            on responses (back-fill creates one default building per
+            property). Optional on write so older clients keep
+            working — buildings are managed via the dedicated
+            `/properties/{id}/buildings` CRUD endpoints.
         geocodeStatus:
           type: string
           enum: [ok, no_result, skipped]
@@ -1886,6 +1970,14 @@ components:
             finance P&L pages skip subtracting the property's tracked
             utility expenses for this lease so the same dollars aren't
             counted twice. Defaults to false. Added by task #518.
+        buildingId:
+          type: ["string", "null"]
+          description: |
+            Optional building scope for this lease (Task #570). `null`
+            (or absent) means the lease is not pinned to a specific
+            building under the property — the common single-building
+            case. Multi-building properties surface a building picker
+            on the add-lease dialog and persist the selection here.
     LeaseUpdate:
       type: object
       properties:
@@ -1921,6 +2013,8 @@ components:
             Termination / renewal notice period in days. See
             `Lease.noticePeriodDays` for the full contract.
         utilitiesIncludedInRent: { type: boolean }
+        buildingId:
+          type: ["string", "null"]
 
     RoomNightLog:
       type: object
@@ -2119,12 +2213,40 @@ components:
         occurredOn: { type: string }
         createdBy: { type: string }
 
+    Building:
+      type: object
+      required: [id, propertyId, name, address, city, state, zip, notes]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        zip: { type: string }
+        notes: { type: string }
+    BuildingUpdate:
+      type: object
+      properties:
+        propertyId: { type: string }
+        name: { type: string }
+        address: { type: string }
+        city: { type: string }
+        state: { type: string }
+        zip: { type: string }
+        notes: { type: string }
+
     Room:
       type: object
       required: [id, propertyId, name, sqft, bathrooms, monthlyRent]
       properties:
         id: { type: string }
         propertyId: { type: string }
+        # Building this room belongs to (Task #570). Optional in the
+        # schema for backward compatibility — empty string when not yet
+        # assigned (the migration backfills every existing room to the
+        # property's default building).
+        buildingId: { type: string }
         name: { type: string }
         sqft: { type: integer }
         bathrooms: { type: number }
@@ -2133,6 +2255,7 @@ components:
       type: object
       properties:
         propertyId: { type: string }
+        buildingId: { type: string }
         name: { type: string }
         sqft: { type: integer }
         bathrooms: { type: number }

@@ -16,6 +16,8 @@ import {
   type InsertCustomerRow,
   type InsertPropertyRow,
   type InsertLeaseRow,
+  type InsertBuildingRow,
+  buildingsTable,
   type InsertRoomRow,
   type InsertBedRow,
   type InsertOccupantRow,
@@ -384,6 +386,10 @@ function buildRoomsBedsAndOccupants(): {
       rooms.push({
         id: roomId,
         propertyId,
+        // Default building per seeded property (Task #570). Mirrors
+        // the deterministic id the migration uses so a fresh seed
+        // and a backfilled DB land at the same building ids.
+        buildingId: `bldg_${propertyId}_1`,
         name: roomDef.name,
         sqft: roomDef.sqft,
         bathrooms: roomDef.bathrooms,
@@ -519,6 +525,11 @@ const SEED_UTILITIES: InsertUtilityRow[] = [
 interface DataBundle {
   customers: InsertCustomerRow[];
   properties: InsertPropertyRow[];
+  // Buildings under each property (Task #570). Optional so callers
+  // built before the buildings rollout keep compiling — treated as
+  // `[]` when missing, and the migration's per-property default
+  // building backfill provides a safety net at boot.
+  buildings?: InsertBuildingRow[];
   leases: InsertLeaseRow[];
   rooms: InsertRoomRow[];
   beds: InsertBedRow[];
@@ -614,6 +625,9 @@ async function wipeAllInTx(
   // doesn't trip on cascade order (Task #499).
   await tx.delete(propertyViolationsTable);
   await tx.delete(roomsTable);
+  // Buildings reference properties by id; wipe before properties so
+  // a future FK doesn't trip on cascade order (Task #570).
+  await tx.delete(buildingsTable);
   await tx.delete(propertiesTable);
   await tx.delete(customersTable);
 }
@@ -635,6 +649,8 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
   await db.transaction(async (tx) => {
     if (bundle.customers.length > 0) await tx.insert(customersTable).values(bundle.customers);
     if (bundle.properties.length > 0) await tx.insert(propertiesTable).values(bundle.properties);
+    const buildings = bundle.buildings ?? [];
+    if (buildings.length > 0) await tx.insert(buildingsTable).values(buildings);
     if (bundle.leases.length > 0) await tx.insert(leasesTable).values(bundle.leases);
     if (bundle.rooms.length > 0) await tx.insert(roomsTable).values(bundle.rooms);
     // Defence-in-depth: run bulk-imported occupant/bed/utility rows
@@ -674,9 +690,23 @@ async function insertBundle(bundle: DataBundle): Promise<void> {
 
 function buildSeedBundle(): DataBundle {
   const { rooms, beds, occupants } = buildRoomsBedsAndOccupants();
+  // One default building per seeded property, mirroring the
+  // migration's backfill output so existing DB rows and a fresh seed
+  // produce the same building ids (Task #570).
+  const buildings: InsertBuildingRow[] = SEED_PROPERTIES.map((p) => ({
+    id: `bldg_${p.id}_1`,
+    propertyId: p.id,
+    name: "Main building",
+    address: p.address ?? "",
+    city: p.city ?? "",
+    state: p.state ?? "",
+    zip: p.zip ?? "",
+    notes: "",
+  }));
   return {
     customers: SEED_CUSTOMERS,
     properties: SEED_PROPERTIES,
+    buildings,
     leases: SEED_LEASES,
     rooms,
     beds,

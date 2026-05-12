@@ -156,7 +156,7 @@ export default function Leases() {
   };
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
-  const { leases, properties, customers, otherCosts, updateLease, addLease, deleteLease } = useData();
+  const { leases, properties, customers, buildings, otherCosts, updateLease, addLease, deleteLease } = useData();
   // Room-night logs power the hotel-rate "at risk this month" tile and
   // the per-row "Below min / No log yet" pill on the leases table. The
   // hook always returns a stable array (or undefined while loading) — no
@@ -418,6 +418,7 @@ export default function Leases() {
               <AddLeaseDialog
                 properties={properties}
                 customers={customers}
+                buildings={buildings}
                 onAdd={(lease) => {
                   addLease(lease);
                   const property = propertyById.get(lease.propertyId);
@@ -436,6 +437,7 @@ export default function Leases() {
         <AddLeaseDialog
           properties={properties}
           customers={customers}
+          buildings={buildings}
           open={pdfFallbackOpen}
           onOpenChange={setPdfFallbackOpen}
           onAdd={(lease) => {
@@ -842,6 +844,7 @@ export default function Leases() {
                     <AddLeaseDialog
                       properties={properties}
                       customers={customers}
+                      buildings={buildings}
                       onAdd={(lease) => {
                         addLease(lease);
                         const property = propertyById.get(lease.propertyId);

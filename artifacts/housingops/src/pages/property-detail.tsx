@@ -629,9 +629,13 @@ export function InlineEdit({
 
 export default function PropertyDetail() {
   const { t } = useTranslation();
-  const { id } = useParams<{ id: string }>();
+  // Task #570: the route also matches /properties/:id/buildings/:buildingId
+  // for drill-downs into a single building. When `buildingId` is present
+  // we filter rooms / beds / leases to that building so operators can
+  // focus on one unit of a multi-building property.
+  const { id, buildingId: focusedBuildingId } = useParams<{ id: string; buildingId?: string }>();
   const [, navigate] = useLocation();
-  const { properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, customers, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addOtherCost, updateOtherCost, deleteOtherCost, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate } = useData();
+  const { properties, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, customers, buildings, isLoading, dataIssues, updateProperty, updateLease, addLease, deleteLease, addRoom, updateRoom, deleteRoom, addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant, updateUtility, addUtility, deleteUtility, addOtherCost, updateOtherCost, deleteOtherCost, addInsuranceCertificate, updateInsuranceCertificate, deleteInsuranceCertificate, addBuilding, updateBuilding, deleteBuilding } = useData();
   // Room-night logs back the hotel-rate revenue estimate ("≈ $X this
   // month (Y nights × $Z/night)") shown for hotel-rate leases. Pulled
   // here so the Stat strip and the Finance tab share the same numbers.
@@ -821,8 +825,27 @@ export default function PropertyDetail() {
   }, [dataIssues, id]);
 
   const propLeases = useMemo(() => leases.filter(l => l.propertyId === id), [leases, id]);
-  const propRooms = useMemo(() => rooms.filter(r => r.propertyId === id), [rooms, id]);
-  const propBeds = useMemo(() => beds.filter(b => b.propertyId === id), [beds, id]);
+  const propRooms = useMemo(
+    () =>
+      rooms
+        .filter((r) => r.propertyId === id)
+        // When the URL targets a single building, only show its rooms.
+        .filter((r) => !focusedBuildingId || r.buildingId === focusedBuildingId),
+    [rooms, id, focusedBuildingId],
+  );
+  const propBeds = useMemo(() => {
+    const allowedRoomIds = new Set(propRooms.map((r) => r.id));
+    return beds
+      .filter((b) => b.propertyId === id)
+      .filter((b) => !focusedBuildingId || allowedRoomIds.has(b.roomId));
+  }, [beds, id, focusedBuildingId, propRooms]);
+  // Buildings under this property (Task #570). Most properties have a
+  // single back-filled "Main building"; multi-building properties (e.g. the
+  // Schuette duplex 1331/1341 S 8th Ave) get a row per building.
+  const propBuildings = useMemo(
+    () => buildings.filter(b => b.propertyId === id),
+    [buildings, id],
+  );
   const propOccupants = useMemo(() => occupants.filter(o => o.propertyId === id && o.status === "Active"), [occupants, id]);
 
   const propertyUnits = useMemo(() => {
@@ -2050,7 +2073,7 @@ export default function PropertyDetail() {
                   </span>
                 )}
               </p>
-              <AddLeaseDialog propertyId={id} onAdd={addLease} />
+              <AddLeaseDialog propertyId={id} buildings={propBuildings} onAdd={addLease} />
             </div>
             <Card>
               <CardContent className="p-0">
@@ -2098,6 +2121,7 @@ export default function PropertyDetail() {
                     <div className="flex flex-col items-center gap-2">
                       <AddLeaseDialog
                         propertyId={id}
+                        buildings={propBuildings}
                         onAdd={addLease}
                         trigger={
                           <Button size="sm" data-testid="button-add-lease-empty">
@@ -2136,6 +2160,120 @@ export default function PropertyDetail() {
               "Unit <n>" room → bed → occupant chain. */}
           {propertyUnits.length > 0 && (
             <TabsContent value="units" className="space-y-4" data-testid="tab-content-units">
+              {/* Buildings roster (Task #570). Always rendered so operators
+                  can rename or delete the back-filled "Main building" row,
+                  and so multi-building properties get drill-down links. */}
+              <Card data-testid="card-buildings-section">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Buildings
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-buildings-count">
+                      {propBuildings.length}
+                    </Badge>
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-testid="button-add-building"
+                    onClick={async () => {
+                      const nextNum = propBuildings.length + 1;
+                      try {
+                        await addBuilding({
+                          id: `bldg_${id}_${Date.now()}`,
+                          propertyId: id,
+                          name: `Building ${nextNum}`,
+                          address: "",
+                          city: "",
+                          state: "",
+                          zip: "",
+                          notes: "",
+                        });
+                      } catch {
+                        /* toast already shown */
+                      }
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Add building
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {propBuildings.length === 0 ? (
+                    <p className="text-xs text-muted-foreground" data-testid="buildings-empty">
+                      No buildings yet — add one to organize rooms by structure.
+                    </p>
+                  ) : (
+                    propBuildings.map((b) => {
+                      const buildingRoomCount = rooms.filter(
+                        (r) => r.propertyId === id && r.buildingId === b.id,
+                      ).length;
+                      const isFocused = focusedBuildingId === b.id;
+                      return (
+                        <div
+                          key={b.id}
+                          className={`border rounded-md p-2.5 flex items-center justify-between gap-2 ${
+                            isFocused ? "bg-accent/40" : ""
+                          }`}
+                          data-testid={`building-row-${b.id}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <InlineEdit
+                              value={b.name}
+                              onSave={(v) => updateBuilding(b.id, { name: v })}
+                              displayClassName="font-medium text-sm"
+                              inputClassName="w-48"
+                              testId={`inline-edit-building-name-${b.id}`}
+                            />
+                            {b.address && (
+                              <span className="text-xs text-muted-foreground truncate" title={b.address}>
+                                · {b.address}
+                              </span>
+                            )}
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {buildingRoomCount} room{buildingRoomCount === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Link
+                              href={
+                                isFocused
+                                  ? `/properties/${id}`
+                                  : `/properties/${id}/buildings/${b.id}`
+                              }
+                            >
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                data-testid={`button-drilldown-building-${b.id}`}
+                              >
+                                {isFocused ? "Show all buildings" : "Drill down"}
+                              </Button>
+                            </Link>
+                            {propBuildings.length > 1 && buildingRoomCount === 0 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                data-testid={`button-delete-building-${b.id}`}
+                                onClick={async () => {
+                                  try {
+                                    await deleteBuilding(b.id);
+                                  } catch {
+                                    /* toast already shown */
+                                  }
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -2257,6 +2395,11 @@ export default function PropertyDetail() {
                       await addRoom({
                         id: `room-${Date.now()}`,
                         propertyId: id,
+                        // Default to the property's first building so the
+                        // single-building flow stays one click. Multi-building
+                        // properties use the building picker on the room edit
+                        // form to reassign (Task #570).
+                        buildingId: propBuildings[0]?.id ?? `bldg_${id}_1`,
                         name: `Room ${nextNum}`,
                         sqft: 0,
                         bathrooms: 0,
@@ -2289,6 +2432,9 @@ export default function PropertyDetail() {
                             await addRoom({
                               id: `room-${Date.now()}`,
                               propertyId: id,
+                              // Same default-building rule as the toolbar
+                              // Add Room button above (Task #570).
+                              buildingId: propBuildings[0]?.id ?? `bldg_${id}_1`,
                               name: `Room 1`,
                               sqft: 0,
                               bathrooms: 0,

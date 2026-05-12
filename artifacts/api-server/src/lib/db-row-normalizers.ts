@@ -320,6 +320,20 @@ export function normalizeLeaseRow<
     recordFixup(fixups, "noticePeriodDays", row.noticePeriodDays, after);
     out.noticePeriodDays = after;
   }
+  if ("buildingId" in row) {
+    // Lease-level building scope (Task #570). Both blank string and
+    // `null` mean "lease is not pinned to a specific building under
+    // the property" — collapse blank to `null` so the DB never
+    // stores an empty FK. Not a fix-up: a `""` → `null` shape
+    // collapse isn't an operator-visible data-quality issue.
+    const raw = (row as Record<string, unknown>).buildingId;
+    out.buildingId =
+      typeof raw === "string" && raw.trim() === ""
+        ? null
+        : raw == null
+          ? null
+          : raw;
+  }
   return out as T;
 }
 
@@ -639,7 +653,41 @@ function normalizeResponsibilities(value: unknown): string[] {
 export function normalizeRoomRow<
   T extends Partial<RoomRow> | Partial<InsertRoomRow>,
 >(row: T, _fixups?: NormalizerFixup[]): T {
-  return { ...row };
+  const out: Record<string, unknown> = { ...row };
+  // buildingId is a free-form FK string. Coerce null/undefined to ""
+  // so the schema's `string` type round-trips legacy rows that came
+  // from the pre-buildings era (Task #570). The migration is supposed
+  // to back-fill every row, but the boundary defence keeps a stray
+  // null from blowing up `ListRoomsResponse.parse`.
+  if ("buildingId" in row) {
+    const raw = (row as Record<string, unknown>).buildingId;
+    out.buildingId = typeof raw === "string" ? raw : "";
+  }
+  return out as T;
+}
+
+// ---------------------------------------------------------------------------
+// Buildings
+// ---------------------------------------------------------------------------
+
+import type { BuildingRow, InsertBuildingRow } from "@workspace/db";
+
+/**
+ * Normalize a building row (Task #570). Free-form text columns get
+ * blank-string defaults so a legacy DB row that's missing one of
+ * them never trips the schema's required string type.
+ */
+export function normalizeBuildingRow<
+  T extends Partial<BuildingRow> | Partial<InsertBuildingRow>,
+>(row: T, _fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  for (const k of ["propertyId", "name", "address", "city", "state", "zip", "notes"] as const) {
+    if (k in row) {
+      const raw = (row as Record<string, unknown>)[k];
+      out[k] = typeof raw === "string" ? raw : "";
+    }
+  }
+  return out as T;
 }
 
 // ---------------------------------------------------------------------------

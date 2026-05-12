@@ -262,6 +262,23 @@ export const ImportDataBody = zod.object({
         .describe(
           "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
         ),
+      buildings: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            propertyId: zod.string(),
+            name: zod.string(),
+            address: zod.string(),
+            city: zod.string(),
+            state: zod.string(),
+            zip: zod.string(),
+            notes: zod.string(),
+          }),
+        )
+        .optional()
+        .describe(
+          "Buildings under this property (Task #570). Always present\non responses (back-fill creates one default building per\nproperty). Optional on write so older clients keep\nworking — buildings are managed via the dedicated\n`\/properties\/{id}\/buildings` CRUD endpoints.\n",
+        ),
       geocodeStatus: zod
         .enum(["ok", "no_result", "skipped"])
         .optional()
@@ -390,12 +407,19 @@ export const ImportDataBody = zod.object({
         .describe(
           "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
         ),
+      buildingId: zod
+        .string()
+        .nullish()
+        .describe(
+          "Optional building scope for this lease (Task #570). `null`\n(or absent) means the lease is not pinned to a specific\nbuilding under the property — the common single-building\ncase. Multi-building properties surface a building picker\non the add-lease dialog and persist the selection here.\n",
+        ),
     }),
   ),
   rooms: zod.array(
     zod.object({
       id: zod.string(),
       propertyId: zod.string(),
+      buildingId: zod.string().optional(),
       name: zod.string(),
       sqft: zod.number(),
       bathrooms: zod.number(),
@@ -871,6 +895,23 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
     ),
+  buildings: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        propertyId: zod.string(),
+        name: zod.string(),
+        address: zod.string(),
+        city: zod.string(),
+        state: zod.string(),
+        zip: zod.string(),
+        notes: zod.string(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Buildings under this property (Task #570). Always present\non responses (back-fill creates one default building per\nproperty). Optional on write so older clients keep\nworking — buildings are managed via the dedicated\n`\/properties\/{id}\/buildings` CRUD endpoints.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -1015,6 +1056,23 @@ export const CreatePropertyBody = zod.object({
     .nullish()
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
+    ),
+  buildings: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        propertyId: zod.string(),
+        name: zod.string(),
+        address: zod.string(),
+        city: zod.string(),
+        state: zod.string(),
+        zip: zod.string(),
+        notes: zod.string(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Buildings under this property (Task #570). Always present\non responses (back-fill creates one default building per\nproperty). Optional on write so older clients keep\nworking — buildings are managed via the dedicated\n`\/properties\/{id}\/buildings` CRUD endpoints.\n",
     ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
@@ -1318,6 +1376,23 @@ export const UpdatePropertyResponse = zod.object({
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
     ),
+  buildings: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        propertyId: zod.string(),
+        name: zod.string(),
+        address: zod.string(),
+        city: zod.string(),
+        state: zod.string(),
+        zip: zod.string(),
+        notes: zod.string(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Buildings under this property (Task #570). Always present\non responses (back-fill creates one default building per\nproperty). Optional on write so older clients keep\nworking — buildings are managed via the dedicated\n`\/properties\/{id}\/buildings` CRUD endpoints.\n",
+    ),
   geocodeStatus: zod
     .enum(["ok", "no_result", "skipped"])
     .optional()
@@ -1466,6 +1541,12 @@ export const ListLeasesResponseItem = zod.object({
     .describe(
       "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
     ),
+  buildingId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional building scope for this lease (Task #570). `null`\n(or absent) means the lease is not pinned to a specific\nbuilding under the property — the common single-building\ncase. Multi-building properties surface a building picker\non the add-lease dialog and persist the selection here.\n",
+    ),
 });
 export const ListLeasesResponse = zod.array(ListLeasesResponseItem);
 
@@ -1601,6 +1682,12 @@ export const CreateLeaseBody = zod.object({
     .optional()
     .describe(
       "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
+    ),
+  buildingId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional building scope for this lease (Task #570). `null`\n(or absent) means the lease is not pinned to a specific\nbuilding under the property — the common single-building\ncase. Multi-building properties surface a building picker\non the add-lease dialog and persist the selection here.\n",
     ),
 });
 
@@ -2049,6 +2136,7 @@ export const UpdateLeaseBody = zod.object({
       "Termination \/ renewal notice period in days. See\n`Lease.noticePeriodDays` for the full contract.\n",
     ),
   utilitiesIncludedInRent: zod.boolean().optional(),
+  buildingId: zod.string().nullish(),
 });
 
 export const updateLeaseResponseStartDateRegExp = new RegExp(
@@ -2180,6 +2268,12 @@ export const UpdateLeaseResponse = zod.object({
     .optional()
     .describe(
       "True when the rent on this lease already bundles utility\ncosts (e.g. master-lease note reads \"utilities included in\nlease except internet\"). When true, the dashboard and\nfinance P&L pages skip subtracting the property's tracked\nutility expenses for this lease so the same dollars aren't\ncounted twice. Defaults to false. Added by task #518.\n",
+    ),
+  buildingId: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional building scope for this lease (Task #570). `null`\n(or absent) means the lease is not pinned to a specific\nbuilding under the property — the common single-building\ncase. Multi-building properties surface a building picker\non the add-lease dialog and persist the selection here.\n",
     ),
 });
 
@@ -2808,11 +2902,80 @@ export const DeletePropertyViolationParams = zod.object({
 });
 
 /**
+ * @summary List all buildings across every property
+ */
+export const ListBuildingsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  notes: zod.string(),
+});
+export const ListBuildingsResponse = zod.array(ListBuildingsResponseItem);
+
+/**
+ * @summary Create a building under a property
+ */
+export const CreateBuildingBody = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * @summary Update a building
+ */
+export const UpdateBuildingParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateBuildingBody = zod.object({
+  propertyId: zod.string().optional(),
+  name: zod.string().optional(),
+  address: zod.string().optional(),
+  city: zod.string().optional(),
+  state: zod.string().optional(),
+  zip: zod.string().optional(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateBuildingResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  name: zod.string(),
+  address: zod.string(),
+  city: zod.string(),
+  state: zod.string(),
+  zip: zod.string(),
+  notes: zod.string(),
+});
+
+/**
+ * Fails with 409 if any rooms reference this building or if it is
+the last building on the property (every property must keep at
+least one building so existing rooms always have a home).
+
+ * @summary Delete a building
+ */
+export const DeleteBuildingParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List all rooms
  */
 export const ListRoomsResponseItem = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
+  buildingId: zod.string().optional(),
   name: zod.string(),
   sqft: zod.number(),
   bathrooms: zod.number(),
@@ -2826,6 +2989,7 @@ export const ListRoomsResponse = zod.array(ListRoomsResponseItem);
 export const CreateRoomBody = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
+  buildingId: zod.string().optional(),
   name: zod.string(),
   sqft: zod.number(),
   bathrooms: zod.number(),
@@ -2841,6 +3005,7 @@ export const UpdateRoomParams = zod.object({
 
 export const UpdateRoomBody = zod.object({
   propertyId: zod.string().optional(),
+  buildingId: zod.string().optional(),
   name: zod.string().optional(),
   sqft: zod.number().optional(),
   bathrooms: zod.number().optional(),
@@ -2850,6 +3015,7 @@ export const UpdateRoomBody = zod.object({
 export const UpdateRoomResponse = zod.object({
   id: zod.string(),
   propertyId: zod.string(),
+  buildingId: zod.string().optional(),
   name: zod.string(),
   sqft: zod.number(),
   bathrooms: zod.number(),

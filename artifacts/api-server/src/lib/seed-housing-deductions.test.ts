@@ -214,6 +214,9 @@ const { occupants, fakeDb } = vi.hoisted(() => {
     if (t === "properties") {
       return [];
     }
+    if (t === "customers") {
+      return [];
+    }
     throw new Error(`Unknown table ${t}`);
   };
   const fakeDb = {
@@ -273,6 +276,17 @@ vi.mock("@workspace/db", () => ({
     __table: "properties",
     id: { __col: "id" },
     name: { __col: "name" },
+    customerId: { __col: "customerId" },
+  },
+  customersTable: {
+    __table: "customers",
+    id: { __col: "id" },
+    name: { __col: "name" },
+  },
+  payrollDeductionsTable: {
+    __table: "payroll_deductions",
+    occupantId: { __col: "occupantId" },
+    payWeekEndDate: { __col: "payWeekEndDate" },
   },
 }));
 

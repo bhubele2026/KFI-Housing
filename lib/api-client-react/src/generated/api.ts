@@ -42,6 +42,7 @@ import type {
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  ListPayrollDeductionsParams,
   ListUnplacedPayrollParams,
   ListUnplacedPayrollResult,
   MasterLeaseImportResult,
@@ -50,6 +51,7 @@ import type {
   OccupantUpdate,
   OtherCost,
   OtherCostUpdate,
+  PayrollDeduction,
   ProjectedMoveIn,
   ProjectedMoveInConvert,
   ProjectedMoveInCreate,
@@ -5648,6 +5650,116 @@ export function useListUnplacedPayroll<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListUnplacedPayrollQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Returns immutable per-pay-week snapshots of housing deductions
+applied to occupants by `seedHousingDeductions`. Each row is one
+occupant × one Mon→Sat pay-week (`payWeekEndDate` is the
+Saturday end-date as YYYY-MM-DD). The Finance Weekly / Monthly /
+By-Customer tabs aggregate these client-side; the per-property
+Finance mini-chart uses the most recent 13 weeks.
+
+Optional `since` and `until` are inclusive Saturday end-dates
+(YYYY-MM-DD). Omit both to get the full history.
+
+ * @summary List per-pay-week housing deduction snapshots
+ */
+export const getListPayrollDeductionsUrl = (
+  params?: ListPayrollDeductionsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/payroll-deductions?${stringifiedParams}`
+    : `/api/payroll-deductions`;
+};
+
+export const listPayrollDeductions = async (
+  params?: ListPayrollDeductionsParams,
+  options?: RequestInit,
+): Promise<PayrollDeduction[]> => {
+  return customFetch<PayrollDeduction[]>(getListPayrollDeductionsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListPayrollDeductionsQueryKey = (
+  params?: ListPayrollDeductionsParams,
+) => {
+  return [`/api/payroll-deductions`, ...(params ? [params] : [])] as const;
+};
+
+export const getListPayrollDeductionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPayrollDeductions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPayrollDeductionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPayrollDeductions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListPayrollDeductionsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listPayrollDeductions>>
+  > = ({ signal }) =>
+    listPayrollDeductions(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPayrollDeductions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListPayrollDeductionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPayrollDeductions>>
+>;
+export type ListPayrollDeductionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List per-pay-week housing deduction snapshots
+ */
+
+export function useListPayrollDeductions<
+  TData = Awaited<ReturnType<typeof listPayrollDeductions>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListPayrollDeductionsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listPayrollDeductions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPayrollDeductionsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { ListUnplacedPayrollResponse } from "@workspace/api-zod";
 import { seedHousingDeductions } from "../lib/seed-housing-deductions";
+import { isSaturdayDate } from "../lib/pay-week";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -32,10 +33,22 @@ router.get("/payroll/unplaced", async (req, res): Promise<void> => {
     typeof req.query.reclaimOccupantIds === "string" && req.query.reclaimOccupantIds.trim()
       ? req.query.reclaimOccupantIds.split(",").map((id) => id.trim()).filter(Boolean)
       : undefined;
+  // Optional pay-week stamp (Task #597). When the operator triggers a
+  // re-import for a specific Mon→Sat pay-week, the dashboard sends the
+  // Saturday YYYY-MM-DD here so the seeder writes per-week snapshots
+  // into `payroll_deductions`. Bad input (non-string, non-Saturday) is
+  // dropped silently — the seeder logs a warning and just runs the
+  // matcher without snapshotting, so dashboard polls (which omit it)
+  // continue to be a cheap no-op on the snapshot table.
+  const payWeekEndDate =
+    typeof req.query.payWeekEndDate === "string" && isSaturdayDate(req.query.payWeekEndDate)
+      ? req.query.payWeekEndDate
+      : null;
   const result = await seedHousingDeductions({
     logger,
     reclaimOverridden,
     reclaimOccupantIds,
+    payWeekEndDate,
   });
   res.json(
     ListUnplacedPayrollResponse.parse({

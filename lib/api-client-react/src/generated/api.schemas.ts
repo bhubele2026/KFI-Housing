@@ -1633,6 +1633,26 @@ cannot be read on disk.
 }
 
 /**
+ * Immutable snapshot of one occupant's weekly housing deduction
+for a single Mon→Sat pay-week (Task #597). `payWeekEndDate` is
+the Saturday end-date as YYYY-MM-DD. `customerId` and
+`propertyId` are denormalized at write time so historical
+rollups stay correct even if the occupant later moves.
+
+ */
+export interface PayrollDeduction {
+  id: string;
+  occupantId: string;
+  customerId: string;
+  propertyId: string;
+  payWeekEndDate: string;
+  weeklyAmount: number;
+  personId: string;
+  nameSnapshot: string;
+  customerSnapshot: string;
+}
+
+/**
  * A close-but-not-exact existing-occupant candidate for an
 unplaced payroll row. The dashboard renders these as
 "Did you mean: <name> @ <propertyName>?" buttons that update
@@ -1836,6 +1856,19 @@ Anything else keeps the safe default (skip overrides).
 
  */
   reclaimOverridden?: ListUnplacedPayrollReclaimOverridden;
+  /**
+ * Saturday YYYY-MM-DD end-date for the Mon→Sat pay-week the
+payroll rows belong to (Task #597). When provided, the
+seeder additionally writes one immutable snapshot row per
+matched occupant into the `payroll_deductions` table — the
+source of truth for the new Finance Weekly / Monthly / By
+Customer tabs. Re-importing the same week is idempotent
+(snapshots are upserted on `(occupantId, payWeekEndDate)`).
+Omitted on dashboard polls so the boot path stays cheap.
+
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+  payWeekEndDate?: string;
 };
 
 export type ListUnplacedPayrollReclaimOverridden =
@@ -1845,3 +1878,14 @@ export const ListUnplacedPayrollReclaimOverridden = {
   true: "true",
   false: "false",
 } as const;
+
+export type ListPayrollDeductionsParams = {
+  /**
+   * @pattern ^\d{4}-\d{2}-\d{2}$
+   */
+  since?: string;
+  /**
+   * @pattern ^\d{4}-\d{2}-\d{2}$
+   */
+  until?: string;
+};

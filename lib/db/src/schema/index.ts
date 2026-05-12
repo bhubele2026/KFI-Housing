@@ -14,3 +14,4 @@ export * from "./projected-move-ins";
 export * from "./last-boot-master-import";
 export * from "./scheduler-state";
 export * from "./digest-recipients";
+export * from "./payroll-deductions";

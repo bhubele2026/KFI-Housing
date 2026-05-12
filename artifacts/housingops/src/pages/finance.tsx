@@ -11,7 +11,13 @@ import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  FinancePayrollWeeklyTab,
+  FinancePayrollMonthlyTab,
+  FinancePayrollByCustomerTab,
+} from "@/components/finance-payroll-tabs";
 import {
   BarChart,
   Bar,
@@ -551,6 +557,55 @@ export default function Finance() {
           </>}
         />
 
+        {/* Task #597: split the Finance page into four tabs. The
+            existing portfolio overview lives under "Overview" so it
+            stays the default landing view; the three new tabs are all
+            powered client-side off the per-pay-week deduction
+            snapshots returned by `/payroll-deductions`. */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList data-testid="tabs-finance-section">
+            <TabsTrigger value="overview" data-testid="tab-finance-overview">
+              {t("pages.finance.tabs.overview")}
+            </TabsTrigger>
+            <TabsTrigger value="weekly" data-testid="tab-finance-weekly">
+              {t("pages.finance.tabs.weekly")}
+            </TabsTrigger>
+            <TabsTrigger value="monthly" data-testid="tab-finance-monthly">
+              {t("pages.finance.tabs.monthly")}
+            </TabsTrigger>
+            <TabsTrigger value="byCustomer" data-testid="tab-finance-bycustomer">
+              {t("pages.finance.tabs.byCustomer")}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="weekly" className="space-y-6">
+            <FinancePayrollWeeklyTab
+              properties={properties}
+              leases={leases}
+              customerById={customerById}
+              customerFilter={customerFilter}
+            />
+          </TabsContent>
+
+          <TabsContent value="monthly" className="space-y-6">
+            <FinancePayrollMonthlyTab
+              properties={properties}
+              leases={leases}
+              customerById={customerById}
+              customerFilter={customerFilter}
+            />
+          </TabsContent>
+
+          <TabsContent value="byCustomer" className="space-y-6">
+            <FinancePayrollByCustomerTab
+              properties={properties}
+              leases={leases}
+              customerById={customerById}
+              customerFilter={customerFilter}
+            />
+          </TabsContent>
+
+          <TabsContent value="overview" className="space-y-8">
         {activeCustomerName && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1.5 px-2 py-1" data-testid="badge-customer-filter">
@@ -1057,6 +1112,8 @@ export default function Finance() {
             </Table>
           </CardContent>
         </Card>
+          </TabsContent>
+        </Tabs>
       </motion.div>
     </MainLayout>
   );

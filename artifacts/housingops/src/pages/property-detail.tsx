@@ -48,6 +48,7 @@ import { BuildingPicker } from "@/components/building-picker";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
+import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift-pairs";
@@ -3610,6 +3611,7 @@ export default function PropertyDetail() {
 
           {/* ── FINANCE TAB ── */}
           <TabsContent value="finance" className="space-y-4">
+            <PropertyFinanceMiniChart propertyId={id} />
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2"><DollarSign className="h-4 w-4" />{t("pages.propertyDetail.monthlyFinancialSummary")}</CardTitle>

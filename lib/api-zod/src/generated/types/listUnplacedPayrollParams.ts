@@ -16,4 +16,17 @@ Anything else keeps the safe default (skip overrides).
 
  */
   reclaimOverridden?: ListUnplacedPayrollReclaimOverridden;
+  /**
+ * Saturday YYYY-MM-DD end-date for the Mon→Sat pay-week the
+payroll rows belong to (Task #597). When provided, the
+seeder additionally writes one immutable snapshot row per
+matched occupant into the `payroll_deductions` table — the
+source of truth for the new Finance Weekly / Monthly / By
+Customer tabs. Re-importing the same week is idempotent
+(snapshots are upserted on `(occupantId, payWeekEndDate)`).
+Omitted on dashboard polls so the boot path stays cheap.
+
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+  payWeekEndDate?: string;
 };

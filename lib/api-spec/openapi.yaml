@@ -1306,12 +1306,60 @@ paths:
           schema:
             type: string
             enum: ["true", "false"]
+        - in: query
+          name: payWeekEndDate
+          required: false
+          description: |
+            Saturday YYYY-MM-DD end-date for the Mon→Sat pay-week the
+            payroll rows belong to (Task #597). When provided, the
+            seeder additionally writes one immutable snapshot row per
+            matched occupant into the `payroll_deductions` table — the
+            source of truth for the new Finance Weekly / Monthly / By
+            Customer tabs. Re-importing the same week is idempotent
+            (snapshots are upserted on `(occupantId, payWeekEndDate)`).
+            Omitted on dashboard polls so the boot path stays cheap.
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ListUnplacedPayrollResult" }
+
+  /payroll-deductions:
+    get:
+      operationId: listPayrollDeductions
+      tags: [payroll]
+      summary: List per-pay-week housing deduction snapshots
+      description: |
+        Returns immutable per-pay-week snapshots of housing deductions
+        applied to occupants by `seedHousingDeductions`. Each row is one
+        occupant × one Mon→Sat pay-week (`payWeekEndDate` is the
+        Saturday end-date as YYYY-MM-DD). The Finance Weekly / Monthly /
+        By-Customer tabs aggregate these client-side; the per-property
+        Finance mini-chart uses the most recent 13 weeks.
+
+        Optional `since` and `until` are inclusive Saturday end-dates
+        (YYYY-MM-DD). Omit both to get the full history.
+      parameters:
+        - in: query
+          name: since
+          required: false
+          schema: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        - in: query
+          name: until
+          required: false
+          schema: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PayrollDeduction" }
 
   /storage/uploads/request-url:
     post:
@@ -2796,6 +2844,37 @@ components:
         leasesCreated: { type: integer }
         leasesUpdated: { type: integer }
         leasesSkipped: { type: integer }
+
+    PayrollDeduction:
+      type: object
+      required:
+        [
+          id,
+          occupantId,
+          customerId,
+          propertyId,
+          payWeekEndDate,
+          weeklyAmount,
+          personId,
+          nameSnapshot,
+          customerSnapshot,
+        ]
+      description: |
+        Immutable snapshot of one occupant's weekly housing deduction
+        for a single Mon→Sat pay-week (Task #597). `payWeekEndDate` is
+        the Saturday end-date as YYYY-MM-DD. `customerId` and
+        `propertyId` are denormalized at write time so historical
+        rollups stay correct even if the occupant later moves.
+      properties:
+        id: { type: string }
+        occupantId: { type: string }
+        customerId: { type: string }
+        propertyId: { type: string }
+        payWeekEndDate: { type: string }
+        weeklyAmount: { type: number }
+        personId: { type: string }
+        nameSnapshot: { type: string }
+        customerSnapshot: { type: string }
 
     UnplacedPayrollRow:
       type: object

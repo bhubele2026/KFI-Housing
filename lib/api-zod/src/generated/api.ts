@@ -3627,12 +3627,23 @@ sparingly, since this discards the operator's manual edit.
 
  * @summary List payroll deductions with no matching occupant yet
  */
+export const listUnplacedPayrollQueryPayWeekEndDateRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
 export const ListUnplacedPayrollQueryParams = zod.object({
   reclaimOverridden: zod
     .enum(["true", "false"])
     .optional()
     .describe(
       'When \"true\", the seeder re-claims occupants whose\nchargeSource is \"manual_override\", overwriting their\nchargePerBed + billingFrequency with the payroll values.\nAnything else keeps the safe default (skip overrides).\n',
+    ),
+  payWeekEndDate: zod.coerce
+    .string()
+    .regex(listUnplacedPayrollQueryPayWeekEndDateRegExp)
+    .optional()
+    .describe(
+      "Saturday YYYY-MM-DD end-date for the Mon→Sat pay-week the\npayroll rows belong to (Task #597). When provided, the\nseeder additionally writes one immutable snapshot row per\nmatched occupant into the `payroll_deductions` table — the\nsource of truth for the new Finance Weekly \/ Monthly \/ By\nCustomer tabs. Re-importing the same week is idempotent\n(snapshots are upserted on `(occupantId, payWeekEndDate)`).\nOmitted on dashboard polls so the boot path stays cheap.\n",
     ),
 });
 
@@ -3803,6 +3814,56 @@ export const ListUnplacedPayrollResponse = zod
   .describe(
     "Response payload for `GET \/payroll\/unplaced`. Splits the\nseeder's output into rows that need a fresh placement\n(`unmatched`) vs. rows that matched only via the name-only\nfallback (`lowConfidenceMatches`) and may need an operator\nconfirmation that the right person was picked.\n",
   );
+
+/**
+ * Returns immutable per-pay-week snapshots of housing deductions
+applied to occupants by `seedHousingDeductions`. Each row is one
+occupant × one Mon→Sat pay-week (`payWeekEndDate` is the
+Saturday end-date as YYYY-MM-DD). The Finance Weekly / Monthly /
+By-Customer tabs aggregate these client-side; the per-property
+Finance mini-chart uses the most recent 13 weeks.
+
+Optional `since` and `until` are inclusive Saturday end-dates
+(YYYY-MM-DD). Omit both to get the full history.
+
+ * @summary List per-pay-week housing deduction snapshots
+ */
+export const listPayrollDeductionsQuerySinceRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+export const listPayrollDeductionsQueryUntilRegExp = new RegExp(
+  "^\\d{4}-\\d{2}-\\d{2}$",
+);
+
+export const ListPayrollDeductionsQueryParams = zod.object({
+  since: zod.coerce
+    .string()
+    .regex(listPayrollDeductionsQuerySinceRegExp)
+    .optional(),
+  until: zod.coerce
+    .string()
+    .regex(listPayrollDeductionsQueryUntilRegExp)
+    .optional(),
+});
+
+export const ListPayrollDeductionsResponseItem = zod
+  .object({
+    id: zod.string(),
+    occupantId: zod.string(),
+    customerId: zod.string(),
+    propertyId: zod.string(),
+    payWeekEndDate: zod.string(),
+    weeklyAmount: zod.number(),
+    personId: zod.string(),
+    nameSnapshot: zod.string(),
+    customerSnapshot: zod.string(),
+  })
+  .describe(
+    "Immutable snapshot of one occupant's weekly housing deduction\nfor a single Mon→Sat pay-week (Task #597). `payWeekEndDate` is\nthe Saturday end-date as YYYY-MM-DD. `customerId` and\n`propertyId` are denormalized at write time so historical\nrollups stay correct even if the occupant later moves.\n",
+  );
+export const ListPayrollDeductionsResponse = zod.array(
+  ListPayrollDeductionsResponseItem,
+);
 
 /**
  * Returns a presigned GCS URL for direct upload. The client sends JSON

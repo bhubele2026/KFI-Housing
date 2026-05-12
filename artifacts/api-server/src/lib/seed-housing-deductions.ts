@@ -1,8 +1,16 @@
-import { eq } from "drizzle-orm";
-import { db, occupantsTable, propertiesTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
+import {
+  customersTable,
+  db,
+  occupantsTable,
+  payrollDeductionsTable,
+  propertiesTable,
+} from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
+import { randomUUID } from "node:crypto";
 import { normalizeOccupantRow } from "./db-row-normalizers";
+import { isSaturdayDate } from "./pay-week";
 
 export interface HousingDeductionRow {
   customer: string;
@@ -69,6 +77,14 @@ export interface SeedHousingDeductionsResult {
   matched: number;
   updated: number;
   alreadyCorrect: number;
+  // Snapshot rows written into `payroll_deductions` for the supplied
+  // `payWeekEndDate` (one per matched occupant). Zero when no
+  // `payWeekEndDate` was passed — the seeder boots happily without
+  // creating snapshots so existing tests / startup paths are unaffected.
+  snapshotsWritten: number;
+  // Saturday end-date the snapshot rows were stamped with (echoed back
+  // from the input). Null when no snapshots were written.
+  payWeekEndDate: string | null;
   unmatched: UnplacedPayrollUnmatchedRow[];
   lowConfidenceMatches: LowConfidencePayrollMatch[];
   // Rows that matched an existing occupant whose chargeSource is
@@ -100,6 +116,15 @@ export interface SeedHousingDeductionsDeps {
   // lets the dashboard offer a per-row "Re-claim from payroll" button
   // without forcibly overwriting every other override in the portfolio.
   reclaimOccupantIds?: string[];
+  // Saturday YYYY-MM-DD end-date for the Mon→Sat pay-week represented
+  // by the supplied `rows`. When provided, the seeder writes one
+  // immutable snapshot row per matched occupant into the
+  // `payroll_deductions` table — the source of truth for the new
+  // weekly / monthly Finance tabs (Task #597). Re-importing the same
+  // pay-week is safe and idempotent: rows are upserted on the
+  // (occupantId, payWeekEndDate) composite unique index. Skipped when
+  // null/undefined (boot path stays a no-op for snapshots).
+  payWeekEndDate?: string | null;
 }
 
 // Source of truth: payroll export
@@ -421,6 +446,25 @@ export async function seedHousingDeductions(
   const reclaimOccupantIdSet = deps.reclaimOccupantIds?.length
     ? new Set(deps.reclaimOccupantIds)
     : null;
+  const payWeekEndDate =
+    typeof deps.payWeekEndDate === "string" && isSaturdayDate(deps.payWeekEndDate)
+      ? deps.payWeekEndDate
+      : null;
+  if (deps.payWeekEndDate && !payWeekEndDate) {
+    log.warn(
+      { payWeekEndDate: deps.payWeekEndDate },
+      "Ignoring payWeekEndDate that is not a YYYY-MM-DD Saturday — no snapshot rows will be written",
+    );
+  }
+  // Track which occupants got matched so we can write one snapshot row
+  // per matched occupant after the per-row apply loop. We use a Map so
+  // a duplicated payroll row (same occupant twice) collapses to one
+  // snapshot — the `(occupantId, payWeekEndDate)` unique index would
+  // reject the second insert anyway.
+  const matchedSnapshots = new Map<
+    string,
+    { occupantId: string; weekly: number; row: HousingDeductionRow; propertyId: string | null; customerId: string }
+  >();
 
   // Pull the entire occupants table once. The volume is small (hundreds),
   // and pre-loading lets us do both lookups (by employeeId, by
@@ -444,10 +488,47 @@ export async function seedHousingDeductions(
   // ("Did you mean: Jane Smith @ Maple Court?") without an N+1 lookup
   // per unmatched row. Volume is small (tens) so a full scan is fine.
   const allProperties = await database
-    .select({ id: propertiesTable.id, name: propertiesTable.name })
+    .select({
+      id: propertiesTable.id,
+      name: propertiesTable.name,
+      customerId: propertiesTable.customerId,
+    })
     .from(propertiesTable);
   const propertyNameById = new Map<string, string>();
-  for (const p of allProperties) propertyNameById.set(p.id, p.name);
+  const propertyCustomerById = new Map<string, string>();
+  for (const p of allProperties) {
+    propertyNameById.set(p.id, p.name);
+    propertyCustomerById.set(p.id, p.customerId ?? "");
+  }
+
+  // Build a payroll-customer-name → customerId lookup so the snapshot
+  // attributes deductions to the matched payroll customer rather than
+  // the property's primary customer. This matters for shared-customer
+  // properties (`sharedWithCustomerIds`) where one property houses
+  // people from multiple customers — the By-Customer rollup needs to
+  // credit the actual employer of the deduction. Lowercased + trimmed
+  // for resilience to whitespace / case differences in the payroll
+  // export.
+  const allCustomers = await database
+    .select({ id: customersTable.id, name: customersTable.name })
+    .from(customersTable);
+  const customerIdByName = new Map<string, string>();
+  for (const c of allCustomers) {
+    if (c.name) customerIdByName.set(c.name.trim().toLowerCase(), c.id);
+  }
+  const resolveCustomerId = (
+    payrollCustomer: string,
+    fallbackPropertyId: string | null,
+  ): string => {
+    const fromPayroll = customerIdByName.get(
+      (payrollCustomer ?? "").trim().toLowerCase(),
+    );
+    if (fromPayroll) return fromPayroll;
+    if (fallbackPropertyId) {
+      return propertyCustomerById.get(fallbackPropertyId) ?? "";
+    }
+    return "";
+  };
   const suggestionCandidates: SuggestionCandidate[] = allOccupants.map((o) => ({
     id: o.id,
     name: o.name,
@@ -657,6 +738,93 @@ export async function seedHousingDeductions(
       )
       .where(eq(occupantsTable.id, target.id));
     updated++;
+    if (payWeekEndDate) {
+      matchedSnapshots.set(target.id, {
+        occupantId: target.id,
+        weekly: row.weekly,
+        row,
+        propertyId: target.propertyId ?? null,
+        customerId: resolveCustomerId(row.customer, target.propertyId),
+      });
+    }
+  }
+
+  // The `updated++` branch above only fires when the seeder actually
+  // wrote to the occupants row. For a re-import of the same payroll
+  // file, the bulk of matched rows hit `alreadyCorrect` and skip the
+  // snapshot map. Re-walk the rows and stamp snapshots for every match
+  // so the per-week record is complete regardless of whether the
+  // occupant cache changed. Done as a second pass to keep the
+  // already-correct fast path readable.
+  if (payWeekEndDate) {
+    for (const row of rows) {
+      let target: (typeof allOccupants)[number] | null = null;
+      const byId = byEmployeeId.get(row.personId.trim());
+      if (byId) target = byId;
+      else {
+        const byNc = byNameCompany.get(nameCompanyKey(row.name, row.customer));
+        if (byNc) target = byNc;
+        else {
+          const byN = byNameOnly.get(nameKey(row.name));
+          if (byN) target = byN;
+        }
+      }
+      if (!target) continue;
+      // Skip overrides we declined to touch — the snapshot wouldn't
+      // reflect what actually got deducted (the operator's manual
+      // value is what's on the row), so writing a payroll-derived
+      // snapshot for that occupant would be misleading.
+      const shouldReclaim =
+        reclaimOverridden &&
+        (!reclaimOccupantIdSet || reclaimOccupantIdSet.has(target.id));
+      if (target.chargeSource === "manual_override" && !shouldReclaim) continue;
+      if (matchedSnapshots.has(target.id)) continue;
+      matchedSnapshots.set(target.id, {
+        occupantId: target.id,
+        weekly: row.weekly,
+        row,
+        propertyId: target.propertyId ?? null,
+        customerId: resolveCustomerId(row.customer, target.propertyId),
+      });
+    }
+  }
+
+  let snapshotsWritten = 0;
+  if (payWeekEndDate && matchedSnapshots.size > 0) {
+    // Idempotent upsert on (occupantId, payWeekEndDate). Re-importing
+    // the same week overwrites the snapshot in place — same posture as
+    // the occupants-cache update above.
+    for (const snap of matchedSnapshots.values()) {
+      await database
+        .insert(payrollDeductionsTable)
+        .values({
+          id: randomUUID(),
+          occupantId: snap.occupantId,
+          customerId: snap.customerId,
+          propertyId: snap.propertyId ?? "",
+          payWeekEndDate,
+          weeklyAmount: snap.weekly,
+          personId: snap.row.personId,
+          nameSnapshot: snap.row.name,
+          customerSnapshot: snap.row.customer,
+        })
+        .onConflictDoUpdate({
+          target: [
+            payrollDeductionsTable.occupantId,
+            payrollDeductionsTable.payWeekEndDate,
+          ],
+          set: {
+            weeklyAmount: snap.weekly,
+            personId: snap.row.personId,
+            nameSnapshot: snap.row.name,
+            customerSnapshot: snap.row.customer,
+            customerId: snap.customerId,
+            propertyId: snap.propertyId ?? "",
+            createdAt: sql`now()`,
+          },
+        });
+      snapshotsWritten++;
+    }
   }
 
   const result: SeedHousingDeductionsResult = {
@@ -664,6 +832,8 @@ export async function seedHousingDeductions(
     matched,
     updated,
     alreadyCorrect,
+    snapshotsWritten,
+    payWeekEndDate,
     unmatched,
     lowConfidenceMatches,
     skippedOverridden,
@@ -684,6 +854,8 @@ export async function seedHousingDeductions(
       matchedByEmployeeId: result.matchedByEmployeeId,
       matchedByNameCompany: result.matchedByNameCompany,
       matchedByNameOnly: result.matchedByNameOnly,
+      snapshotsWritten: result.snapshotsWritten,
+      payWeekEndDate: result.payWeekEndDate,
     },
     "Seeded weekly housing deductions from payroll file",
   );

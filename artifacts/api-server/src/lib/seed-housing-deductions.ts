@@ -775,14 +775,15 @@ export async function seedHousingDeductions(
         }
       }
       if (!target) continue;
-      // Skip overrides we declined to touch — the snapshot wouldn't
-      // reflect what actually got deducted (the operator's manual
-      // value is what's on the row), so writing a payroll-derived
-      // snapshot for that occupant would be misleading.
-      const shouldReclaim =
-        reclaimOverridden &&
-        (!reclaimOccupantIdSet || reclaimOccupantIdSet.has(target.id));
-      if (target.chargeSource === "manual_override" && !shouldReclaim) continue;
+      // Snapshot every matched payroll row, even when the occupant is
+      // in `manual_override` and reclaim is off (Task #597 v6
+      // validator). The cache value on the occupant row may diverge
+      // from the actual payroll deduction in that case, but the
+      // `payroll_deductions` table is the source of truth for what
+      // was actually deducted on this pay-week — leaving holes here
+      // would cause Finance Weekly/Monthly/By-Customer to undercount
+      // recovered amounts. The occupants-cache update above is still
+      // gated on the override, only the snapshot write is universal.
       if (matchedSnapshots.has(target.id)) continue;
       matchedSnapshots.set(target.id, {
         occupantId: target.id,

@@ -830,7 +830,10 @@ export async function seedHousingDeductions(
             propertyId: snap.propertyId ?? "",
             source: "payroll_import",
             importedAt: sql`now()`,
-            createdAt: sql`now()`,
+            // `createdAt` is intentionally NOT bumped on conflict —
+            // it stays as the original creation timestamp so the
+            // audit trail remains useful. `importedAt` is the
+            // mutable "when did we last touch this" marker.
           },
         });
       snapshotsWritten++;

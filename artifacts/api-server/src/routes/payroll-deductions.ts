@@ -6,12 +6,13 @@ import { isSaturdayDate } from "../lib/pay-week";
 
 const router: IRouter = Router();
 
-// Per-pay-week housing-deduction snapshots (Task #597). Powers the
-// Finance Weekly / Monthly / By Customer tabs and the per-property
-// 13-week mini-chart. The aggregations all happen client-side off this
-// raw list (the volume is small — ~250 rows × N weeks of history) so
-// the API surface stays minimal and the UI can re-bucket without a
-// round-trip when filters change.
+// Per-pay-week housing-deduction snapshots (Task #597). The Finance
+// Weekly / Monthly / By Customer tabs and the per-property 13-week
+// mini-chart consume server-side rollups under `/api/finance/*`
+// instead of re-bucketing this raw list — see routes/finance.ts. This
+// endpoint stays around as a low-level audit feed (CSV exports,
+// debugging tools, future per-occupant detail views) and is the
+// primary read path tests assert against.
 //
 // `since` / `until` are inclusive Saturday YYYY-MM-DD end-dates; both
 // are optional. Bad input (non-string, non-Saturday) is silently

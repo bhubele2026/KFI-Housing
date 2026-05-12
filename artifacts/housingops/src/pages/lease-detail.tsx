@@ -458,7 +458,7 @@ export default function LeaseDetail() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const {
-    leases, properties, customers, otherCosts, isLoading,
+    leases, properties, customers, otherCosts, buildings, isLoading,
     updateLease, addLease, deleteLease,
   } = useData();
 
@@ -610,6 +610,20 @@ export default function LeaseDetail() {
   const property = useMemo(
     () => (lease ? properties.find((p) => p.id === lease.propertyId) : undefined),
     [lease, properties],
+  );
+  // Building info for the lease (Task #587). Only surfaced when the
+  // parent property has more than one building — single-building
+  // properties don't need disambiguation.
+  const propertyBuildings = useMemo(
+    () => (property ? buildings.filter((b) => b.propertyId === property.id) : []),
+    [buildings, property],
+  );
+  const leaseBuilding = useMemo(
+    () =>
+      lease && lease.buildingId
+        ? buildings.find((b) => b.id === lease.buildingId) ?? null
+        : null,
+    [buildings, lease],
   );
   const customer = useMemo(
     () => (property ? customers.find((c) => c.id === property.customerId) : undefined),
@@ -804,6 +818,20 @@ export default function LeaseDetail() {
             </Link>
           ) : (
             <span className="italic text-muted-foreground">Unattached</span>
+          )}
+          {/* Building crumb (Task #587). Only when the parent property has
+              more than one building, to keep simple cases noise-free. */}
+          {propertyBuildings.length > 1 && (
+            <>
+              <span className="text-muted-foreground">/</span>
+              <span
+                className="inline-flex items-center gap-1 text-muted-foreground"
+                data-testid="lease-detail-building-crumb"
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                {leaseBuilding ? leaseBuilding.name : <span className="italic">Building unassigned</span>}
+              </span>
+            </>
           )}
           <span className="text-muted-foreground">/</span>
           <span className="font-medium">{isCreateMode ? "New" : "Lease"}</span>

@@ -2081,6 +2081,7 @@ export default function PropertyDetail() {
                   leases={sortedPropLeases}
                   properties={properties}
                   otherCosts={otherCosts}
+                  buildings={propBuildings}
                   showProperty={false}
                   showCustomer={false}
                   onDelete={deleteLease}
@@ -2547,6 +2548,24 @@ export default function PropertyDetail() {
                                     <BedDouble className="h-4 w-4 text-muted-foreground" />
                                     <InlineEdit value={room.name} onSave={v => updateRoom(room.id, { name: v })} />
                                   </CardTitle>
+                                  {/* Building badge (Task #587). Only rendered
+                                      when this property has more than one
+                                      building so single-building cards stay
+                                      unchanged. */}
+                                  {propBuildings.length > 1 && (() => {
+                                    const bld = propBuildings.find((b) => b.id === room.buildingId);
+                                    return (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] font-normal gap-1 text-muted-foreground border-dashed"
+                                        data-testid={`room-building-label-${room.id}`}
+                                        title={bld ? `Building: ${bld.name}` : "Building unassigned"}
+                                      >
+                                        <Building2 className="h-3 w-3" />
+                                        {bld ? bld.name : "Building unassigned"}
+                                      </Badge>
+                                    );
+                                  })()}
                                   <span className="text-xs text-muted-foreground">
                                     {t("pages.propertyDetail.bedsCount", { count: roomBeds.length })} · {t("pages.propertyDetail.occupiedCount", { count: roomOccupied })}
                                   </span>

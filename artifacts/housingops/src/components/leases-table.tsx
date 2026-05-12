@@ -5,11 +5,11 @@ import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock, Zap } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock, Zap, Building2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { Lease, Customer, Property, RoomNightLog, OtherCost } from "@/data/mockData";
+import type { Lease, Customer, Property, RoomNightLog, OtherCost, Building } from "@/data/mockData";
 import { formatUsd } from "@/data/mockData";
 import { getHotelRateRiskStatus } from "@/lib/hotel-rate-status";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
@@ -99,6 +99,15 @@ export interface LeasesTableProps {
    */
   otherCosts?: readonly OtherCost[];
   /**
+   * Buildings keyed by property (Task #587). When a lease's property
+   * has more than one building, the Property cell renders a small
+   * "Building X" label beneath the property name so operators can tell
+   * which building the lease applies to without opening the lease.
+   * Defaults to an empty array so callers that don't care (sandbox /
+   * unit tests) keep their current behaviour.
+   */
+  buildings?: readonly Building[];
+  /**
    * Page path (no leading hash) the user is currently on. Threaded through
    * to the lease detail page via the `?from=` query string so the back
    * link there can return to the *exact* surface the user came from
@@ -151,6 +160,52 @@ function formatMoney(n: number): string {
 }
 
 /**
+ * Compact "Building X" label that renders beneath the property name on
+ * each lease row when the lease's parent property has more than one
+ * building (Task #587). For single-building properties — by far the
+ * common case — this returns null so the row stays unchanged.
+ *
+ * If the lease has a `buildingId` we render that building's name. If
+ * the field is blank/null on a multi-building property (legacy / not-
+ * yet-assigned rows) we render a muted "Building unassigned" hint so
+ * operators can spot the gap without opening the lease.
+ */
+function LeaseBuildingLabel({
+  lease,
+  propertyBuildings,
+  buildingById,
+}: {
+  lease: Lease;
+  propertyBuildings: readonly Building[];
+  buildingById: Map<string, Building>;
+}) {
+  if (propertyBuildings.length <= 1) return null;
+  const building = lease.buildingId ? buildingById.get(lease.buildingId) : null;
+  if (building) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground"
+        data-testid={`lease-building-label-${lease.id}`}
+        title={`Building: ${building.name}`}
+      >
+        <Building2 className="h-3 w-3 opacity-60" aria-hidden />
+        {building.name}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-normal italic text-muted-foreground"
+      data-testid={`lease-building-label-${lease.id}`}
+      title="This lease isn't assigned to a building yet."
+    >
+      <Building2 className="h-3 w-3 opacity-60" aria-hidden />
+      Building unassigned
+    </span>
+  );
+}
+
+/**
  * A single source of truth for *listing* leases. Used both on the global
  * Leases page (with a Property column) and on the Property Detail page's
  * Leases tab (without it, since context is implicit).
@@ -184,9 +239,28 @@ export function LeasesTable({
   placeholderProperties = [],
   roomNightLogs,
   otherCosts = [],
+  buildings = [],
   originPath,
 }: LeasesTableProps) {
   const propertyById = new Map(properties.map((p) => [p.id, p] as const));
+  // Building lookups for the "Building X" sub-label under each property
+  // name (Task #587). We need both `byPropertyId` (to know how many a
+  // property has — single-building properties skip the label entirely)
+  // and `byId` (to render the matching building's name from the
+  // lease's `buildingId`).
+  const buildingsByPropertyId = useMemo(() => {
+    const m = new Map<string, Building[]>();
+    for (const b of buildings) {
+      const list = m.get(b.propertyId) ?? [];
+      list.push(b);
+      m.set(b.propertyId, list);
+    }
+    return m;
+  }, [buildings]);
+  const buildingById = useMemo(
+    () => new Map(buildings.map((b) => [b.id, b] as const)),
+    [buildings],
+  );
   // Pre-aggregate OtherCost rows per property so the Rent column lookup
   // is O(1) per row instead of O(n) per render.
   const otherCostsByPropertyId = useMemo(() => {
@@ -286,13 +360,32 @@ export function LeasesTable({
       navigate(href);
     };
 
+  // Standalone Building column (Task #587). Only rendered when the
+  // Property column is hidden (e.g., the Property Detail → Leases tab,
+  // where every row shares the same property) AND at least one row's
+  // property has more than one building. Without this, the per-property
+  // Leases tab would have nowhere to display building context.
+  const showBuilding = useMemo(() => {
+    if (showProperty) return false;
+    for (const lease of leases) {
+      const propBuildings = buildingsByPropertyId.get(lease.propertyId) ?? [];
+      if (propBuildings.length > 1) return true;
+    }
+    for (const placeholder of placeholderProperties) {
+      const propBuildings = buildingsByPropertyId.get(placeholder.id) ?? [];
+      if (propBuildings.length > 1) return true;
+    }
+    return false;
+  }, [showProperty, leases, placeholderProperties, buildingsByPropertyId]);
+
   // (optional) 1 bulk-select column + 1 PDF thumbnail column + Property +
-  // Customer + 7 always-on columns (Start, End, Rent, Deposit, Status,
-  // Terms, Notes) + 1 trash column.
+  // (optional) Building + Customer + 7 always-on columns (Start, End,
+  // Rent, Deposit, Status, Terms, Notes) + 1 trash column.
   const columnCount =
     (bulkEnabled ? 1 : 0) +
     1 +
     (showProperty ? 1 : 0) +
+    (showBuilding ? 1 : 0) +
     (showCustomer ? 1 : 0) +
     7 +
     1;
@@ -356,6 +449,7 @@ export function LeasesTable({
             <span className="sr-only">Source PDF</span>
           </TableHead>
           {showProperty && <TableHead>Property</TableHead>}
+          {showBuilding && <TableHead>Building</TableHead>}
           {showCustomer && <TableHead>Customer</TableHead>}
           <TableHead>Start Date</TableHead>
           <TableHead>End Date</TableHead>
@@ -420,24 +514,44 @@ export function LeasesTable({
                   {showProperty && (
                     <TableCell className="font-medium">
                       {property ? (
-                        onPropertyClick ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onPropertyClick(property.id);
-                            }}
-                            className="rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring text-left"
-                            data-testid={`link-lease-property-${lease.id}`}
-                          >
+                        <div className="flex flex-col gap-0.5">
+                          {onPropertyClick ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onPropertyClick(property.id);
+                              }}
+                              className="rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring text-left"
+                              data-testid={`link-lease-property-${lease.id}`}
+                            >
+                              <PropertyNameCell name={property.name} />
+                            </button>
+                          ) : (
                             <PropertyNameCell name={property.name} />
-                          </button>
-                        ) : (
-                          <PropertyNameCell name={property.name} />
-                        )
+                          )}
+                          <LeaseBuildingLabel
+                            lease={lease}
+                            propertyBuildings={
+                              buildingsByPropertyId.get(lease.propertyId) ?? []
+                            }
+                            buildingById={buildingById}
+                          />
+                        </div>
                       ) : (
                         <span className="italic text-muted-foreground">Unknown</span>
                       )}
+                    </TableCell>
+                  )}
+                  {showBuilding && (
+                    <TableCell className="text-sm">
+                      <LeaseBuildingLabel
+                        lease={lease}
+                        propertyBuildings={
+                          buildingsByPropertyId.get(lease.propertyId) ?? []
+                        }
+                        buildingById={buildingById}
+                      />
                     </TableCell>
                   )}
                   {showCustomer && (
@@ -824,6 +938,9 @@ export function LeasesTable({
                         </p>
                       )}
                     </TableCell>
+                  )}
+                  {showBuilding && (
+                    <TableCell className="text-sm text-muted-foreground">—</TableCell>
                   )}
                   {showCustomer && (
                     <TableCell className="text-sm text-muted-foreground">

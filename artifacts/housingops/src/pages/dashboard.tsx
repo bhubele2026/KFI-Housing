@@ -86,7 +86,7 @@ function formatRelativeTime(
 
 export default function Dashboard() {
   const { t } = useTranslation();
-  const { properties, beds, rooms, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant, updateLease } = useData();
+  const { properties, buildings, beds, rooms, leases, utilities, insuranceCertificates, customers, occupants, addOccupant, updateBed, updateOccupant, updateLease } = useData();
   const { toast } = useToast();
   const [pendingEmployerMove, setPendingEmployerMove] = useState<{
     occupantId: string;
@@ -568,8 +568,20 @@ export default function Dashboard() {
     propertyId: string;
     propertyName: string;
     days: number;
+    // Building label (Task #587). Only populated when the parent
+    // property has more than one building; resolved via bed → room
+    // → buildingId since ProjectedMoveIn only carries `bedId`.
+    buildingName: string | null;
   }
   const upcomingMoveIns = useMemo<UpcomingMoveInRow[]>(() => {
+    // Lookups built once per memo run so the inner loop stays O(1).
+    const bedById = new Map(beds.map((b) => [b.id, b]));
+    const roomById = new Map(rooms.map((r) => [r.id, r]));
+    const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    const buildingsByProperty = new Map<string, number>();
+    for (const b of buildings) {
+      buildingsByProperty.set(b.propertyId, (buildingsByProperty.get(b.propertyId) ?? 0) + 1);
+    }
     const out: UpcomingMoveInRow[] = [];
     for (const m of allProjectedMoveIns) {
       if (!scopedPropertyIds.has(m.propertyId)) continue;
@@ -577,7 +589,14 @@ export default function Dashboard() {
       if (days === null) continue;
       const propertyName =
         scopedProperties.find((p) => p.id === m.propertyId)?.name ?? "—";
-      out.push({ moveIn: m, propertyId: m.propertyId, propertyName, days });
+      let buildingName: string | null = null;
+      if ((buildingsByProperty.get(m.propertyId) ?? 0) > 1) {
+        const bed = m.bedId ? bedById.get(m.bedId) : undefined;
+        const room = bed ? roomById.get(bed.roomId) : undefined;
+        const bld = room?.buildingId ? buildingById.get(room.buildingId) : undefined;
+        buildingName = bld ? bld.name : "Building unassigned";
+      }
+      out.push({ moveIn: m, propertyId: m.propertyId, propertyName, days, buildingName });
     }
     // Most-overdue first (most negative `days`), then soonest
     // upcoming arrivals. Matches the ascending-by-date semantics the
@@ -585,7 +604,7 @@ export default function Dashboard() {
     // the cache was hydrated from a different ordering.
     out.sort((a, b) => a.days - b.days);
     return out;
-  }, [allProjectedMoveIns, scopedPropertyIds, scopedProperties]);
+  }, [allProjectedMoveIns, scopedPropertyIds, scopedProperties, beds, rooms, buildings]);
   const upcomingMoveInCounts = useMemo(() => {
     let overdue = 0;
     let next7 = 0;
@@ -615,6 +634,10 @@ export default function Dashboard() {
     propertyName: string;
     days: number;
     bucket: ExpiryBucket;
+    // Building label (Task #587). Only populated when the parent
+    // property has more than one building, so single-building setups
+    // stay noise-free.
+    buildingName: string | null;
   }
   // Snooze support (Task #357). A lease whose `snoozedUntil` date is
   // strictly after today is hidden from the alerts panel — operators
@@ -627,6 +650,11 @@ export default function Dashboard() {
   // can show "X snoozed" alongside the visible count without double
   // counting.
   const allInWindowLeases = useMemo<ExpiringLease[]>(() => {
+    const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    const buildingsByProperty = new Map<string, number>();
+    for (const b of buildings) {
+      buildingsByProperty.set(b.propertyId, (buildingsByProperty.get(b.propertyId) ?? 0) + 1);
+    }
     const out: ExpiringLease[] = [];
     for (const l of scopedLeases) {
       if (!l.endDate) continue;
@@ -652,13 +680,18 @@ export default function Dashboard() {
       }
       const propertyName =
         scopedProperties.find((p) => p.id === l.propertyId)?.name ?? "—";
-      out.push({ lease: l, propertyName, days, bucket });
+      let buildingName: string | null = null;
+      if ((buildingsByProperty.get(l.propertyId) ?? 0) > 1) {
+        const bld = l.buildingId ? buildingById.get(l.buildingId) : undefined;
+        buildingName = bld ? bld.name : "Building unassigned";
+      }
+      out.push({ lease: l, propertyName, days, bucket, buildingName });
     }
     // Sort by urgency: most-overdue first (most negative), then
     // soonest-expiring upcoming dates.
     out.sort((a, b) => a.days - b.days);
     return out;
-  }, [scopedLeases, scopedProperties]);
+  }, [scopedLeases, scopedProperties, buildings]);
 
   // Active alerts = in-window AND not currently snoozed. A snooze is
   // active when `snoozedUntil` (a YYYY-MM-DD or "") is strictly after
@@ -1234,7 +1267,7 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {upcomingMoveIns.map(({ moveIn, propertyId, propertyName, days }) => {
+                  {upcomingMoveIns.map(({ moveIn, propertyId, propertyName, days, buildingName }) => {
                     const overdue = days < 0;
                     return (
                       <TableRow
@@ -1261,7 +1294,18 @@ export default function Dashboard() {
                           </Link>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          <PropertyNameCell name={propertyName} />
+                          <div className="flex flex-col">
+                            <PropertyNameCell name={propertyName} />
+                            {buildingName && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/80"
+                                data-testid={`upcoming-move-in-building-${moveIn.id}`}
+                              >
+                                <Building2 className="h-3 w-3" />
+                                {buildingName}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm tabular-nums text-muted-foreground">
                           {formatYMDPretty(moveIn.projectedMoveInDate)}
@@ -1491,7 +1535,7 @@ export default function Dashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expiringLeases.map(({ lease, propertyName, days, bucket }) => {
+                  {expiringLeases.map(({ lease, propertyName, days, bucket, buildingName }) => {
                     const style = expiryBucketStyle[bucket];
                     function snooze(durationDays: number, label: string) {
                       const until = addDaysToToday(durationDays);
@@ -1533,6 +1577,15 @@ export default function Dashboard() {
                               primaryClassName="text-primary"
                             />
                           </Link>
+                          {buildingName && (
+                            <span
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground"
+                              data-testid={`expiring-lease-building-${lease.id}`}
+                            >
+                              <Building2 className="h-3 w-3" />
+                              {buildingName}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm tabular-nums text-muted-foreground">
                           {formatYMDPretty(lease.endDate)}

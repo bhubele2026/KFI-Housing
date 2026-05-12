@@ -839,6 +839,7 @@ export default function Leases() {
                 }}
                 placeholderProperties={visiblePlaceholderProperties}
                 roomNightLogs={roomNightLogs}
+                buildings={buildings}
                 emptyAction={
                   leases.length === 0 ? (
                     <AddLeaseDialog
@@ -929,6 +930,7 @@ export default function Leases() {
                           });
                         }}
                         roomNightLogs={roomNightLogs}
+                        buildings={buildings}
                         originPath="/leases"
                       />
                     </AccordionContent>

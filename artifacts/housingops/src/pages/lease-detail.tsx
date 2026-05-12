@@ -95,6 +95,7 @@ import { useToast } from "@/hooks/use-toast";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { NotFoundScreen } from "@/components/not-found-screen";
+import { BuildingPicker } from "@/components/building-picker";
 
 // We deliberately reuse the inline editors from the Property Detail page so
 // every lease field on this page commits with the same save-on-blur +
@@ -824,13 +825,23 @@ export default function LeaseDetail() {
           {propertyBuildings.length > 1 && (
             <>
               <span className="text-muted-foreground">/</span>
-              <span
-                className="inline-flex items-center gap-1 text-muted-foreground"
-                data-testid="lease-detail-building-crumb"
-              >
-                <Building2 className="h-3.5 w-3.5" />
-                {leaseBuilding ? leaseBuilding.name : <span className="italic">Building unassigned</span>}
-              </span>
+              <BuildingPicker
+                buildings={propertyBuildings}
+                selectedId={lease.buildingId ?? null}
+                onSelect={(buildingId) => applyUpdate({ buildingId })}
+                contentTestId="lease-detail-building-picker"
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-transparent px-1.5 py-0.5 text-muted-foreground hover:border-input hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    data-testid="lease-detail-building-crumb"
+                    title={leaseBuilding ? `Building: ${leaseBuilding.name} — click to change` : "Click to assign a building"}
+                  >
+                    <Building2 className="h-3.5 w-3.5" />
+                    {leaseBuilding ? leaseBuilding.name : <span className="italic">Building unassigned</span>}
+                  </button>
+                }
+              />
             </>
           )}
           <span className="text-muted-foreground">/</span>

@@ -22,6 +22,7 @@ import {
 } from "@/lib/lease-source-pdf";
 import { isBlankYMD } from "@/lib/lease-dates";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
+import { BuildingPicker } from "@/components/building-picker";
 
 export interface LeasesTableProps {
   leases: readonly Lease[];
@@ -174,34 +175,68 @@ function LeaseBuildingLabel({
   lease,
   propertyBuildings,
   buildingById,
+  onUpdateLease,
 }: {
   lease: Lease;
   propertyBuildings: readonly Building[];
   buildingById: Map<string, Building>;
+  /**
+   * When provided, the label becomes an inline building picker (Task #591)
+   * so operators can assign / change a lease's building right from the
+   * leases table. When omitted (sandbox / unit tests) the label remains
+   * read-only.
+   */
+  onUpdateLease?: (id: string, updates: Partial<Lease>) => void;
 }) {
   if (propertyBuildings.length <= 1) return null;
   const building = lease.buildingId ? buildingById.get(lease.buildingId) : null;
-  if (building) {
+  const baseClass =
+    "inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground";
+  const labelText = building ? building.name : "Building unassigned";
+  const labelTitle = building
+    ? onUpdateLease
+      ? `Building: ${building.name} — click to change`
+      : `Building: ${building.name}`
+    : onUpdateLease
+    ? "Click to assign a building"
+    : "This lease isn't assigned to a building yet.";
+
+  if (!onUpdateLease) {
     return (
       <span
-        className="inline-flex items-center gap-1 text-[11px] font-normal text-muted-foreground"
+        className={cn(baseClass, !building && "italic")}
         data-testid={`lease-building-label-${lease.id}`}
-        title={`Building: ${building.name}`}
+        title={labelTitle}
       >
         <Building2 className="h-3 w-3 opacity-60" aria-hidden />
-        {building.name}
+        {labelText}
       </span>
     );
   }
+
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] font-normal italic text-muted-foreground"
-      data-testid={`lease-building-label-${lease.id}`}
-      title="This lease isn't assigned to a building yet."
-    >
-      <Building2 className="h-3 w-3 opacity-60" aria-hidden />
-      Building unassigned
-    </span>
+    <BuildingPicker
+      buildings={propertyBuildings}
+      selectedId={lease.buildingId ?? null}
+      onSelect={(buildingId) => onUpdateLease(lease.id, { buildingId })}
+      contentTestId={`lease-building-picker-${lease.id}`}
+      trigger={
+        <button
+          type="button"
+          className={cn(
+            baseClass,
+            "rounded-sm hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            !building && "italic",
+          )}
+          data-testid={`lease-building-label-${lease.id}`}
+          title={labelTitle}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Building2 className="h-3 w-3 opacity-60" aria-hidden />
+          {labelText}
+        </button>
+      }
+    />
   );
 }
 
@@ -536,6 +571,7 @@ export function LeasesTable({
                               buildingsByPropertyId.get(lease.propertyId) ?? []
                             }
                             buildingById={buildingById}
+                            onUpdateLease={onUpdateLease}
                           />
                         </div>
                       ) : (
@@ -551,6 +587,7 @@ export function LeasesTable({
                           buildingsByPropertyId.get(lease.propertyId) ?? []
                         }
                         buildingById={buildingById}
+                        onUpdateLease={onUpdateLease}
                       />
                     </TableCell>
                   )}

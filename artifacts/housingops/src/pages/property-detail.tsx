@@ -44,6 +44,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
+import { BuildingPicker } from "@/components/building-picker";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
@@ -2555,15 +2556,25 @@ export default function PropertyDetail() {
                                   {propBuildings.length > 1 && (() => {
                                     const bld = propBuildings.find((b) => b.id === room.buildingId);
                                     return (
-                                      <Badge
-                                        variant="outline"
-                                        className="text-[10px] font-normal gap-1 text-muted-foreground border-dashed"
-                                        data-testid={`room-building-label-${room.id}`}
-                                        title={bld ? `Building: ${bld.name}` : "Building unassigned"}
-                                      >
-                                        <Building2 className="h-3 w-3" />
-                                        {bld ? bld.name : "Building unassigned"}
-                                      </Badge>
+                                      <BuildingPicker
+                                        buildings={propBuildings}
+                                        selectedId={room.buildingId ?? null}
+                                        onSelect={(buildingId) =>
+                                          updateRoom(room.id, { buildingId: buildingId ?? "" })
+                                        }
+                                        contentTestId={`room-building-picker-${room.id}`}
+                                        trigger={
+                                          <button
+                                            type="button"
+                                            className="inline-flex items-center gap-1 rounded-md border border-dashed bg-background px-2 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            data-testid={`room-building-label-${room.id}`}
+                                            title={bld ? `Building: ${bld.name} — click to change` : "Click to assign a building"}
+                                          >
+                                            <Building2 className="h-3 w-3" />
+                                            {bld ? bld.name : "Building unassigned"}
+                                          </button>
+                                        }
+                                      />
                                     );
                                   })()}
                                   <span className="text-xs text-muted-foreground">

@@ -33,7 +33,7 @@ import SettingsPage from "@/pages/settings";
 // the user sees their last-good value, not the half-applied change.
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
     mutations: { retry: false },
   },
 });

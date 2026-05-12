@@ -157,19 +157,45 @@ function propertiesWithUtilitiesInRent(
 // Without this skip-set the recovered side counts the deduction but
 // the rent side excludes the obligation, producing artificially
 // positive net values.
-function customerResponsiblePropertyIds(
+function customerResponsiblePropertyIdsByMonth(
   leases: LeaseRow[],
   monthsTouched: Iterable<string>,
-): Set<string> {
-  const out = new Set<string>();
+): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
   for (const ym of monthsTouched) {
+    const set = new Set<string>();
     for (const l of leases) {
       if (!l.customerResponsibleForRent) continue;
       if (!isLeaseActiveInMonth(l, ym)) continue;
-      out.add(l.propertyId);
+      set.add(l.propertyId);
     }
+    out.set(ym, set);
   }
   return out;
+}
+
+function isSnapBlocked(
+  s: { payWeekEndDate: string; propertyId: string },
+  skipByMonth: Map<string, Set<string>>,
+): boolean {
+  const ym = monthBucketForPayWeek(s.payWeekEndDate);
+  if (!ym) return false;
+  const set = skipByMonth.get(ym);
+  return set ? set.has(s.propertyId) : false;
+}
+
+// Returns the earliest payWeekEndDate ever recorded in the
+// payroll_deductions table (across ALL snapshots, regardless of
+// scope). Used to trim trailing buckets that pre-date the first
+// deployment week — Task #597 explicitly says "no historical
+// backfill," so periods before the first real snapshot must NOT
+// surface as fake "recovered $0 / rent $X / negative net" rows.
+function earliestSnapshotWeek(snaps: { payWeekEndDate: string }[]): string {
+  let earliest = "";
+  for (const s of snaps) {
+    if (!earliest || s.payWeekEndDate < earliest) earliest = s.payWeekEndDate;
+  }
+  return earliest;
 }
 
 function applyScopeToLeases(
@@ -221,17 +247,29 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
       : 13;
   const scope = readScopeFilters(req);
   const anchor = await resolveAnchorWeek();
-  const buckets = trailingPayWeeks(weeks, anchor);
-  const since = buckets[0];
-  const until = buckets[buckets.length - 1];
-  const [snaps, leasesAll, utilitiesAll, properties] = await Promise.all([
-    loadSnapshots(since, until),
-    db.select().from(leasesTable),
-    db.select().from(utilitiesTable),
-    db
-      .select({ id: propertiesTable.id, customerId: propertiesTable.customerId })
-      .from(propertiesTable),
-  ]);
+  const allBuckets = trailingPayWeeks(weeks, anchor);
+  const since = allBuckets[0];
+  const until = allBuckets[allBuckets.length - 1];
+  const [snaps, allSnaps, leasesAll, utilitiesAll, properties] =
+    await Promise.all([
+      loadSnapshots(since, until),
+      loadSnapshots(),
+      db.select().from(leasesTable),
+      db.select().from(utilitiesTable),
+      db
+        .select({
+          id: propertiesTable.id,
+          customerId: propertiesTable.customerId,
+        })
+        .from(propertiesTable),
+    ]);
+  // Drop trailing buckets older than the very first snapshot week —
+  // those periods pre-date deployment and must render as "no data"
+  // (i.e. omitted), not as fake all-cost weeks.
+  const earliestWeek = earliestSnapshotWeek(allSnaps);
+  const buckets = earliestWeek
+    ? allBuckets.filter((w) => w >= earliestWeek)
+    : [];
 
   const propertyCustomerById = new Map<string, string>();
   for (const p of properties) propertyCustomerById.set(p.id, p.customerId ?? "");
@@ -251,13 +289,18 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
   const monthsTouched = new Set<string>();
   for (const w of buckets) monthsTouched.add(monthBucketForPayWeek(w));
 
-  const skipRecoveryProps = customerResponsiblePropertyIds(
+  // Per-month skip set: a property only counts as customer-responsible
+  // for the months its lease was actually flagged active. Without the
+  // per-month split, a property whose lease only became
+  // customer-responsible last month would have its older recoveries
+  // wrongly suppressed.
+  const skipByMonth = customerResponsiblePropertyIdsByMonth(
     leasesAll as LeaseRow[],
     monthsTouched,
   );
   const recoveredByWeek = new Map<string, number>();
   for (const s of scopedSnaps) {
-    if (skipRecoveryProps.has(s.propertyId)) continue;
+    if (isSnapBlocked(s, skipByMonth)) continue;
     recoveredByWeek.set(
       s.payWeekEndDate,
       (recoveredByWeek.get(s.payWeekEndDate) ?? 0) + s.weeklyAmount,
@@ -311,7 +354,7 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
   const scope = readScopeFilters(req);
   const anchor = await resolveAnchorWeek();
   const anchorMonth = monthBucketForPayWeek(anchor);
-  const buckets = trailingMonthBuckets(months, anchorMonth);
+  const allBuckets = trailingMonthBuckets(months, anchorMonth);
 
   const [snaps, leasesAll, utilitiesAll, otherCostsAll, properties] =
     await Promise.all([
@@ -326,6 +369,16 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
         })
         .from(propertiesTable),
     ]);
+  // Trim months that pre-date the first snapshot — same "no historical
+  // backfill" rule as /finance/weekly. Without this, freshly deployed
+  // tenants would see 11 months of all-rent / no-recovered rows.
+  const earliestWeek = earliestSnapshotWeek(snaps);
+  const earliestMonth = earliestWeek
+    ? monthBucketForPayWeek(earliestWeek)
+    : "";
+  const buckets = earliestMonth
+    ? allBuckets.filter((m) => m >= earliestMonth)
+    : [];
 
   const propertyCustomerById = new Map<string, string>();
   for (const p of properties) propertyCustomerById.set(p.id, p.customerId ?? "");
@@ -347,13 +400,13 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
   );
   const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
-  const skipRecoveryProps = customerResponsiblePropertyIds(
+  const skipByMonth = customerResponsiblePropertyIdsByMonth(
     leasesAll as LeaseRow[],
     buckets,
   );
   const recoveredByMonth = new Map<string, number>();
   for (const s of scopedSnaps) {
-    if (skipRecoveryProps.has(s.propertyId)) continue;
+    if (isSnapBlocked(s, skipByMonth)) continue;
     const ym = monthBucketForPayWeek(s.payWeekEndDate);
     if (!ym) continue;
     recoveredByMonth.set(ym, (recoveredByMonth.get(ym) ?? 0) + s.weeklyAmount);
@@ -443,13 +496,11 @@ router.get("/finance/by-customer", async (req, res): Promise<void> => {
   if (mostRecentCandidate) {
     monthsTouched.add(monthBucketForPayWeek(mostRecentCandidate));
   }
-  const skipRecoveryProps = customerResponsiblePropertyIds(
+  const skipByMonth = customerResponsiblePropertyIdsByMonth(
     leasesAll as LeaseRow[],
     monthsTouched,
   );
-  const filteredSnaps = scopedSnaps.filter(
-    (s) => !skipRecoveryProps.has(s.propertyId),
-  );
+  const filteredSnaps = scopedSnaps.filter((s) => !isSnapBlocked(s, skipByMonth));
 
   let mostRecentWeek = "";
   for (const s of filteredSnaps) {

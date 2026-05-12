@@ -57,7 +57,7 @@ router.get("/payroll/unplaced", async (req, res): Promise<void> => {
   // {unmatched, lowConfidenceMatches} shape and don't surface a
   // misleading "Imported 0 deductions" toast.
   const importSummary =
-    payWeekEndDate && (result.snapshotsWritten ?? 0) >= 0 && result.payWeekEndDate
+    payWeekEndDate && (result.snapshotsWritten ?? 0) > 0 && result.payWeekEndDate
       ? {
           payWeekEndDate: result.payWeekEndDate,
           deductionsImported: result.snapshotsWritten ?? 0,

@@ -77,6 +77,9 @@ export interface StartDeps {
   // Idempotent Ridge Motor Inn (Portage, WI) shared-housing seed
   // (Task #295). Runs after the master-file import seed. Non-fatal.
   seedRidgeMotorInnIfMissing: () => Promise<void>;
+  // Idempotent Penda Corp 2900 New Pinery Rd, Portage WI seed
+  // (Task #571). Runs after seedRidgeMotorInnIfMissing. Non-fatal.
+  seedPendaNewPineryIfMissing: () => Promise<void>;
   listen: (port: number) => Promise<void>;
   notifySchemaDrift: (params: {
     webhookUrl: string;
@@ -494,6 +497,19 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.warn(
         { err },
         "Failed to apply Ridge Motor Inn seed — continuing to serve",
+      );
+    }
+  }
+
+  // Idempotent Penda Corp 2900 New Pinery Rd seed (Task #571);
+  // non-fatal for the same reason.
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedPendaNewPineryIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Penda New Pinery seed — continuing to serve",
       );
     }
   }

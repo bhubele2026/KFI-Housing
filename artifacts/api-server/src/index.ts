@@ -10,6 +10,7 @@ import { seedChateauKnollIfMissing } from "./lib/seed-chateau-knoll";
 import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
 import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
+import { seedPendaNewPineryIfMissing } from "./lib/seed-penda-new-pinery";
 import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { seedParkPlaceIfMissing } from "./lib/seed-park-place";
 import { seedParkPlaceLandscapeIfMissing } from "./lib/seed-park-place-landscape";
@@ -72,6 +73,9 @@ void start({
   },
   seedRidgeMotorInnIfMissing: async () => {
     await seedRidgeMotorInnIfMissing();
+  },
+  seedPendaNewPineryIfMissing: async () => {
+    await seedPendaNewPineryIfMissing();
   },
   listen: (port) =>
     new Promise<void>((resolve, reject) => {

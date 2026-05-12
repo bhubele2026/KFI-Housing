@@ -763,6 +763,14 @@ export default function PropertyDetail() {
     const tab = new URLSearchParams(window.location.search).get("tab");
     return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
   });
+  // Per-tab building filters (Task #590). On multi-building properties
+  // operators want to focus the Leases table or Units list to a single
+  // structure without dropping into the URL-based drill-down. State is
+  // kept separate per tab so flipping one doesn't surprise the other,
+  // and "all" is the default so single-building properties (the common
+  // case) and the initial render stay unchanged.
+  const [leasesBuildingFilter, setLeasesBuildingFilter] = useState<string>("all");
+  const [unitsBuildingFilter, setUnitsBuildingFilter] = useState<string>("all");
   const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -876,6 +884,26 @@ export default function PropertyDetail() {
   }, [propLeases, propRooms, propBeds, propOccupants]);
 
   const sortedPropLeases = useMemo(() => sortLeases(propLeases), [propLeases]);
+
+  // Apply the Leases-tab building filter (Task #590). When the user
+  // picks a building, only show leases tied to it; "all" passes through.
+  // Single-building properties never render the picker, so this is a
+  // no-op for them.
+  const filteredLeasesForLeasesTab = useMemo(() => {
+    if (leasesBuildingFilter === "all") return sortedPropLeases;
+    return sortedPropLeases.filter((l) => l.buildingId === leasesBuildingFilter);
+  }, [sortedPropLeases, leasesBuildingFilter]);
+
+  // Apply the Units-tab building filter (Task #590). A unit is included
+  // if any of its leases is tied to the selected building. Most units
+  // have a single lease, so in practice this matches "show units in
+  // building X".
+  const filteredPropertyUnits = useMemo(() => {
+    if (unitsBuildingFilter === "all") return propertyUnits;
+    return propertyUnits.filter((u) =>
+      u.leases.some((l) => l.buildingId === unitsBuildingFilter),
+    );
+  }, [propertyUnits, unitsBuildingFilter]);
 
   if (isLoading) {
     return (
@@ -2061,7 +2089,7 @@ export default function PropertyDetail() {
 
           {/* ── LEASES TAB ── */}
           <TabsContent value="leases" className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-3 flex-wrap">
               <p className="text-sm text-muted-foreground">
                 {t("pages.propertyDetail.leasesForProperty", { count: propLeases.length })}
                 {activeLeases.length >= 2 && (
@@ -2074,12 +2102,41 @@ export default function PropertyDetail() {
                   </span>
                 )}
               </p>
-              <AddLeaseDialog propertyId={id} buildings={propBuildings} onAdd={addLease} />
+              <div className="flex items-center gap-2 flex-wrap">
+                {propBuildings.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="leases-building-filter" className="text-xs text-muted-foreground">
+                      Building
+                    </Label>
+                    <Select
+                      value={leasesBuildingFilter}
+                      onValueChange={setLeasesBuildingFilter}
+                    >
+                      <SelectTrigger
+                        id="leases-building-filter"
+                        className="h-8 text-xs w-48"
+                        data-testid="select-leases-building-filter"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All buildings</SelectItem>
+                        {propBuildings.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <AddLeaseDialog propertyId={id} buildings={propBuildings} onAdd={addLease} />
+              </div>
             </div>
             <Card>
               <CardContent className="p-0">
                 <LeasesTable
-                  leases={sortedPropLeases}
+                  leases={filteredLeasesForLeasesTab}
                   properties={properties}
                   otherCosts={otherCosts}
                   buildings={propBuildings}
@@ -2277,14 +2334,48 @@ export default function PropertyDetail() {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 space-y-0">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
-                    {propertyUnits.length} unit{propertyUnits.length === 1 ? "" : "s"} on this property
+                    {unitsBuildingFilter === "all"
+                      ? `${propertyUnits.length} unit${propertyUnits.length === 1 ? "" : "s"} on this property`
+                      : `${filteredPropertyUnits.length} of ${propertyUnits.length} unit${propertyUnits.length === 1 ? "" : "s"}`}
                   </CardTitle>
+                  {propBuildings.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="units-building-filter" className="text-xs text-muted-foreground">
+                        Building
+                      </Label>
+                      <Select
+                        value={unitsBuildingFilter}
+                        onValueChange={setUnitsBuildingFilter}
+                      >
+                        <SelectTrigger
+                          id="units-building-filter"
+                          className="h-8 text-xs w-48"
+                          data-testid="select-units-building-filter"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All buildings</SelectItem>
+                          {propBuildings.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {propertyUnits.map(({ unit, leases: unitLeases, occupants: unitOccupants, beds: unitBeds }) => {
+                  {filteredPropertyUnits.length === 0 ? (
+                    <p className="text-xs text-muted-foreground" data-testid="units-filter-empty">
+                      No units in the selected building.
+                    </p>
+                  ) : null}
+                  {filteredPropertyUnits.map(({ unit, leases: unitLeases, occupants: unitOccupants, beds: unitBeds }) => {
                     const activeLease = unitLeases.find((l) => l.status === "Active") ?? unitLeases[0];
                     return (
                       <div

@@ -1460,6 +1460,7 @@
   "sidebar": {
     "exportData": "Export data",
     "importData": "Import data",
+    "importOccupants": "Import occupants",
     "resetSampleData": "Reset to sample data",
     "resetDemoData": "Reset demo data (dev)",
     "resetDemoTooltip": "Visible in development builds only",

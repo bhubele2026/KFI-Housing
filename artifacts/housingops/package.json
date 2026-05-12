@@ -87,6 +87,7 @@
   },
   "dependencies": {
     "i18next": "^26.0.9",
-    "react-i18next": "^17.0.6"
+    "react-i18next": "^17.0.6",
+    "xlsx": "^0.18.5"
   }
 }

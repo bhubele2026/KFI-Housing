@@ -34,6 +34,7 @@ import {
 } from "@/lib/google-maps-sdk";
 import { Button } from "@/components/ui/button";
 import { ToastAction } from "@/components/ui/toast";
+import { ImportOccupantsDialog } from "@/components/import-occupants-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -658,22 +659,30 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           </Button>,
         )}
         {wrapTip(
-          t("sidebar.importData"),
-          <Button
-            variant="outline"
-            size={collapsed ? "icon" : "default"}
-            className={cn(
-              "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              collapsed ? "h-9 w-9" : "w-full justify-start",
-            )}
-            onClick={handlePickImportFile}
-            aria-label={t("sidebar.importData")}
-            data-testid="button-import-data"
-          >
-            <Upload className={cn("h-4 w-4", !collapsed && "mr-2")} />
-            {!collapsed && t("sidebar.importData")}
-          </Button>,
+          t("sidebar.importOccupants", "Import occupants"),
+          <ImportOccupantsDialog
+            trigger={
+              <Button
+                variant="outline"
+                size={collapsed ? "icon" : "default"}
+                className={cn(
+                  "text-muted-foreground border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  collapsed ? "h-9 w-9" : "w-full justify-start",
+                )}
+                aria-label={t("sidebar.importOccupants", "Import occupants")}
+                data-testid="button-import-occupants"
+              >
+                <Upload className={cn("h-4 w-4", !collapsed && "mr-2")} />
+                {!collapsed && t("sidebar.importOccupants", "Import occupants")}
+              </Button>
+            }
+          />,
         )}
+        {/* Legacy JSON-backup file picker kept mounted but detached
+            from the visible button. The handlers (handlePickImportFile,
+            handleFileSelected) and import dialog state stay reachable
+            for tests and any future restore-flow re-entry, but operators
+            now use the Import occupants dialog above for everyday work. */}
         <input
           ref={fileInputRef}
           type="file"

@@ -44,6 +44,14 @@ vi.mock("@workspace/api-client-react", () => ({
   useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
   useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
   getListPropertyViolationsQueryKey: () => [],
+  useListProjectedMoveIns: () => ({ data: [] }),
+  useCreateProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useUpdateProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeleteProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useConvertProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListProjectedMoveInsQueryKey: () => [],
+  getListBedsQueryKey: () => [],
+  getListOccupantsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

@@ -10,6 +10,14 @@ vi.mock("@/components/layout/main-layout", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
+  useListProjectedMoveIns: () => ({ data: [] }),
+  useCreateProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useUpdateProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useDeleteProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useConvertProjectedMoveIn: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  getListProjectedMoveInsQueryKey: () => [],
+  getListBedsQueryKey: () => [],
+  getListOccupantsQueryKey: () => [],
 }));
 
 vi.mock("@/components/property-location-map", () => ({

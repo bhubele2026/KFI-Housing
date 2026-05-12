@@ -3647,6 +3647,10 @@ export const ListUnplacedPayrollQueryParams = zod.object({
     ),
 });
 
+export const listUnplacedPayrollResponseImportSummaryDeductionsImportedMin = 0;
+
+export const listUnplacedPayrollResponseImportSummaryTotalAmountMin = 0;
+
 export const ListUnplacedPayrollResponse = zod
   .object({
     unmatched: zod.array(
@@ -3810,10 +3814,127 @@ export const ListUnplacedPayrollResponse = zod
           "A payroll row that the seeder \*did\* apply, but only via the\nname-only fallback — meaning the matched occupant has no\nemployeeId stamped and no exact (name, company) hit. At an\nemployer with two namesakes the wrong one may have received\nthe rate, so the dashboard asks the operator to confirm.\n",
         ),
     ),
+    importSummary: zod
+      .object({
+        payWeekEndDate: zod
+          .string()
+          .nullable()
+          .describe(
+            "Saturday end-date (YYYY-MM-DD) snapshots were stamped with, or null when none were written.",
+          ),
+        deductionsImported: zod
+          .number()
+          .min(listUnplacedPayrollResponseImportSummaryDeductionsImportedMin),
+        totalAmount: zod
+          .number()
+          .min(listUnplacedPayrollResponseImportSummaryTotalAmountMin),
+      })
+      .describe(
+        'Per-import summary returned by `GET \/payroll\/unplaced` when the\noperator passes a `payWeekEndDate` (Saturday end-date). The\ndashboard renders \"Imported X deductions … total $Y\" from\nthese fields. For dashboard polls (no `payWeekEndDate`)\n`deductionsImported` and `totalAmount` are 0 and\n`payWeekEndDate` is null — the UI suppresses the toast.\n',
+      ),
   })
   .describe(
-    "Response payload for `GET \/payroll\/unplaced`. Splits the\nseeder's output into rows that need a fresh placement\n(`unmatched`) vs. rows that matched only via the name-only\nfallback (`lowConfidenceMatches`) and may need an operator\nconfirmation that the right person was picked.\n",
+    "Response payload for `GET \/payroll\/unplaced`. Splits the\nseeder's output into rows that need a fresh placement\n(`unmatched`) vs. rows that matched only via the name-only\nfallback (`lowConfidenceMatches`) and may need an operator\nconfirmation that the right person was picked. Also echoes\nback an `importSummary` with the count + dollar total of\nper-week snapshots written for `payWeekEndDate` (Task #597).\n",
   );
+
+/**
+ * Server-side rollup powering the Finance Weekly tab. Returns one
+row per Mon→Sat pay-week (default trailing 13 weeks) with the
+recovered amount (sum of payroll deduction snapshots), the
+weekly-equivalent rent KFI pays (calendar-month rent ÷ 52/12,
+excluding `customerResponsibleForRent` leases and non-monthly
+leases), the weekly-equivalent utilities expense, and the net.
+
+ * @summary Trailing-N pay-week finance rollup (Task
+ */
+export const listFinanceWeeklyQueryWeeksDefault = 13;
+export const listFinanceWeeklyQueryWeeksMax = 104;
+
+export const ListFinanceWeeklyQueryParams = zod.object({
+  weeks: zod.coerce
+    .number()
+    .min(1)
+    .max(listFinanceWeeklyQueryWeeksMax)
+    .default(listFinanceWeeklyQueryWeeksDefault),
+});
+
+export const ListFinanceWeeklyResponseItem = zod.object({
+  payWeekEndDate: zod.string(),
+  recovered: zod.number(),
+  rentPaid: zod.number(),
+  utilities: zod.number(),
+  net: zod.number(),
+});
+export const ListFinanceWeeklyResponse = zod.array(
+  ListFinanceWeeklyResponseItem,
+);
+
+/**
+ * Server-side rollup powering the Finance Monthly tab. Returns
+one row per calendar month (default trailing 12 months) with
+recovered, rent paid, utilities, other costs, and net. Same
+exclusion rules as the Weekly endpoint.
+
+ * @summary Trailing-N month finance rollup (Task
+ */
+export const listFinanceMonthlyQueryMonthsDefault = 12;
+export const listFinanceMonthlyQueryMonthsMax = 36;
+
+export const ListFinanceMonthlyQueryParams = zod.object({
+  months: zod.coerce
+    .number()
+    .min(1)
+    .max(listFinanceMonthlyQueryMonthsMax)
+    .default(listFinanceMonthlyQueryMonthsDefault),
+});
+
+export const ListFinanceMonthlyResponseItem = zod.object({
+  month: zod.string().describe("YYYY-MM bucket"),
+  recovered: zod.number(),
+  rentPaid: zod.number(),
+  utilities: zod.number(),
+  otherCosts: zod.number(),
+  net: zod.number(),
+});
+export const ListFinanceMonthlyResponse = zod.array(
+  ListFinanceMonthlyResponseItem,
+);
+
+/**
+ * Server-side rollup powering the Finance By-Customer tab. One
+row per customer with active occupant count, monthly rent KFI
+pays for that customer, the most-recent-complete-week recovered
+sum, the month-to-date recovered sum, and the net (MTD
+recovered − monthly rent KFI pays).
+
+ * @summary Per-customer finance rollup (Task
+ */
+export const listFinanceByCustomerResponseRowsItemActiveOccupantsMin = 0;
+
+export const ListFinanceByCustomerResponse = zod.object({
+  mostRecentWeekEndDate: zod
+    .string()
+    .nullable()
+    .describe(
+      "Saturday end-date of the most recent snapshot week (null when no snapshots exist yet).",
+    ),
+  currentMonth: zod
+    .string()
+    .describe("YYYY-MM bucket the MTD column aggregates."),
+  rows: zod.array(
+    zod.object({
+      customerId: zod.string(),
+      customerName: zod.string(),
+      activeOccupants: zod
+        .number()
+        .min(listFinanceByCustomerResponseRowsItemActiveOccupantsMin),
+      monthlyRentKfiPays: zod.number(),
+      mostRecentWeekRecovered: zod.number(),
+      monthToDateRecovered: zod.number(),
+      net: zod.number(),
+    }),
+  ),
+});
 
 /**
  * Returns immutable per-pay-week snapshots of housing deductions

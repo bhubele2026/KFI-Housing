@@ -1328,6 +1328,74 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ListUnplacedPayrollResult" }
 
+  /finance/weekly:
+    get:
+      operationId: listFinanceWeekly
+      tags: [payroll]
+      summary: Trailing-N pay-week finance rollup (Task #597)
+      description: |
+        Server-side rollup powering the Finance Weekly tab. Returns one
+        row per Mon→Sat pay-week (default trailing 13 weeks) with the
+        recovered amount (sum of payroll deduction snapshots), the
+        weekly-equivalent rent KFI pays (calendar-month rent ÷ 52/12,
+        excluding `customerResponsibleForRent` leases and non-monthly
+        leases), the weekly-equivalent utilities expense, and the net.
+      parameters:
+        - in: query
+          name: weeks
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 104, default: 13 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FinanceWeeklyRow" }
+
+  /finance/monthly:
+    get:
+      operationId: listFinanceMonthly
+      tags: [payroll]
+      summary: Trailing-N month finance rollup (Task #597)
+      description: |
+        Server-side rollup powering the Finance Monthly tab. Returns
+        one row per calendar month (default trailing 12 months) with
+        recovered, rent paid, utilities, other costs, and net. Same
+        exclusion rules as the Weekly endpoint.
+      parameters:
+        - in: query
+          name: months
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 36, default: 12 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FinanceMonthlyRow" }
+
+  /finance/by-customer:
+    get:
+      operationId: listFinanceByCustomer
+      tags: [payroll]
+      summary: Per-customer finance rollup (Task #597)
+      description: |
+        Server-side rollup powering the Finance By-Customer tab. One
+        row per customer with active occupant count, monthly rent KFI
+        pays for that customer, the most-recent-complete-week recovered
+        sum, the month-to-date recovered sum, and the net (MTD
+        recovered − monthly rent KFI pays).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinanceByCustomerResult" }
+
   /payroll-deductions:
     get:
       operationId: listPayrollDeductions
@@ -2845,6 +2913,62 @@ components:
         leasesUpdated: { type: integer }
         leasesSkipped: { type: integer }
 
+    FinanceWeeklyRow:
+      type: object
+      required: [payWeekEndDate, recovered, rentPaid, utilities, net]
+      properties:
+        payWeekEndDate: { type: string }
+        recovered: { type: number }
+        rentPaid: { type: number }
+        utilities: { type: number }
+        net: { type: number }
+
+    FinanceMonthlyRow:
+      type: object
+      required: [month, recovered, rentPaid, utilities, otherCosts, net]
+      properties:
+        month: { type: string, description: "YYYY-MM bucket" }
+        recovered: { type: number }
+        rentPaid: { type: number }
+        utilities: { type: number }
+        otherCosts: { type: number }
+        net: { type: number }
+
+    FinanceByCustomerRow:
+      type: object
+      required:
+        [
+          customerId,
+          customerName,
+          activeOccupants,
+          monthlyRentKfiPays,
+          mostRecentWeekRecovered,
+          monthToDateRecovered,
+          net,
+        ]
+      properties:
+        customerId: { type: string }
+        customerName: { type: string }
+        activeOccupants: { type: integer, minimum: 0 }
+        monthlyRentKfiPays: { type: number }
+        mostRecentWeekRecovered: { type: number }
+        monthToDateRecovered: { type: number }
+        net: { type: number }
+
+    FinanceByCustomerResult:
+      type: object
+      required: [mostRecentWeekEndDate, currentMonth, rows]
+      properties:
+        mostRecentWeekEndDate:
+          type: ["string", "null"]
+          description: Saturday end-date of the most recent snapshot week (null when no snapshots exist yet).
+        currentMonth:
+          type: string
+          description: "YYYY-MM bucket the MTD column aggregates."
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/FinanceByCustomerRow" }
+
     PayrollDeduction:
       type: object
       required:
@@ -2912,13 +3036,15 @@ components:
 
     ListUnplacedPayrollResult:
       type: object
-      required: [unmatched, lowConfidenceMatches]
+      required: [unmatched, lowConfidenceMatches, importSummary]
       description: |
         Response payload for `GET /payroll/unplaced`. Splits the
         seeder's output into rows that need a fresh placement
         (`unmatched`) vs. rows that matched only via the name-only
         fallback (`lowConfidenceMatches`) and may need an operator
-        confirmation that the right person was picked.
+        confirmation that the right person was picked. Also echoes
+        back an `importSummary` with the count + dollar total of
+        per-week snapshots written for `payWeekEndDate` (Task #597).
       properties:
         unmatched:
           type: array
@@ -2926,6 +3052,29 @@ components:
         lowConfidenceMatches:
           type: array
           items: { $ref: "#/components/schemas/LowConfidencePayrollMatch" }
+        importSummary:
+          $ref: "#/components/schemas/PayrollImportSummary"
+
+    PayrollImportSummary:
+      type: object
+      required: [payWeekEndDate, deductionsImported, totalAmount]
+      description: |
+        Per-import summary returned by `GET /payroll/unplaced` when the
+        operator passes a `payWeekEndDate` (Saturday end-date). The
+        dashboard renders "Imported X deductions … total $Y" from
+        these fields. For dashboard polls (no `payWeekEndDate`)
+        `deductionsImported` and `totalAmount` are 0 and
+        `payWeekEndDate` is null — the UI suppresses the toast.
+      properties:
+        payWeekEndDate:
+          type: ["string", "null"]
+          description: Saturday end-date (YYYY-MM-DD) snapshots were stamped with, or null when none were written.
+        deductionsImported:
+          type: integer
+          minimum: 0
+        totalAmount:
+          type: number
+          minimum: 0
 
     LowConfidencePayrollMatch:
       type: object

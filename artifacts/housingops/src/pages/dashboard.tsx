@@ -54,6 +54,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { mostRecentSaturday, isSaturdayDate } from "@/lib/finance-pay-weeks";
 import {
   recordPayrollReconciliation,
   removePayrollReconciliation,
@@ -399,13 +400,30 @@ export default function Dashboard() {
 
   const [reclaimingIds, setReclaimingIds] = useState<Set<string>>(new Set());
   const [reclaimingAll, setReclaimingAll] = useState(false);
+  // Saturday end-date for the pay-week the operator wants the
+  // re-import to write a snapshot for. Defaults to the most-recent
+  // Saturday — Task #597's Finance Weekly/Monthly tabs read those
+  // snapshots back, so writing one is what makes the re-import flow
+  // useful for finance tracking (not just for re-claiming overrides).
+  const [reclaimPayWeekEndDate, setReclaimPayWeekEndDate] = useState<string>(
+    () => mostRecentSaturday(),
+  );
+  const reclaimPayWeekIsSaturday = isSaturdayDate(reclaimPayWeekEndDate);
 
   const handleReclaimSingle = async (occupantId: string) => {
+    if (!reclaimPayWeekIsSaturday) {
+      toast({
+        title: t("pages.finance.payroll.invalidWeekTitle"),
+        description: t("pages.finance.payroll.invalidWeekDescription"),
+        variant: "destructive",
+      });
+      return;
+    }
     setReclaimingIds((prev) => new Set(prev).add(occupantId));
     try {
       const baseUrl = import.meta.env.BASE_URL ?? "/";
       const res = await fetch(
-        `${baseUrl}api/payroll/unplaced?reclaimOverridden=true&reclaimOccupantIds=${encodeURIComponent(occupantId)}`,
+        `${baseUrl}api/payroll/unplaced?reclaimOverridden=true&reclaimOccupantIds=${encodeURIComponent(occupantId)}&payWeekEndDate=${encodeURIComponent(reclaimPayWeekEndDate)}`,
       );
       if (!res.ok) {
         toast({
@@ -415,13 +433,21 @@ export default function Dashboard() {
         });
         return;
       }
+      const body = await res.json().catch(() => null);
       await queryClient.invalidateQueries({
         queryKey: getListUnplacedPayrollQueryKey(),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+      const summary = body?.importSummary;
       toast({
         title: t("pages.dashboard.reclaim.claimedTitle"),
-        description: t("pages.dashboard.reclaim.claimedDescription"),
+        description: summary
+          ? t("pages.dashboard.reclaim.claimedDescriptionWithSummary", {
+              count: summary.deductionsImported ?? 0,
+              total: formatUsd(Number(summary.totalAmount ?? 0)),
+              week: summary.payWeekEndDate ?? reclaimPayWeekEndDate,
+            })
+          : t("pages.dashboard.reclaim.claimedDescription"),
       });
     } finally {
       setReclaimingIds((prev) => {
@@ -433,10 +459,18 @@ export default function Dashboard() {
   };
 
   const handleReclaimAll = async () => {
+    if (!reclaimPayWeekIsSaturday) {
+      toast({
+        title: t("pages.finance.payroll.invalidWeekTitle"),
+        description: t("pages.finance.payroll.invalidWeekDescription"),
+        variant: "destructive",
+      });
+      return;
+    }
     setReclaimingAll(true);
     try {
       const baseUrl = import.meta.env.BASE_URL ?? "/";
-      const res = await fetch(`${baseUrl}api/payroll/unplaced?reclaimOverridden=true`);
+      const res = await fetch(`${baseUrl}api/payroll/unplaced?reclaimOverridden=true&payWeekEndDate=${encodeURIComponent(reclaimPayWeekEndDate)}`);
       if (!res.ok) {
         toast({
           title: t("pages.dashboard.reclaim.failedTitle"),
@@ -445,13 +479,21 @@ export default function Dashboard() {
         });
         return;
       }
+      const body = await res.json().catch(() => null);
       await queryClient.invalidateQueries({
         queryKey: getListUnplacedPayrollQueryKey(),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/occupants"] });
+      const summary = body?.importSummary;
       toast({
         title: t("pages.dashboard.reclaim.allClaimedTitle"),
-        description: t("pages.dashboard.reclaim.allClaimedDescription", { count: overriddenOccupants.length }),
+        description: summary
+          ? t("pages.dashboard.reclaim.allClaimedDescriptionWithSummary", {
+              count: summary.deductionsImported ?? 0,
+              total: formatUsd(Number(summary.totalAmount ?? 0)),
+              week: summary.payWeekEndDate ?? reclaimPayWeekEndDate,
+            })
+          : t("pages.dashboard.reclaim.allClaimedDescription", { count: overriddenOccupants.length }),
       });
     } finally {
       setReclaimingAll(false);
@@ -2019,12 +2061,29 @@ export default function Dashboard() {
               </p>
             </CardHeader>
             <CardContent className="space-y-6">
-              {overriddenOccupants.length > 1 && (
-                <div className="flex justify-end">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-end gap-3 border rounded-md p-3 bg-muted/30">
+                <div className="flex flex-col gap-1 flex-1 max-w-xs">
+                  <Label htmlFor="input-reclaim-pay-week" className="text-xs">
+                    {t("pages.finance.payroll.payWeekEndingSaturday")}
+                  </Label>
+                  <Input
+                    id="input-reclaim-pay-week"
+                    type="date"
+                    value={reclaimPayWeekEndDate}
+                    onChange={(e) => setReclaimPayWeekEndDate(e.target.value)}
+                    data-testid="input-reclaim-pay-week-end-date"
+                  />
+                  {!reclaimPayWeekIsSaturday && (
+                    <p className="text-xs text-destructive" data-testid="text-reclaim-pay-week-not-saturday">
+                      {t("pages.finance.payroll.notSaturday")}
+                    </p>
+                  )}
+                </div>
+                {overriddenOccupants.length > 1 && (
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={reclaimingAll}
+                    disabled={reclaimingAll || !reclaimPayWeekIsSaturday}
                     onClick={handleReclaimAll}
                     data-testid="button-reclaim-all-overrides"
                   >
@@ -2033,8 +2092,8 @@ export default function Dashboard() {
                       ? t("pages.dashboard.payrollMismatches.reclaimAllLoading")
                       : t("pages.dashboard.payrollMismatches.reclaimAll")}
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
               {overriddenByCustomer.map((group) => (
                 <div
                   key={group.customer}

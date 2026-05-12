@@ -579,30 +579,15 @@ export default function Finance() {
           </TabsList>
 
           <TabsContent value="weekly" className="space-y-6">
-            <FinancePayrollWeeklyTab
-              properties={properties}
-              leases={leases}
-              customerById={customerById}
-              customerFilter={customerFilter}
-            />
+            <FinancePayrollWeeklyTab customerFilter={customerFilter} />
           </TabsContent>
 
           <TabsContent value="monthly" className="space-y-6">
-            <FinancePayrollMonthlyTab
-              properties={properties}
-              leases={leases}
-              customerById={customerById}
-              customerFilter={customerFilter}
-            />
+            <FinancePayrollMonthlyTab customerFilter={customerFilter} />
           </TabsContent>
 
           <TabsContent value="byCustomer" className="space-y-6">
-            <FinancePayrollByCustomerTab
-              properties={properties}
-              leases={leases}
-              customerById={customerById}
-              customerFilter={customerFilter}
-            />
+            <FinancePayrollByCustomerTab customerFilter={customerFilter} />
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-8">

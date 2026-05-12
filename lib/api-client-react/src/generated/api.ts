@@ -32,6 +32,9 @@ import type {
   DigestRecipient,
   DigestRecipientCreate,
   ErrorEnvelope,
+  FinanceByCustomerResult,
+  FinanceMonthlyRow,
+  FinanceWeeklyRow,
   HealthStatus,
   ImportLeasePdfBody,
   ImportMasterLeasesBody,
@@ -42,6 +45,8 @@ import type {
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  ListFinanceMonthlyParams,
+  ListFinanceWeeklyParams,
   ListPayrollDeductionsParams,
   ListUnplacedPayrollParams,
   ListUnplacedPayrollResult,
@@ -5650,6 +5655,293 @@ export function useListUnplacedPayroll<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListUnplacedPayrollQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Server-side rollup powering the Finance Weekly tab. Returns one
+row per Mon→Sat pay-week (default trailing 13 weeks) with the
+recovered amount (sum of payroll deduction snapshots), the
+weekly-equivalent rent KFI pays (calendar-month rent ÷ 52/12,
+excluding `customerResponsibleForRent` leases and non-monthly
+leases), the weekly-equivalent utilities expense, and the net.
+
+ * @summary Trailing-N pay-week finance rollup (Task
+ */
+export const getListFinanceWeeklyUrl = (params?: ListFinanceWeeklyParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/finance/weekly?${stringifiedParams}`
+    : `/api/finance/weekly`;
+};
+
+export const listFinanceWeekly = async (
+  params?: ListFinanceWeeklyParams,
+  options?: RequestInit,
+): Promise<FinanceWeeklyRow[]> => {
+  return customFetch<FinanceWeeklyRow[]>(getListFinanceWeeklyUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFinanceWeeklyQueryKey = (
+  params?: ListFinanceWeeklyParams,
+) => {
+  return [`/api/finance/weekly`, ...(params ? [params] : [])] as const;
+};
+
+export const getListFinanceWeeklyQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFinanceWeekly>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFinanceWeeklyParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceWeekly>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListFinanceWeeklyQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFinanceWeekly>>
+  > = ({ signal }) => listFinanceWeekly(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFinanceWeekly>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFinanceWeeklyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFinanceWeekly>>
+>;
+export type ListFinanceWeeklyQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Trailing-N pay-week finance rollup (Task
+ */
+
+export function useListFinanceWeekly<
+  TData = Awaited<ReturnType<typeof listFinanceWeekly>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFinanceWeeklyParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceWeekly>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFinanceWeeklyQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Server-side rollup powering the Finance Monthly tab. Returns
+one row per calendar month (default trailing 12 months) with
+recovered, rent paid, utilities, other costs, and net. Same
+exclusion rules as the Weekly endpoint.
+
+ * @summary Trailing-N month finance rollup (Task
+ */
+export const getListFinanceMonthlyUrl = (params?: ListFinanceMonthlyParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/finance/monthly?${stringifiedParams}`
+    : `/api/finance/monthly`;
+};
+
+export const listFinanceMonthly = async (
+  params?: ListFinanceMonthlyParams,
+  options?: RequestInit,
+): Promise<FinanceMonthlyRow[]> => {
+  return customFetch<FinanceMonthlyRow[]>(getListFinanceMonthlyUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFinanceMonthlyQueryKey = (
+  params?: ListFinanceMonthlyParams,
+) => {
+  return [`/api/finance/monthly`, ...(params ? [params] : [])] as const;
+};
+
+export const getListFinanceMonthlyQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFinanceMonthly>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFinanceMonthlyParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceMonthly>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListFinanceMonthlyQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFinanceMonthly>>
+  > = ({ signal }) => listFinanceMonthly(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFinanceMonthly>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFinanceMonthlyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFinanceMonthly>>
+>;
+export type ListFinanceMonthlyQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Trailing-N month finance rollup (Task
+ */
+
+export function useListFinanceMonthly<
+  TData = Awaited<ReturnType<typeof listFinanceMonthly>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListFinanceMonthlyParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceMonthly>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFinanceMonthlyQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Server-side rollup powering the Finance By-Customer tab. One
+row per customer with active occupant count, monthly rent KFI
+pays for that customer, the most-recent-complete-week recovered
+sum, the month-to-date recovered sum, and the net (MTD
+recovered − monthly rent KFI pays).
+
+ * @summary Per-customer finance rollup (Task
+ */
+export const getListFinanceByCustomerUrl = () => {
+  return `/api/finance/by-customer`;
+};
+
+export const listFinanceByCustomer = async (
+  options?: RequestInit,
+): Promise<FinanceByCustomerResult> => {
+  return customFetch<FinanceByCustomerResult>(getListFinanceByCustomerUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListFinanceByCustomerQueryKey = () => {
+  return [`/api/finance/by-customer`] as const;
+};
+
+export const getListFinanceByCustomerQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFinanceByCustomer>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFinanceByCustomer>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListFinanceByCustomerQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listFinanceByCustomer>>
+  > = ({ signal }) => listFinanceByCustomer({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFinanceByCustomer>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListFinanceByCustomerQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFinanceByCustomer>>
+>;
+export type ListFinanceByCustomerQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Per-customer finance rollup (Task
+ */
+
+export function useListFinanceByCustomer<
+  TData = Awaited<ReturnType<typeof listFinanceByCustomer>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listFinanceByCustomer>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFinanceByCustomerQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

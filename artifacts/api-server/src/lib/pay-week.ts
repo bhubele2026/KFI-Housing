@@ -80,3 +80,27 @@ export function trailingPayWeeks(count: number, endingSaturday: string): string[
   }
   return out;
 }
+
+/** Average weeks per calendar month — used to convert monthlyRent → weekly. */
+export const WEEKS_PER_MONTH = 52 / 12;
+
+/** "2026-05" — calendar month bucket for a Saturday end-date. */
+export function monthBucketForPayWeek(saturdayYmd: string): string {
+  const d = parsePayWeekDate(saturdayYmd);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Trailing N YYYY-MM bucket strings ending at `endingMonth` inclusive. */
+export function trailingMonthBuckets(count: number, endingMonth: string): string[] {
+  const m = /^(\d{4})-(\d{2})$/.exec(endingMonth);
+  if (!m) return [];
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const out: string[] = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const d = new Date(y, mo - 1 - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}

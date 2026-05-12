@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LowConfidencePayrollMatch } from "./lowConfidencePayrollMatch";
+import type { PayrollImportSummary } from "./payrollImportSummary";
 import type { UnplacedPayrollRow } from "./unplacedPayrollRow";
 
 /**
@@ -13,10 +14,13 @@ import type { UnplacedPayrollRow } from "./unplacedPayrollRow";
 seeder's output into rows that need a fresh placement
 (`unmatched`) vs. rows that matched only via the name-only
 fallback (`lowConfidenceMatches`) and may need an operator
-confirmation that the right person was picked.
+confirmation that the right person was picked. Also echoes
+back an `importSummary` with the count + dollar total of
+per-week snapshots written for `payWeekEndDate` (Task #597).
 
  */
 export interface ListUnplacedPayrollResult {
   unmatched: UnplacedPayrollRow[];
   lowConfidenceMatches: LowConfidencePayrollMatch[];
+  importSummary: PayrollImportSummary;
 }

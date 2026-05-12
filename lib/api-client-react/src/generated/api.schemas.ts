@@ -1632,6 +1632,46 @@ cannot be read on disk.
   leasesSkipped?: number;
 }
 
+export interface FinanceWeeklyRow {
+  payWeekEndDate: string;
+  recovered: number;
+  rentPaid: number;
+  utilities: number;
+  net: number;
+}
+
+export interface FinanceMonthlyRow {
+  /** YYYY-MM bucket */
+  month: string;
+  recovered: number;
+  rentPaid: number;
+  utilities: number;
+  otherCosts: number;
+  net: number;
+}
+
+export interface FinanceByCustomerRow {
+  customerId: string;
+  customerName: string;
+  /** @minimum 0 */
+  activeOccupants: number;
+  monthlyRentKfiPays: number;
+  mostRecentWeekRecovered: number;
+  monthToDateRecovered: number;
+  net: number;
+}
+
+export interface FinanceByCustomerResult {
+  /**
+   * Saturday end-date of the most recent snapshot week (null when no snapshots exist yet).
+   * @nullable
+   */
+  mostRecentWeekEndDate: string | null;
+  /** YYYY-MM bucket the MTD column aggregates. */
+  currentMonth: string;
+  rows: FinanceByCustomerRow[];
+}
+
 /**
  * Immutable snapshot of one occupant's weekly housing deduction
 for a single Mon→Sat pay-week (Task #597). `payWeekEndDate` is
@@ -1748,16 +1788,40 @@ dialog manually.
 }
 
 /**
+ * Per-import summary returned by `GET /payroll/unplaced` when the
+operator passes a `payWeekEndDate` (Saturday end-date). The
+dashboard renders "Imported X deductions … total $Y" from
+these fields. For dashboard polls (no `payWeekEndDate`)
+`deductionsImported` and `totalAmount` are 0 and
+`payWeekEndDate` is null — the UI suppresses the toast.
+
+ */
+export interface PayrollImportSummary {
+  /**
+   * Saturday end-date (YYYY-MM-DD) snapshots were stamped with, or null when none were written.
+   * @nullable
+   */
+  payWeekEndDate: string | null;
+  /** @minimum 0 */
+  deductionsImported: number;
+  /** @minimum 0 */
+  totalAmount: number;
+}
+
+/**
  * Response payload for `GET /payroll/unplaced`. Splits the
 seeder's output into rows that need a fresh placement
 (`unmatched`) vs. rows that matched only via the name-only
 fallback (`lowConfidenceMatches`) and may need an operator
-confirmation that the right person was picked.
+confirmation that the right person was picked. Also echoes
+back an `importSummary` with the count + dollar total of
+per-week snapshots written for `payWeekEndDate` (Task #597).
 
  */
 export interface ListUnplacedPayrollResult {
   unmatched: UnplacedPayrollRow[];
   lowConfidenceMatches: LowConfidencePayrollMatch[];
+  importSummary: PayrollImportSummary;
 }
 
 export interface DigestRecipient {
@@ -1878,6 +1942,22 @@ export const ListUnplacedPayrollReclaimOverridden = {
   true: "true",
   false: "false",
 } as const;
+
+export type ListFinanceWeeklyParams = {
+  /**
+   * @minimum 1
+   * @maximum 104
+   */
+  weeks?: number;
+};
+
+export type ListFinanceMonthlyParams = {
+  /**
+   * @minimum 1
+   * @maximum 36
+   */
+  months?: number;
+};
 
 export type ListPayrollDeductionsParams = {
   /**

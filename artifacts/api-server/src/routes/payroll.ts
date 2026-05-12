@@ -54,6 +54,18 @@ router.get("/payroll/unplaced", async (req, res): Promise<void> => {
     ListUnplacedPayrollResponse.parse({
       unmatched: result.unmatched,
       lowConfidenceMatches: result.lowConfidenceMatches,
+      // Per-import summary for the dashboard toast (Task #597). When
+      // the operator triggers a re-import for a specific Saturday
+      // pay-week the seeder writes per-week snapshots; we echo back
+      // the count + total so the UI can render
+      // "Imported X deductions … total $Y" without a second call.
+      // For dashboard polls (no payWeekEndDate) these stay zero / null
+      // and the UI suppresses the toast.
+      importSummary: {
+        payWeekEndDate: result.payWeekEndDate,
+        deductionsImported: result.snapshotsWritten,
+        totalAmount: result.snapshotsTotalAmount,
+      },
     }),
   );
 });

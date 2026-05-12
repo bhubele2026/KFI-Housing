@@ -82,6 +82,11 @@ export interface SeedHousingDeductionsResult {
   // `payWeekEndDate` was passed — the seeder boots happily without
   // creating snapshots so existing tests / startup paths are unaffected.
   snapshotsWritten: number;
+  // Sum of `weeklyAmount` (USD) across the snapshot rows written for
+  // `payWeekEndDate`. Used by the dashboard import-summary toast so
+  // the operator sees "Imported X deductions … total $Y" without a
+  // second round-trip. Zero when no snapshots were written.
+  snapshotsTotalAmount: number;
   // Saturday end-date the snapshot rows were stamped with (echoed back
   // from the input). Null when no snapshots were written.
   payWeekEndDate: string | null;
@@ -790,6 +795,7 @@ export async function seedHousingDeductions(
   }
 
   let snapshotsWritten = 0;
+  let snapshotsTotalAmount = 0;
   if (payWeekEndDate && matchedSnapshots.size > 0) {
     // Idempotent upsert on (occupantId, payWeekEndDate). Re-importing
     // the same week overwrites the snapshot in place — same posture as
@@ -824,6 +830,7 @@ export async function seedHousingDeductions(
           },
         });
       snapshotsWritten++;
+      snapshotsTotalAmount += snap.weekly;
     }
   }
 
@@ -833,6 +840,7 @@ export async function seedHousingDeductions(
     updated,
     alreadyCorrect,
     snapshotsWritten,
+    snapshotsTotalAmount: Math.round(snapshotsTotalAmount * 100) / 100,
     payWeekEndDate,
     unmatched,
     lowConfidenceMatches,

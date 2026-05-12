@@ -600,9 +600,8 @@ export default function Customers() {
                       <motion.tr
                         key={c.id}
                         id={`customer-row-${c.id}`}
-                        initial={{ opacity: 0, y: 4 }}
+                        initial={false}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.03 }}
                         className={`border-b hover:bg-muted/40 transition-colors ${
                           isHighlighted ? "bg-primary/5 ring-1 ring-primary/30" : ""
                         }`}

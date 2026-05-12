@@ -446,21 +446,13 @@ export async function start(deps: StartDeps): Promise<void> {
     }
   }
 
-  // One-shot seeder for weekly housing deductions sourced from the
-  // payroll export (Task #282). Idempotent: only writes when a matched
-  // occupant's chargePerBed/billingFrequency would change. Failures are
-  // logged but non-fatal — the rest of the app keeps the previous
-  // values, and unmatched rows are surfaced for manual reconciliation.
-  if (!autoSeedDisabled) {
-    try {
-      await deps.seedHousingDeductions();
-    } catch (err) {
-      deps.logger.warn(
-        { err },
-        "Failed to apply payroll-derived weekly housing deductions — continuing to serve",
-      );
-    }
-  }
+  // Auto-seeding of weekly housing deductions has been removed: the
+  // operator now imports an Excel deductions file from the Occupants
+  // page, and `payroll_deductions` starts empty until they do. The
+  // `seedHousingDeductions` helper is still exported because the new
+  // POST /api/payroll/import-deductions route reuses its matching +
+  // upsert logic for parsed Excel rows.
+  void deps.seedHousingDeductions;
 
   // Idempotent seed for active leases extracted from attached PDFs
   // (Task #287). Non-fatal for the same reason as the Adient seed.

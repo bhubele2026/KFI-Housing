@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearch } from "wouter";
 import { PropertyNameCell } from "@/components/property-name-cell";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
-  Search, UserPlus, Download, Users, Trash2, AlertTriangle, UserPlus2,
+  Search, UserPlus, Download, Upload, Users, Trash2, AlertTriangle, UserPlus2,
   CheckCircle2, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
@@ -28,7 +28,9 @@ import {
   useListPayrollDeductions,
   useListUnplacedPayroll,
   getListUnplacedPayrollQueryKey,
+  getListPayrollDeductionsQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   isSaturdayDate,
   mostRecentSaturday,
@@ -294,6 +296,84 @@ export default function Occupants() {
     return [...STANDARD_SHIFTS, ...extras];
   }, [occupants, customers, customerScope]);
 
+  // Excel deductions import (Task: clean-slate payroll). Uploads an
+  // .xlsx file to POST /api/payroll/import-deductions for the
+  // currently-selected pay-week, then invalidates the per-week
+  // deductions query so the table refreshes in place.
+  const queryClient = useQueryClient();
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const handleImportExcelClick = () => {
+    if (!isSaturdayDate(payWeek)) {
+      toast({
+        title: "Pick a Saturday pay-week first",
+        description:
+          "Use the date picker above the table to select the Saturday end-date of the pay-week before importing.",
+        variant: "destructive",
+      });
+      return;
+    }
+    importFileInputRef.current?.click();
+  };
+  const handleImportExcelChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(
+        `${baseUrl}api/payroll/import-deductions?payWeekEndDate=${encodeURIComponent(payWeek)}`,
+        { method: "POST", body: form },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        deductionsImported?: number;
+        totalAmount?: number;
+        unmatchedCount?: number;
+        skippedRows?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(body.error ?? `Import failed (${res.status}).`);
+      }
+      toast({
+        title: "Deductions imported",
+        description: `Imported ${body.deductionsImported ?? 0} deduction${
+          (body.deductionsImported ?? 0) === 1 ? "" : "s"
+        }${
+          typeof body.totalAmount === "number"
+            ? `, total ${formatUsd(body.totalAmount)}`
+            : ""
+        } for week of ${formatPayWeekRange(payWeek)}.${
+          body.unmatchedCount ? ` ${body.unmatchedCount} row${body.unmatchedCount === 1 ? "" : "s"} didn't match an occupant.` : ""
+        }${
+          body.skippedRows ? ` ${body.skippedRows} row${body.skippedRows === 1 ? "" : "s"} skipped.` : ""
+        }`,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getListPayrollDeductionsQueryKey({
+          since: payWeek,
+          until: payWeek,
+        }),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getListUnplacedPayrollQueryKey({ payWeekEndDate: payWeek }),
+      });
+    } catch (err) {
+      toast({
+        title: "Couldn't import deductions",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const handleDownloadCsv = () => {
     const csv = toCsv(filteredOccupants, [
       { header: "Name",              value: (o) => o.name },
@@ -459,6 +539,24 @@ export default function Occupants() {
           }
           actions={
             <>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={handleImportExcelChange}
+                data-testid="input-import-deductions-xlsx"
+              />
+              <Button
+                variant="outline"
+                onClick={handleImportExcelClick}
+                disabled={isImporting}
+                data-testid="button-import-deductions-xlsx"
+                title={`Import a payroll deductions .xlsx for week of ${formatPayWeekRange(payWeek)}`}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                {isImporting ? "Importing…" : "Import deductions (.xlsx)"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleDownloadCsv}

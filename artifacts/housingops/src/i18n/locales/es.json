@@ -1153,6 +1153,8 @@
       },
       "customerPlaceholder": "Cliente",
       "allCustomers": "Todos los clientes",
+      "propertyPlaceholder": "Propiedad",
+      "allProperties": "Todas las propiedades",
       "downloadCsv": "Descargar CSV",
       "totalRevenue": "Ingresos totales",
       "totalCosts": "Costos totales",

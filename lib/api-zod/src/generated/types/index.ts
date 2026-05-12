@@ -50,6 +50,7 @@ export * from "./leaseStatus";
 export * from "./leaseUpdate";
 export * from "./leaseUpdateRateType";
 export * from "./leaseUpdateStatus";
+export * from "./listFinanceByCustomerParams";
 export * from "./listFinanceMonthlyParams";
 export * from "./listFinanceWeeklyParams";
 export * from "./listPayrollDeductionsParams";

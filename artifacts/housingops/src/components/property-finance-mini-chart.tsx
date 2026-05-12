@@ -1,11 +1,8 @@
 // 13-week pay-week deductions mini-chart for the per-property Finance
-// tab (Task #597). Shows weekly recovered (bars) overlaid against the
-// property's weekly-equivalent rent (line) so an operator can spot at
-// a glance whether the deductions cover the property's rent.
-//
-// `monthlyRent` is divided by 52/12 to get a weekly equivalent, and
-// leases flagged `customerResponsibleForRent` or with a non-monthly
-// rateType are excluded — same exclusion rules as the Finance tabs.
+// tab (Task #597). Reads the same `/api/finance/weekly` endpoint the
+// global Finance Weekly tab uses, scoped to a single property via the
+// `propertyId` query param. Reading from one endpoint family means the
+// per-property numbers always reconcile with the portfolio-wide totals.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,102 +18,43 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useListPayrollDeductions } from "@workspace/api-client-react";
-import { formatUsd, type Lease } from "@/data/mockData";
-import { useData } from "@/context/data-store";
-import {
-  mostRecentSaturday,
-  parsePayWeekDate,
-  trailingPayWeeks,
-} from "@/lib/finance-pay-weeks";
+import { useListFinanceWeekly } from "@workspace/api-client-react";
+import { formatUsd } from "@/data/mockData";
+import { parsePayWeekDate } from "@/lib/finance-pay-weeks";
 
-type PayrollDeductionRow = {
+type WeeklyRow = {
   payWeekEndDate: string;
-  weeklyAmount: number;
-  propertyId: string;
+  recovered: number;
+  rentPaid: number;
+  utilities: number;
+  net: number;
 };
 
 type Props = {
   propertyId: string;
 };
 
-const WEEK_COUNT = 13;
-const WEEKS_PER_MONTH = 52 / 12;
-
-function isMonthlyRentLease(l: Lease): boolean {
-  if (l.customerResponsibleForRent) return false;
-  if ((l.rateType ?? "monthly") !== "monthly") return false;
-  return true;
-}
-
-// Calendar-month rent for `propertyId` covering the Saturday week's
-// month. Includes any lease active for at least one day in the month.
-function monthlyRentForPropertyOnDate(
-  leases: readonly Lease[],
-  propertyId: string,
-  saturdayYmd: string,
-): number {
-  const d = parsePayWeekDate(saturdayYmd);
-  if (!d) return 0;
-  const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  const monthStart = `${ym}-01`;
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const monthEnd = `${ym}-${String(lastDay).padStart(2, "0")}`;
-  let total = 0;
-  for (const l of leases) {
-    if (l.propertyId !== propertyId) continue;
-    if (!isMonthlyRentLease(l)) continue;
-    if (!l.startDate) continue;
-    const effectiveEnd =
-      l.endDate && l.endDate.length > 0 ? l.endDate : "9999-12-31";
-    if (l.startDate <= monthEnd && effectiveEnd >= monthStart) {
-      total += l.monthlyRent || 0;
-    }
-  }
-  return total;
-}
-
 export function PropertyFinanceMiniChart({ propertyId }: Props) {
   const { t } = useTranslation();
-  const { data } = useListPayrollDeductions();
-  const { leases } = useData();
-  const deductions: PayrollDeductionRow[] = useMemo(
-    () => (data as PayrollDeductionRow[] | undefined) ?? [],
+  const { data } = useListFinanceWeekly({ weeks: 13, propertyId });
+  const rows: WeeklyRow[] = useMemo(
+    () => (data as WeeklyRow[] | undefined) ?? [],
     [data],
   );
 
   const series = useMemo(() => {
-    const propertyRows = deductions.filter((d) => d.propertyId === propertyId);
-    let anchor = mostRecentSaturday();
-    if (propertyRows.length > 0) {
-      const latest = propertyRows
-        .map((r) => r.payWeekEndDate)
-        .sort()
-        .at(-1);
-      if (latest) anchor = latest;
-    }
-    const weeks = trailingPayWeeks(WEEK_COUNT, anchor);
-    const sums = new Map<string, number>();
-    for (const r of propertyRows) {
-      sums.set(
-        r.payWeekEndDate,
-        (sums.get(r.payWeekEndDate) ?? 0) + r.weeklyAmount,
-      );
-    }
-    return weeks.map((w) => {
-      const d = parsePayWeekDate(w);
-      const monthlyRent = monthlyRentForPropertyOnDate(leases, propertyId, w);
-      const weeklyRent = Math.round((monthlyRent / WEEKS_PER_MONTH) * 100) / 100;
+    return rows.map((r) => {
+      const d = parsePayWeekDate(r.payWeekEndDate);
       return {
-        week: w,
+        week: r.payWeekEndDate,
         label: d
           ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-          : w,
-        recovered: Math.round((sums.get(w) ?? 0) * 100) / 100,
-        rent: weeklyRent,
+          : r.payWeekEndDate,
+        recovered: r.recovered,
+        rent: r.rentPaid,
       };
     });
-  }, [deductions, propertyId, leases]);
+  }, [rows]);
 
   const hasAnyData = series.some((s) => s.recovered > 0 || s.rent > 0);
 

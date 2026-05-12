@@ -16,7 +16,6 @@ import {
   ListFinanceByCustomerResponse,
 } from "@workspace/api-zod";
 import {
-  isSaturdayDate,
   mostRecentSaturday,
   monthBucketForPayWeek,
   trailingPayWeeks,
@@ -25,9 +24,8 @@ import {
 } from "../lib/pay-week";
 
 // Server-side finance rollups (Task #597). Three sibling endpoints
-// share a single DB read pass per request and apply consistent
-// exclusion rules so the Weekly / Monthly / By-Customer tabs all
-// agree on the underlying numbers:
+// share consistent exclusion rules so the Weekly / Monthly /
+// By-Customer tabs all agree on the underlying numbers:
 //
 //   - `customerResponsibleForRent` leases are excluded from rent
 //     totals (the customer pays the landlord directly).
@@ -37,24 +35,36 @@ import {
 //   - Calendar-month rent counts the FULL `monthlyRent` if the lease
 //     is active any day in the month. Open-ended leases (blank
 //     `endDate`) are treated as ongoing through the month end.
+//   - Utilities for properties whose active lease(s) flag
+//     `utilitiesIncludedInRent` are dropped from the utilities sum
+//     to avoid double-counting (the rent already covers them).
+//
+// All three endpoints accept optional `customerId` and `propertyId`
+// query params so the Finance UI's filter chips and the per-property
+// mini-chart all consume the SAME endpoint family — guaranteeing the
+// numbers across views reconcile.
 
 const router: IRouter = Router();
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function isMonthlyRentLease(l: {
-  rateType: string;
+type LeaseRow = {
+  id: string;
+  propertyId: string;
   customerId: string | null;
+  rateType: string;
   monthlyRent: number;
-}): boolean {
-  if ((l.rateType ?? "monthly") !== "monthly") return false;
-  return true;
+  customerResponsibleForRent: boolean;
+  utilitiesIncludedInRent: boolean | null;
+  startDate: string;
+  endDate: string;
+};
+
+function isMonthlyRentLease(l: LeaseRow): boolean {
+  return (l.rateType ?? "monthly") === "monthly";
 }
 
-function isLeaseActiveInMonth(
-  l: { startDate: string; endDate: string },
-  ym: string,
-): boolean {
+function isLeaseActiveInMonth(l: LeaseRow, ym: string): boolean {
   const m = /^(\d{4})-(\d{2})$/.exec(ym);
   if (!m) return false;
   const y = Number(m[1]);
@@ -66,6 +76,14 @@ function isLeaseActiveInMonth(
   const effectiveEnd =
     l.endDate && l.endDate.length > 0 ? l.endDate : "9999-12-31";
   return l.startDate <= monthEnd && effectiveEnd >= monthStart;
+}
+
+function leaseCustomerId(
+  l: LeaseRow,
+  propertyCustomerById: Map<string, string>,
+): string {
+  if (l.customerId && l.customerId.length > 0) return l.customerId;
+  return propertyCustomerById.get(l.propertyId) ?? "";
 }
 
 type SnapRow = {
@@ -91,9 +109,6 @@ async function loadSnapshots(since?: string, until?: string): Promise<SnapRow[]>
     .where(conds.length ? and(...conds) : undefined);
 }
 
-// Trailing N pay-weeks. Anchors on the latest snapshot week if any,
-// otherwise on the most recent Saturday before today, so an empty DB
-// still returns a sensible rolling window of zeros.
 async function resolveAnchorWeek(): Promise<string> {
   const rows = await db
     .select({ payWeekEndDate: payrollDeductionsTable.payWeekEndDate })
@@ -105,43 +120,124 @@ async function resolveAnchorWeek(): Promise<string> {
   return latest || mostRecentSaturday();
 }
 
+function readScopeFilters(req: {
+  query: Record<string, unknown>;
+}): { customerId: string | null; propertyId: string | null } {
+  const c = typeof req.query.customerId === "string" ? req.query.customerId : "";
+  const p = typeof req.query.propertyId === "string" ? req.query.propertyId : "";
+  return {
+    customerId: c.length > 0 ? c : null,
+    propertyId: p.length > 0 ? p : null,
+  };
+}
+
+// Properties whose active monthly lease(s) flag
+// `utilitiesIncludedInRent`. When summing utilities we drop any
+// utility row whose property is in this set — the rent already covers
+// the utility cost so counting both would inflate "expenses" twice.
+function propertiesWithUtilitiesInRent(
+  leases: LeaseRow[],
+  ym: string,
+): Set<string> {
+  const out = new Set<string>();
+  for (const l of leases) {
+    if (!l.utilitiesIncludedInRent) continue;
+    if (!isMonthlyRentLease(l)) continue;
+    if (!isLeaseActiveInMonth(l, ym)) continue;
+    out.add(l.propertyId);
+  }
+  return out;
+}
+
+function applyScopeToLeases(
+  leases: LeaseRow[],
+  scope: { customerId: string | null; propertyId: string | null },
+  propertyCustomerById: Map<string, string>,
+): LeaseRow[] {
+  return leases.filter((l) => {
+    if (scope.propertyId && l.propertyId !== scope.propertyId) return false;
+    if (scope.customerId) {
+      const cid = leaseCustomerId(l, propertyCustomerById);
+      if (cid !== scope.customerId) return false;
+    }
+    return true;
+  });
+}
+
+function applyScopeToUtilities(
+  utilities: { propertyId: string; monthlyCost: number }[],
+  scope: { customerId: string | null; propertyId: string | null },
+  propertyCustomerById: Map<string, string>,
+): { propertyId: string; monthlyCost: number }[] {
+  return utilities.filter((u) => {
+    if (scope.propertyId && u.propertyId !== scope.propertyId) return false;
+    if (scope.customerId) {
+      const cid = propertyCustomerById.get(u.propertyId) ?? "";
+      if (cid !== scope.customerId) return false;
+    }
+    return true;
+  });
+}
+
+function applyScopeToSnaps(
+  snaps: SnapRow[],
+  scope: { customerId: string | null; propertyId: string | null },
+): SnapRow[] {
+  return snaps.filter((s) => {
+    if (scope.propertyId && s.propertyId !== scope.propertyId) return false;
+    if (scope.customerId && s.customerId !== scope.customerId) return false;
+    return true;
+  });
+}
+
 router.get("/finance/weekly", async (req, res): Promise<void> => {
   const weeksRaw = Number(req.query.weeks ?? 13);
   const weeks =
     Number.isFinite(weeksRaw) && weeksRaw > 0 && weeksRaw <= 104
       ? Math.floor(weeksRaw)
       : 13;
+  const scope = readScopeFilters(req);
   const anchor = await resolveAnchorWeek();
   const buckets = trailingPayWeeks(weeks, anchor);
   const since = buckets[0];
   const until = buckets[buckets.length - 1];
-  const [snaps, leases, utilities] = await Promise.all([
+  const [snaps, leasesAll, utilitiesAll, properties] = await Promise.all([
     loadSnapshots(since, until),
     db.select().from(leasesTable),
     db.select().from(utilitiesTable),
+    db
+      .select({ id: propertiesTable.id, customerId: propertiesTable.customerId })
+      .from(propertiesTable),
   ]);
 
-  // Per-week recovered (sum of snapshot weeklyAmount).
+  const propertyCustomerById = new Map<string, string>();
+  for (const p of properties) propertyCustomerById.set(p.id, p.customerId ?? "");
+
+  const leases = applyScopeToLeases(
+    leasesAll as LeaseRow[],
+    scope,
+    propertyCustomerById,
+  );
+  const utilities = applyScopeToUtilities(
+    utilitiesAll,
+    scope,
+    propertyCustomerById,
+  );
+  const scopedSnaps = applyScopeToSnaps(snaps, scope);
+
   const recoveredByWeek = new Map<string, number>();
-  for (const s of snaps) {
+  for (const s of scopedSnaps) {
     recoveredByWeek.set(
       s.payWeekEndDate,
       (recoveredByWeek.get(s.payWeekEndDate) ?? 0) + s.weeklyAmount,
     );
   }
 
-  // Per-week rent: convert calendar-month rent → weekly equivalent
-  // using WEEKS_PER_MONTH. A lease that's active in the Saturday's
-  // calendar month contributes its full monthlyRent / WEEKS_PER_MONTH
-  // for that week.
-  const weeklyRentByMonth = new Map<string, number>();
-  const weeklyUtilByMonth = new Map<string, number>();
-  const utilTotal =
-    utilities.reduce((s, u) => s + (u.monthlyCost || 0), 0) / WEEKS_PER_MONTH;
-
   const monthsTouched = new Set<string>();
   for (const w of buckets) monthsTouched.add(monthBucketForPayWeek(w));
 
+  const weeklyRentByMonth = new Map<string, number>();
+  const weeklyUtilByMonth = new Map<string, number>();
   for (const ym of monthsTouched) {
     let rent = 0;
     for (const l of leases) {
@@ -150,8 +246,14 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
       if (!isLeaseActiveInMonth(l, ym)) continue;
       rent += l.monthlyRent || 0;
     }
+    const skipUtilProps = propertiesWithUtilitiesInRent(leases, ym);
+    let util = 0;
+    for (const u of utilities) {
+      if (skipUtilProps.has(u.propertyId)) continue;
+      util += u.monthlyCost || 0;
+    }
     weeklyRentByMonth.set(ym, rent / WEEKS_PER_MONTH);
-    weeklyUtilByMonth.set(ym, utilTotal);
+    weeklyUtilByMonth.set(ym, util / WEEKS_PER_MONTH);
   }
 
   const result = buckets.map((week) => {
@@ -178,26 +280,51 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
     Number.isFinite(monthsRaw) && monthsRaw > 0 && monthsRaw <= 36
       ? Math.floor(monthsRaw)
       : 12;
+  const scope = readScopeFilters(req);
   const anchor = await resolveAnchorWeek();
   const anchorMonth = monthBucketForPayWeek(anchor);
   const buckets = trailingMonthBuckets(months, anchorMonth);
 
-  const [snaps, leases, utilities, otherCosts] = await Promise.all([
-    loadSnapshots(),
-    db.select().from(leasesTable),
-    db.select().from(utilitiesTable),
-    db.select().from(otherCostsTable),
-  ]);
+  const [snaps, leasesAll, utilitiesAll, otherCostsAll, properties] =
+    await Promise.all([
+      loadSnapshots(),
+      db.select().from(leasesTable),
+      db.select().from(utilitiesTable),
+      db.select().from(otherCostsTable),
+      db
+        .select({
+          id: propertiesTable.id,
+          customerId: propertiesTable.customerId,
+        })
+        .from(propertiesTable),
+    ]);
+
+  const propertyCustomerById = new Map<string, string>();
+  for (const p of properties) propertyCustomerById.set(p.id, p.customerId ?? "");
+
+  const leases = applyScopeToLeases(
+    leasesAll as LeaseRow[],
+    scope,
+    propertyCustomerById,
+  );
+  const utilities = applyScopeToUtilities(
+    utilitiesAll,
+    scope,
+    propertyCustomerById,
+  );
+  const otherCosts = applyScopeToUtilities(
+    otherCostsAll as { propertyId: string; monthlyCost: number }[],
+    scope,
+    propertyCustomerById,
+  );
+  const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
   const recoveredByMonth = new Map<string, number>();
-  for (const s of snaps) {
+  for (const s of scopedSnaps) {
     const ym = monthBucketForPayWeek(s.payWeekEndDate);
     if (!ym) continue;
     recoveredByMonth.set(ym, (recoveredByMonth.get(ym) ?? 0) + s.weeklyAmount);
   }
-
-  const utilTotal = utilities.reduce((s, u) => s + (u.monthlyCost || 0), 0);
-  const otherTotal = otherCosts.reduce((s, o) => s + (o.monthlyCost || 0), 0);
 
   const result = buckets.map((ym) => {
     let rent = 0;
@@ -207,17 +334,24 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
       if (!isLeaseActiveInMonth(l, ym)) continue;
       rent += l.monthlyRent || 0;
     }
+    const skipUtilProps = propertiesWithUtilitiesInRent(leases, ym);
+    let util = 0;
+    for (const u of utilities) {
+      if (skipUtilProps.has(u.propertyId)) continue;
+      util += u.monthlyCost || 0;
+    }
+    const other = otherCosts.reduce((s, o) => s + (o.monthlyCost || 0), 0);
     const recovered = round2(recoveredByMonth.get(ym) ?? 0);
     const rentPaid = round2(rent);
-    const util = round2(utilTotal);
-    const other = round2(otherTotal);
-    const net = round2(recovered - rentPaid - util - other);
+    const utilitiesAmt = round2(util);
+    const otherAmt = round2(other);
+    const net = round2(recovered - rentPaid - utilitiesAmt - otherAmt);
     return {
       month: ym,
       recovered,
       rentPaid,
-      utilities: util,
-      otherCosts: other,
+      utilities: utilitiesAmt,
+      otherCosts: otherAmt,
       net,
     };
   });
@@ -225,8 +359,9 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
   res.json(ListFinanceMonthlyResponse.parse(result));
 });
 
-router.get("/finance/by-customer", async (_req, res): Promise<void> => {
-  const [customers, occupants, properties, leases, snaps] = await Promise.all([
+router.get("/finance/by-customer", async (req, res): Promise<void> => {
+  const scope = readScopeFilters(req);
+  const [customers, occupants, properties, leasesAll, snaps] = await Promise.all([
     db.select().from(customersTable),
     db
       .select({
@@ -244,25 +379,36 @@ router.get("/finance/by-customer", async (_req, res): Promise<void> => {
   ]);
 
   const propertyCustomerById = new Map<string, string>();
-  for (const p of properties) {
-    propertyCustomerById.set(p.id, p.customerId ?? "");
-  }
+  for (const p of properties) propertyCustomerById.set(p.id, p.customerId ?? "");
 
-  // Most recent complete week = max payWeekEndDate present in snapshots.
+  const leases = applyScopeToLeases(
+    leasesAll as LeaseRow[],
+    scope,
+    propertyCustomerById,
+  );
+  const scopedSnaps = applyScopeToSnaps(snaps, scope);
+
   let mostRecentWeek = "";
-  for (const s of snaps) {
+  for (const s of scopedSnaps) {
     if (s.payWeekEndDate > mostRecentWeek) mostRecentWeek = s.payWeekEndDate;
   }
 
-  // Current calendar month for MTD aggregation.
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  // Per-customer rollups.
+  const scopedOccupants = occupants.filter((o) => {
+    if (!o.propertyId) return false;
+    if (scope.propertyId && o.propertyId !== scope.propertyId) return false;
+    if (scope.customerId) {
+      const cid = propertyCustomerById.get(o.propertyId) ?? "";
+      if (cid !== scope.customerId) return false;
+    }
+    return true;
+  });
+
   const activeOccByCustomer = new Map<string, number>();
-  for (const o of occupants) {
-    if (!o.propertyId) continue;
-    const cid = propertyCustomerById.get(o.propertyId) ?? "";
+  for (const o of scopedOccupants) {
+    const cid = propertyCustomerById.get(o.propertyId!) ?? "";
     if (!cid) continue;
     activeOccByCustomer.set(cid, (activeOccByCustomer.get(cid) ?? 0) + 1);
   }
@@ -272,10 +418,7 @@ router.get("/finance/by-customer", async (_req, res): Promise<void> => {
     if (l.customerResponsibleForRent) continue;
     if (!isMonthlyRentLease(l)) continue;
     if (!isLeaseActiveInMonth(l, currentMonth)) continue;
-    const cid =
-      l.customerId && l.customerId.length > 0
-        ? l.customerId
-        : propertyCustomerById.get(l.propertyId) ?? "";
+    const cid = leaseCustomerId(l, propertyCustomerById);
     if (!cid) continue;
     monthlyRentByCustomer.set(
       cid,
@@ -285,7 +428,7 @@ router.get("/finance/by-customer", async (_req, res): Promise<void> => {
 
   const recentWeekByCustomer = new Map<string, number>();
   const mtdByCustomer = new Map<string, number>();
-  for (const s of snaps) {
+  for (const s of scopedSnaps) {
     if (!s.customerId) continue;
     if (s.payWeekEndDate === mostRecentWeek) {
       recentWeekByCustomer.set(
@@ -301,9 +444,11 @@ router.get("/finance/by-customer", async (_req, res): Promise<void> => {
     }
   }
 
-  // Union of all customers we have any data for.
   const seen = new Set<string>();
-  for (const c of customers) seen.add(c.id);
+  for (const c of customers) {
+    if (scope.customerId && c.id !== scope.customerId) continue;
+    seen.add(c.id);
+  }
   for (const k of activeOccByCustomer.keys()) seen.add(k);
   for (const k of monthlyRentByCustomer.keys()) seen.add(k);
   for (const k of recentWeekByCustomer.keys()) seen.add(k);

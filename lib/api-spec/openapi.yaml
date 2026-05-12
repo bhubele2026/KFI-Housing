@@ -1345,6 +1345,14 @@ paths:
           name: weeks
           required: false
           schema: { type: integer, minimum: 1, maximum: 104, default: 13 }
+        - in: query
+          name: customerId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: propertyId
+          required: false
+          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -1369,6 +1377,14 @@ paths:
           name: months
           required: false
           schema: { type: integer, minimum: 1, maximum: 36, default: 12 }
+        - in: query
+          name: customerId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: propertyId
+          required: false
+          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -1389,6 +1405,15 @@ paths:
         pays for that customer, the most-recent-complete-week recovered
         sum, the month-to-date recovered sum, and the net (MTD
         recovered − monthly rent KFI pays).
+      parameters:
+        - in: query
+          name: customerId
+          required: false
+          schema: { type: string }
+        - in: query
+          name: propertyId
+          required: false
+          schema: { type: string }
       responses:
         "200":
           description: OK

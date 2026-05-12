@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
@@ -129,6 +129,22 @@ export default function Finance() {
     if (customerFilter === ALL_CUSTOMERS) return properties;
     return properties.filter((p) => p.customerId === customerFilter);
   }, [properties, customerFilter]);
+
+  // Property filter chip — companion to the customer chip. Both feed
+  // the Finance Weekly / Monthly / By-Customer tabs so the operator
+  // can scope all three views at once. Reset the property filter
+  // whenever the customer changes so a stale property selection from
+  // a different customer can never linger.
+  const [propertyFilter, setPropertyFilter] = useState<string>(ALL_CUSTOMERS);
+  const filteredProperties = visibleProperties;
+  useEffect(() => {
+    if (
+      propertyFilter !== ALL_CUSTOMERS &&
+      !filteredProperties.some((p) => p.id === propertyFilter)
+    ) {
+      setPropertyFilter(ALL_CUSTOMERS);
+    }
+  }, [propertyFilter, filteredProperties]);
 
   const financialData = visibleProperties.map(p => {
     const propOccupants = occupants.filter(o => o.propertyId === p.id && o.status === "Active");
@@ -521,6 +537,17 @@ export default function Finance() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+              <SelectTrigger className="w-full sm:w-56" data-testid="select-finance-property-filter">
+                <SelectValue placeholder={t("pages.finance.propertyPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CUSTOMERS}>{t("pages.finance.allProperties")}</SelectItem>
+                {filteredProperties.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{formatPropertyName(p.name).primary}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               onClick={handleDownloadCsv}
@@ -579,15 +606,24 @@ export default function Finance() {
           </TabsList>
 
           <TabsContent value="weekly" className="space-y-6">
-            <FinancePayrollWeeklyTab customerFilter={customerFilter} />
+            <FinancePayrollWeeklyTab
+              customerFilter={customerFilter}
+              propertyFilter={propertyFilter}
+            />
           </TabsContent>
 
           <TabsContent value="monthly" className="space-y-6">
-            <FinancePayrollMonthlyTab customerFilter={customerFilter} />
+            <FinancePayrollMonthlyTab
+              customerFilter={customerFilter}
+              propertyFilter={propertyFilter}
+            />
           </TabsContent>
 
           <TabsContent value="byCustomer" className="space-y-6">
-            <FinancePayrollByCustomerTab customerFilter={customerFilter} />
+            <FinancePayrollByCustomerTab
+              customerFilter={customerFilter}
+              propertyFilter={propertyFilter}
+            />
           </TabsContent>
 
           <TabsContent value="overview" className="space-y-8">

@@ -1949,6 +1949,8 @@ export type ListFinanceWeeklyParams = {
    * @maximum 104
    */
   weeks?: number;
+  customerId?: string;
+  propertyId?: string;
 };
 
 export type ListFinanceMonthlyParams = {
@@ -1957,6 +1959,13 @@ export type ListFinanceMonthlyParams = {
    * @maximum 36
    */
   months?: number;
+  customerId?: string;
+  propertyId?: string;
+};
+
+export type ListFinanceByCustomerParams = {
+  customerId?: string;
+  propertyId?: string;
 };
 
 export type ListPayrollDeductionsParams = {

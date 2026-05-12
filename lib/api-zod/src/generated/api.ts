@@ -3856,6 +3856,8 @@ export const ListFinanceWeeklyQueryParams = zod.object({
     .min(1)
     .max(listFinanceWeeklyQueryWeeksMax)
     .default(listFinanceWeeklyQueryWeeksDefault),
+  customerId: zod.coerce.string().optional(),
+  propertyId: zod.coerce.string().optional(),
 });
 
 export const ListFinanceWeeklyResponseItem = zod.object({
@@ -3886,6 +3888,8 @@ export const ListFinanceMonthlyQueryParams = zod.object({
     .min(1)
     .max(listFinanceMonthlyQueryMonthsMax)
     .default(listFinanceMonthlyQueryMonthsDefault),
+  customerId: zod.coerce.string().optional(),
+  propertyId: zod.coerce.string().optional(),
 });
 
 export const ListFinanceMonthlyResponseItem = zod.object({
@@ -3909,6 +3913,11 @@ recovered − monthly rent KFI pays).
 
  * @summary Per-customer finance rollup (Task
  */
+export const ListFinanceByCustomerQueryParams = zod.object({
+  customerId: zod.coerce.string().optional(),
+  propertyId: zod.coerce.string().optional(),
+});
+
 export const listFinanceByCustomerResponseRowsItemActiveOccupantsMin = 0;
 
 export const ListFinanceByCustomerResponse = zod.object({

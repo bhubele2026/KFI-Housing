@@ -6,7 +6,11 @@
 // what "rent paid" or "recovered" means and so the wire payload stays
 // small (one row per pay-week / month / customer).
 //
-// Each tab supports CSV export of the displayed rows.
+// Each tab supports CSV export of the displayed rows and surfaces a
+// small recovered-vs-rent line chart on top so trends are visible at
+// a glance. The optional `customerId` / `propertyId` props are passed
+// through to the endpoints so the Finance page filter chips control
+// every tab consistently.
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +30,16 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Legend,
+} from "recharts";
 import { formatUsd } from "@/data/mockData";
 import { ALL_CUSTOMERS } from "@/context/customer-scope";
 import {
@@ -35,6 +49,7 @@ import {
 
 type SharedProps = {
   customerFilter: string;
+  propertyFilter?: string;
 };
 
 type WeeklyRow = {
@@ -92,16 +107,39 @@ function downloadCsv(filename: string, header: string[], rows: (string | number)
   URL.revokeObjectURL(url);
 }
 
+function scopeParams(p: SharedProps): {
+  customerId?: string;
+  propertyId?: string;
+} {
+  const out: { customerId?: string; propertyId?: string } = {};
+  if (p.customerFilter && p.customerFilter !== ALL_CUSTOMERS) {
+    out.customerId = p.customerFilter;
+  }
+  if (p.propertyFilter && p.propertyFilter !== ALL_CUSTOMERS) {
+    out.propertyId = p.propertyFilter;
+  }
+  return out;
+}
+
 // ── Weekly tab ─────────────────────────────────────────────────────
-export function FinancePayrollWeeklyTab(_props: SharedProps) {
+export function FinancePayrollWeeklyTab(props: SharedProps) {
   const { t } = useTranslation();
-  const { data } = useListFinanceWeekly({ weeks: 13 });
+  const { data } = useListFinanceWeekly({ weeks: 13, ...scopeParams(props) });
   const rows: WeeklyRow[] = useMemo(
     () => (data as WeeklyRow[] | undefined) ?? [],
     [data],
   );
-  // Newest first for display.
   const display = useMemo(() => [...rows].reverse(), [rows]);
+  // The chart reads in chronological order so the line moves left→right.
+  const chartData = useMemo(
+    () =>
+      rows.map((r) => ({
+        label: formatPayWeekRange(r.payWeekEndDate),
+        recovered: r.recovered,
+        rentPaid: r.rentPaid,
+      })),
+    [rows],
+  );
 
   const totals = display.reduce(
     (acc, r) => ({
@@ -147,7 +185,43 @@ export function FinancePayrollWeeklyTab(_props: SharedProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {chartData.length > 0 && (
+          <div className="h-44 w-full" data-testid="chart-finance-weekly">
+            <ResponsiveContainer>
+              <LineChart
+                data={chartData}
+                margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: number) => `$${Math.round(v)}`}
+                  width={56}
+                />
+                <Tooltip formatter={(v: number) => formatUsd(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line
+                  type="monotone"
+                  dataKey="recovered"
+                  name={t("pages.finance.payroll.recovered")}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="rentPaid"
+                  name={t("pages.finance.payroll.rentPaid")}
+                  stroke="hsl(var(--destructive))"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         {display.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("pages.finance.payroll.noSnapshotsDescription")}
@@ -220,14 +294,23 @@ export function FinancePayrollWeeklyTab(_props: SharedProps) {
 }
 
 // ── Monthly tab ────────────────────────────────────────────────────
-export function FinancePayrollMonthlyTab(_props: SharedProps) {
+export function FinancePayrollMonthlyTab(props: SharedProps) {
   const { t } = useTranslation();
-  const { data } = useListFinanceMonthly({ months: 12 });
+  const { data } = useListFinanceMonthly({ months: 12, ...scopeParams(props) });
   const rows: MonthlyRow[] = useMemo(
     () => (data as MonthlyRow[] | undefined) ?? [],
     [data],
   );
   const display = useMemo(() => [...rows].reverse(), [rows]);
+  const chartData = useMemo(
+    () =>
+      rows.map((r) => ({
+        label: formatMonthBucketLabel(r.month),
+        recovered: r.recovered,
+        rentPaid: r.rentPaid,
+      })),
+    [rows],
+  );
 
   const totals = display.reduce(
     (acc, r) => ({
@@ -282,7 +365,43 @@ export function FinancePayrollMonthlyTab(_props: SharedProps) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {chartData.length > 0 && (
+          <div className="h-44 w-full" data-testid="chart-finance-monthly">
+            <ResponsiveContainer>
+              <LineChart
+                data={chartData}
+                margin={{ top: 4, right: 8, bottom: 0, left: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(v: number) => `$${Math.round(v)}`}
+                  width={56}
+                />
+                <Tooltip formatter={(v: number) => formatUsd(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line
+                  type="monotone"
+                  dataKey="recovered"
+                  name={t("pages.finance.payroll.recovered")}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="rentPaid"
+                  name={t("pages.finance.payroll.rentPaid")}
+                  stroke="hsl(var(--destructive))"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         {display.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("pages.finance.payroll.noSnapshotsDescription")}
@@ -364,19 +483,15 @@ export function FinancePayrollMonthlyTab(_props: SharedProps) {
 }
 
 // ── By Customer tab ────────────────────────────────────────────────
-export function FinancePayrollByCustomerTab({ customerFilter }: SharedProps) {
+export function FinancePayrollByCustomerTab(props: SharedProps) {
   const { t } = useTranslation();
-  const { data } = useListFinanceByCustomer();
+  const { data } = useListFinanceByCustomer(scopeParams(props));
   const result: ByCustomerResult | null = useMemo(
     () => (data as ByCustomerResult | undefined) ?? null,
     [data],
   );
 
-  const rows = useMemo(() => {
-    const all = result?.rows ?? [];
-    if (customerFilter === ALL_CUSTOMERS) return all;
-    return all.filter((r) => r.customerId === customerFilter);
-  }, [result, customerFilter]);
+  const rows = useMemo(() => result?.rows ?? [], [result]);
 
   const totals = rows.reduce(
     (acc, r) => ({

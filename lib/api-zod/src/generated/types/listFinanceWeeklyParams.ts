@@ -12,4 +12,6 @@ export type ListFinanceWeeklyParams = {
    * @maximum 104
    */
   weeks?: number;
+  customerId?: string;
+  propertyId?: string;
 };

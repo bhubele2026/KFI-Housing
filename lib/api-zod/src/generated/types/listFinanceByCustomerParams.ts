@@ -6,12 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListFinanceMonthlyParams = {
-  /**
-   * @minimum 1
-   * @maximum 36
-   */
-  months?: number;
+export type ListFinanceByCustomerParams = {
   customerId?: string;
   propertyId?: string;
 };

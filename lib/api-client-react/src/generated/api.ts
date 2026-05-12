@@ -45,6 +45,7 @@ import type {
   Lease,
   LeasePdfImportResult,
   LeaseUpdate,
+  ListFinanceByCustomerParams,
   ListFinanceMonthlyParams,
   ListFinanceWeeklyParams,
   ListPayrollDeductionsParams,
@@ -5878,41 +5879,66 @@ recovered − monthly rent KFI pays).
 
  * @summary Per-customer finance rollup (Task
  */
-export const getListFinanceByCustomerUrl = () => {
-  return `/api/finance/by-customer`;
+export const getListFinanceByCustomerUrl = (
+  params?: ListFinanceByCustomerParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/finance/by-customer?${stringifiedParams}`
+    : `/api/finance/by-customer`;
 };
 
 export const listFinanceByCustomer = async (
+  params?: ListFinanceByCustomerParams,
   options?: RequestInit,
 ): Promise<FinanceByCustomerResult> => {
-  return customFetch<FinanceByCustomerResult>(getListFinanceByCustomerUrl(), {
-    ...options,
-    method: "GET",
-  });
+  return customFetch<FinanceByCustomerResult>(
+    getListFinanceByCustomerUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getListFinanceByCustomerQueryKey = () => {
-  return [`/api/finance/by-customer`] as const;
+export const getListFinanceByCustomerQueryKey = (
+  params?: ListFinanceByCustomerParams,
+) => {
+  return [`/api/finance/by-customer`, ...(params ? [params] : [])] as const;
 };
 
 export const getListFinanceByCustomerQueryOptions = <
   TData = Awaited<ReturnType<typeof listFinanceByCustomer>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listFinanceByCustomer>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
+>(
+  params?: ListFinanceByCustomerParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceByCustomer>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getListFinanceByCustomerQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getListFinanceByCustomerQueryKey(params);
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof listFinanceByCustomer>>
-  > = ({ signal }) => listFinanceByCustomer({ signal, ...requestOptions });
+  > = ({ signal }) =>
+    listFinanceByCustomer(params, { signal, ...requestOptions });
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listFinanceByCustomer>>,
@@ -5933,15 +5959,18 @@ export type ListFinanceByCustomerQueryError = ErrorType<unknown>;
 export function useListFinanceByCustomer<
   TData = Awaited<ReturnType<typeof listFinanceByCustomer>>,
   TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listFinanceByCustomer>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListFinanceByCustomerQueryOptions(options);
+>(
+  params?: ListFinanceByCustomerParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listFinanceByCustomer>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListFinanceByCustomerQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

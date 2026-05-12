@@ -12,6 +12,7 @@ import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedHickoryHavenIfMissing } from "./lib/seed-hickory-haven";
 import { seedParkPlaceIfMissing } from "./lib/seed-park-place";
+import { seedParkPlaceLandscapeIfMissing } from "./lib/seed-park-place-landscape";
 // Re-exported from `./lib/seed` so the boot-sequence integration point
 // for post-master-import seeds (#295 and friends) lives next to the
 // other seed entry points.
@@ -50,6 +51,9 @@ void start({
   },
   seedParkPlaceIfMissing: async () => {
     await seedParkPlaceIfMissing();
+  },
+  seedParkPlaceLandscapeIfMissing: async () => {
+    await seedParkPlaceLandscapeIfMissing();
   },
   seedKolbeWausauIfMissing: async () => {
     await seedKolbeWausauIfMissing();

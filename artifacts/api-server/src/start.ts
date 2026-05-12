@@ -58,6 +58,9 @@ export interface StartDeps {
   seedHickoryHavenIfMissing: () => Promise<void>;
   seedGreenockManorIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
+  // Idempotent Landscape Structures / Park Place Plymouth seed
+  // (Task #569). Non-fatal.
+  seedParkPlaceLandscapeIfMissing: () => Promise<void>;
   seedKolbeWausauIfMissing: () => Promise<void>;
   // Idempotent backfill of payroll people who appear on the weekly
   // housing deduction roster but do not yet exist as occupants
@@ -395,6 +398,19 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.warn(
         { err },
         "Failed to apply Park Place seed — continuing to serve",
+      );
+    }
+  }
+
+  // Idempotent Landscape Structures / Park Place Plymouth seed (Task #569);
+  // non-fatal for the same reason.
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedParkPlaceLandscapeIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Park Place Landscape Structures seed — continuing to serve",
       );
     }
   }

@@ -32,6 +32,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     seedHickoryHavenIfMissing: vi.fn().mockResolvedValue(undefined),
     seedGreenockManorIfMissing: vi.fn().mockResolvedValue(undefined),
     seedParkPlaceIfMissing: vi.fn().mockResolvedValue(undefined),
+    seedParkPlaceLandscapeIfMissing: vi.fn().mockResolvedValue(undefined),
     seedKolbeWausauIfMissing: vi.fn().mockResolvedValue(undefined),
     seedPayrollOccupantsIfMissing: vi.fn().mockResolvedValue(undefined),
     seedHousingDeductions: vi.fn().mockResolvedValue(undefined),

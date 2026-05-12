@@ -171,9 +171,24 @@ function propertiesWithUtilitiesInRent(
 // Without this skip-set the recovered side counts the deduction but
 // the rent side excludes the obligation, producing artificially
 // positive net values.
-function customerResponsiblePropertyIdsByMonth(
+// Per-month skip set keyed on (propertyId | customerId). The snapshot
+// table denormalises both fields at import time, and leases can be
+// flagged customer-responsible at the (property, customer) grain on
+// shared-housing properties used by multiple customers (Ridge Motor
+// Inn etc., per leases.customerId comment in the schema). Keying the
+// skip-set on property-only would over-exclude — a property whose
+// Penda lease is customer-responsible would also drop the Trienda
+// recovered snapshots that share the property. Keying on
+// (propertyId, customerId) gives lease-level attribution as required
+// by Task #597 v8 validator.
+function snapKey(propertyId: string, customerId: string): string {
+  return `${propertyId}|${customerId}`;
+}
+
+function customerResponsibleSnapKeysByMonth(
   leases: LeaseRow[],
   monthsTouched: Iterable<string>,
+  propertyCustomerById: Map<string, string>,
 ): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
   for (const ym of monthsTouched) {
@@ -181,7 +196,7 @@ function customerResponsiblePropertyIdsByMonth(
     for (const l of leases) {
       if (!l.customerResponsibleForRent) continue;
       if (!isLeaseActiveInMonth(l, ym)) continue;
-      set.add(l.propertyId);
+      set.add(snapKey(l.propertyId, leaseCustomerId(l, propertyCustomerById)));
     }
     out.set(ym, set);
   }
@@ -189,13 +204,13 @@ function customerResponsiblePropertyIdsByMonth(
 }
 
 function isSnapBlocked(
-  s: { payWeekEndDate: string; propertyId: string },
+  s: { payWeekEndDate: string; propertyId: string; customerId: string },
   skipByMonth: Map<string, Set<string>>,
 ): boolean {
   const ym = monthBucketForPayWeek(s.payWeekEndDate);
   if (!ym) return false;
   const set = skipByMonth.get(ym);
-  return set ? set.has(s.propertyId) : false;
+  return set ? set.has(snapKey(s.propertyId, s.customerId)) : false;
 }
 
 // Returns the earliest payWeekEndDate ever recorded in the
@@ -308,9 +323,10 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
   // per-month split, a property whose lease only became
   // customer-responsible last month would have its older recoveries
   // wrongly suppressed.
-  const skipByMonth = customerResponsiblePropertyIdsByMonth(
+  const skipByMonth = customerResponsibleSnapKeysByMonth(
     leasesAll as LeaseRow[],
     monthsTouched,
+    propertyCustomerById,
   );
   const recoveredByWeek = new Map<string, number>();
   for (const s of scopedSnaps) {
@@ -415,9 +431,10 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
   );
   const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
-  const skipByMonth = customerResponsiblePropertyIdsByMonth(
+  const skipByMonth = customerResponsibleSnapKeysByMonth(
     leasesAll as LeaseRow[],
     buckets,
+    propertyCustomerById,
   );
   const recoveredByMonth = new Map<string, number>();
   for (const s of scopedSnaps) {
@@ -511,9 +528,10 @@ router.get("/finance/by-customer", async (req, res): Promise<void> => {
   if (mostRecentCandidate) {
     monthsTouched.add(monthBucketForPayWeek(mostRecentCandidate));
   }
-  const skipByMonth = customerResponsiblePropertyIdsByMonth(
+  const skipByMonth = customerResponsibleSnapKeysByMonth(
     leasesAll as LeaseRow[],
     monthsTouched,
+    propertyCustomerById,
   );
   const filteredSnaps = scopedSnaps.filter((s) => !isSnapBlocked(s, skipByMonth));
 

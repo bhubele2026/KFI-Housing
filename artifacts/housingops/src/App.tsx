@@ -21,6 +21,7 @@ import LeaseDetail from "@/pages/lease-detail";
 import SnoozedLeaseAlerts from "@/pages/snoozed-lease-alerts";
 import Beds from "@/pages/beds";
 import Occupants from "@/pages/occupants";
+import OccupantDetail from "@/pages/occupant-detail";
 import Utilities from "@/pages/utilities";
 import Finance from "@/pages/finance";
 import InsuranceCertificates from "@/pages/insurance-certificates";
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/leases/:id" component={LeaseDetail} />
       <Route path="/beds" component={Beds} />
       <Route path="/occupants" component={Occupants} />
+      <Route path="/occupants/:id" component={OccupantDetail} />
       <Route path="/utilities" component={Utilities} />
       <Route path="/finance" component={Finance} />
       <Route path="/insurance" component={InsuranceCertificates} />

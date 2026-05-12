@@ -1821,7 +1821,7 @@ per-week snapshots written for `payWeekEndDate` (Task #597).
 export interface ListUnplacedPayrollResult {
   unmatched: UnplacedPayrollRow[];
   lowConfidenceMatches: LowConfidencePayrollMatch[];
-  importSummary: PayrollImportSummary;
+  importSummary?: PayrollImportSummary;
 }
 
 export interface DigestRecipient {

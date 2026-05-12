@@ -149,6 +149,29 @@ function propertiesWithUtilitiesInRent(
   return out;
 }
 
+// Properties whose active lease flags `customerResponsibleForRent`
+// for ANY month touched by the rollup window. Snapshots tied to these
+// properties are excluded from the recovered totals — the customer
+// pays the landlord directly so the housing deduction (if any
+// somehow shows up in payroll) is not part of KFI's recovery.
+// Without this skip-set the recovered side counts the deduction but
+// the rent side excludes the obligation, producing artificially
+// positive net values.
+function customerResponsiblePropertyIds(
+  leases: LeaseRow[],
+  monthsTouched: Iterable<string>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const ym of monthsTouched) {
+    for (const l of leases) {
+      if (!l.customerResponsibleForRent) continue;
+      if (!isLeaseActiveInMonth(l, ym)) continue;
+      out.add(l.propertyId);
+    }
+  }
+  return out;
+}
+
 function applyScopeToLeases(
   leases: LeaseRow[],
   scope: { customerId: string | null; propertyId: string | null },
@@ -225,16 +248,21 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
   );
   const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
+  const monthsTouched = new Set<string>();
+  for (const w of buckets) monthsTouched.add(monthBucketForPayWeek(w));
+
+  const skipRecoveryProps = customerResponsiblePropertyIds(
+    leasesAll as LeaseRow[],
+    monthsTouched,
+  );
   const recoveredByWeek = new Map<string, number>();
   for (const s of scopedSnaps) {
+    if (skipRecoveryProps.has(s.propertyId)) continue;
     recoveredByWeek.set(
       s.payWeekEndDate,
       (recoveredByWeek.get(s.payWeekEndDate) ?? 0) + s.weeklyAmount,
     );
   }
-
-  const monthsTouched = new Set<string>();
-  for (const w of buckets) monthsTouched.add(monthBucketForPayWeek(w));
 
   const weeklyRentByMonth = new Map<string, number>();
   const weeklyUtilByMonth = new Map<string, number>();
@@ -319,8 +347,13 @@ router.get("/finance/monthly", async (req, res): Promise<void> => {
   );
   const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
+  const skipRecoveryProps = customerResponsiblePropertyIds(
+    leasesAll as LeaseRow[],
+    buckets,
+  );
   const recoveredByMonth = new Map<string, number>();
   for (const s of scopedSnaps) {
+    if (skipRecoveryProps.has(s.propertyId)) continue;
     const ym = monthBucketForPayWeek(s.payWeekEndDate);
     if (!ym) continue;
     recoveredByMonth.set(ym, (recoveredByMonth.get(ym) ?? 0) + s.weeklyAmount);
@@ -388,13 +421,40 @@ router.get("/finance/by-customer", async (req, res): Promise<void> => {
   );
   const scopedSnaps = applyScopeToSnaps(snaps, scope);
 
-  let mostRecentWeek = "";
-  for (const s of scopedSnaps) {
-    if (s.payWeekEndDate > mostRecentWeek) mostRecentWeek = s.payWeekEndDate;
-  }
-
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  // Snapshots tied to customerResponsibleForRent properties never
+  // count toward "recovered" — see comment on
+  // customerResponsiblePropertyIds() above. The skip-set must cover
+  // EVERY month this endpoint will ever attribute a recovery to, not
+  // just the current calendar month, otherwise a customer-responsible
+  // property whose `mostRecentWeek` falls in a prior month would still
+  // contribute to the recovered total. We compute the candidate
+  // `mostRecentWeek` from the unfiltered scopedSnaps first so we can
+  // include its month bucket in the skip-set BEFORE filtering.
+  let mostRecentCandidate = "";
+  for (const s of scopedSnaps) {
+    if (s.payWeekEndDate > mostRecentCandidate) {
+      mostRecentCandidate = s.payWeekEndDate;
+    }
+  }
+  const monthsTouched = new Set<string>([currentMonth]);
+  if (mostRecentCandidate) {
+    monthsTouched.add(monthBucketForPayWeek(mostRecentCandidate));
+  }
+  const skipRecoveryProps = customerResponsiblePropertyIds(
+    leasesAll as LeaseRow[],
+    monthsTouched,
+  );
+  const filteredSnaps = scopedSnaps.filter(
+    (s) => !skipRecoveryProps.has(s.propertyId),
+  );
+
+  let mostRecentWeek = "";
+  for (const s of filteredSnaps) {
+    if (s.payWeekEndDate > mostRecentWeek) mostRecentWeek = s.payWeekEndDate;
+  }
 
   const scopedOccupants = occupants.filter((o) => {
     if (!o.propertyId) return false;
@@ -428,7 +488,7 @@ router.get("/finance/by-customer", async (req, res): Promise<void> => {
 
   const recentWeekByCustomer = new Map<string, number>();
   const mtdByCustomer = new Map<string, number>();
-  for (const s of scopedSnaps) {
+  for (const s of filteredSnaps) {
     if (!s.customerId) continue;
     if (s.payWeekEndDate === mostRecentWeek) {
       recentWeekByCustomer.set(

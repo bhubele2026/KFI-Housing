@@ -114,6 +114,9 @@ describe("GET /payroll/unplaced", () => {
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
     expect(res.status).toBe(200);
     const body = await res.json();
+    // Background dashboard polls (no payWeekEndDate) get the legacy
+    // shape — `importSummary` is only emitted when the operator
+    // triggers a Saturday-stamped re-import (Task #597).
     expect(body).toEqual({
       unmatched: [
         { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25, suggestions: [] },

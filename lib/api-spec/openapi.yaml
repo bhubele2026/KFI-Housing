@@ -3061,7 +3061,7 @@ components:
 
     ListUnplacedPayrollResult:
       type: object
-      required: [unmatched, lowConfidenceMatches, importSummary]
+      required: [unmatched, lowConfidenceMatches]
       description: |
         Response payload for `GET /payroll/unplaced`. Splits the
         seeder's output into rows that need a fresh placement

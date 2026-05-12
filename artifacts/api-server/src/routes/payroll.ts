@@ -50,22 +50,25 @@ router.get("/payroll/unplaced", async (req, res): Promise<void> => {
     reclaimOccupantIds,
     payWeekEndDate,
   });
+  // Per-import summary for the dashboard toast (Task #597). Only
+  // included when a Saturday pay-week was passed AND the seeder
+  // actually wrote snapshots — that way background dashboard polls
+  // (which omit payWeekEndDate) keep returning the legacy
+  // {unmatched, lowConfidenceMatches} shape and don't surface a
+  // misleading "Imported 0 deductions" toast.
+  const importSummary =
+    payWeekEndDate && (result.snapshotsWritten ?? 0) >= 0 && result.payWeekEndDate
+      ? {
+          payWeekEndDate: result.payWeekEndDate,
+          deductionsImported: result.snapshotsWritten ?? 0,
+          totalAmount: result.snapshotsTotalAmount ?? 0,
+        }
+      : undefined;
   res.json(
     ListUnplacedPayrollResponse.parse({
       unmatched: result.unmatched,
       lowConfidenceMatches: result.lowConfidenceMatches,
-      // Per-import summary for the dashboard toast (Task #597). When
-      // the operator triggers a re-import for a specific Saturday
-      // pay-week the seeder writes per-week snapshots; we echo back
-      // the count + total so the UI can render
-      // "Imported X deductions … total $Y" without a second call.
-      // For dashboard polls (no payWeekEndDate) these stay zero / null
-      // and the UI suppresses the toast.
-      importSummary: {
-        payWeekEndDate: result.payWeekEndDate,
-        deductionsImported: result.snapshotsWritten,
-        totalAmount: result.snapshotsTotalAmount,
-      },
+      ...(importSummary ? { importSummary } : {}),
     }),
   );
 });

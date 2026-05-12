@@ -6,13 +6,19 @@
 // what "rent paid" or "recovered" means and so the wire payload stays
 // small (one row per pay-week / month / customer).
 //
-// Each tab supports CSV export of the displayed rows and surfaces a
-// small recovered-vs-rent line chart on top so trends are visible at
-// a glance. The optional `customerId` / `propertyId` props are passed
-// through to the endpoints so the Finance page filter chips control
-// every tab consistently.
+// Each tab supports CSV export of the displayed rows (via the shared
+// `toCsv` / `downloadCsv` helpers in `@/lib/csv` so we get the same
+// BOM / quoting / formula-injection guarantees as every other CSV
+// export in the app), surfaces a small recovered-vs-rent line chart
+// on top, and offers click-to-sort headers backed by a single
+// `sortRows()` helper. The optional `customerId` / `propertyId`
+// props are passed through to the endpoints so the Finance page
+// filter chips control every tab consistently. The By-Customer table
+// is also click-through: clicking a row promotes that customer into
+// the page-level `customerFilter` so the operator can drill into a
+// single tenant without reaching for the chip.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   useListFinanceWeekly,
@@ -29,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -46,10 +52,17 @@ import {
   formatMonthBucketLabel,
   formatPayWeekRange,
 } from "@/lib/finance-pay-weeks";
+import { downloadCsv, timestampedCsvName, toCsv } from "@/lib/csv";
 
 type SharedProps = {
   customerFilter: string;
   propertyFilter?: string;
+  /**
+   * Optional click-through callback used by the By-Customer tab to
+   * promote a row into the page-level customer chip. Wired by the
+   * Finance page; left undefined elsewhere (the row stays inert).
+   */
+  onSelectCustomer?: (customerId: string) => void;
 };
 
 type WeeklyRow = {
@@ -82,29 +95,28 @@ type ByCustomerRow = {
   net: number;
 };
 
+type SortDir = "asc" | "desc";
+type SortState<K extends string> = { key: K; dir: SortDir };
+
+function sortRows<Row, K extends string>(
+  rows: readonly Row[],
+  state: SortState<K>,
+  pickers: Record<K, (r: Row) => string | number>,
+): Row[] {
+  const pick = pickers[state.key];
+  const factor = state.dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = pick(a);
+    const vb = pick(b);
+    if (typeof va === "number" && typeof vb === "number") {
+      return (va - vb) * factor;
+    }
+    return String(va).localeCompare(String(vb)) * factor;
+  });
+}
+
 function deltaCellClass(n: number): string {
   return n >= 0 ? "text-green-600" : "text-destructive";
-}
-
-function csvEscape(v: string | number): string {
-  const s = String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
-
-function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
-  const body = [header, ...rows]
-    .map((r) => r.map(csvEscape).join(","))
-    .join("\n");
-  const blob = new Blob([body], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 function scopeParams(p: SharedProps): {
@@ -121,7 +133,46 @@ function scopeParams(p: SharedProps): {
   return out;
 }
 
+function SortHeader<K extends string>({
+  label,
+  sortKey,
+  state,
+  setState,
+  align = "left",
+  testId,
+}: {
+  label: string;
+  sortKey: K;
+  state: SortState<K>;
+  setState: (s: SortState<K>) => void;
+  align?: "left" | "right";
+  testId?: string;
+}) {
+  const active = state.key === sortKey;
+  const Icon = active ? (state.dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={() =>
+        setState({
+          key: sortKey,
+          dir: active && state.dir === "asc" ? "desc" : "asc",
+        })
+      }
+      className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${
+        align === "right" ? "ml-auto flex-row-reverse" : ""
+      } ${active ? "text-foreground" : ""}`}
+    >
+      <Icon className="h-3 w-3 opacity-60" />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 // ── Weekly tab ─────────────────────────────────────────────────────
+type WeeklyKey = "payWeekEndDate" | "recovered" | "rentPaid" | "utilities" | "net";
+
 export function FinancePayrollWeeklyTab(props: SharedProps) {
   const { t } = useTranslation();
   const { data } = useListFinanceWeekly({ weeks: 13, ...scopeParams(props) });
@@ -129,15 +180,31 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
     () => (data as WeeklyRow[] | undefined) ?? [],
     [data],
   );
-  const display = useMemo(() => [...rows].reverse(), [rows]);
-  // The chart reads in chronological order so the line moves left→right.
+  const [sort, setSort] = useState<SortState<WeeklyKey>>({
+    key: "payWeekEndDate",
+    dir: "desc",
+  });
+  const display = useMemo(
+    () =>
+      sortRows(rows, sort, {
+        payWeekEndDate: (r) => r.payWeekEndDate,
+        recovered: (r) => r.recovered,
+        rentPaid: (r) => r.rentPaid,
+        utilities: (r) => r.utilities,
+        net: (r) => r.net,
+      }),
+    [rows, sort],
+  );
+  // Chart always reads chronological order so the line moves left→right.
   const chartData = useMemo(
     () =>
-      rows.map((r) => ({
-        label: formatPayWeekRange(r.payWeekEndDate),
-        recovered: r.recovered,
-        rentPaid: r.rentPaid,
-      })),
+      [...rows]
+        .sort((a, b) => a.payWeekEndDate.localeCompare(b.payWeekEndDate))
+        .map((r) => ({
+          label: formatPayWeekRange(r.payWeekEndDate),
+          recovered: r.recovered,
+          rentPaid: r.rentPaid,
+        })),
     [rows],
   );
 
@@ -152,17 +219,14 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
   );
 
   const handleExport = () => {
-    downloadCsv(
-      "finance-weekly.csv",
-      ["pay_week_end_date", "recovered", "rent_paid", "utilities", "net"],
-      display.map((r) => [
-        r.payWeekEndDate,
-        r.recovered,
-        r.rentPaid,
-        r.utilities,
-        r.net,
-      ]),
-    );
+    const csv = toCsv(display, [
+      { header: "pay_week_end_date", value: (r) => r.payWeekEndDate },
+      { header: "recovered", value: (r) => r.recovered },
+      { header: "rent_paid", value: (r) => r.rentPaid },
+      { header: "utilities", value: (r) => r.utilities },
+      { header: "net", value: (r) => r.net },
+    ]);
+    downloadCsv(timestampedCsvName("finance-weekly"), csv);
   };
 
   return (
@@ -230,18 +294,50 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("pages.finance.payroll.payWeek")}</TableHead>
-                <TableHead className="text-right">
-                  {t("pages.finance.payroll.recovered")}
+                <TableHead>
+                  <SortHeader
+                    label={t("pages.finance.payroll.payWeek")}
+                    sortKey="payWeekEndDate"
+                    state={sort}
+                    setState={setSort}
+                    testId="sort-finance-weekly-payweek"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.rentPaid")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.recovered")}
+                    sortKey="recovered"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.utilities")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.rentPaid")}
+                    sortKey="rentPaid"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.net")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.utilities")}
+                    sortKey="utilities"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortHeader
+                    label={t("pages.finance.payroll.net")}
+                    sortKey="net"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -294,6 +390,14 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
 }
 
 // ── Monthly tab ────────────────────────────────────────────────────
+type MonthlyKey =
+  | "month"
+  | "recovered"
+  | "rentPaid"
+  | "utilities"
+  | "otherCosts"
+  | "net";
+
 export function FinancePayrollMonthlyTab(props: SharedProps) {
   const { t } = useTranslation();
   const { data } = useListFinanceMonthly({ months: 12, ...scopeParams(props) });
@@ -301,14 +405,31 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
     () => (data as MonthlyRow[] | undefined) ?? [],
     [data],
   );
-  const display = useMemo(() => [...rows].reverse(), [rows]);
+  const [sort, setSort] = useState<SortState<MonthlyKey>>({
+    key: "month",
+    dir: "desc",
+  });
+  const display = useMemo(
+    () =>
+      sortRows(rows, sort, {
+        month: (r) => r.month,
+        recovered: (r) => r.recovered,
+        rentPaid: (r) => r.rentPaid,
+        utilities: (r) => r.utilities,
+        otherCosts: (r) => r.otherCosts,
+        net: (r) => r.net,
+      }),
+    [rows, sort],
+  );
   const chartData = useMemo(
     () =>
-      rows.map((r) => ({
-        label: formatMonthBucketLabel(r.month),
-        recovered: r.recovered,
-        rentPaid: r.rentPaid,
-      })),
+      [...rows]
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .map((r) => ({
+          label: formatMonthBucketLabel(r.month),
+          recovered: r.recovered,
+          rentPaid: r.rentPaid,
+        })),
     [rows],
   );
 
@@ -324,25 +445,15 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
   );
 
   const handleExport = () => {
-    downloadCsv(
-      "finance-monthly.csv",
-      [
-        "month",
-        "recovered",
-        "rent_paid",
-        "utilities",
-        "other_costs",
-        "net",
-      ],
-      display.map((r) => [
-        r.month,
-        r.recovered,
-        r.rentPaid,
-        r.utilities,
-        r.otherCosts,
-        r.net,
-      ]),
-    );
+    const csv = toCsv(display, [
+      { header: "month", value: (r) => r.month },
+      { header: "recovered", value: (r) => r.recovered },
+      { header: "rent_paid", value: (r) => r.rentPaid },
+      { header: "utilities", value: (r) => r.utilities },
+      { header: "other_costs", value: (r) => r.otherCosts },
+      { header: "net", value: (r) => r.net },
+    ]);
+    downloadCsv(timestampedCsvName("finance-monthly"), csv);
   };
 
   return (
@@ -410,21 +521,59 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("pages.finance.payroll.month")}</TableHead>
-                <TableHead className="text-right">
-                  {t("pages.finance.payroll.recovered")}
+                <TableHead>
+                  <SortHeader
+                    label={t("pages.finance.payroll.month")}
+                    sortKey="month"
+                    state={sort}
+                    setState={setSort}
+                    testId="sort-finance-monthly-month"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.rentPaid")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.recovered")}
+                    sortKey="recovered"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.utilities")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.rentPaid")}
+                    sortKey="rentPaid"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.otherCosts")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.utilities")}
+                    sortKey="utilities"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.net")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.otherCosts")}
+                    sortKey="otherCosts"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortHeader
+                    label={t("pages.finance.payroll.net")}
+                    sortKey="net"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -483,6 +632,14 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
 }
 
 // ── By Customer tab ────────────────────────────────────────────────
+type ByCustomerKey =
+  | "customerName"
+  | "activeOccupants"
+  | "monthlyRentKfiPays"
+  | "mostRecentWeekRecovered"
+  | "monthToDateRecovered"
+  | "net";
+
 export function FinancePayrollByCustomerTab(props: SharedProps) {
   const { t } = useTranslation();
   const { data } = useListFinanceByCustomer(scopeParams(props));
@@ -491,7 +648,23 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
     [data],
   );
 
-  const rows = useMemo(() => result?.rows ?? [], [result]);
+  const rawRows = useMemo(() => result?.rows ?? [], [result]);
+  const [sort, setSort] = useState<SortState<ByCustomerKey>>({
+    key: "customerName",
+    dir: "asc",
+  });
+  const rows = useMemo(
+    () =>
+      sortRows(rawRows, sort, {
+        customerName: (r) => r.customerName,
+        activeOccupants: (r) => r.activeOccupants,
+        monthlyRentKfiPays: (r) => r.monthlyRentKfiPays,
+        mostRecentWeekRecovered: (r) => r.mostRecentWeekRecovered,
+        monthToDateRecovered: (r) => r.monthToDateRecovered,
+        net: (r) => r.net,
+      }),
+    [rawRows, sort],
+  );
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -512,27 +685,22 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
   );
 
   const handleExport = () => {
-    downloadCsv(
-      "finance-by-customer.csv",
-      [
-        "customer_id",
-        "customer_name",
-        "active_occupants",
-        "monthly_rent_kfi_pays",
-        "most_recent_week_recovered",
-        "month_to_date_recovered",
-        "net",
-      ],
-      rows.map((r) => [
-        r.customerId,
-        r.customerName,
-        r.activeOccupants,
-        r.monthlyRentKfiPays,
-        r.mostRecentWeekRecovered,
-        r.monthToDateRecovered,
-        r.net,
-      ]),
-    );
+    const csv = toCsv(rows, [
+      { header: "customer_id", value: (r) => r.customerId },
+      { header: "customer_name", value: (r) => r.customerName },
+      { header: "active_occupants", value: (r) => r.activeOccupants },
+      { header: "monthly_rent_kfi_pays", value: (r) => r.monthlyRentKfiPays },
+      {
+        header: "most_recent_week_recovered",
+        value: (r) => r.mostRecentWeekRecovered,
+      },
+      {
+        header: "month_to_date_recovered",
+        value: (r) => r.monthToDateRecovered,
+      },
+      { header: "net", value: (r) => r.net },
+    ]);
+    downloadCsv(timestampedCsvName("finance-by-customer"), csv);
   };
 
   const subtitle = result
@@ -541,6 +709,8 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
         month: formatMonthBucketLabel(result.currentMonth),
       })
     : "";
+
+  const onSelect = props.onSelectCustomer;
 
   return (
     <Card>
@@ -576,21 +746,58 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("pages.finance.payroll.customer")}</TableHead>
-                <TableHead className="text-right">
-                  {t("pages.finance.payroll.activeOccupants")}
+                <TableHead>
+                  <SortHeader
+                    label={t("pages.finance.payroll.customer")}
+                    sortKey="customerName"
+                    state={sort}
+                    setState={setSort}
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.monthlyRentKfiPays")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.activeOccupants")}
+                    sortKey="activeOccupants"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.mostRecentWeek")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.monthlyRentKfiPays")}
+                    sortKey="monthlyRentKfiPays"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.monthToDate")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.mostRecentWeek")}
+                    sortKey="mostRecentWeekRecovered"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
                 <TableHead className="text-right">
-                  {t("pages.finance.payroll.net")}
+                  <SortHeader
+                    label={t("pages.finance.payroll.monthToDate")}
+                    sortKey="monthToDateRecovered"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortHeader
+                    label={t("pages.finance.payroll.net")}
+                    sortKey="net"
+                    state={sort}
+                    setState={setSort}
+                    align="right"
+                  />
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -599,6 +806,20 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
                 <TableRow
                   key={r.customerId}
                   data-testid={`row-finance-by-customer-${r.customerId}`}
+                  onClick={onSelect ? () => onSelect(r.customerId) : undefined}
+                  className={onSelect ? "cursor-pointer hover:bg-muted/50" : ""}
+                  role={onSelect ? "button" : undefined}
+                  tabIndex={onSelect ? 0 : undefined}
+                  onKeyDown={
+                    onSelect
+                      ? (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelect(r.customerId);
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   <TableCell>{r.customerName}</TableCell>
                   <TableCell className="text-right tabular-nums">

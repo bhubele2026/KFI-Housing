@@ -3829,6 +3829,7 @@ export const ListUnplacedPayrollResponse = zod
           .number()
           .min(listUnplacedPayrollResponseImportSummaryTotalAmountMin),
       })
+      .optional()
       .describe(
         'Per-import summary returned by `GET \/payroll\/unplaced` when the\noperator passes a `payWeekEndDate` (Saturday end-date). The\ndashboard renders \"Imported X deductions … total $Y\" from\nthese fields. For dashboard polls (no `payWeekEndDate`)\n`deductionsImported` and `totalAmount` are 0 and\n`payWeekEndDate` is null — the UI suppresses the toast.\n',
       ),

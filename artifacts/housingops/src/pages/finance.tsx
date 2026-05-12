@@ -623,6 +623,7 @@ export default function Finance() {
             <FinancePayrollByCustomerTab
               customerFilter={customerFilter}
               propertyFilter={propertyFilter}
+              onSelectCustomer={updateCustomerFilter}
             />
           </TabsContent>
 

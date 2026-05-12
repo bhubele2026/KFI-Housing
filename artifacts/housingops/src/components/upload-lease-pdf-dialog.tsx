@@ -30,6 +30,7 @@ import {
   RotateCcw,
   Sparkles,
   Building2,
+  Users,
   Upload,
   X,
   XCircle,
@@ -67,8 +68,6 @@ interface PropertyDraft {
   city: string;
   state: string;
   zip: string;
-  customerId: string;
-  newCustomerName: string;
 }
 
 interface LeaseDraft {
@@ -105,6 +104,16 @@ interface QueueItem {
   selectedPropertyId: string;
   propertyDraft: PropertyDraft | null;
   leaseDraft: LeaseDraft | null;
+  /**
+   * Customer the operator confirmed in the review form. Always editable —
+   * not just when creating a new property — so the operator can re-assign
+   * an existing property's customer at the same time they import the lease,
+   * or pick the right customer when the auto-matched property happens to
+   * be wrong. Empty string = "make me pick"; NEW_CUSTOMER_VALUE = inline
+   * create.
+   */
+  customerId: string;
+  newCustomerName: string;
 }
 
 function emptyPropertyDraft(extracted: ExtractedLeaseFromPdf): PropertyDraft {
@@ -114,8 +123,6 @@ function emptyPropertyDraft(extracted: ExtractedLeaseFromPdf): PropertyDraft {
     city: extracted.city ?? "",
     state: extracted.state ?? "",
     zip: extracted.zip ?? "",
-    customerId: "",
-    newCustomerName: "",
   };
 }
 
@@ -219,7 +226,7 @@ export interface UploadLeasePdfDialogProps {
  * The PDF itself is never stored — only the extracted fields land in our DB.
  */
 export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFailed }: UploadLeasePdfDialogProps) {
-  const { properties, customers, addProperty, addCustomer, addLease } = useData();
+  const { properties, customers, addProperty, addCustomer, addLease, updateProperty } = useData();
   const { toast } = useToast();
 
   const [open, setOpen] = useState(false);
@@ -275,6 +282,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         updateQueueItem(item.id, { status: "uploading" });
         try {
           const result = await importLeasePdf(item.file);
+          // Pre-fill the customer slot from the auto-matched property's
+          // current customer, if any — operators can still override it
+          // in the review form (e.g. when the matched property happens
+          // to belong to the wrong customer in the PDF).
+          const matchedPropertyCustomerId = result.topMatch
+            ? properties.find((p) => p.id === result.topMatch!.propertyId)?.customerId ?? ""
+            : "";
           updateQueueItem(item.id, {
             status: "needs-review",
             importResult: result,
@@ -283,6 +297,8 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
             // an explicit choice in the review form (existing OR create new).
             selectedPropertyId: result.topMatch ? result.topMatch.propertyId : "",
             propertyDraft: null,
+            customerId: matchedPropertyCustomerId,
+            newCustomerName: "",
           });
           recordLeaseUpload({
             id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -354,6 +370,8 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         selectedPropertyId: "",
         propertyDraft: null,
         leaseDraft: null,
+        customerId: "",
+        newCustomerName: "",
       });
     }
 
@@ -470,13 +488,31 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
       updateQueueItem(reviewingItem.id, {
         selectedPropertyId: value,
         propertyDraft: draft,
+        // New properties always need an explicit customer pick from
+        // the operator — clear any auto-fill from the previous match.
+        customerId: reviewingItem.customerId === NEW_CUSTOMER_VALUE
+          ? NEW_CUSTOMER_VALUE
+          : "",
       });
     } else {
+      // Snap the customer field to the picked property's current customer
+      // so the form always shows the truth on screen. Operators can then
+      // change it (which also re-assigns the property on save).
+      const picked = properties.find((p) => p.id === value);
       updateQueueItem(reviewingItem.id, {
         selectedPropertyId: value,
         propertyDraft: null,
+        customerId: picked?.customerId ?? "",
+        newCustomerName: "",
       });
     }
+  };
+
+  const updateReviewingCustomer = (
+    patch: Partial<Pick<QueueItem, "customerId" | "newCustomerName">>,
+  ) => {
+    if (!reviewingItem) return;
+    updateQueueItem(reviewingItem.id, patch);
   };
 
   const updateReviewingPropertyDraft = (patch: Partial<PropertyDraft>) => {
@@ -497,12 +533,20 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     if (!reviewingItem) return false;
     const lease = reviewingItem.leaseDraft;
     if (!lease || !lease.startDate || !lease.endDate || !lease.monthlyRent) return false;
+    // Customer is always required now — the operator must confirm who
+    // owns this lease before we save (whether the property is new or
+    // already in the portfolio).
+    if (!reviewingItem.customerId) return false;
+    if (
+      reviewingItem.customerId === NEW_CUSTOMER_VALUE &&
+      !reviewingItem.newCustomerName.trim()
+    ) {
+      return false;
+    }
     if (reviewingItem.selectedPropertyId === NEW_PROPERTY_VALUE) {
       const p = reviewingItem.propertyDraft;
       if (!p) return false;
       if (!p.name.trim()) return false;
-      if (!p.customerId) return false;
-      if (p.customerId === NEW_CUSTOMER_VALUE && !p.newCustomerName.trim()) return false;
       return true;
     }
     return !!reviewingItem.selectedPropertyId;
@@ -514,34 +558,39 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     let propertyId = reviewingItem.selectedPropertyId;
     setSaving(true);
     try {
+      // Resolve the customer up-front. This block runs for BOTH paths
+      // (new property and existing property) so the operator's customer
+      // pick — including inline "+ Create new customer" — is always
+      // honoured, not just when they're also creating a new property.
+      let customerId = reviewingItem.customerId;
+      if (customerId === NEW_CUSTOMER_VALUE) {
+        customerId = `cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        try {
+          await addCustomer({
+            id: customerId,
+            name: reviewingItem.newCustomerName.trim(),
+            contactName: "",
+            email: "",
+            phone: "",
+            notes: "Created from lease PDF import.",
+            state: "",
+            customShifts: [],
+          });
+        } catch {
+          toast({
+            title: "Couldn't create customer",
+            description: "The new customer couldn't be saved. Lease was not created.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
       if (
         reviewingItem.selectedPropertyId === NEW_PROPERTY_VALUE &&
         reviewingItem.propertyDraft
       ) {
         const draft = reviewingItem.propertyDraft;
-        let customerId = draft.customerId;
-        if (customerId === NEW_CUSTOMER_VALUE) {
-          customerId = `cust-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-          try {
-            await addCustomer({
-              id: customerId,
-              name: draft.newCustomerName.trim(),
-              contactName: "",
-              email: "",
-              phone: "",
-              notes: "Created from lease PDF import.",
-              state: "",
-            });
-          } catch {
-            toast({
-              title: "Couldn't create customer",
-              description: "The new customer couldn't be saved. Lease was not created.",
-              variant: "destructive",
-            });
-            return;
-          }
-        }
-
         const newProperty: Property = {
           id: `prop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           customerId,
@@ -578,6 +627,25 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
             variant: "destructive",
           });
           return;
+        }
+      } else {
+        // Existing property — re-assign the customer if the operator
+        // picked a different one (or just confirmed the auto-created
+        // new customer). Keeps the property's `customerId` consistent
+        // with the lease the operator just confirmed.
+        const existing = properties.find((p) => p.id === propertyId);
+        if (existing && existing.customerId !== customerId) {
+          try {
+            await updateProperty(existing.id, { customerId });
+          } catch {
+            toast({
+              title: "Couldn't update property's customer",
+              description:
+                "The lease wasn't created. Try again, or change the customer from the property page.",
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
 
@@ -910,40 +978,76 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pdf-prop-customer">Customer *</Label>
-                  <Select
-                    value={reviewingItem.propertyDraft.customerId}
-                    onValueChange={(v) => updateReviewingPropertyDraft({ customerId: v })}
-                  >
-                    <SelectTrigger id="pdf-prop-customer" data-testid="select-pdf-property-customer">
-                      <SelectValue placeholder="Choose a customer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value={NEW_CUSTOMER_VALUE}>+ Create new customer…</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {reviewingItem.propertyDraft.customerId === NEW_CUSTOMER_VALUE && (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="pdf-new-customer-name">New customer name *</Label>
-                    <Input
-                      id="pdf-new-customer-name"
-                      value={reviewingItem.propertyDraft.newCustomerName}
-                      onChange={(e) =>
-                        updateReviewingPropertyDraft({ newCustomerName: e.target.value })
-                      }
-                      data-testid="input-pdf-new-customer-name"
-                    />
-                  </div>
-                )}
               </div>
             )}
+
+            {/* ── Customer section (always visible) ────────────────────
+                Surfaces the customer pick for every lease — not just
+                new properties — so operators can re-assign an existing
+                property's customer at the same time they import the
+                lease, or correct an auto-matched property that belongs
+                to the wrong customer in the PDF. */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="pdf-lease-customer"
+                className="text-sm font-semibold flex items-center gap-1.5"
+              >
+                <Users className="h-4 w-4" />
+                Customer *
+              </Label>
+              <Select
+                value={reviewingItem.customerId}
+                onValueChange={(v) => updateReviewingCustomer({ customerId: v })}
+              >
+                <SelectTrigger id="pdf-lease-customer" data-testid="select-pdf-lease-customer">
+                  <SelectValue placeholder="Choose a customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NEW_CUSTOMER_VALUE}>+ Create new customer…</SelectItem>
+                </SelectContent>
+              </Select>
+              {(() => {
+                if (
+                  reviewingItem.selectedPropertyId &&
+                  reviewingItem.selectedPropertyId !== NEW_PROPERTY_VALUE &&
+                  reviewingItem.customerId &&
+                  reviewingItem.customerId !== NEW_CUSTOMER_VALUE
+                ) {
+                  const picked = properties.find(
+                    (p) => p.id === reviewingItem.selectedPropertyId,
+                  );
+                  if (picked && picked.customerId !== reviewingItem.customerId) {
+                    return (
+                      <p
+                        className="text-xs text-amber-600 dark:text-amber-400"
+                        data-testid="text-pdf-customer-reassign"
+                      >
+                        Saving will re-assign “{picked.name}” to this customer.
+                      </p>
+                    );
+                  }
+                }
+                return null;
+              })()}
+              {reviewingItem.customerId === NEW_CUSTOMER_VALUE && (
+                <div className="space-y-1.5 pt-1">
+                  <Label htmlFor="pdf-new-customer-name">New customer name *</Label>
+                  <Input
+                    id="pdf-new-customer-name"
+                    value={reviewingItem.newCustomerName}
+                    onChange={(e) =>
+                      updateReviewingCustomer({ newCustomerName: e.target.value })
+                    }
+                    data-testid="input-pdf-new-customer-name"
+                  />
+                </div>
+              )}
+            </div>
 
             <Separator />
 

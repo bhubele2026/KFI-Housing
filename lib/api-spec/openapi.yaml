@@ -1657,6 +1657,13 @@ components:
             shift…" UI. The standard "Days" / "Nights" / "Overnights"
             options are always available regardless of this list.
             Optional + defaulted to `[]` so older payloads keep parsing.
+        isInactive:
+          type: boolean
+          description: |
+            Operator-toggled flag that moves the customer into the
+            collapsible "No housing or inactive" bucket on the Customers
+            page. Optional + defaulted to `false` so older payloads keep
+            parsing.
     CustomerUpdate:
       type: object
       properties:
@@ -1677,6 +1684,11 @@ components:
             See `Customer.customShifts`. Operators add titles by PATCHing
             the customer with the new title appended to the existing
             list.
+        isInactive:
+          type: boolean
+          description: |
+            See `Customer.isInactive`. Toggle the customer in/out of the
+            "No housing or inactive" bucket on the Customers page.
 
     Property:
       type: object

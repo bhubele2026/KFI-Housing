@@ -77,6 +77,11 @@ export const CustomerSchema = z.object({
   // time an occupant on one of this customer's properties needs a
   // shift set. Optional + defaulted so older payloads keep parsing.
   customShifts: z.array(z.string()).optional().default([]),
+  // Operator-toggled flag that moves the customer into a collapsible
+  // "No housing or inactive" bucket on the Customers page. Optional +
+  // defaulted to `false` so older payloads (and the seed fixtures)
+  // keep parsing without each customer having to set the field.
+  isInactive: z.boolean().optional().default(false),
 });
 export type Customer = z.infer<typeof CustomerSchema>;
 
@@ -1132,9 +1137,9 @@ export const ProjectedMoveInSchema = z.object({
 export type ProjectedMoveIn = z.infer<typeof ProjectedMoveInSchema>;
 
 export const MOCK_CUSTOMERS: Customer[] = [
-  { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX" },
-  { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX" },
-  { id: "c3", name: "Sunrise Logistics",  contactName: "Hannah Park",  email: "hannah.park@sunriselogistics.com",  phone: "713-555-1300", notes: "Seasonal warehouse staff. Flexible occupancy needed.",   state: "TX" },
+  { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX", customShifts: [], isInactive: false },
+  { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX", customShifts: [], isInactive: false },
+  { id: "c3", name: "Sunrise Logistics",  contactName: "Hannah Park",  email: "hannah.park@sunriselogistics.com",  phone: "713-555-1300", notes: "Seasonal warehouse staff. Flexible occupancy needed.",   state: "TX", customShifts: [], isInactive: false },
 ];
 
 export const MOCK_PROPERTIES: Property[] = [

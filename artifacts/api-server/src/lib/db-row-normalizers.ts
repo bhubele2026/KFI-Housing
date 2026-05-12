@@ -379,6 +379,19 @@ export function normalizeCustomerRow<
     recordFixup(fixups, "customShifts", row.customShifts, after);
     out.customShifts = after;
   }
+  if ("isInactive" in row) {
+    // Coerce truthy/falsy values (e.g. "true", 1, "1") into a strict
+    // boolean so older callers / loose payloads land on a clean column
+    // value. Anything genuinely missing stays missing.
+    const raw = row.isInactive;
+    const after =
+      raw === true ||
+      raw === "true" ||
+      raw === 1 ||
+      raw === "1";
+    recordFixup(fixups, "isInactive", raw, after);
+    out.isInactive = after;
+  }
   return out as T;
 }
 

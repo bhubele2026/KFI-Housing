@@ -32,4 +32,10 @@ options are always available regardless of this list.
 Optional + defaulted to `[]` so older payloads keep parsing.
  */
   customShifts?: string[];
+  /** Operator-toggled flag that moves the customer into the
+collapsible "No housing or inactive" bucket on the Customers
+page. Optional + defaulted to `false` so older payloads keep
+parsing.
+ */
+  isInactive?: boolean;
 }

@@ -146,6 +146,12 @@ export const ImportDataBody = zod.object({
         .describe(
           'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
         ),
+      isInactive: zod
+        .boolean()
+        .optional()
+        .describe(
+          'Operator-toggled flag that moves the customer into the\ncollapsible \"No housing or inactive\" bucket on the Customers\npage. Optional + defaulted to `false` so older payloads keep\nparsing.\n',
+        ),
     }),
   ),
   properties: zod.array(
@@ -651,6 +657,12 @@ export const ListCustomersResponseItem = zod.object({
     .describe(
       'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
     ),
+  isInactive: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Operator-toggled flag that moves the customer into the\ncollapsible \"No housing or inactive\" bucket on the Customers\npage. Optional + defaulted to `false` so older payloads keep\nparsing.\n',
+    ),
 });
 export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
 
@@ -687,6 +699,12 @@ export const CreateCustomerBody = zod.object({
     .describe(
       'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
     ),
+  isInactive: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Operator-toggled flag that moves the customer into the\ncollapsible \"No housing or inactive\" bucket on the Customers\npage. Optional + defaulted to `false` so older payloads keep\nparsing.\n',
+    ),
 });
 
 /**
@@ -716,6 +734,12 @@ export const UpdateCustomerBody = zod.object({
     .optional()
     .describe(
       "See `Customer.customShifts`. Operators add titles by PATCHing\nthe customer with the new title appended to the existing\nlist.\n",
+    ),
+  isInactive: zod
+    .boolean()
+    .optional()
+    .describe(
+      'See `Customer.isInactive`. Toggle the customer in\/out of the\n\"No housing or inactive\" bucket on the Customers page.\n',
     ),
 });
 
@@ -748,6 +772,12 @@ export const UpdateCustomerResponse = zod.object({
     .optional()
     .describe(
       'Per-customer reusable shift titles (Task #506). Free-form\nstrings the operator added through the bed-row \"Add custom\nshift…\" UI. The standard \"Days\" \/ \"Nights\" \/ \"Overnights\"\noptions are always available regardless of this list.\nOptional + defaulted to `[]` so older payloads keep parsing.\n',
+    ),
+  isInactive: zod
+    .boolean()
+    .optional()
+    .describe(
+      'Operator-toggled flag that moves the customer into the\ncollapsible \"No housing or inactive\" bucket on the Customers\npage. Optional + defaulted to `false` so older payloads keep\nparsing.\n',
     ),
 });
 

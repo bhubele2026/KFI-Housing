@@ -162,6 +162,8 @@ const LEGACY_CUSTOMER: Customer = {
   notes:
     "Auto-created during import of an older backup that did not include customers. " +
     "Re-assign these properties to your real customers when you're ready.",
+  customShifts: [],
+  isInactive: false,
 };
 
 /**

@@ -573,6 +573,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
             email: "",
             phone: "",
             notes: "Created from lease PDF import.",
+            isInactive: false,
             state: "",
             customShifts: [],
           });

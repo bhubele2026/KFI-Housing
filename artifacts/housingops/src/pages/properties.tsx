@@ -707,6 +707,8 @@ export default function Properties() {
             phone: newCustomer.phone.trim(),
             notes: "",
             state: "",
+            customShifts: [],
+            isInactive: false,
           });
         } catch {
           toast({

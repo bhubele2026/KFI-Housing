@@ -20,4 +20,8 @@ the customer with the new title appended to the existing
 list.
  */
   customShifts?: string[];
+  /** See `Customer.isInactive`. Toggle the customer in/out of the
+"No housing or inactive" bucket on the Customers page.
+ */
+  isInactive?: boolean;
 }

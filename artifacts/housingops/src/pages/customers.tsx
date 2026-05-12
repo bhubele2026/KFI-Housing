@@ -35,7 +35,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown, Download } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, Briefcase, Mail, Phone, ChevronRight, Trophy, TrendingUp, Building2, FileText, Zap, Eye, ArrowUp, ArrowDown, ArrowUpDown, Download, ChevronDown, Power, RotateCcw } from "lucide-react";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { EmptyStateRow } from "@/components/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -55,6 +55,8 @@ const EMPTY_DRAFT: Customer = {
   notes: "",
   state: "",
   noHousingReason: null,
+  customShifts: [],
+  isInactive: false,
 };
 
 const UNASSIGNED_STATE_KEY = "__unassigned__";
@@ -181,6 +183,10 @@ export default function Customers() {
     return () => clearTimeout(t);
   }, [customers, location]);
 
+  // Inactive bucket is collapsed by default — operators only need to
+  // peek at it occasionally to reactivate someone.
+  const [showInactive, setShowInactive] = useState(false);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     const list = q
@@ -221,14 +227,27 @@ export default function Customers() {
     return list;
   }, [customers, search, sortKey, sortDir, statsByCustomer]);
 
-  // Bucket the visible customers by US state so the table can render a
-  // section header per state. Buckets are ordered alphabetically by state
-  // code (A → Z) with the catch-all "Other / Unassigned" pinned to the
-  // bottom. Within each bucket we preserve the order produced by `filtered`
-  // so any active sort/search still applies.
+  // Split the visible customers into the main "active" list (grouped by
+  // state) and a separate "inactive / no housing" bucket rendered in a
+  // collapsible section below the main table. A customer is bucketed
+  // when the operator has explicitly toggled `isInactive`.
+  const activeFiltered = useMemo(
+    () => filtered.filter((c) => !c.isInactive),
+    [filtered],
+  );
+  const inactiveFiltered = useMemo(
+    () => filtered.filter((c) => c.isInactive),
+    [filtered],
+  );
+
+  // Bucket the visible active customers by US state so the table can
+  // render a section header per state. Buckets are ordered alphabetically
+  // by state code (A → Z) with the catch-all "Other / Unassigned" pinned
+  // to the bottom. Within each bucket we preserve the order produced by
+  // `activeFiltered` so any active sort/search still applies.
   const grouped = useMemo(() => {
     const buckets = new Map<string, Customer[]>();
-    for (const c of filtered) {
+    for (const c of activeFiltered) {
       const key = stateBucketKey(c.state);
       const list = buckets.get(key) ?? [];
       list.push(c);
@@ -241,7 +260,7 @@ export default function Customers() {
         return a.localeCompare(b);
       })
       .map(([state, rows]) => ({ state, rows }));
-  }, [filtered]);
+  }, [activeFiltered]);
 
   // Tri-state cycle: unsorted -> asc -> desc -> unsorted. Switching to a new
   // column always restarts at ascending, matching the Properties page UX.
@@ -339,6 +358,23 @@ export default function Customers() {
     toast({
       title: t("toasts.customersExportedTitle"),
       description: t("toasts.customersExportedDescription", { count: filtered.length }),
+    });
+  };
+
+  // Flip the operator-toggled `isInactive` flag. We send only the
+  // single field through `updateCustomer` (which already does a
+  // partial PATCH) so we don't accidentally overwrite an in-flight
+  // edit from elsewhere on the page.
+  const handleToggleInactive = (c: Customer) => {
+    const next = !c.isInactive;
+    updateCustomer(c.id, { isInactive: next });
+    toast({
+      title: next
+        ? "Marked as inactive / no housing"
+        : "Marked active",
+      description: next
+        ? `${c.name} moved to the “No housing or inactive” bucket below.`
+        : `${c.name} moved back to the active customers list.`,
     });
   };
 
@@ -465,8 +501,12 @@ export default function Customers() {
                   data-testid="input-search-customers"
                 />
               </div>
-              <span className="text-xs text-muted-foreground">
-                {t("pages.customers.countOfTotal", { shown: filtered.length, total: customers.length, count: customers.length })}
+              <span className="text-xs text-muted-foreground" data-testid="text-customers-count">
+                {`${activeFiltered.length} active of ${customers.length} customers${
+                  inactiveFiltered.length > 0
+                    ? ` (${inactiveFiltered.length} inactive)`
+                    : ""
+                }`}
               </span>
             </div>
 
@@ -773,6 +813,23 @@ export default function Customers() {
                             >
                               <Edit2 className="h-4 w-4" />
                             </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleToggleInactive(c)}
+                                  aria-label={`Mark ${c.name} as inactive`}
+                                  data-testid={`button-toggle-inactive-${c.id}`}
+                                >
+                                  <Power className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent side="left">
+                                Move {c.name} to the “No housing or inactive” bucket
+                              </TooltipContent>
+                            </Tooltip>
                             {count > 0 ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -819,6 +876,126 @@ export default function Customers() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Collapsible "No housing or inactive" bucket — sits below the
+            main customers list so the operator can park customers
+            without losing them. The bucket only renders when there's
+            something to show, and a click on the header expands a
+            simplified table with a one-click "Mark active" button to
+            send a customer back to the main list. */}
+        {inactiveFiltered.length > 0 && (
+          <Card data-testid="card-inactive-customers">
+            <CardContent className="p-0">
+              <button
+                type="button"
+                onClick={() => setShowInactive((s) => !s)}
+                className="w-full flex items-center justify-between gap-4 p-4 text-left hover:bg-muted/40 transition-colors"
+                aria-expanded={showInactive}
+                aria-controls="inactive-customers-panel"
+                data-testid="button-toggle-inactive-bucket"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-md bg-muted text-muted-foreground">
+                    <Power className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">No housing or inactive</p>
+                    <p className="text-xs text-muted-foreground">
+                      {inactiveFiltered.length}{" "}
+                      {inactiveFiltered.length === 1 ? "customer" : "customers"} hidden from the active list
+                    </p>
+                  </div>
+                </div>
+                <ChevronDown
+                  className={`h-4 w-4 text-muted-foreground transition-transform ${
+                    showInactive ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {showInactive && (
+                <div id="inactive-customers-panel" className="border-t">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>State</TableHead>
+                        <TableHead>Reason</TableHead>
+                        <TableHead className="w-32 text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {inactiveFiltered.map((c) => (
+                        <TableRow
+                          key={c.id}
+                          data-testid={`row-inactive-customer-${c.id}`}
+                        >
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 rounded-md bg-muted">
+                                <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}
+                                className="font-medium text-left hover:underline hover:text-primary transition-colors"
+                                data-testid={`link-inactive-customer-name-${c.id}`}
+                              >
+                                {c.name}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-4 text-sm text-muted-foreground">
+                            {(c.state ?? "").trim() || "—"}
+                          </td>
+                          <td className="p-4 text-sm">
+                            {c.noHousingReason ? (
+                              <Badge variant="outline" className="font-normal">
+                                {t(`common.noHousingReasons.${c.noHousingReason}`)}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">Marked inactive</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}
+                                aria-label={`View ${c.name}`}
+                                data-testid={`button-view-inactive-customer-${c.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 gap-1 px-2 text-xs"
+                                    onClick={() => handleToggleInactive(c)}
+                                    data-testid={`button-reactivate-customer-${c.id}`}
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                    Reactivate
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left">
+                                  Move {c.name} back to the active list
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </td>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </motion.div>
 
       {/* Add / Edit dialog */}

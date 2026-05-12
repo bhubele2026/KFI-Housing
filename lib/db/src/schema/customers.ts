@@ -1,4 +1,4 @@
-import { pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text } from "drizzle-orm/pg-core";
 
 export const customersTable = pgTable("customers", {
   id: text("id").primaryKey(),
@@ -25,6 +25,15 @@ export const customersTable = pgTable("customers", {
   // Empty array = no per-customer custom shifts; the standard
   // "Days" / "Nights" / "Overnights" options are always available.
   customShifts: text("custom_shifts").array().notNull().default([]),
+  // Operator-toggled flag that hides the customer from the main
+  // Customers list and tucks it into a collapsible "No housing or
+  // inactive" bucket below the active customers. Defaults to false so
+  // every existing customer stays visible until an operator marks
+  // them. Independent of `noHousingReason` — a customer can be marked
+  // inactive even while still owning properties, and a customer with
+  // a no-housing reason can stay active if the operator wants them
+  // visible at the top.
+  isInactive: boolean("is_inactive").notNull().default(false),
 });
 
 export type CustomerRow = typeof customersTable.$inferSelect;

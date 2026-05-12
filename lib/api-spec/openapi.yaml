@@ -705,6 +705,133 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PropertyViolation" }
+  /properties/{id}/projected-move-ins:
+    get:
+      operationId: listProjectedMoveIns
+      tags: [projected-move-ins]
+      summary: List projected (planned) move-ins for a property
+      description: |
+        Returns every active (not-yet-converted) projected move-in
+        recorded for the given property, sorted by
+        `projectedMoveInDate` ascending so the next upcoming
+        arrival is at the top. Once a projection has been
+        converted into a real occupant via the convert endpoint,
+        it is hidden from this list.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProjectedMoveIn" }
+    post:
+      operationId: createProjectedMoveIn
+      tags: [projected-move-ins]
+      summary: Add a projected move-in for a property
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectedMoveInCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectedMoveIn" }
+  /properties/{id}/projected-move-ins/{moveInId}:
+    patch:
+      operationId: updateProjectedMoveIn
+      tags: [projected-move-ins]
+      summary: Edit a projected move-in
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: moveInId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectedMoveInUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectedMoveIn" }
+    delete:
+      operationId: deleteProjectedMoveIn
+      tags: [projected-move-ins]
+      summary: Delete a projected move-in
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: moveInId
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+  /properties/{id}/projected-move-ins/{moveInId}/convert:
+    post:
+      operationId: convertProjectedMoveIn
+      tags: [projected-move-ins]
+      summary: Convert a projected move-in into a real occupant
+      description: |
+        Creates a new `occupants` row tied to the chosen bed (the
+        bed stored on the projection, or the optional override in
+        the request body), reuses the existing occupant-creation
+        validation (move-in date format, bed cleaning status), and
+        stamps `convertedOccupantId` on the projection so it stays
+        linked. Returns the projection row with the
+        `convertedOccupantId` set; the new occupant is exposed
+        separately via `occupant` in the same response so the
+        client can update its caches without an extra round-trip.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: moveInId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectedMoveInConvert" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [projectedMoveIn, occupant]
+                properties:
+                  projectedMoveIn: { $ref: "#/components/schemas/ProjectedMoveIn" }
+                  occupant: { $ref: "#/components/schemas/Occupant" }
+
   /properties/{id}/violations/{violationId}:
     delete:
       operationId: deletePropertyViolation
@@ -1857,6 +1984,62 @@ components:
         coverageEnd: { type: string }
         documentUrl: { type: string }
         notes: { type: string }
+
+    ProjectedMoveIn:
+      type: object
+      required: [id, propertyId, personName, projectedMoveInDate, bedId, notes, convertedOccupantId]
+      properties:
+        id: { type: string }
+        propertyId: { type: string }
+        personName: { type: string }
+        projectedMoveInDate:
+          type: string
+          description: YYYY-MM-DD date the operator expects the person to start at housing.
+        bedId:
+          type: ["string", "null"]
+          description: |
+            Optional reservation. Null when the operator hasn't
+            picked a bed yet (typical for early-planning rows).
+        notes: { type: string }
+        convertedOccupantId:
+          type: ["string", "null"]
+          description: |
+            Set by the convert endpoint to the id of the real
+            occupant that was created for this projection. Null
+            while the projection is still active.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ProjectedMoveInCreate:
+      type: object
+      required: [id, personName, projectedMoveInDate]
+      properties:
+        id: { type: string }
+        personName: { type: string }
+        projectedMoveInDate: { type: string }
+        bedId:
+          type: ["string", "null"]
+        notes: { type: string }
+    ProjectedMoveInUpdate:
+      type: object
+      properties:
+        personName: { type: string }
+        projectedMoveInDate: { type: string }
+        bedId:
+          type: ["string", "null"]
+        notes: { type: string }
+    ProjectedMoveInConvert:
+      type: object
+      description: |
+        Optional bed override. If `bedId` is omitted, the convert
+        endpoint uses the bed already stored on the projection.
+        If both are absent the endpoint returns 400.
+      properties:
+        bedId:
+          type: ["string", "null"]
 
     PropertyViolationCategory:
       type: string

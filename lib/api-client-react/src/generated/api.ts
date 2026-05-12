@@ -20,6 +20,7 @@ import type {
   BackfillPropertyCoords200,
   Bed,
   BedUpdate,
+  ConvertProjectedMoveIn200,
   CreateDigestRecipient409,
   Customer,
   CustomerUpdate,
@@ -46,6 +47,10 @@ import type {
   OccupantUpdate,
   OtherCost,
   OtherCostUpdate,
+  ProjectedMoveIn,
+  ProjectedMoveInConvert,
+  ProjectedMoveInCreate,
+  ProjectedMoveInUpdate,
   Property,
   PropertyUpdate,
   PropertyViolation,
@@ -2911,6 +2916,466 @@ export const useCreatePropertyViolation = <
   TContext
 > => {
   return useMutation(getCreatePropertyViolationMutationOptions(options));
+};
+
+/**
+ * Returns every active (not-yet-converted) projected move-in
+recorded for the given property, sorted by
+`projectedMoveInDate` ascending so the next upcoming
+arrival is at the top. Once a projection has been
+converted into a real occupant via the convert endpoint,
+it is hidden from this list.
+
+ * @summary List projected (planned) move-ins for a property
+ */
+export const getListProjectedMoveInsUrl = (id: string) => {
+  return `/api/properties/${id}/projected-move-ins`;
+};
+
+export const listProjectedMoveIns = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ProjectedMoveIn[]> => {
+  return customFetch<ProjectedMoveIn[]>(getListProjectedMoveInsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListProjectedMoveInsQueryKey = (id: string) => {
+  return [`/api/properties/${id}/projected-move-ins`] as const;
+};
+
+export const getListProjectedMoveInsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProjectedMoveIns>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProjectedMoveIns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListProjectedMoveInsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listProjectedMoveIns>>
+  > = ({ signal }) => listProjectedMoveIns(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listProjectedMoveIns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListProjectedMoveInsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProjectedMoveIns>>
+>;
+export type ListProjectedMoveInsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List projected (planned) move-ins for a property
+ */
+
+export function useListProjectedMoveIns<
+  TData = Awaited<ReturnType<typeof listProjectedMoveIns>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProjectedMoveIns>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListProjectedMoveInsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a projected move-in for a property
+ */
+export const getCreateProjectedMoveInUrl = (id: string) => {
+  return `/api/properties/${id}/projected-move-ins`;
+};
+
+export const createProjectedMoveIn = async (
+  id: string,
+  projectedMoveInCreate: ProjectedMoveInCreate,
+  options?: RequestInit,
+): Promise<ProjectedMoveIn> => {
+  return customFetch<ProjectedMoveIn>(getCreateProjectedMoveInUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(projectedMoveInCreate),
+  });
+};
+
+export const getCreateProjectedMoveInMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createProjectedMoveIn>>,
+    TError,
+    { id: string; data: BodyType<ProjectedMoveInCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createProjectedMoveIn>>,
+  TError,
+  { id: string; data: BodyType<ProjectedMoveInCreate> },
+  TContext
+> => {
+  const mutationKey = ["createProjectedMoveIn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createProjectedMoveIn>>,
+    { id: string; data: BodyType<ProjectedMoveInCreate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createProjectedMoveIn(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateProjectedMoveInMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createProjectedMoveIn>>
+>;
+export type CreateProjectedMoveInMutationBody = BodyType<ProjectedMoveInCreate>;
+export type CreateProjectedMoveInMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a projected move-in for a property
+ */
+export const useCreateProjectedMoveIn = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createProjectedMoveIn>>,
+    TError,
+    { id: string; data: BodyType<ProjectedMoveInCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createProjectedMoveIn>>,
+  TError,
+  { id: string; data: BodyType<ProjectedMoveInCreate> },
+  TContext
+> => {
+  return useMutation(getCreateProjectedMoveInMutationOptions(options));
+};
+
+/**
+ * @summary Edit a projected move-in
+ */
+export const getUpdateProjectedMoveInUrl = (id: string, moveInId: string) => {
+  return `/api/properties/${id}/projected-move-ins/${moveInId}`;
+};
+
+export const updateProjectedMoveIn = async (
+  id: string,
+  moveInId: string,
+  projectedMoveInUpdate: ProjectedMoveInUpdate,
+  options?: RequestInit,
+): Promise<ProjectedMoveIn> => {
+  return customFetch<ProjectedMoveIn>(
+    getUpdateProjectedMoveInUrl(id, moveInId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(projectedMoveInUpdate),
+    },
+  );
+};
+
+export const getUpdateProjectedMoveInMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string; data: BodyType<ProjectedMoveInUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateProjectedMoveIn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateProjectedMoveIn>>,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInUpdate> }
+  > = (props) => {
+    const { id, moveInId, data } = props ?? {};
+
+    return updateProjectedMoveIn(id, moveInId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateProjectedMoveInMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateProjectedMoveIn>>
+>;
+export type UpdateProjectedMoveInMutationBody = BodyType<ProjectedMoveInUpdate>;
+export type UpdateProjectedMoveInMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Edit a projected move-in
+ */
+export const useUpdateProjectedMoveIn = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string; data: BodyType<ProjectedMoveInUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateProjectedMoveInMutationOptions(options));
+};
+
+/**
+ * @summary Delete a projected move-in
+ */
+export const getDeleteProjectedMoveInUrl = (id: string, moveInId: string) => {
+  return `/api/properties/${id}/projected-move-ins/${moveInId}`;
+};
+
+export const deleteProjectedMoveIn = async (
+  id: string,
+  moveInId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteProjectedMoveInUrl(id, moveInId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteProjectedMoveInMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteProjectedMoveIn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteProjectedMoveIn>>,
+    { id: string; moveInId: string }
+  > = (props) => {
+    const { id, moveInId } = props ?? {};
+
+    return deleteProjectedMoveIn(id, moveInId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteProjectedMoveInMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteProjectedMoveIn>>
+>;
+
+export type DeleteProjectedMoveInMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a projected move-in
+ */
+export const useDeleteProjectedMoveIn = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string },
+  TContext
+> => {
+  return useMutation(getDeleteProjectedMoveInMutationOptions(options));
+};
+
+/**
+ * Creates a new `occupants` row tied to the chosen bed (the
+bed stored on the projection, or the optional override in
+the request body), reuses the existing occupant-creation
+validation (move-in date format, bed cleaning status), and
+stamps `convertedOccupantId` on the projection so it stays
+linked. Returns the projection row with the
+`convertedOccupantId` set; the new occupant is exposed
+separately via `occupant` in the same response so the
+client can update its caches without an extra round-trip.
+
+ * @summary Convert a projected move-in into a real occupant
+ */
+export const getConvertProjectedMoveInUrl = (id: string, moveInId: string) => {
+  return `/api/properties/${id}/projected-move-ins/${moveInId}/convert`;
+};
+
+export const convertProjectedMoveIn = async (
+  id: string,
+  moveInId: string,
+  projectedMoveInConvert?: ProjectedMoveInConvert,
+  options?: RequestInit,
+): Promise<ConvertProjectedMoveIn200> => {
+  return customFetch<ConvertProjectedMoveIn200>(
+    getConvertProjectedMoveInUrl(id, moveInId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(projectedMoveInConvert),
+    },
+  );
+};
+
+export const getConvertProjectedMoveInMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInConvert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof convertProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string; data: BodyType<ProjectedMoveInConvert> },
+  TContext
+> => {
+  const mutationKey = ["convertProjectedMoveIn"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof convertProjectedMoveIn>>,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInConvert> }
+  > = (props) => {
+    const { id, moveInId, data } = props ?? {};
+
+    return convertProjectedMoveIn(id, moveInId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConvertProjectedMoveInMutationResult = NonNullable<
+  Awaited<ReturnType<typeof convertProjectedMoveIn>>
+>;
+export type ConvertProjectedMoveInMutationBody =
+  BodyType<ProjectedMoveInConvert>;
+export type ConvertProjectedMoveInMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Convert a projected move-in into a real occupant
+ */
+export const useConvertProjectedMoveIn = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof convertProjectedMoveIn>>,
+    TError,
+    { id: string; moveInId: string; data: BodyType<ProjectedMoveInConvert> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof convertProjectedMoveIn>>,
+  TError,
+  { id: string; moveInId: string; data: BodyType<ProjectedMoveInConvert> },
+  TContext
+> => {
+  return useMutation(getConvertProjectedMoveInMutationOptions(options));
 };
 
 /**

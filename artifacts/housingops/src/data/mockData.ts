@@ -1077,6 +1077,30 @@ export type PropertyViolation = z.infer<typeof PropertyViolationSchema>;
 export type PropertyViolationCategory =
   (typeof PROPERTY_VIOLATION_CATEGORIES)[number];
 
+/**
+ * Planned future arrival recorded against a property (Task #567).
+ * Mirrors `ProjectedMoveIn` in `lib/api-spec/openapi.yaml`. The
+ * row sits in `projected_move_ins` until an operator clicks
+ * "Move them in" — at which point a real `Occupant` is created
+ * and `convertedOccupantId` is stamped here so the projection
+ * stays linked for audit (and is hidden from the active list).
+ *
+ * `bedId` is nullable because operators often add planned
+ * arrivals before the bed assignment is finalised.
+ */
+export const ProjectedMoveInSchema = z.object({
+  id: z.string(),
+  propertyId: z.string(),
+  personName: z.string(),
+  projectedMoveInDate: z.string(),
+  bedId: z.string().nullable(),
+  notes: z.string(),
+  convertedOccupantId: z.string().nullable(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+});
+export type ProjectedMoveIn = z.infer<typeof ProjectedMoveInSchema>;
+
 export const MOCK_CUSTOMERS: Customer[] = [
   { id: "c1", name: "Acme Energy",        contactName: "Dana Rivera",  email: "dana.rivera@acme-energy.com",       phone: "512-555-1100", notes: "Long-term oilfield crews. Net-15 invoicing.",            state: "TX" },
   { id: "c2", name: "Frontier Tech",      contactName: "Marcus Lee",   email: "marcus.lee@frontiertech.io",        phone: "214-555-1200", notes: "Rotating consultants and engineers. Prefers monthly billing.", state: "TX" },

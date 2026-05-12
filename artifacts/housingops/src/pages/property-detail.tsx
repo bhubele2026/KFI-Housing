@@ -52,6 +52,7 @@ import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift-pairs";
 import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
+import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { useUpload } from "@workspace/object-storage-web";
 import { Upload, FileText, Loader2 } from "lucide-react";
@@ -2213,6 +2214,12 @@ export default function PropertyDetail() {
 
           {/* ── BEDS TAB (grouped by room, merged with occupants) ── */}
           <TabsContent value="beds" className="space-y-4">
+            <ProjectedMoveInsSection
+              propertyId={id ?? ""}
+              propRooms={propRooms}
+              propBeds={propBeds}
+              propOccupants={propOccupants}
+            />
             <div className="flex justify-between items-center gap-3 flex-wrap">
               <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{t("pages.propertyDetail.bedsOccupied", { count: occupiedBeds })}</span>

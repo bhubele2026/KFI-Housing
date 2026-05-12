@@ -2502,6 +2502,264 @@ export const CreatePropertyViolationBody = zod.object({
 });
 
 /**
+ * Returns every active (not-yet-converted) projected move-in
+recorded for the given property, sorted by
+`projectedMoveInDate` ascending so the next upcoming
+arrival is at the top. Once a projection has been
+converted into a real occupant via the convert endpoint,
+it is hidden from this list.
+
+ * @summary List projected (planned) move-ins for a property
+ */
+export const ListProjectedMoveInsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListProjectedMoveInsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  personName: zod.string(),
+  projectedMoveInDate: zod
+    .string()
+    .describe(
+      "YYYY-MM-DD date the operator expects the person to start at housing.",
+    ),
+  bedId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Optional reservation. Null when the operator hasn't\npicked a bed yet (typical for early-planning rows).\n",
+    ),
+  notes: zod.string(),
+  convertedOccupantId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Set by the convert endpoint to the id of the real\noccupant that was created for this projection. Null\nwhile the projection is still active.\n",
+    ),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const ListProjectedMoveInsResponse = zod.array(
+  ListProjectedMoveInsResponseItem,
+);
+
+/**
+ * @summary Add a projected move-in for a property
+ */
+export const CreateProjectedMoveInParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CreateProjectedMoveInBody = zod.object({
+  id: zod.string(),
+  personName: zod.string(),
+  projectedMoveInDate: zod.string(),
+  bedId: zod.string().nullish(),
+  notes: zod.string().optional(),
+});
+
+/**
+ * @summary Edit a projected move-in
+ */
+export const UpdateProjectedMoveInParams = zod.object({
+  id: zod.coerce.string(),
+  moveInId: zod.coerce.string(),
+});
+
+export const UpdateProjectedMoveInBody = zod.object({
+  personName: zod.string().optional(),
+  projectedMoveInDate: zod.string().optional(),
+  bedId: zod.string().nullish(),
+  notes: zod.string().optional(),
+});
+
+export const UpdateProjectedMoveInResponse = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  personName: zod.string(),
+  projectedMoveInDate: zod
+    .string()
+    .describe(
+      "YYYY-MM-DD date the operator expects the person to start at housing.",
+    ),
+  bedId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Optional reservation. Null when the operator hasn't\npicked a bed yet (typical for early-planning rows).\n",
+    ),
+  notes: zod.string(),
+  convertedOccupantId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Set by the convert endpoint to the id of the real\noccupant that was created for this projection. Null\nwhile the projection is still active.\n",
+    ),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+
+/**
+ * @summary Delete a projected move-in
+ */
+export const DeleteProjectedMoveInParams = zod.object({
+  id: zod.coerce.string(),
+  moveInId: zod.coerce.string(),
+});
+
+/**
+ * Creates a new `occupants` row tied to the chosen bed (the
+bed stored on the projection, or the optional override in
+the request body), reuses the existing occupant-creation
+validation (move-in date format, bed cleaning status), and
+stamps `convertedOccupantId` on the projection so it stays
+linked. Returns the projection row with the
+`convertedOccupantId` set; the new occupant is exposed
+separately via `occupant` in the same response so the
+client can update its caches without an extra round-trip.
+
+ * @summary Convert a projected move-in into a real occupant
+ */
+export const ConvertProjectedMoveInParams = zod.object({
+  id: zod.coerce.string(),
+  moveInId: zod.coerce.string(),
+});
+
+export const ConvertProjectedMoveInBody = zod
+  .object({
+    bedId: zod.string().nullish(),
+  })
+  .describe(
+    "Optional bed override. If `bedId` is omitted, the convert\nendpoint uses the bed already stored on the projection.\nIf both are absent the endpoint returns 400.\n",
+  );
+
+export const convertProjectedMoveInResponseOccupantMoveInDateRegExp =
+  new RegExp("^(\\d{4}-\\d{2}-\\d{2})?$");
+export const convertProjectedMoveInResponseOccupantMoveOutDateOneRegExp =
+  new RegExp("^(\\d{4}-\\d{2}-\\d{2})?$");
+
+export const ConvertProjectedMoveInResponse = zod.object({
+  projectedMoveIn: zod.object({
+    id: zod.string(),
+    propertyId: zod.string(),
+    personName: zod.string(),
+    projectedMoveInDate: zod
+      .string()
+      .describe(
+        "YYYY-MM-DD date the operator expects the person to start at housing.",
+      ),
+    bedId: zod
+      .string()
+      .nullable()
+      .describe(
+        "Optional reservation. Null when the operator hasn't\npicked a bed yet (typical for early-planning rows).\n",
+      ),
+    notes: zod.string(),
+    convertedOccupantId: zod
+      .string()
+      .nullable()
+      .describe(
+        "Set by the convert endpoint to the id of the real\noccupant that was created for this projection. Null\nwhile the projection is still active.\n",
+      ),
+    createdAt: zod.coerce.date().optional(),
+    updatedAt: zod.coerce.date().optional(),
+  }),
+  occupant: zod.object({
+    id: zod.string(),
+    name: zod.string(),
+    email: zod.string(),
+    phone: zod.string(),
+    bedId: zod.string().nullable(),
+    propertyId: zod.string().nullable(),
+    moveInDate: zod
+      .string()
+      .regex(convertProjectedMoveInResponseOccupantMoveInDateRegExp),
+    moveOutDate: zod.union([
+      zod
+        .string()
+        .regex(convertProjectedMoveInResponseOccupantMoveOutDateOneRegExp),
+      zod.null(),
+    ]),
+    status: zod.enum(["Active", "Former"]),
+    chargePerBed: zod.number(),
+    billingFrequency: zod.enum(["Weekly", "Biweekly", "Monthly"]),
+    employeeId: zod.string(),
+    company: zod.string(),
+    chargeSource: zod.enum(["", "payroll", "manual_override"]),
+    chargeSourceCustomer: zod.string(),
+    chargeSourcePersonId: zod.string(),
+    shift: zod
+      .string()
+      .nullable()
+      .describe(
+        'Crew shift this occupant works. Standard values are\n\"Days\" (5am–2pm), \"Nights\" (2pm–midnight), and \"Overnights\"\n(midnight–8am). Per-customer custom titles (e.g.\nclient-specific \"Penda\" \/ \"TriEnda\") are also accepted —\nthe field is free-form so any title the operator adds via\nthe \"Add custom shift…\" UI round-trips. Null for properties\nwhere shift assignments don\'t apply (most of the portfolio).\nLegacy \"1st\"\/\"2nd\" values from before Task #506 are coerced\nto \"Days\"\/\"Nights\" at the API boundary.\n',
+      ),
+    language: zod
+      .union([
+        zod.literal("Bilingual"),
+        zod.literal("English only"),
+        zod.literal("Spanish only"),
+        zod.literal("French only"),
+        zod.literal("Other only"),
+        zod.literal(null),
+      ])
+      .nullish()
+      .describe(
+        "Workforce language profile (Task #502). Null when not on\nfile yet. Unrecognised legacy values are normalised to\nnull at the boundary so the list endpoint never 500s.\n",
+      ),
+    gender: zod
+      .union([zod.literal("Female"), zod.literal("Male"), zod.literal(null)])
+      .nullish()
+      .describe("Workforce gender (Task #502). Null when not on file.\n"),
+    title: zod
+      .union([
+        zod.literal("Onsite Supervisor"),
+        zod.literal("Onsite Lead"),
+        zod.literal("Driver + Associate"),
+        zod.literal("Driver ONLY"),
+        zod.literal("Associate"),
+        zod.literal("Mentor"),
+        zod.literal(null),
+      ])
+      .nullish()
+      .describe(
+        "Workforce job title used for staffing\/routing decisions\n(Task #502). Null when not on file.\n",
+      ),
+    kfisAuthorizedToDrive: zod
+      .boolean()
+      .nullish()
+      .describe(
+        "True when the associate holds a valid driver's license AND\nis KFIS-cleared to drive a company vehicle (Task #502).\nNull when their driver status hasn't been recorded.\n",
+      ),
+    responsibilities: zod
+      .array(zod.string())
+      .optional()
+      .describe(
+        'Operator-assigned day-to-day responsibilities for this\noccupant (task #500). Free-form short strings — e.g.\n\"Take out trash on Mondays\". Optional in the schema so\nlegacy payloads keep parsing; the boundary normaliser\ndefaults a missing value to an empty array.\n',
+      ),
+    isLead: zod
+      .boolean()
+      .optional()
+      .describe(
+        "True for the lead tenant \/ key holder of the room (task\n#500). The API enforces at most one lead per room — when\nthis is set true, any prior lead in the same room is\ndemoted to false.\n",
+      ),
+    keysIssued: zod
+      .number()
+      .optional()
+      .describe(
+        "Number of physical keys this occupant has been issued\n(task #500). Validated as a non-negative integer.\n",
+      ),
+    createdAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
+      ),
+  }),
+});
+
+/**
  * @summary Delete a property violation
  */
 export const DeletePropertyViolationParams = zod.object({

@@ -742,6 +742,60 @@ export interface InsuranceCertificateUpdate {
   notes?: string;
 }
 
+export interface ProjectedMoveIn {
+  id: string;
+  propertyId: string;
+  personName: string;
+  /** YYYY-MM-DD date the operator expects the person to start at housing. */
+  projectedMoveInDate: string;
+  /**
+   * Optional reservation. Null when the operator hasn't
+picked a bed yet (typical for early-planning rows).
+
+   * @nullable
+   */
+  bedId: string | null;
+  notes: string;
+  /**
+   * Set by the convert endpoint to the id of the real
+occupant that was created for this projection. Null
+while the projection is still active.
+
+   * @nullable
+   */
+  convertedOccupantId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ProjectedMoveInCreate {
+  id: string;
+  personName: string;
+  projectedMoveInDate: string;
+  /** @nullable */
+  bedId?: string | null;
+  notes?: string;
+}
+
+export interface ProjectedMoveInUpdate {
+  personName?: string;
+  projectedMoveInDate?: string;
+  /** @nullable */
+  bedId?: string | null;
+  notes?: string;
+}
+
+/**
+ * Optional bed override. If `bedId` is omitted, the convert
+endpoint uses the bed already stored on the projection.
+If both are absent the endpoint returns 400.
+
+ */
+export interface ProjectedMoveInConvert {
+  /** @nullable */
+  bedId?: string | null;
+}
+
 /**
  * Canonical category for a property violation. The "other"
 bucket is paired with a free-text `details` field so unusual
@@ -1716,6 +1770,11 @@ When omitted, the importer reads the bundled
 
 export type CreateDigestRecipient409 = {
   error?: string;
+};
+
+export type ConvertProjectedMoveIn200 = {
+  projectedMoveIn: ProjectedMoveIn;
+  occupant: Occupant;
 };
 
 export type DeleteRoom409 = {

@@ -20,9 +20,15 @@ import {
   useListUnplacedPayroll,
   getListUnplacedPayrollQueryKey,
   useListRoomNightLogs,
+  useListAllProjectedMoveIns,
+  type ProjectedMoveIn,
   type UnplacedPayrollRow,
   type LowConfidencePayrollMatch,
 } from "@workspace/api-client-react";
+import {
+  projectedMoveInDaysFromToday,
+  MoveInDateBadge,
+} from "@/lib/projected-move-in-flag";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
@@ -105,6 +111,15 @@ export default function Dashboard() {
   // loading; treat as empty so the tile just shows 0 / no tile.
   const { data: roomNightLogsData } = useListRoomNightLogs();
   const roomNightLogs = useMemo(() => roomNightLogsData ?? [], [roomNightLogsData]);
+  // Portfolio-wide projected move-ins (Task #578). One query feeds the
+  // dashboard "Upcoming move-ins" roll-up — we filter by customer scope
+  // and date bucket on the client so operators see the same data their
+  // selected scope would on each property's Beds tab.
+  const { data: allProjectedMoveInsData } = useListAllProjectedMoveIns();
+  const allProjectedMoveIns = useMemo<ProjectedMoveIn[]>(
+    () => allProjectedMoveInsData ?? [],
+    [allProjectedMoveInsData],
+  );
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
   const [topRatingSort, setTopRatingSort] = useState<TopPropertiesSortKey>("overall");
@@ -540,6 +555,46 @@ export default function Dashboard() {
       testId: "needs-review-hotel-rate-at-risk",
     },
   ].filter((item) => item.count > 0);
+
+  // ── Upcoming projected move-ins roll-up (Task #578) ──────────────
+  // Portfolio-wide variant of the per-property "Projected Move-Ins"
+  // card on the Beds tab. Lists every active (not-yet-converted)
+  // projection across the operator's currently-scoped properties so
+  // they don't have to open each property to see who's arriving soon.
+  // Sorted by date ascending; rows whose date is already past surface
+  // first as "Overdue" so nothing slips.
+  interface UpcomingMoveInRow {
+    moveIn: ProjectedMoveIn;
+    propertyId: string;
+    propertyName: string;
+    days: number;
+  }
+  const upcomingMoveIns = useMemo<UpcomingMoveInRow[]>(() => {
+    const out: UpcomingMoveInRow[] = [];
+    for (const m of allProjectedMoveIns) {
+      if (!scopedPropertyIds.has(m.propertyId)) continue;
+      const days = projectedMoveInDaysFromToday(m.projectedMoveInDate);
+      if (days === null) continue;
+      const propertyName =
+        scopedProperties.find((p) => p.id === m.propertyId)?.name ?? "—";
+      out.push({ moveIn: m, propertyId: m.propertyId, propertyName, days });
+    }
+    // Most-overdue first (most negative `days`), then soonest
+    // upcoming arrivals. Matches the ascending-by-date semantics the
+    // server already returns the list with — reapplying here in case
+    // the cache was hydrated from a different ordering.
+    out.sort((a, b) => a.days - b.days);
+    return out;
+  }, [allProjectedMoveIns, scopedPropertyIds, scopedProperties]);
+  const upcomingMoveInCounts = useMemo(() => {
+    let overdue = 0;
+    let next7 = 0;
+    for (const r of upcomingMoveIns) {
+      if (r.days < 0) overdue++;
+      else if (r.days <= 7) next7++;
+    }
+    return { total: upcomingMoveIns.length, overdue, next7 };
+  }, [upcomingMoveIns]);
 
   // ── Expiring-soon lease alerts (Task #326) ────────────────────────
   // Surface leases whose end date is approaching (within 90 days) or
@@ -1122,6 +1177,106 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {upcomingMoveIns.length > 0 && (
+          <Card data-testid="card-upcoming-move-ins">
+            <CardHeader>
+              <div className="flex items-center gap-2 flex-wrap">
+                <CalendarClock className="h-4 w-4 text-blue-600" />
+                <CardTitle>Upcoming move-ins</CardTitle>
+                <span
+                  className="text-xs text-muted-foreground ml-auto tabular-nums"
+                  data-testid="text-upcoming-move-ins-total-count"
+                >
+                  {upcomingMoveInCounts.total} planned
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Active projected move-ins across every property in
+                scope. Overdue rows surface first; rows due in the
+                next 7 days are flagged. Click a row to jump to the
+                property's Beds tab.
+              </p>
+              <div
+                className="mt-2 flex flex-wrap gap-2 text-xs"
+                data-testid="bucket-counts-upcoming-move-ins"
+              >
+                {upcomingMoveInCounts.overdue > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 bg-rose-100 text-rose-900 border-rose-200"
+                    data-testid="bucket-count-upcoming-move-ins-overdue"
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {upcomingMoveInCounts.overdue} overdue
+                  </span>
+                )}
+                {upcomingMoveInCounts.next7 > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 bg-amber-100 text-amber-900 border-amber-200"
+                    data-testid="bucket-count-upcoming-move-ins-next7"
+                  >
+                    {upcomingMoveInCounts.next7} in next 7 days
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Person</TableHead>
+                    <TableHead>Property</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {upcomingMoveIns.map(({ moveIn, propertyId, propertyName, days }) => {
+                    const overdue = days < 0;
+                    return (
+                      <TableRow
+                        key={moveIn.id}
+                        className={overdue ? "bg-rose-50/40 dark:bg-rose-950/20" : undefined}
+                        data-testid={`row-upcoming-move-in-${moveIn.id}`}
+                        data-bucket={
+                          overdue
+                            ? "overdue"
+                            : days === 0
+                              ? "today"
+                              : days <= 7
+                                ? "soon"
+                                : "later"
+                        }
+                      >
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/properties/${propertyId}?tab=beds`}
+                            className="hover:underline text-primary"
+                            data-testid={`link-upcoming-move-in-${moveIn.id}`}
+                          >
+                            {moveIn.personName || "(no name)"}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          <PropertyNameCell name={propertyName} />
+                        </TableCell>
+                        <TableCell className="text-sm tabular-nums text-muted-foreground">
+                          {formatYMDPretty(moveIn.projectedMoveInDate)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <MoveInDateBadge
+                            date={moveIn.projectedMoveInDate}
+                            testId={`badge-upcoming-move-in-${moveIn.id}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}

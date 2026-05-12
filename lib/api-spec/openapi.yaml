@@ -705,6 +705,27 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PropertyViolation" }
+  /projected-move-ins:
+    get:
+      operationId: listAllProjectedMoveIns
+      tags: [projected-move-ins]
+      summary: List active projected move-ins across the entire portfolio
+      description: |
+        Portfolio-wide variant of `listProjectedMoveIns`: returns
+        every active (not-yet-converted) projected move-in across
+        every property, sorted by `projectedMoveInDate` ascending
+        so the soonest arrivals are at the top. Powers the
+        dashboard "Upcoming move-ins" roll-up so operators don't
+        have to open each property's Beds tab to see who's
+        arriving soon.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProjectedMoveIn" }
   /properties/{id}/projected-move-ins:
     get:
       operationId: listProjectedMoveIns

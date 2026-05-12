@@ -82,6 +82,22 @@ async function ensureBedBelongsToProperty(
 }
 
 router.get(
+  "/projected-move-ins",
+  async (_req, res): Promise<void> => {
+    // Portfolio-wide roll-up (Task #578): every active (not-yet-
+    // converted) projection across every property, sorted by date
+    // ascending so the dashboard card lists the soonest arrivals
+    // — and overdue rows — at the top.
+    const rows = await db
+      .select()
+      .from(projectedMoveInsTable)
+      .where(isNull(projectedMoveInsTable.convertedOccupantId))
+      .orderBy(asc(projectedMoveInsTable.projectedMoveInDate));
+    res.json(ListProjectedMoveInsResponse.parse(rows.map(serialize)));
+  },
+);
+
+router.get(
   "/properties/:id/projected-move-ins",
   async (req, res): Promise<void> => {
     const params = ListProjectedMoveInsParams.safeParse(req.params);

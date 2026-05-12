@@ -37,26 +37,13 @@ import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import type { Bed, Occupant, Room, ProjectedMoveIn } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
+import {
+  projectedMoveInDaysFromToday,
+  projectedMoveInFlag,
+} from "@/lib/projected-move-in-flag";
 
 const NO_BED_SENTINEL = "__none";
 const STRICT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Returns whole days between today (UTC midnight) and a YYYY-MM-DD
- * string. Negative values mean the date has already passed.
- *
- * Uses UTC parsing because every date in the system is a calendar
- * date (no time component), so DST/local-tz shifts would otherwise
- * make a date that's "today" round to -1 in the wrong tz.
- */
-function daysFromToday(ymd: string): number | null {
-  if (!STRICT_DATE_RE.test(ymd)) return null;
-  const [y, m, d] = ymd.split("-").map(Number);
-  const target = Date.UTC(y, m - 1, d);
-  const now = new Date();
-  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((target - today) / (24 * 60 * 60 * 1000));
-}
 
 interface ProjectedMoveInsSectionProps {
   propertyId: string;
@@ -149,7 +136,7 @@ export function ProjectedMoveInsSection({
     let next7 = 0;
     let overdue = 0;
     for (const m of moveIns) {
-      const d = daysFromToday(m.projectedMoveInDate);
+      const d = projectedMoveInDaysFromToday(m.projectedMoveInDate);
       if (d === null) continue;
       if (d < 0) overdue++;
       else if (d <= 7) next7++;
@@ -500,29 +487,7 @@ function ProjectedMoveInRow({
   );
   const [notes, setNotes] = useState(row.notes);
 
-  const days = daysFromToday(row.projectedMoveInDate);
-  const flag =
-    days === null
-      ? null
-      : days < 0
-        ? {
-            label: `Overdue · ${Math.abs(days)}d ago`,
-            cls: "bg-rose-100 text-rose-900 border-rose-200",
-          }
-        : days === 0
-          ? {
-              label: "Today",
-              cls: "bg-emerald-100 text-emerald-900 border-emerald-200",
-            }
-          : days <= 7
-            ? {
-                label: `In ${days}d`,
-                cls: "bg-amber-100 text-amber-900 border-amber-200",
-              }
-            : {
-                label: `In ${days}d`,
-                cls: "bg-muted text-muted-foreground border-border",
-              };
+  const flag = projectedMoveInFlag(row.projectedMoveInDate);
 
   const bedLabel =
     row.bedId

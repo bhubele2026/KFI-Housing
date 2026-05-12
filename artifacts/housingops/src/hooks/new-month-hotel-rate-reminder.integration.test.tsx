@@ -89,6 +89,8 @@ vi.mock("@/context/data-store", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: mockLogs }),
+  useListAllProjectedMoveIns: () => ({ data: [] }),
+  getListAllProjectedMoveInsQueryKey: () => ["/projected-move-ins"],
   useListPropertyViolations: () => ({ data: [] }),
   useCreatePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
   useDeletePropertyViolation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),

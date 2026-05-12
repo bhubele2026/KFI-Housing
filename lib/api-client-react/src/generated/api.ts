@@ -2919,6 +2919,90 @@ export const useCreatePropertyViolation = <
 };
 
 /**
+ * Portfolio-wide variant of `listProjectedMoveIns`: returns
+every active (not-yet-converted) projected move-in across
+every property, sorted by `projectedMoveInDate` ascending
+so the soonest arrivals are at the top. Powers the
+dashboard "Upcoming move-ins" roll-up so operators don't
+have to open each property's Beds tab to see who's
+arriving soon.
+
+ * @summary List active projected move-ins across the entire portfolio
+ */
+export const getListAllProjectedMoveInsUrl = () => {
+  return `/api/projected-move-ins`;
+};
+
+export const listAllProjectedMoveIns = async (
+  options?: RequestInit,
+): Promise<ProjectedMoveIn[]> => {
+  return customFetch<ProjectedMoveIn[]>(getListAllProjectedMoveInsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAllProjectedMoveInsQueryKey = () => {
+  return [`/api/projected-move-ins`] as const;
+};
+
+export const getListAllProjectedMoveInsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllProjectedMoveIns>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAllProjectedMoveIns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAllProjectedMoveInsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAllProjectedMoveIns>>
+  > = ({ signal }) => listAllProjectedMoveIns({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAllProjectedMoveIns>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAllProjectedMoveInsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllProjectedMoveIns>>
+>;
+export type ListAllProjectedMoveInsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List active projected move-ins across the entire portfolio
+ */
+
+export function useListAllProjectedMoveIns<
+  TData = Awaited<ReturnType<typeof listAllProjectedMoveIns>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAllProjectedMoveIns>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAllProjectedMoveInsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Returns every active (not-yet-converted) projected move-in
 recorded for the given property, sorted by
 `projectedMoveInDate` ascending so the next upcoming

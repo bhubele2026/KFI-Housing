@@ -2502,6 +2502,46 @@ export const CreatePropertyViolationBody = zod.object({
 });
 
 /**
+ * Portfolio-wide variant of `listProjectedMoveIns`: returns
+every active (not-yet-converted) projected move-in across
+every property, sorted by `projectedMoveInDate` ascending
+so the soonest arrivals are at the top. Powers the
+dashboard "Upcoming move-ins" roll-up so operators don't
+have to open each property's Beds tab to see who's
+arriving soon.
+
+ * @summary List active projected move-ins across the entire portfolio
+ */
+export const ListAllProjectedMoveInsResponseItem = zod.object({
+  id: zod.string(),
+  propertyId: zod.string(),
+  personName: zod.string(),
+  projectedMoveInDate: zod
+    .string()
+    .describe(
+      "YYYY-MM-DD date the operator expects the person to start at housing.",
+    ),
+  bedId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Optional reservation. Null when the operator hasn't\npicked a bed yet (typical for early-planning rows).\n",
+    ),
+  notes: zod.string(),
+  convertedOccupantId: zod
+    .string()
+    .nullable()
+    .describe(
+      "Set by the convert endpoint to the id of the real\noccupant that was created for this projection. Null\nwhile the projection is still active.\n",
+    ),
+  createdAt: zod.coerce.date().optional(),
+  updatedAt: zod.coerce.date().optional(),
+});
+export const ListAllProjectedMoveInsResponse = zod.array(
+  ListAllProjectedMoveInsResponseItem,
+);
+
+/**
  * Returns every active (not-yet-converted) projected move-in
 recorded for the given property, sorted by
 `projectedMoveInDate` ascending so the next upcoming

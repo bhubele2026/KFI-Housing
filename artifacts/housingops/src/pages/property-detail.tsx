@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -161,6 +161,68 @@ function writePersistedStatsExpanded(expanded: boolean): void {
     }
   } catch {
     // Quota / disabled storage / private mode — silently ignore.
+  }
+}
+
+// Per-property persistence for the Leases / Units tab building filters
+// (Task #592). Operators on multi-building properties used to lose their
+// pick every time they navigated away — refresh, drill into a lease, or
+// flip tabs and the dropdown reset to "All buildings". We store the
+// selection per property (keyed by propertyId in a JSON map) so each
+// property remembers its own focus, mirroring the localStorage pattern
+// used for BEDS_SORT_STORAGE_KEY / STATS_EXPANDED_STORAGE_KEY above.
+//
+// Map shape: `{ [propertyId: string]: buildingId }`. "all" is the
+// default and is stored as the absence of an entry — selecting
+// "All buildings" deletes the key so storage doesn't accumulate stale
+// entries (and so single-building properties never write at all).
+const LEASES_BUILDING_STORAGE_KEY = "housingops:property-leases:building";
+const UNITS_BUILDING_STORAGE_KEY = "housingops:property-units:building";
+
+function readBuildingFilterMap(storageKey: string): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string" && v.length > 0) out[k] = v;
+      }
+      return out;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function readPersistedBuildingFilter(storageKey: string, propertyId: string | undefined): string {
+  if (!propertyId) return "all";
+  const map = readBuildingFilterMap(storageKey);
+  return map[propertyId] ?? "all";
+}
+
+function writePersistedBuildingFilter(storageKey: string, propertyId: string | undefined, value: string): void {
+  if (typeof window === "undefined" || !propertyId) return;
+  try {
+    const map = readBuildingFilterMap(storageKey);
+    if (value === "all") {
+      if (!(propertyId in map)) return;
+      delete map[propertyId];
+    } else {
+      if (map[propertyId] === value) return;
+      map[propertyId] = value;
+    }
+    if (Object.keys(map).length === 0) {
+      window.localStorage.removeItem(storageKey);
+    } else {
+      window.localStorage.setItem(storageKey, JSON.stringify(map));
+    }
+  } catch {
+    // Quota / disabled storage / private mode — silently ignore;
+    // this is a UX nicety, not a correctness requirement.
   }
 }
 
@@ -784,13 +846,38 @@ export default function PropertyDetail() {
   // kept separate per tab so flipping one doesn't surprise the other,
   // and "all" is the default so single-building properties (the common
   // case) and the initial render stay unchanged.
-  const [leasesBuildingFilter, setLeasesBuildingFilter] = useState<string>("all");
-  const [unitsBuildingFilter, setUnitsBuildingFilter] = useState<string>("all");
+  //
+  // Hydrated from localStorage per-property (Task #592) so the pick
+  // survives refreshes and round-trips back from a lease detail page.
+  // The persisted buildingId is validated against `propBuildings` in an
+  // effect below — if the saved building was deleted (or the user
+  // landed on a different property), we silently fall back to "all".
+  const [leasesBuildingFilter, setLeasesBuildingFilterState] = useState<string>(
+    () => readPersistedBuildingFilter(LEASES_BUILDING_STORAGE_KEY, id),
+  );
+  const [unitsBuildingFilter, setUnitsBuildingFilterState] = useState<string>(
+    () => readPersistedBuildingFilter(UNITS_BUILDING_STORAGE_KEY, id),
+  );
+  const setLeasesBuildingFilter = useCallback(
+    (value: string) => {
+      setLeasesBuildingFilterState(value);
+      writePersistedBuildingFilter(LEASES_BUILDING_STORAGE_KEY, id, value);
+    },
+    [id],
+  );
+  const setUnitsBuildingFilter = useCallback(
+    (value: string) => {
+      setUnitsBuildingFilterState(value);
+      writePersistedBuildingFilter(UNITS_BUILDING_STORAGE_KEY, id, value);
+    },
+    [id],
+  );
   // Beds-tab building filter (Task #596). Same pattern as the Units /
   // Leases pickers above so every property — including single-building
   // ones — gets a consistent Beds → Building navigation story. When the
   // URL drill-down is active (`focusedBuildingId`) it always wins so the
-  // dropdown stays in sync with the Buildings roster.
+  // dropdown stays in sync with the Buildings roster. Not persisted —
+  // task #592's persistence was scoped to Units / Leases.
   const [bedsBuildingFilter, setBedsBuildingFilter] = useState<string>("all");
   const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -876,6 +963,27 @@ export default function PropertyDetail() {
     () => buildings.filter(b => b.propertyId === id),
     [buildings, id],
   );
+  // Validate the persisted Leases / Units building filters against the
+  // current property's buildings (Task #592). If the saved buildingId
+  // no longer exists — building deleted, single-building property, etc.
+  // — silently fall back to "all" and clean the storage entry. We wait
+  // until buildings have actually loaded (length > 0) so we don't
+  // clobber a valid pick during the initial empty-data render.
+  useEffect(() => {
+    if (propBuildings.length === 0) return;
+    if (
+      leasesBuildingFilter !== "all" &&
+      !propBuildings.some((b) => b.id === leasesBuildingFilter)
+    ) {
+      setLeasesBuildingFilter("all");
+    }
+    if (
+      unitsBuildingFilter !== "all" &&
+      !propBuildings.some((b) => b.id === unitsBuildingFilter)
+    ) {
+      setUnitsBuildingFilter("all");
+    }
+  }, [propBuildings, leasesBuildingFilter, unitsBuildingFilter, setLeasesBuildingFilter, setUnitsBuildingFilter]);
   const propOccupants = useMemo(() => occupants.filter(o => o.propertyId === id && o.status === "Active"), [occupants, id]);
 
   const propertyUnits = useMemo(() => {

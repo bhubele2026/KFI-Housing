@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.tesseract
     pkgs.systemd
     pkgs.libxkbcommon
     pkgs.dbus-glib

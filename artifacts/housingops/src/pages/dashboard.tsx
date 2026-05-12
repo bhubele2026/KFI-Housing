@@ -500,6 +500,54 @@ export default function Dashboard() {
     }
   };
 
+  // Always-available payroll snapshot import (Task #597). Even with
+  // zero overrides to reclaim, operators still need a way to write a
+  // payroll_deductions snapshot for a chosen Saturday pay-week so the
+  // Finance Weekly / Monthly / By-Customer tabs have data to roll up.
+  // The previous flow gated this behind `overriddenOccupants.length > 0`,
+  // which left fresh deployments with no UI path at all.
+  const [importingSnapshot, setImportingSnapshot] = useState(false);
+  const handleImportSnapshot = async () => {
+    if (!reclaimPayWeekIsSaturday) {
+      toast({
+        title: t("pages.finance.payroll.invalidWeekTitle"),
+        description: t("pages.finance.payroll.invalidWeekDescription"),
+        variant: "destructive",
+      });
+      return;
+    }
+    setImportingSnapshot(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(
+        `${baseUrl}api/payroll/unplaced?payWeekEndDate=${encodeURIComponent(reclaimPayWeekEndDate)}`,
+      );
+      if (!res.ok) {
+        toast({
+          title: t("pages.dashboard.payrollSnapshot.importFailedTitle"),
+          description: t("pages.dashboard.payrollSnapshot.importFailedDescription", { status: res.status }),
+          variant: "destructive",
+        });
+        return;
+      }
+      const body = await res.json().catch(() => null);
+      const summary = body?.importSummary;
+      const week = summary?.payWeekEndDate ?? reclaimPayWeekEndDate;
+      toast({
+        title: t("pages.dashboard.payrollSnapshot.importedTitle"),
+        description: summary
+          ? t("pages.dashboard.payrollSnapshot.importedDescription", {
+              count: summary.deductionsImported ?? 0,
+              total: formatUsd(Number(summary.totalAmount ?? 0)),
+              week,
+            })
+          : t("pages.dashboard.payrollSnapshot.importedDescriptionEmpty", { week }),
+      });
+    } finally {
+      setImportingSnapshot(false);
+    }
+  };
+
   // "Needs review" mirrors the per-page filters that the dashboard tiles
   // deep-link into. Each predicate matches what the corresponding page
   // shows when `?needsReview=1` is set — keeping the counts in sync with
@@ -2042,6 +2090,51 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        <Card id="card-payroll-snapshot" data-testid="card-payroll-snapshot">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-muted-foreground" />
+              <CardTitle>{t("pages.dashboard.payrollSnapshot.title")}</CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t("pages.dashboard.payrollSnapshot.helperText")}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex flex-col gap-1 flex-1 max-w-xs">
+                <Label htmlFor="input-import-pay-week" className="text-xs">
+                  {t("pages.finance.payroll.payWeekEndingSaturday")}
+                </Label>
+                <Input
+                  id="input-import-pay-week"
+                  type="date"
+                  value={reclaimPayWeekEndDate}
+                  onChange={(e) => setReclaimPayWeekEndDate(e.target.value)}
+                  data-testid="input-import-pay-week-end-date"
+                />
+                {!reclaimPayWeekIsSaturday && (
+                  <p className="text-xs text-destructive" data-testid="text-import-pay-week-not-saturday">
+                    {t("pages.finance.payroll.notSaturday")}
+                  </p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={importingSnapshot || !reclaimPayWeekIsSaturday}
+                onClick={handleImportSnapshot}
+                data-testid="button-import-payroll-snapshot"
+              >
+                <RotateCcw className="h-3 w-3 mr-1" />
+                {importingSnapshot
+                  ? t("pages.dashboard.payrollSnapshot.importing")
+                  : t("pages.dashboard.payrollSnapshot.import")}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {overriddenOccupants.length > 0 && (
           <Card id="card-payroll-mismatches" data-testid="card-payroll-mismatches">

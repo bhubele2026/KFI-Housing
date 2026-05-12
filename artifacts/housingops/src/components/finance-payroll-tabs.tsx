@@ -37,6 +37,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -780,6 +782,40 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
             {t("pages.finance.payroll.noSnapshotsDescription")}
           </p>
         ) : (
+          <>
+            <div
+              className="h-44 mb-4"
+              data-testid="chart-finance-by-customer"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="customerName"
+                    tick={{ fontSize: 11 }}
+                    interval={0}
+                    angle={-20}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    formatter={(value: number) => formatUsd(value)}
+                  />
+                  <Legend />
+                  <Bar
+                    dataKey="monthToDateRecovered"
+                    name={t("pages.finance.payroll.monthToDate")}
+                    fill="#2563eb"
+                  />
+                  <Bar
+                    dataKey="monthlyRentKfiPays"
+                    name={t("pages.finance.payroll.monthlyRentKfiPays")}
+                    fill="#94a3b8"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -900,6 +936,7 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
               </TableRow>
             </TableBody>
           </Table>
+          </>
         )}
       </CardContent>
     </Card>

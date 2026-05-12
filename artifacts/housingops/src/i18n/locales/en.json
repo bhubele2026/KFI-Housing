@@ -346,6 +346,17 @@
         "leasesHeader": "Leases",
         "monthlyRentHeader": "Monthly rent"
       },
+      "payrollSnapshot": {
+        "title": "Import payroll snapshot",
+        "helperText": "Pick the Saturday end-date of a Mon→Sat pay-week and import a payroll snapshot for it. The Finance tabs read these snapshots to build the Weekly / Monthly / By-Customer rollups. Re-importing the same week overwrites in place.",
+        "import": "Import snapshot",
+        "importing": "Importing…",
+        "importedTitle": "Snapshot imported",
+        "importedDescription": "Wrote {{count}} deduction(s) totalling {{total}} for week ending {{week}}.",
+        "importedDescriptionEmpty": "No matching payroll deductions for week ending {{week}}.",
+        "importFailedTitle": "Snapshot import failed",
+        "importFailedDescription": "Server returned status {{status}}."
+      },
       "payrollMismatches": {
         "title": "Review payroll mismatches",
         "overrideCount_one": "{{count}} override",

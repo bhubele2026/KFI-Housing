@@ -7,6 +7,7 @@ import { migrateLeasesCustomerIdNullableIfNeeded } from "./migrations/leases-cus
 import { backfillUtilitiesIncludedInRent } from "./migrations/backfill-utilities-included-in-rent";
 import { addOccupantProfileFieldsIfNeeded } from "./migrations/add-occupant-profile-fields";
 import { backfillBuildingsIfNeeded } from "./migrations/backfill-buildings";
+import { createPayrollDeductionsTableIfNeeded } from "./migrations/create-payroll-deductions-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -63,6 +64,13 @@ export async function pushSchemaIfNeeded(
   // empty. Idempotent — re-runs are no-ops once every property has at
   // least one building and every room.building_id is populated.
   await backfillBuildingsIfNeeded(pool, log);
+
+  // Provision the `payroll_deductions` table (Task #597) BEFORE
+  // drizzle's pushSchema, so deployed environments that haven't yet
+  // run pushSchema still have the table available the first time a
+  // payroll re-import writes a snapshot. Idempotent — no-op once the
+  // table exists.
+  await createPayrollDeductionsTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

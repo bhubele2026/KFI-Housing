@@ -12,15 +12,36 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, UserPlus, Download, Users, Trash2 } from "lucide-react";
+import {
+  Search, UserPlus, Download, Users, Trash2, AlertTriangle, UserPlus2,
+  CheckCircle2, ChevronLeft, ChevronRight,
+} from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
-import { toWeeklyCharge, toMonthlyCharge, formatUsd, STANDARD_SHIFTS } from "@/data/mockData";
+import { formatUsd, STANDARD_SHIFTS } from "@/data/mockData";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useMemo } from "react";
+import {
+  useListPayrollDeductions,
+  useListUnplacedPayroll,
+  getListUnplacedPayrollQueryKey,
+} from "@workspace/api-client-react";
+import {
+  isSaturdayDate,
+  mostRecentSaturday,
+  shiftWeeks,
+  formatPayWeekRange,
+} from "@/lib/finance-pay-weeks";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+
+// Monthly equivalent of a single weekly deduction. 52 pay-weeks ÷ 12
+// months matches the rest of the app's weekly→monthly conversion.
+const WEEKS_PER_MONTH = 52 / 12;
 
 export default function Occupants() {
   const { t } = useTranslation();
@@ -73,6 +94,21 @@ export default function Occupants() {
     const v = new URLSearchParams(searchString).get("chargeSource");
     return v === "manual" || v === "payroll" ? v : "All";
   });
+  // Pay-week selector. Defaults to the most recent Mon→Sat pay-week
+  // (the one this week's payroll import would target). URL-driven via
+  // ?week=YYYY-MM-DD so a deep link to a specific week round-trips.
+  const [payWeek, setPayWeek] = useState<string>(() => {
+    const raw = new URLSearchParams(searchString).get("week");
+    return raw && isSaturdayDate(raw) ? raw : mostRecentSaturday();
+  });
+  // "This week" filter: All / Imported (has snapshot) / Missing (active
+  // occupant with no snapshot for the selected week).
+  const [weekFilter, setWeekFilter] = useState<"All" | "Imported" | "Missing">(
+    () => {
+      const v = new URLSearchParams(searchString).get("weekStatus");
+      return v === "Imported" || v === "Missing" ? v : "All";
+    },
+  );
 
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -87,6 +123,14 @@ export default function Occupants() {
     const cs = params.get("chargeSource");
     const nextCs = cs === "manual" || cs === "payroll" ? cs : "All";
     setChargeSourceFilter((prev) => (prev === nextCs ? prev : nextCs));
+    // Re-sync the pay-week selector + this-week filter so back/forward
+    // navigation and deep links land on the right week even after mount.
+    const rawWeek = params.get("week");
+    const nextWeek = rawWeek && isSaturdayDate(rawWeek) ? rawWeek : mostRecentSaturday();
+    setPayWeek((prev) => (prev === nextWeek ? prev : nextWeek));
+    const ws = params.get("weekStatus");
+    const nextWs = ws === "Imported" || ws === "Missing" ? ws : "All";
+    setWeekFilter((prev) => (prev === nextWs ? prev : nextWs));
   }, [searchString]);
 
   const updateUrlParam = (key: string, value: string | null) => {
@@ -112,6 +156,48 @@ export default function Occupants() {
     updateUrlParam("chargeSource", value === "All" ? null : value);
   };
 
+  const updatePayWeek = (value: string) => {
+    if (!isSaturdayDate(value)) return;
+    setPayWeek(value);
+    updateUrlParam("week", value);
+  };
+  const updateWeekFilter = (value: "All" | "Imported" | "Missing") => {
+    setWeekFilter(value);
+    updateUrlParam("weekStatus", value === "All" ? null : value);
+  };
+
+  // Per-week deduction snapshots. Filtered to a single Saturday so the
+  // payload is one row per occupant who got paid that week. The
+  // unplaced-payroll endpoint surfaces the rows from the same import
+  // that didn't match an existing occupant — i.e. brand-new arrivals
+  // the operator still needs to place.
+  const deductionsQuery = useListPayrollDeductions({
+    since: payWeek,
+    until: payWeek,
+  });
+  // The unplaced-payroll endpoint re-runs the seeder server-side and
+  // upserts snapshot rows when given a payWeekEndDate, so we must NOT
+  // call it on every render. Gate on the new-arrivals popover being
+  // opened — the operator explicitly asks "who's new this week?".
+  const [newArrivalsOpen, setNewArrivalsOpen] = useState(false);
+  const unplacedQuery = useListUnplacedPayroll(
+    { payWeekEndDate: payWeek },
+    {
+      query: {
+        queryKey: getListUnplacedPayrollQueryKey({ payWeekEndDate: payWeek }),
+        enabled: newArrivalsOpen && isSaturdayDate(payWeek),
+      },
+    },
+  );
+  const weekDeductionByOccupantId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of deductionsQuery.data ?? []) {
+      if (r.payWeekEndDate === payWeek) map.set(r.occupantId, r.weeklyAmount);
+    }
+    return map;
+  }, [deductionsQuery.data, payWeek]);
+  const newArrivals = unplacedQuery.data?.unmatched ?? [];
+
   const filteredOccupants = occupants.filter((o) => {
     const matchesSearch = o.name.toLowerCase().includes(search.toLowerCase());
     const matchesProperty = propertyFilter === "All" || o.propertyId === propertyFilter;
@@ -133,8 +219,37 @@ export default function Occupants() {
     const matchesCustomer =
       customerScopedPropertyIds === null ||
       (o.propertyId !== null && customerScopedPropertyIds.has(o.propertyId));
-    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift && matchesChargeSource && matchesCustomer;
+    const hasWeekRow = weekDeductionByOccupantId.has(o.id);
+    const matchesWeek =
+      weekFilter === "All"
+        ? true
+        : weekFilter === "Imported"
+          ? hasWeekRow
+          : // "Missing" only flags Active occupants — Former rows
+            // shouldn't appear in this week's payroll anyway.
+            o.status === "Active" && !hasWeekRow;
+    return matchesSearch && matchesProperty && matchesStatus && matchesMoveIn && matchesShift && matchesChargeSource && matchesCustomer && matchesWeek;
   });
+
+  // Header counts honour every filter EXCEPT the week-status filter
+  // itself, so toggling between Imported / Missing doesn't make the
+  // banner numbers jump around.
+  const weekScopedOccupants = useMemo(
+    () =>
+      occupants.filter((o) => {
+        const matchesProperty = propertyFilter === "All" || o.propertyId === propertyFilter;
+        const matchesCustomer =
+          customerScopedPropertyIds === null ||
+          (o.propertyId !== null && customerScopedPropertyIds.has(o.propertyId));
+        return o.status === "Active" && matchesProperty && matchesCustomer;
+      }),
+    [occupants, propertyFilter, customerScopedPropertyIds],
+  );
+  const importedCount = useMemo(
+    () => weekScopedOccupants.filter((o) => weekDeductionByOccupantId.has(o.id)).length,
+    [weekScopedOccupants, weekDeductionByOccupantId],
+  );
+  const missingCount = weekScopedOccupants.length - importedCount;
 
   // Per-shift counts (Task #506). We tally every distinct title we see
   // on an occupant so the filter dropdown can offer one row per real
@@ -196,6 +311,7 @@ export default function Occupants() {
       { header: "Move Out",          value: (o) => o.moveOutDate ?? "" },
       { header: "Charge per Bed",    value: (o) => o.chargePerBed },
       { header: "Billing Frequency", value: (o) => o.billingFrequency },
+      { header: `Deduction (week of ${payWeek})`, value: (o) => weekDeductionByOccupantId.get(o.id) ?? "" },
       { header: "Shift",             value: (o) => o.shift ?? "" },
       { header: "Status",            value: (o) => o.status },
     ]);
@@ -212,6 +328,135 @@ export default function Occupants() {
         <PageHeader
           title={t("pages.occupants.title")}
           description={t("pages.occupants.description")}
+          meta={
+            <div
+              className="flex flex-wrap items-center gap-3 mt-2"
+              data-testid="pay-week-bar"
+            >
+              <div className="inline-flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => updatePayWeek(shiftWeeks(payWeek, -1))}
+                  data-testid="button-pay-week-prev"
+                  title="Previous week"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="date"
+                  value={payWeek}
+                  onChange={(e) => updatePayWeek(e.target.value)}
+                  className="h-8 w-[10.5rem]"
+                  data-testid="input-pay-week"
+                  title="Pay-week ending Saturday"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => updatePayWeek(shiftWeeks(payWeek, 1))}
+                  data-testid="button-pay-week-next"
+                  title="Next week"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <span className="ml-2 text-sm text-muted-foreground" data-testid="text-pay-week-range">
+                  Week of {formatPayWeekRange(payWeek)}
+                </span>
+              </div>
+              <Badge
+                variant="outline"
+                className="gap-1"
+                data-testid="badge-week-imported"
+              >
+                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                {importedCount} imported
+              </Badge>
+              <Badge
+                variant="outline"
+                className={
+                  missingCount > 0
+                    ? "gap-1 border-amber-500 text-amber-700 dark:text-amber-400"
+                    : "gap-1"
+                }
+                data-testid="badge-week-missing"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {missingCount} missing
+              </Badge>
+              {!isSaturdayDate(payWeek) ? null : (
+                <Popover open={newArrivalsOpen} onOpenChange={setNewArrivalsOpen}>
+                  <PopoverTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="gap-1 cursor-pointer hover:bg-muted"
+                      data-testid="badge-week-new-arrivals"
+                    >
+                      <UserPlus2 className="h-3 w-3" />
+                      {newArrivalsOpen && unplacedQuery.isLoading
+                        ? "Loading new arrivals…"
+                        : newArrivalsOpen && unplacedQuery.data
+                          ? `${newArrivals.length} new in import`
+                          : "New in import"}
+                    </Badge>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-80 max-h-80 overflow-auto p-3"
+                    data-testid="popover-week-new-arrivals"
+                  >
+                    <div className="text-sm font-medium mb-2">
+                      New arrivals in week of {payWeek}
+                    </div>
+                    {unplacedQuery.isLoading ? (
+                      <p className="text-xs text-muted-foreground">Loading…</p>
+                    ) : newArrivals.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Every name in this week's import already matches an
+                        existing occupant.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          These names appeared in the payroll file but don't
+                          match any occupant yet. Place them from the
+                          dashboard's payroll panel.
+                        </p>
+                        <ul className="space-y-1.5 text-sm">
+                          {newArrivals.map((row) => (
+                            <li
+                              key={`${row.personId}-${row.name}`}
+                              className="flex items-center justify-between gap-2"
+                              data-testid={`row-new-arrival-${row.personId}`}
+                            >
+                              <span className="truncate">
+                                <span className="font-medium">{row.name}</span>
+                                <span className="text-muted-foreground"> · {row.customer}</span>
+                              </span>
+                              <span className="tabular-nums text-muted-foreground">
+                                {formatUsd(row.weekly)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-3">
+                          <Link
+                            href="/dashboard"
+                            className="text-xs text-primary hover:underline"
+                            data-testid="link-new-arrivals-dashboard"
+                          >
+                            Go to dashboard to place them →
+                          </Link>
+                        </div>
+                      </>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          }
           actions={
             <>
               <Button
@@ -308,6 +553,22 @@ export default function Occupants() {
                 <SelectContent>
                   <SelectItem value="All">{t("pages.occupants.allMoveIns")}</SelectItem>
                   <SelectItem value="NeedsReview">{t("pages.occupants.needsReview")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={weekFilter}
+                onValueChange={(v) => updateWeekFilter(v as "All" | "Imported" | "Missing")}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-44"
+                  data-testid="select-week-status-filter"
+                >
+                  <SelectValue placeholder="This week" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All this week</SelectItem>
+                  <SelectItem value="Imported">Imported</SelectItem>
+                  <SelectItem value="Missing">Missing only</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -442,24 +703,34 @@ export default function Occupants() {
                           className="text-right tabular-nums"
                           data-testid={`cell-occupant-weekly-${occupant.id}`}
                         >
-                          {formatUsd(
-                            toWeeklyCharge(
-                              occupant.chargePerBed,
-                              occupant.billingFrequency ?? "Monthly",
-                            ),
-                          )}
+                          {(() => {
+                            const amt = weekDeductionByOccupantId.get(occupant.id);
+                            if (amt !== undefined) return formatUsd(amt);
+                            if (occupant.status !== "Active") {
+                              return <span className="text-muted-foreground">—</span>;
+                            }
+                            return (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500 text-amber-700 dark:text-amber-400"
+                                data-testid={`badge-occupant-week-missing-${occupant.id}`}
+                                title={`No deduction imported for week ending ${payWeek}`}
+                              >
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                Missing
+                              </Badge>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell
                           className="text-right tabular-nums text-muted-foreground"
                           data-testid={`cell-occupant-monthly-${occupant.id}`}
                           title={t("pages.occupants.monthlyEquivalentTitle")}
                         >
-                          {formatUsd(
-                            toMonthlyCharge(
-                              occupant.chargePerBed,
-                              occupant.billingFrequency ?? "Monthly",
-                            ),
-                          )}
+                          {(() => {
+                            const amt = weekDeductionByOccupantId.get(occupant.id);
+                            return amt !== undefined ? formatUsd(amt * WEEKS_PER_MONTH) : "—";
+                          })()}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={occupant.status === "Active" ? "default" : "secondary"}>

@@ -2940,10 +2940,24 @@ components:
 
     FinanceWeeklyRow:
       type: object
-      required: [payWeekEndDate, recovered, rentPaid, utilities, net]
+      required:
+        [
+          payWeekEndDate,
+          recovered,
+          expectedRecovered,
+          rentPaid,
+          utilities,
+          net,
+        ]
       properties:
         payWeekEndDate: { type: string }
         recovered: { type: number }
+        # Sum across active beds of the bed-level weekly rate
+        # effective for this pay-week (Task #598). Acts as the
+        # "should have collected" baseline so operators can spot
+        # under-collection before the snapshot drifts. Always
+        # present (0 when no rates have been entered yet).
+        expectedRecovered: { type: number }
         rentPaid: { type: number }
         utilities: { type: number }
         net: { type: number }

@@ -1635,6 +1635,7 @@ cannot be read on disk.
 export interface FinanceWeeklyRow {
   payWeekEndDate: string;
   recovered: number;
+  expectedRecovered: number;
   rentPaid: number;
   utilities: number;
   net: number;

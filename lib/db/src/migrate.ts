@@ -8,6 +8,7 @@ import { backfillUtilitiesIncludedInRent } from "./migrations/backfill-utilities
 import { addOccupantProfileFieldsIfNeeded } from "./migrations/add-occupant-profile-fields";
 import { backfillBuildingsIfNeeded } from "./migrations/backfill-buildings";
 import { createPayrollDeductionsTableIfNeeded } from "./migrations/create-payroll-deductions-table";
+import { createBedWeeklyRatesTableIfNeeded } from "./migrations/create-bed-weekly-rates-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -71,6 +72,11 @@ export async function pushSchemaIfNeeded(
   // payroll re-import writes a snapshot. Idempotent — no-op once the
   // table exists.
   await createPayrollDeductionsTableIfNeeded(pool, log);
+
+  // Provision `bed_weekly_rates` (Task #598) the same way — ahead
+  // of pushSchema so the table is available to the new bed-rate
+  // routes on first request even when pushSchema is skipped.
+  await createBedWeeklyRatesTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

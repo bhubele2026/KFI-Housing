@@ -70,6 +70,11 @@ type SharedProps = {
 type WeeklyRow = {
   payWeekEndDate: string;
   recovered: number;
+  // Sum of bed-level "current weekly rate" rows effective for
+  // this pay-week (Task #598). Optional on the wire so older
+  // clients don't break if the field is missing — render falls
+  // back to 0 in that case.
+  expectedRecovered?: number;
   rentPaid: number;
   utilities: number;
   net: number;
@@ -211,6 +216,7 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
         .map((r) => ({
           label: formatPayWeekRange(r.payWeekEndDate),
           recovered: r.recovered,
+          expectedRecovered: r.expectedRecovered ?? 0,
           rentPaid: r.rentPaid,
         })),
     [rows],
@@ -294,6 +300,15 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
                   name={t("pages.finance.payroll.recovered")}
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="expectedRecovered"
+                  name={t("pages.finance.payroll.expectedRecovered")}
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
                   dot={false}
                 />
                 <Line

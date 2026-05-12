@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { and, gte, lte, eq } from "drizzle-orm";
 import {
+  bedsTable,
+  bedWeeklyRatesTable,
   customersTable,
   db,
   leasesTable,
@@ -10,6 +12,10 @@ import {
   propertiesTable,
   utilitiesTable,
 } from "@workspace/db";
+import {
+  effectiveBedWeeklyRate,
+  groupRatesByBed,
+} from "./bed-weekly-rates";
 import {
   ListFinanceWeeklyResponse,
   ListFinanceMonthlyResponse,
@@ -279,7 +285,7 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
   const allBuckets = trailingPayWeeks(weeks, anchor);
   const since = allBuckets[0];
   const until = allBuckets[allBuckets.length - 1];
-  const [snaps, allSnaps, leasesAll, utilitiesAll, properties] =
+  const [snaps, allSnaps, leasesAll, utilitiesAll, properties, beds, bedRates] =
     await Promise.all([
       loadSnapshots(since, until),
       loadSnapshots(),
@@ -291,6 +297,21 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
           customerId: propertiesTable.customerId,
         })
         .from(propertiesTable),
+      db
+        .select({
+          id: bedsTable.id,
+          propertyId: bedsTable.propertyId,
+          status: bedsTable.status,
+          occupantId: bedsTable.occupantId,
+        })
+        .from(bedsTable),
+      db
+        .select({
+          bedId: bedWeeklyRatesTable.bedId,
+          effectivePayWeekEndDate: bedWeeklyRatesTable.effectivePayWeekEndDate,
+          weeklyRate: bedWeeklyRatesTable.weeklyRate,
+        })
+        .from(bedWeeklyRatesTable),
     ]);
   // Drop trailing buckets older than the very first snapshot week —
   // those periods pre-date deployment and must render as "no data"
@@ -345,6 +366,38 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
   // calendar-month obligation; we simply attribute it only to the
   // weeks the lease was actually active, dividing the monthly figure
   // by WEEKS_PER_MONTH for the per-week charge.
+  // Expected recovered (Task #598): sum across currently-occupied
+  // beds (filtered by the active scope) of the bed-level rate
+  // effective for each pay-week. This is a forward-looking
+  // baseline — once Task #597's payroll snapshot lands for the
+  // week, `recovered` is the truth, but the gap between expected
+  // and recovered is what flags under-collection. Beds with no
+  // rate row contribute 0 (Task #598 intentionally cleared
+  // chargePerBed so absence means $0, not "unknown"). Historical
+  // occupancy isn't tracked at the bed level so we use the
+  // current `status === "Occupied"` flag as the proxy; that's
+  // acceptable because rates are entered going forward and the
+  // chart re-renders every time a snapshot or rate is updated.
+  const ratesByBed = groupRatesByBed(bedRates);
+  // Customer scoping uses the property's primary `customerId`, the
+  // same fallback the lease/utility rollups above use when a lease
+  // row doesn't carry its own customerId. Beds and occupants don't
+  // have a direct customer FK in this schema, so a multi-customer
+  // shared property (rare) attributes ALL its beds to the primary
+  // — consistent with the lease/utility behavior, NOT with the
+  // payroll snapshot grain. If shared-property accuracy is later
+  // required, adding `occupant.customerId` (or a bed-level
+  // override) is the right place to fix it for all three rollups
+  // at once.
+  const scopedBeds = beds.filter((b) => {
+    if (scope.propertyId && b.propertyId !== scope.propertyId) return false;
+    if (scope.customerId) {
+      const cid = propertyCustomerById.get(b.propertyId) ?? "";
+      if (cid !== scope.customerId) return false;
+    }
+    return b.status === "Occupied" && Boolean(b.occupantId);
+  });
+
   const result = buckets.map((week) => {
     const ym = monthBucketForPayWeek(week);
     let weeklyRent = 0;
@@ -360,13 +413,19 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
       if (skipUtilProps.has(u.propertyId)) continue;
       weeklyUtil += (u.monthlyCost || 0) / WEEKS_PER_MONTH;
     }
+    let expected = 0;
+    for (const b of scopedBeds) {
+      expected += effectiveBedWeeklyRate(ratesByBed.get(b.id), week);
+    }
     const recovered = round2(recoveredByWeek.get(week) ?? 0);
+    const expectedRecovered = round2(expected);
     const rentPaid = round2(weeklyRent);
     const utilitiesAmt = round2(weeklyUtil);
     const net = round2(recovered - rentPaid - utilitiesAmt);
     return {
       payWeekEndDate: week,
       recovered,
+      expectedRecovered,
       rentPaid,
       utilities: utilitiesAmt,
       net,

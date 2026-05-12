@@ -3864,6 +3864,7 @@ export const ListFinanceWeeklyQueryParams = zod.object({
 export const ListFinanceWeeklyResponseItem = zod.object({
   payWeekEndDate: zod.string(),
   recovered: zod.number(),
+  expectedRecovered: zod.number(),
   rentPaid: zod.number(),
   utilities: zod.number(),
   net: zod.number(),

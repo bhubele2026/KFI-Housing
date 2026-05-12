@@ -18,6 +18,7 @@ import {
 import {
   mostRecentSaturday,
   monthBucketForPayWeek,
+  payWeekStartForEnd,
   trailingPayWeeks,
   trailingMonthBuckets,
   WEEKS_PER_MONTH,
@@ -62,6 +63,19 @@ type LeaseRow = {
 
 function isMonthlyRentLease(l: LeaseRow): boolean {
   return (l.rateType ?? "monthly") === "monthly";
+}
+
+// True if the lease is active for ANY day in the Mon→Sat pay-week
+// ending on `payWeekEndDate`. Used by /finance/weekly so a lease
+// starting / ending mid-month doesn't contribute weekly rent in
+// pay-weeks that fall outside its actual active range.
+function isLeaseActiveInWeek(l: LeaseRow, payWeekEndDate: string): boolean {
+  if (!l.startDate) return false;
+  const start = payWeekStartForEnd(payWeekEndDate);
+  if (!start) return false;
+  const effectiveEnd =
+    l.endDate && l.endDate.length > 0 ? l.endDate : "9999-12-31";
+  return l.startDate <= payWeekEndDate && effectiveEnd >= start;
 }
 
 function isLeaseActiveInMonth(l: LeaseRow, ym: string): boolean {
@@ -307,31 +321,32 @@ router.get("/finance/weekly", async (req, res): Promise<void> => {
     );
   }
 
-  const weeklyRentByMonth = new Map<string, number>();
-  const weeklyUtilByMonth = new Map<string, number>();
-  for (const ym of monthsTouched) {
-    let rent = 0;
+  // Per-pay-week rent / utilities. We evaluate lease activity at the
+  // pay-week (Mon→Sat) granularity — not just per calendar month — so
+  // a lease that starts or ends mid-month doesn't contribute weekly
+  // rent in pay-weeks that fall outside its actual active range
+  // (Task #597 v5 validator). The full monthlyRent is still the
+  // calendar-month obligation; we simply attribute it only to the
+  // weeks the lease was actually active, dividing the monthly figure
+  // by WEEKS_PER_MONTH for the per-week charge.
+  const result = buckets.map((week) => {
+    const ym = monthBucketForPayWeek(week);
+    let weeklyRent = 0;
     for (const l of leases) {
       if (l.customerResponsibleForRent) continue;
       if (!isMonthlyRentLease(l)) continue;
-      if (!isLeaseActiveInMonth(l, ym)) continue;
-      rent += l.monthlyRent || 0;
+      if (!isLeaseActiveInWeek(l, week)) continue;
+      weeklyRent += (l.monthlyRent || 0) / WEEKS_PER_MONTH;
     }
     const skipUtilProps = propertiesWithUtilitiesInRent(leases, ym);
-    let util = 0;
+    let weeklyUtil = 0;
     for (const u of utilities) {
       if (skipUtilProps.has(u.propertyId)) continue;
-      util += u.monthlyCost || 0;
+      weeklyUtil += (u.monthlyCost || 0) / WEEKS_PER_MONTH;
     }
-    weeklyRentByMonth.set(ym, rent / WEEKS_PER_MONTH);
-    weeklyUtilByMonth.set(ym, util / WEEKS_PER_MONTH);
-  }
-
-  const result = buckets.map((week) => {
-    const ym = monthBucketForPayWeek(week);
     const recovered = round2(recoveredByWeek.get(week) ?? 0);
-    const rentPaid = round2(weeklyRentByMonth.get(ym) ?? 0);
-    const utilitiesAmt = round2(weeklyUtilByMonth.get(ym) ?? 0);
+    const rentPaid = round2(weeklyRent);
+    const utilitiesAmt = round2(weeklyUtil);
     const net = round2(recovered - rentPaid - utilitiesAmt);
     return {
       payWeekEndDate: week,

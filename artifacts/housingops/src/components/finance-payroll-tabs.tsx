@@ -173,9 +173,15 @@ function SortHeader<K extends string>({
 // ── Weekly tab ─────────────────────────────────────────────────────
 type WeeklyKey = "payWeekEndDate" | "recovered" | "rentPaid" | "utilities" | "net";
 
+const WEEKLY_WINDOW_OPTIONS = [4, 13, 26, 52] as const;
+
 export function FinancePayrollWeeklyTab(props: SharedProps) {
   const { t } = useTranslation();
-  const { data } = useListFinanceWeekly({ weeks: 13, ...scopeParams(props) });
+  // Window selector — defaults to the 13-week trailing trend the
+  // dashboard mini-chart uses, but operators can widen the table
+  // (Task #597 v5 validator: "default, filterable" window).
+  const [weeks, setWeeks] = useState<number>(13);
+  const { data } = useListFinanceWeekly({ weeks, ...scopeParams(props) });
   const rows: WeeklyRow[] = useMemo(
     () => (data as WeeklyRow[] | undefined) ?? [],
     [data],
@@ -236,6 +242,19 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
           <CardTitle className="text-base">
             {t("pages.finance.payroll.weeklyTitle")}
           </CardTitle>
+          <div className="flex items-center gap-2">
+            <select
+              value={weeks}
+              onChange={(e) => setWeeks(Number(e.target.value))}
+              data-testid="select-finance-weekly-window"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              {WEEKLY_WINDOW_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {t("pages.finance.payroll.lastNWeeks", { count: n })}
+                </option>
+              ))}
+            </select>
           <Button
             type="button"
             variant="outline"
@@ -247,6 +266,7 @@ export function FinancePayrollWeeklyTab(props: SharedProps) {
             <Download className="h-3 w-3 mr-1" />
             {t("pages.finance.payroll.exportCsv")}
           </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -398,9 +418,12 @@ type MonthlyKey =
   | "otherCosts"
   | "net";
 
+const MONTHLY_WINDOW_OPTIONS = [3, 6, 12, 24] as const;
+
 export function FinancePayrollMonthlyTab(props: SharedProps) {
   const { t } = useTranslation();
-  const { data } = useListFinanceMonthly({ months: 12, ...scopeParams(props) });
+  const [months, setMonths] = useState<number>(12);
+  const { data } = useListFinanceMonthly({ months, ...scopeParams(props) });
   const rows: MonthlyRow[] = useMemo(
     () => (data as MonthlyRow[] | undefined) ?? [],
     [data],
@@ -463,6 +486,19 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
           <CardTitle className="text-base">
             {t("pages.finance.payroll.monthlyTitle")}
           </CardTitle>
+          <div className="flex items-center gap-2">
+            <select
+              value={months}
+              onChange={(e) => setMonths(Number(e.target.value))}
+              data-testid="select-finance-monthly-window"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            >
+              {MONTHLY_WINDOW_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {t("pages.finance.payroll.lastNMonths", { count: n })}
+                </option>
+              ))}
+            </select>
           <Button
             type="button"
             variant="outline"
@@ -474,6 +510,7 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
             <Download className="h-3 w-3 mr-1" />
             {t("pages.finance.payroll.exportCsv")}
           </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

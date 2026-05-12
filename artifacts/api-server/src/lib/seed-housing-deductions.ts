@@ -813,6 +813,7 @@ export async function seedHousingDeductions(
           personId: snap.row.personId,
           nameSnapshot: snap.row.name,
           customerSnapshot: snap.row.customer,
+          source: "payroll_import",
         })
         .onConflictDoUpdate({
           target: [
@@ -826,6 +827,8 @@ export async function seedHousingDeductions(
             customerSnapshot: snap.row.customer,
             customerId: snap.customerId,
             propertyId: snap.propertyId ?? "",
+            source: "payroll_import",
+            importedAt: sql`now()`,
             createdAt: sql`now()`,
           },
         });

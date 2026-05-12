@@ -40,6 +40,16 @@ export const payrollDeductionsTable = pgTable(
     personId: text("person_id").notNull().default(""),
     nameSnapshot: text("name_snapshot").notNull().default(""),
     customerSnapshot: text("customer_snapshot").notNull().default(""),
+    // Snapshot provenance (Task #597). `source` records the
+    // ingestion path ("payroll_import" today; future: "manual",
+    // "backfill", etc.) and `importedAt` is the wall-clock time the
+    // row was written, distinct from `createdAt` which is just the DB
+    // default. Keeping them separate makes audit/replay possible
+    // even after a re-import overwrites the row in place.
+    source: text("source").notNull().default("payroll_import"),
+    importedAt: timestamp("imported_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => ({

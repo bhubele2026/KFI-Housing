@@ -84,6 +84,19 @@ export function trailingPayWeeks(count: number, endingSaturday: string): string[
 /** Average weeks per calendar month — used to convert monthlyRent → weekly. */
 export const WEEKS_PER_MONTH = 52 / 12;
 
+/**
+ * Monday start-date for the Mon→Sat pay-week ending on `saturdayYmd`.
+ * Returned as YYYY-MM-DD. The weekly finance rollup uses [start, end]
+ * to test "is this lease active in this pay-week" (per Task #597 v5
+ * validator: weekly rent must respect lease start/end mid-month).
+ */
+export function payWeekStartForEnd(saturdayYmd: string): string {
+  const d = parsePayWeekDate(saturdayYmd);
+  if (!d) return "";
+  d.setDate(d.getDate() - 5);
+  return ymd(d);
+}
+
 /** "2026-05" — calendar month bucket for a Saturday end-date. */
 export function monthBucketForPayWeek(saturdayYmd: string): string {
   const d = parsePayWeekDate(saturdayYmd);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -763,6 +763,19 @@ export default function PropertyDetail() {
     const tab = new URLSearchParams(window.location.search).get("tab");
     return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
   });
+  // Keep `activeTab` in sync with `?tab=` whenever the URL changes
+  // (Task #596). Without this, in-app navigation that only changes
+  // the query string — e.g. the Buildings roster's "Beds" jump
+  // (`/properties/:id/buildings/:bldgId?tab=beds`) — would update
+  // the URL but leave the user on whichever tab they were already
+  // on, since `useState`'s initializer runs once. wouter's
+  // `useSearch` is reactive so this effect fires on every location
+  // change.
+  const locationSearch = useSearch();
+  useEffect(() => {
+    const tab = new URLSearchParams(locationSearch).get("tab");
+    if (tab && PROPERTY_TABS.has(tab)) setActiveTab(tab);
+  }, [locationSearch, PROPERTY_TABS]);
   // Per-tab building filters (Task #590). On multi-building properties
   // operators want to focus the Leases table or Units list to a single
   // structure without dropping into the URL-based drill-down. State is
@@ -771,6 +784,12 @@ export default function PropertyDetail() {
   // case) and the initial render stay unchanged.
   const [leasesBuildingFilter, setLeasesBuildingFilter] = useState<string>("all");
   const [unitsBuildingFilter, setUnitsBuildingFilter] = useState<string>("all");
+  // Beds-tab building filter (Task #596). Same pattern as the Units /
+  // Leases pickers above so every property — including single-building
+  // ones — gets a consistent Beds → Building navigation story. When the
+  // URL drill-down is active (`focusedBuildingId`) it always wins so the
+  // dropdown stays in sync with the Buildings roster.
+  const [bedsBuildingFilter, setBedsBuildingFilter] = useState<string>("all");
   const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -2296,6 +2315,19 @@ export default function PropertyDetail() {
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             <Link
+                              href={`/properties/${id}/buildings/${b.id}?tab=beds`}
+                            >
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                data-testid={`button-building-beds-${b.id}`}
+                                title={`Show beds in ${b.name}`}
+                              >
+                                <BedDouble className="h-3.5 w-3.5 mr-1" />
+                                Beds
+                              </Button>
+                            </Link>
+                            <Link
                               href={
                                 isFocused
                                   ? `/properties/${id}`
@@ -2459,6 +2491,40 @@ export default function PropertyDetail() {
                 <span className="text-foreground font-medium">{formatUsd(propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0))}{t("pages.propertyDetail.revenueSuffix")}</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
+                {/* Beds-tab building filter (Task #596). Mirrors the
+                    Units / Leases pickers — only rendered when a
+                    property has more than one building, since
+                    single-building properties have nothing to filter.
+                    When the URL drill-down is active the filter is
+                    forced to that building and disabled. */}
+                {propBuildings.length > 1 && (
+                  <>
+                    <Label htmlFor="beds-building-filter" className="text-xs text-muted-foreground">
+                      Building
+                    </Label>
+                    <Select
+                      value={focusedBuildingId ?? bedsBuildingFilter}
+                      onValueChange={setBedsBuildingFilter}
+                      disabled={!!focusedBuildingId}
+                    >
+                      <SelectTrigger
+                        id="beds-building-filter"
+                        className="h-8 text-xs w-48"
+                        data-testid="select-beds-building-filter"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All buildings</SelectItem>
+                        {propBuildings.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
                 <Label htmlFor="beds-sort" className="text-xs text-muted-foreground">{t("pages.propertyDetail.bedsSort.label")}</Label>
                 <Select
                   value={bedsSort}
@@ -2559,7 +2625,15 @@ export default function PropertyDetail() {
                     if (list) list.push(b);
                     else orphans.push(b);
                   }
-                  const groups = propRooms.map((r) => ({ room: r, beds: bedsByRoomId.get(r.id) ?? [] }));
+                  const allGroups = propRooms.map((r) => ({ room: r, beds: bedsByRoomId.get(r.id) ?? [] }));
+                  // Apply the Beds-tab building filter (Task #596). When
+                  // the URL focus is active, propRooms is already
+                  // narrowed to that building so the filter is a no-op;
+                  // otherwise we narrow here so the toolbar dropdown
+                  // works even without a URL drill-down.
+                  const groups = bedsBuildingFilter === "all" || focusedBuildingId
+                    ? allGroups
+                    : allGroups.filter((g) => g.room.buildingId === bedsBuildingFilter);
 
                   // Apply the user's sort to the room cards. Rooms with a
                   // missing sort value (e.g. $/sqft is null because rent or
@@ -2640,12 +2714,29 @@ export default function PropertyDetail() {
                                     <BedDouble className="h-4 w-4 text-muted-foreground" />
                                     <InlineEdit value={room.name} onSave={v => updateRoom(room.id, { name: v })} />
                                   </CardTitle>
-                                  {/* Building badge (Task #587). Only rendered
-                                      when this property has more than one
-                                      building so single-building cards stay
-                                      unchanged. */}
-                                  {propBuildings.length > 1 && (() => {
+                                  {/* Building badge (Task #596 — extends Task
+                                      #587). Always rendered so single-building
+                                      and multi-building properties present the
+                                      same card layout. The picker is only
+                                      interactive on multi-building properties
+                                      (no other building to switch to
+                                      otherwise), but the badge itself is
+                                      always shown. */}
+                                  {(() => {
                                     const bld = propBuildings.find((b) => b.id === room.buildingId);
+                                    const labelClass = "inline-flex items-center gap-1 rounded-md border border-dashed bg-background px-2 py-0.5 text-[10px] font-normal text-muted-foreground";
+                                    if (propBuildings.length <= 1) {
+                                      return (
+                                        <span
+                                          className={labelClass}
+                                          data-testid={`room-building-label-${room.id}`}
+                                          title={bld ? `Building: ${bld.name}` : "Building unassigned"}
+                                        >
+                                          <Building2 className="h-3 w-3" />
+                                          {bld ? bld.name : "Building unassigned"}
+                                        </span>
+                                      );
+                                    }
                                     return (
                                       <BuildingPicker
                                         buildings={propBuildings}
@@ -2657,7 +2748,7 @@ export default function PropertyDetail() {
                                         trigger={
                                           <button
                                             type="button"
-                                            className="inline-flex items-center gap-1 rounded-md border border-dashed bg-background px-2 py-0.5 text-[10px] font-normal text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            className={`${labelClass} hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
                                             data-testid={`room-building-label-${room.id}`}
                                             title={bld ? `Building: ${bld.name} — click to change` : "Click to assign a building"}
                                           >

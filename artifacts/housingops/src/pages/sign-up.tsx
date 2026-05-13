@@ -8,8 +8,7 @@ export default function SignUpPage() {
         routing="path"
         path={`${basePath}/sign-up`}
         signInUrl={`${basePath}/sign-in`}
-        afterSignInUrl={`${basePath}/dashboard`}
-        afterSignUpUrl={`${basePath}/dashboard`}
+        fallbackRedirectUrl={`${basePath}/dashboard`}
       />
     </div>
   );

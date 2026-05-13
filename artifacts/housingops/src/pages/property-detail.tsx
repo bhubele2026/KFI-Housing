@@ -3006,31 +3006,29 @@ export default function PropertyDetail() {
                                 </div>
                               );
                             })()}
-                            <CardContent className="p-0">
-                              <Table className="[&_td]:py-1.5 [&_td]:px-2 [&_th]:h-8 [&_th]:py-0 [&_th]:px-2 [&_th]:whitespace-nowrap [&_th]:text-[10px]">
+                            <CardContent className="p-0 overflow-x-auto">
+                              <Table className="table-fixed w-full min-w-[1100px] [&_td]:py-1.5 [&_td]:px-2 [&_td]:align-middle [&_th]:h-8 [&_th]:py-0 [&_th]:px-2 [&_th]:align-middle [&_th]:whitespace-nowrap [&_th]:text-[10px]">
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-10">{t("pages.propertyDetail.bedTableBedNum")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableStatus")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableCompany")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableShift")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
-                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableBilling")}</TableHead>
-                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
-                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTableEmail")}</TableHead>
-                                    <TableHead>{t("pages.propertyDetail.bedTablePhone")}</TableHead>
-                                    <TableHead className="w-36">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
+                                    <TableHead className="w-24">{t("pages.propertyDetail.bedTableStatus")}</TableHead>
+                                    <TableHead className="w-44">{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
+                                    <TableHead className="w-20">{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
+                                    <TableHead className="w-28">{t("pages.propertyDetail.bedTableCompany")}</TableHead>
+                                    <TableHead className="w-28">{t("pages.propertyDetail.bedTableShift")}</TableHead>
+                                    <TableHead className="w-24">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
+                                    <TableHead className="w-20 text-right">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
+                                    <TableHead className="w-24">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
+                                    <TableHead className="w-24 text-right">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
+                                    <TableHead className="w-24 text-right">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
+                                    <TableHead className="w-32">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={15}
+                                      colSpan={13}
                                       icon={BedDouble}
                                       title={t("pages.propertyDetail.noBedsInRoom")}
                                       description={t("pages.propertyDetail.noBedsInRoomDescription", { room: room.name })}
@@ -3262,7 +3260,7 @@ export default function PropertyDetail() {
                                                 triggerClassName="h-7 text-xs w-28"
                                               />
                                             </TableCell>
-                                            <TableCell><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
+                                            <TableCell className="whitespace-nowrap"><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex items-center justify-end gap-1.5">
                                                 <InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} />
@@ -3327,12 +3325,10 @@ export default function PropertyDetail() {
                                             >
                                               {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
                                             </TableCell>
-                                            <TableCell><InlineEdit value={occ.email} onSave={v => updateOccupant(occ.id, { email: v })} /></TableCell>
-                                            <TableCell><InlineEdit value={occ.phone} onSave={v => updateOccupant(occ.id, { phone: v })} /></TableCell>
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={10}>
+                                            <TableCell colSpan={8}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable

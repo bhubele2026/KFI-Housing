@@ -188,7 +188,9 @@ describe("start", () => {
     );
 
     expect(exit).not.toHaveBeenCalled();
-    expect(seedIfEmpty).toHaveBeenCalled();
+    // Production never runs boot-time seeders — prod data is managed
+    // through the app, not bootstrapped from code.
+    expect(seedIfEmpty).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledWith(3000);
 
     const warnCalls = logger.warn.mock.calls;

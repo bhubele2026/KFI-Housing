@@ -274,18 +274,25 @@ export async function start(deps: StartDeps): Promise<void> {
   // deliberately keep schema push + backfills + listen + schedulers
   // running — only the data-seeding side of boot is gated.
   let autoSeedDisabled = false;
-  try {
-    autoSeedDisabled = await deps.isAutoSeedDisabled();
-  } catch (err) {
-    deps.logger.warn(
-      { err },
-      "Failed to read auto-seed-disabled marker — defaulting to enabled",
-    );
-  }
-  if (autoSeedDisabled) {
+  if (isProduction) {
+    autoSeedDisabled = true;
     deps.logger.info(
-      "Auto-seed marker present — skipping seedIfEmpty and all boot-time seeders/auto-importers (database was deliberately wiped). Run `POST /reset` to restore sample data and re-enable auto-seeding.",
+      "Production environment — skipping all boot-time seeders/auto-importers. Production data is managed through the app, not bootstrapped from code.",
     );
+  } else {
+    try {
+      autoSeedDisabled = await deps.isAutoSeedDisabled();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to read auto-seed-disabled marker — defaulting to enabled",
+      );
+    }
+    if (autoSeedDisabled) {
+      deps.logger.info(
+        "Auto-seed marker present — skipping seedIfEmpty and all boot-time seeders/auto-importers (database was deliberately wiped). Run `POST /reset` to restore sample data and re-enable auto-seeding.",
+      );
+    }
   }
 
   if (!autoSeedDisabled) {

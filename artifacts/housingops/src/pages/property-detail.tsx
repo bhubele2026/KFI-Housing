@@ -586,7 +586,7 @@ function ResponsibilitiesEditor({
       ) : (
         <button
           type="button"
-          className="text-[10px] text-muted-foreground hover:text-foreground italic flex items-center gap-0.5"
+          className={`text-[10px] text-muted-foreground hover:text-foreground italic flex items-center gap-0.5 ${(values ?? []).length === 0 ? "opacity-0 group-hover/occ:opacity-100 transition-opacity" : ""}`}
           onClick={() => setAdding(true)}
           data-testid={`responsibility-add-${occupantId}`}
         >
@@ -2824,8 +2824,8 @@ export default function PropertyDetail() {
                           }
                         };
                         return (
-                          <Card key={room.id} data-testid={`room-card-${room.id}`}>
-                            <CardHeader className="pb-3">
+                          <Card key={room.id} data-testid={`room-card-${room.id}`} className="group/room">
+                            <CardHeader className="py-2 px-4">
                               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-between">
                                 <div className="flex items-center gap-3 flex-wrap">
                                   <CardTitle className="text-base flex items-center gap-2">
@@ -3007,10 +3007,10 @@ export default function PropertyDetail() {
                               );
                             })()}
                             <CardContent className="p-0">
-                              <Table>
+                              <Table className="[&_td]:py-1.5 [&_td]:px-2 [&_th]:h-8 [&_th]:py-0 [&_th]:px-2 [&_th]:whitespace-nowrap [&_th]:text-[10px]">
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead className="w-12">{t("pages.propertyDetail.bedTableBedNum")}</TableHead>
+                                    <TableHead className="w-10">{t("pages.propertyDetail.bedTableBedNum")}</TableHead>
                                     <TableHead>{t("pages.propertyDetail.bedTableStatus")}</TableHead>
                                     <TableHead>{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
                                     <TableHead>{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
@@ -3164,9 +3164,9 @@ export default function PropertyDetail() {
                                         </TableCell>
                                         {occ ? (
                                           <>
-                                            <TableCell className="font-medium">
-                                              <div className="flex flex-col gap-1">
-                                                <div className="flex items-center gap-1 flex-wrap">
+                                            <TableCell className="font-medium group/occ">
+                                              <div className="flex flex-col gap-0.5">
+                                                <div className="flex items-center gap-1 flex-wrap whitespace-nowrap">
                                                   <InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} />
                                                   {/* Lead-tenant badge + key count (task #500).
                                                       Only meaningful in shared (multi-bed) rooms;
@@ -3188,7 +3188,7 @@ export default function PropertyDetail() {
                                                     <Button
                                                       size="sm"
                                                       variant="ghost"
-                                                      className="h-5 px-1.5 text-[10px] text-muted-foreground"
+                                                      className={`h-5 px-1.5 text-[10px] text-muted-foreground ${occ.isLead ? "" : "opacity-0 group-hover/occ:opacity-100 transition-opacity"}`}
                                                       onClick={() =>
                                                         updateOccupant(occ.id, {
                                                           isLead: !occ.isLead,
@@ -3229,7 +3229,7 @@ export default function PropertyDetail() {
                                                       <Button
                                                         size="icon"
                                                         variant="ghost"
-                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover/occ:opacity-100 transition-opacity"
                                                         data-testid={`button-delete-occupant-${occ.id}`}
                                                         title="Delete occupant"
                                                       >

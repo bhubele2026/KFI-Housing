@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
@@ -8,7 +8,6 @@ import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { ClerkTokenBridge } from "@/components/clerk-token-bridge";
 import { useGoogleMapsKeyErrorToastListener } from "@/hooks/use-google-maps-key-error";
 import { useNewMonthHotelRateReminder } from "@/hooks/use-new-month-hotel-rate-reminder";
 
@@ -32,18 +31,20 @@ import Finance from "@/pages/finance";
 import InsuranceCertificates from "@/pages/insurance-certificates";
 import SettingsPage from "@/pages/settings";
 
-// Resolve the publishable key from window.location.hostname so the same
-// build can serve multiple Clerk custom domains. Falls back to
-// VITE_CLERK_PUBLISHABLE_KEY when the host doesn't map to a custom domain.
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
   window.location.hostname,
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
 );
 
-// Empty in dev (Clerk talks to dev FAPI directly); auto-set in prod so
-// the published app routes Clerk traffic through /api/__clerk on its
-// own domain instead of trying the dev FAPI host.
 const CLERK_PROXY_URL = import.meta.env.VITE_CLERK_PROXY_URL;
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function stripBase(path: string): string {
+  return basePath && path.startsWith(basePath)
+    ? path.slice(basePath.length) || "/"
+    : path;
+}
 
 if (!CLERK_PUBLISHABLE_KEY) {
   throw new Error(
@@ -119,8 +120,9 @@ function NewMonthHotelRateReminder() {
   return null;
 }
 
-function App() {
-  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+function ClerkProviderWithRoutes() {
+  const [, setLocation] = useLocation();
+
   return (
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
@@ -128,31 +130,38 @@ function App() {
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       afterSignOutUrl={`${basePath}/sign-in`}
+      routerPush={(to) => setLocation(stripBase(to))}
+      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
     >
-      <ClerkTokenBridge />
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AuthProvider>
-            <WouterRouter base={basePath}>
+            <Switch>
               {/* Clerk's sign-in / sign-up routes are mounted OUTSIDE
                   the SignedIn gate so the auth flow itself works while
-                  the user is signed-out. */}
-              <Switch>
-                <Route path="/sign-in" component={SignInPage} />
-                <Route path="/sign-in/:rest*" component={SignInPage} />
-                <Route path="/sign-up" component={SignUpPage} />
-                <Route path="/sign-up/:rest*" component={SignUpPage} />
-                <Route>
-                  <SignedInShell />
-                </Route>
-              </Switch>
-            </WouterRouter>
+                  the user is signed-out. The optional-wildcard `/*?`
+                  matches both the base path and Clerk's sub-paths
+                  (factor-one, sso-callback, verify-email, etc.). */}
+              <Route path="/sign-in/*?" component={SignInPage} />
+              <Route path="/sign-up/*?" component={SignUpPage} />
+              <Route>
+                <SignedInShell />
+              </Route>
+            </Switch>
           </AuthProvider>
           <MapsKeyErrorToastListener />
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>
+  );
+}
+
+function App() {
+  return (
+    <WouterRouter base={basePath}>
+      <ClerkProviderWithRoutes />
+    </WouterRouter>
   );
 }
 

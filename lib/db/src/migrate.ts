@@ -9,6 +9,7 @@ import { addOccupantProfileFieldsIfNeeded } from "./migrations/add-occupant-prof
 import { backfillBuildingsIfNeeded } from "./migrations/backfill-buildings";
 import { createPayrollDeductionsTableIfNeeded } from "./migrations/create-payroll-deductions-table";
 import { createBedWeeklyRatesTableIfNeeded } from "./migrations/create-bed-weekly-rates-table";
+import { createAppUsersTablesIfNeeded } from "./migrations/create-app-users-tables";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -77,6 +78,11 @@ export async function pushSchemaIfNeeded(
   // of pushSchema so the table is available to the new bed-rate
   // routes on first request even when pushSchema is skipped.
   await createBedWeeklyRatesTableIfNeeded(pool, log);
+
+  // Provision `app_users` + `app_invites` (team auth) BEFORE drizzle's
+  // pushSchema so the auth allowlist tables exist on the very first
+  // request after the rollout. Idempotent — no-op once both exist.
+  await createAppUsersTablesIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.15",
+    "@clerk/shared": "^4.10.2",
     "@google-cloud/storage": "^7.19.0",
     "@napi-rs/canvas": "0.1.80",
     "@workspace/api-zod": "workspace:*",
@@ -22,6 +24,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5",
     "google-auth-library": "^10.6.2",
+    "http-proxy-middleware": "^4.0.0",
     "multer": "^2.1.1",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "5.4.296",

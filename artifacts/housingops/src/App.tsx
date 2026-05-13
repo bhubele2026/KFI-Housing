@@ -1,16 +1,20 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ClerkProvider, RedirectToSignIn, useAuth as useClerkAuth } from "@clerk/react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ClerkTokenBridge } from "@/components/clerk-token-bridge";
 import { useGoogleMapsKeyErrorToastListener } from "@/hooks/use-google-maps-key-error";
 import { useNewMonthHotelRateReminder } from "@/hooks/use-new-month-hotel-rate-reminder";
 
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import SignInPage from "@/pages/sign-in";
+import SignUpPage from "@/pages/sign-up";
 import Dashboard from "@/pages/dashboard";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
@@ -27,11 +31,14 @@ import Finance from "@/pages/finance";
 import InsuranceCertificates from "@/pages/insurance-certificates";
 import SettingsPage from "@/pages/settings";
 
-// Demo-grade defaults: never auto-retry mutations (a stale optimistic patch
-// will get re-applied on top of fresh data, which is more confusing than a
-// single visible error toast), and only retry queries once before surfacing
-// a load failure. The data store rolls back optimistic patches on error so
-// the user sees their last-good value, not the half-applied change.
+const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+if (!CLERK_PUBLISHABLE_KEY) {
+  throw new Error(
+    "Missing VITE_CLERK_PUBLISHABLE_KEY. Run setupClerkWhitelabelAuth() to provision Clerk.",
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
@@ -39,7 +46,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function Router() {
+function AppRoutes() {
   return (
     <Switch>
       <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
@@ -49,14 +56,9 @@ function Router() {
       <Route path="/customers/:id" component={CustomerDetail} />
       <Route path="/properties" component={Properties} />
       <Route path="/properties/:id" component={PropertyDetail} />
-      {/* Drill-down to a single building under a property (Task #570). */}
       <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
       <Route path="/leases" component={Leases} />
       <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
-      {/* Create-mode route is registered BEFORE the parameterized one so
-          wouter's <Switch> matches it first; otherwise `/leases/new` would
-          land on the edit page with id="new" and try to look up a lease
-          that doesn't exist yet. */}
       <Route path="/leases/new" component={LeaseDetail} />
       <Route path="/leases/:id" component={LeaseDetail} />
       <Route path="/beds" component={Beds} />
@@ -71,51 +73,71 @@ function Router() {
   );
 }
 
-// Tiny render-less child of the QueryClientProvider tree that installs the
-// global Google-Maps-key-error listeners (postMessage + window.gm_authFailure)
-// and pumps the resulting events into the app's toast queue. Lives as its
-// own component so the hook can call useToast without coupling App's body
-// to the toast pipeline (Task #167).
+function SignedInShell() {
+  const { isLoaded, isSignedIn } = useClerkAuth();
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f6f1e7] text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+  if (!isSignedIn) {
+    return <RedirectToSignIn />;
+  }
+  return (
+    <DataProvider>
+      <CustomerScopeProvider>
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
+        <NewMonthHotelRateReminder />
+      </CustomerScopeProvider>
+    </DataProvider>
+  );
+}
+
 function MapsKeyErrorToastListener() {
   useGoogleMapsKeyErrorToastListener();
   return null;
 }
 
-// Render-less child of DataProvider + WouterRouter that fires the
-// once-per-month "no log yet" reminder when the calendar month rolls
-// over and at least one hotel-rate lease still lacks a current-month
-// room-night log. Lives inside the router so its toast action can use
-// wouter's <Link> for the deep-link to /leases?atRisk=1 (Task #343).
 function NewMonthHotelRateReminder() {
   useNewMonthHotelRateReminder();
   return null;
 }
 
 function App() {
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <DataProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <CustomerScopeProvider>
-                {/* Boundary lives below WouterRouter so a buggy page only
-                    blanks the main content area — the sidebar (rendered
-                    inside MainLayout, also below the boundary) stays
-                    available via the "Try again" button or by navigating
-                    to a different route which remounts the subtree. */}
-                <ErrorBoundary>
-                  <Router />
-                </ErrorBoundary>
-                <NewMonthHotelRateReminder />
-              </CustomerScopeProvider>
+    <ClerkProvider
+      publishableKey={CLERK_PUBLISHABLE_KEY}
+      signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
+      afterSignOutUrl={`${basePath}/sign-in`}
+    >
+      <ClerkTokenBridge />
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <WouterRouter base={basePath}>
+              {/* Clerk's sign-in / sign-up routes are mounted OUTSIDE
+                  the SignedIn gate so the auth flow itself works while
+                  the user is signed-out. */}
+              <Switch>
+                <Route path="/sign-in/:rest*" component={SignInPage} />
+                <Route path="/sign-up/:rest*" component={SignUpPage} />
+                <Route>
+                  <SignedInShell />
+                </Route>
+              </Switch>
             </WouterRouter>
-          </DataProvider>
-        </AuthProvider>
-        <MapsKeyErrorToastListener />
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+          </AuthProvider>
+          <MapsKeyErrorToastListener />
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ClerkProvider>
   );
 }
 

@@ -16,3 +16,4 @@ export * from "./scheduler-state";
 export * from "./digest-recipients";
 export * from "./payroll-deductions";
 export * from "./bed-weekly-rates";
+export * from "./app-users";

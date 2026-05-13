@@ -28,6 +28,7 @@ import attachedAssetsRouter from "./attached-assets";
 import leaseDigestRouter from "./lease-digest";
 import digestRecipientsRouter from "./digest-recipients";
 import storageRouter from "./storage";
+import teamRouter from "./team";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(financeRouter);
 router.use(attachedAssetsRouter);
 router.use(leaseDigestRouter);
 router.use(digestRecipientsRouter);
+router.use(teamRouter);
 
 export default router;

@@ -21,7 +21,7 @@ import {
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
   ShieldCheck, Trees, Sparkles, CheckCircle2, Star, Briefcase,
   Cigarette, Car, Volume2, Siren, Wrench, Sparkle, MoreHorizontal,
-  ShieldAlert,
+  ShieldAlert, ArrowRightLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -51,6 +51,7 @@ import { PropertyLocationMap } from "@/components/property-location-map";
 import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
+import { MoveOccupantDialog } from "@/components/move-occupant-dialog";
 import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift-pairs";
 import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
@@ -3218,6 +3219,21 @@ export default function PropertyDetail() {
                                                       }}
                                                     />
                                                   )}
+                                                  <MoveOccupantDialog
+                                                    occupant={occ}
+                                                    testIdSuffix={occ.id}
+                                                    trigger={
+                                                      <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-0 group-hover/occ:opacity-100 transition-opacity"
+                                                        data-testid={`button-move-occupant-${occ.id}`}
+                                                        title="Move to another property / customer"
+                                                      >
+                                                        <ArrowRightLeft className="h-3 w-3" />
+                                                      </Button>
+                                                    }
+                                                  />
                                                   <ConfirmDeleteButton
                                                     title={`Delete ${occ.name}?`}
                                                     description="This permanently removes the occupant record and frees up the bed. You can't undo this."

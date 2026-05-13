@@ -19,6 +19,7 @@ import {
 import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
+import { MoveOccupantDialog } from "@/components/move-occupant-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { formatUsd, STANDARD_SHIFTS } from "@/data/mockData";
@@ -836,23 +837,29 @@ export default function Occupants() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <ConfirmDeleteButton
-                            title={t("pages.occupants.deleteOccupantConfirmTitle", { name: occupant.name })}
-                            description={t("pages.occupants.deleteOccupantConfirmDescription")}
-                            onConfirm={() => deleteOccupant(occupant.id)}
-                            testId={`dialog-confirm-delete-occupant-${occupant.id}`}
-                            trigger={
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                data-testid={`button-delete-occupant-${occupant.id}`}
-                                title={t("pages.occupants.deleteOccupantTitle")}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            }
-                          />
+                          <div className="flex items-center justify-end gap-1">
+                            <MoveOccupantDialog
+                              occupant={occupant}
+                              testIdSuffix={occupant.id}
+                            />
+                            <ConfirmDeleteButton
+                              title={t("pages.occupants.deleteOccupantConfirmTitle", { name: occupant.name })}
+                              description={t("pages.occupants.deleteOccupantConfirmDescription")}
+                              onConfirm={() => deleteOccupant(occupant.id)}
+                              testId={`dialog-confirm-delete-occupant-${occupant.id}`}
+                              trigger={
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                  data-testid={`button-delete-occupant-${occupant.id}`}
+                                  title={t("pages.occupants.deleteOccupantTitle")}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

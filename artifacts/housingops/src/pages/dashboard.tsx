@@ -31,7 +31,7 @@ import {
 } from "@/lib/projected-move-in-flag";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, toMonthlyCharge, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -1040,10 +1040,16 @@ export default function Dashboard() {
   const vacantBeds = scopedBeds.filter((b) => b.status === "Vacant").length;
   const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
 
-  const totalMonthlyRevenue = scopedProperties.reduce((acc, p) => {
-    const occupied = scopedBeds.filter((b) => b.propertyId === p.id && b.status === "Occupied");
-    return acc + occupied.length * p.monthlyRent;
-  }, 0);
+  // "Recovered Rent" = what active occupants are actually paying back
+  // via payroll deductions, NOT the theoretical full per-bed list price.
+  // If no occupants have a chargePerBed set yet, this is $0 — which
+  // correctly reflects that nothing has been recovered.
+  const totalMonthlyRevenue = activeOccupants.reduce(
+    (acc, o) =>
+      acc +
+      toMonthlyCharge(o.chargePerBed || 0, o.billingFrequency ?? "Monthly"),
+    0,
+  );
 
   // Use the hotel-rate–aware estimator so corporate-rate agreements
   // (nightly × room-nights from the latest logged month) contribute to

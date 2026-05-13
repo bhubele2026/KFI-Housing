@@ -51,7 +51,6 @@ import { PropertyLocationMap } from "@/components/property-location-map";
 import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
 import { NotFoundScreen } from "@/components/not-found-screen";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
-import { BedWeeklyRateCell } from "@/components/bed-weekly-rate-cell";
 import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift-pairs";
 import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
@@ -3011,7 +3010,6 @@ export default function PropertyDetail() {
                                     <TableHead>{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
                                     <TableHead className="text-right">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
                                     <TableHead>{t("pages.propertyDetail.bedTableBilling")}</TableHead>
-                                    <TableHead className="text-right">{t("pages.propertyDetail.bedTableBedRate")}</TableHead>
                                     <TableHead className="text-right">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
                                     <TableHead className="text-right">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
                                     <TableHead>{t("pages.propertyDetail.bedTableEmail")}</TableHead>
@@ -3023,7 +3021,7 @@ export default function PropertyDetail() {
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={16}
+                                      colSpan={15}
                                       icon={BedDouble}
                                       title={t("pages.propertyDetail.noBedsInRoom")}
                                       description={t("pages.propertyDetail.noBedsInRoomDescription", { room: room.name })}
@@ -3309,12 +3307,6 @@ export default function PropertyDetail() {
                                             </TableCell>
                                             <TableCell
                                               className="text-right tabular-nums"
-                                              data-testid={`cell-bed-rate-${bed.id}`}
-                                            >
-                                              <BedWeeklyRateCell bedId={bed.id} />
-                                            </TableCell>
-                                            <TableCell
-                                              className="text-right tabular-nums"
                                               data-testid={`cell-bed-weekly-${bed.id}`}
                                             >
                                               {formatUsd(toWeeklyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
@@ -3331,7 +3323,7 @@ export default function PropertyDetail() {
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={11}>
+                                            <TableCell colSpan={10}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable

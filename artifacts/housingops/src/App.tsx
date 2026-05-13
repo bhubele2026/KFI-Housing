@@ -1,6 +1,7 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
+import { publishableKeyFromHost } from "@clerk/react/internal";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
@@ -31,7 +32,18 @@ import Finance from "@/pages/finance";
 import InsuranceCertificates from "@/pages/insurance-certificates";
 import SettingsPage from "@/pages/settings";
 
-const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+// Resolve the publishable key from window.location.hostname so the same
+// build can serve multiple Clerk custom domains. Falls back to
+// VITE_CLERK_PUBLISHABLE_KEY when the host doesn't map to a custom domain.
+const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+
+// Empty in dev (Clerk talks to dev FAPI directly); auto-set in prod so
+// the published app routes Clerk traffic through /api/__clerk on its
+// own domain instead of trying the dev FAPI host.
+const CLERK_PROXY_URL = import.meta.env.VITE_CLERK_PROXY_URL;
 
 if (!CLERK_PUBLISHABLE_KEY) {
   throw new Error(
@@ -112,6 +124,7 @@ function App() {
   return (
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
+      proxyUrl={CLERK_PROXY_URL}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
       afterSignOutUrl={`${basePath}/sign-in`}

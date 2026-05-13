@@ -1147,7 +1147,16 @@ export default function PropertyDetail() {
     (b) => b.status === "Vacant" && (b.cleaningStatus ?? "ready") !== "ready",
   ).length;
   const vacantBeds = propBeds.length - occupiedBeds;
-  const monthlyRevenue = propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0);
+  // Housing Recovery (monthly snapshot) = sum of per-occupant weekly
+  // deduction × 4. Same source as the "Weekly Deduction" column on the
+  // bed table, so the stat card and the per-bed rows always agree.
+  // Editing the deduction on the occupant or bed row immediately moves
+  // this number. Empty / unset deductions contribute $0.
+  const weeklyRecovery = propOccupants.reduce(
+    (s, o) => s + toWeeklyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"),
+    0,
+  );
+  const monthlyRevenue = weeklyRecovery * 4;
   const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
   // Per-bed unit economics use property.monthlyRent (not the sum of
   // active-lease rent) so the number matches the Properties list and

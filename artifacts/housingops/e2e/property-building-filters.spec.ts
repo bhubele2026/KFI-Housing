@@ -131,13 +131,14 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByLabel("Email").fill("pw-building-filters@test.com");
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL("**/dashboard");
-  // Let the dashboard's data queries (properties, leases, buildings, …)
-  // settle before we navigate to the property detail page. Without this
-  // the property page mounts mid-load: its `isLoading` flips from true
-  // → false between renders, which crosses an early `return` guard and
-  // changes the hook count between renders. Waiting here keeps the
-  // queries cached so PropertyDetail mounts with `isLoading === false`
-  // from its first render.
+  // Belt-and-suspenders: wait for the dashboard's queries to settle.
+  // Historically this was load-bearing — PropertyDetail had `useMemo`s
+  // sitting BELOW its `isLoading` early return, so mounting mid-load
+  // crashed with "Rendered more hooks than during the previous render".
+  // Task #596 hoisted those hooks above the early returns, so the page
+  // now renders cleanly even on a cold cache. We keep the wait here
+  // anyway to keep the test deterministic, but it's no longer required
+  // to avoid the crash.
   await page.waitForLoadState("networkidle");
 }
 
@@ -243,5 +244,47 @@ test.describe("Property detail building filters (Task #590)", () => {
     for (const u of ["100", "200", "300", "400"]) {
       await expect(page.getByTestId(`unit-card-${u}`)).toBeVisible();
     }
+  });
+
+  // Regression test for Task #596. Previously, deep-linking straight to
+  // `/properties/:id` on a cold cache crashed PropertyDetail with
+  // "Rendered more hooks than during the previous render" because two
+  // `useMemo` calls sat below the `isLoading` early return. This test
+  // navigates directly to the property page WITHOUT the dashboard
+  // warm-up, then asserts the page rendered successfully (header is
+  // visible, no global error-boundary fallback shown).
+  test("Direct cold-cache navigation to /properties/:id renders without crashing into the error boundary (Task #596)", async ({
+    page,
+  }) => {
+    const errorBoundaryMessages: string[] = [];
+    page.on("pageerror", (err) => {
+      errorBoundaryMessages.push(err.message);
+    });
+
+    await setupRouteInterception(page);
+
+    // Log in but DO NOT wait for the dashboard's queries to settle —
+    // we want PropertyDetail to mount mid-load to reproduce the cold-
+    // cache scenario the bug originally hit.
+    await page.goto("/login");
+    await page.getByLabel("Email").fill("pw-cold-load@test.com");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL("**/dashboard");
+
+    // Jump straight to the property page without a networkidle wait.
+    await page.goto(`/properties/${PROPERTY.id}?tab=leases`);
+
+    // The page should render its content, not the global error
+    // boundary. Use a lease row as the success signal — it only
+    // appears once PropertyDetail finishes its post-loading render.
+    await expect(page.getByTestId(`row-lease-${LEASE_A1.id}`)).toBeVisible();
+
+    // Belt-and-suspenders: no React invariant errors should have
+    // surfaced as page errors during the load.
+    expect(
+      errorBoundaryMessages.filter((m) =>
+        m.includes("Rendered more hooks than during the previous render"),
+      ),
+    ).toEqual([]);
   });
 });

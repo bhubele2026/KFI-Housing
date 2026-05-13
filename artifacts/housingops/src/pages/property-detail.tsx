@@ -985,6 +985,20 @@ export default function PropertyDetail() {
     }
   }, [propBuildings, leasesBuildingFilter, unitsBuildingFilter, setLeasesBuildingFilter, setUnitsBuildingFilter]);
   const propOccupants = useMemo(() => occupants.filter(o => o.propertyId === id && o.status === "Active"), [occupants, id]);
+  // Recurring non-rent line items for this property. Hoisted above the
+  // `isLoading` / not-found early returns so the hook count stays stable
+  // across the cold-cache → loaded transition (Task #596). Previously
+  // these `useMemo`s sat ~150 lines below the early return, which caused
+  // React's "Rendered more hooks than during the previous render" crash
+  // on a hard refresh of `/properties/:id`.
+  const propOtherCostsTotal = useMemo(
+    () => sumOtherCostsForProperty(otherCosts, id),
+    [otherCosts, id],
+  );
+  const propOtherCosts = useMemo(
+    () => otherCosts.filter((c) => c.propertyId === id),
+    [otherCosts, id],
+  );
 
   const propertyUnits = useMemo(() => {
     const byUnit = new Map<string, Lease[]>();
@@ -1185,14 +1199,8 @@ export default function PropertyDetail() {
   // When `property.rentFree` is true, this replaces `monthlyLeaseCost` in
   // every "rent" surface (header stat card, leases table, etc.) so the
   // operator sees the cleaning fee total instead of a perpetual $0.
-  const propOtherCostsTotal = useMemo(
-    () => sumOtherCostsForProperty(otherCosts, id),
-    [otherCosts, id],
-  );
-  const propOtherCosts = useMemo(
-    () => otherCosts.filter((c) => c.propertyId === id),
-    [otherCosts, id],
-  );
+  // `propOtherCostsTotal` and `propOtherCosts` are computed above the
+  // early returns (Task #596) so refer to those bindings here.
   // Per-lease hotel-rate breakdown — used by the Lease Rent stat sub and
   // by the Finance tab Costs section to surface the
   // "≈ $X this month (Y nights × $Z/night)" figure operators want next

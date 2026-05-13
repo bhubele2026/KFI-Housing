@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, ne, sql } from "drizzle-orm";
+import { clerkClient } from "@clerk/express";
 import { db } from "@workspace/db";
 import { appUsersTable, appInvitesTable } from "@workspace/db/schema";
 import {
@@ -84,6 +85,47 @@ router.post("/team/invites", requireAdmin, async (req: AuthedRequest, res) => {
     res.status(409).json({ error: `${rawEmail} is already invited.` });
     return;
   }
+  // Build the redirect target for the invitation email — Clerk appends
+  // the invite ticket to this URL, so it must point at the published
+  // app's sign-up page (not the API host). We derive it from the
+  // request's `Origin` / `Referer` so dev + prod both work without
+  // having to hard-code a domain.
+  const origin =
+    (typeof req.headers.origin === "string" && req.headers.origin) ||
+    (typeof req.headers.referer === "string"
+      ? new URL(req.headers.referer).origin
+      : null);
+  const redirectUrl = origin ? `${origin}/sign-up` : undefined;
+
+  // Hand the email-sending off to Clerk's invitation API. Clerk owns
+  // the email template (branded with the app name + logo configured in
+  // the Auth pane) and the invite ticket, which short-circuits email
+  // verification when the recipient signs up. We still store our own
+  // `app_invites` row so `requireAuth` can promote them to the right
+  // role on first sign-in.
+  let clerkInviteId: string | null = null;
+  try {
+    const inv = await clerkClient.invitations.createInvitation({
+      emailAddress: rawEmail,
+      redirectUrl,
+      publicMetadata: { role },
+      ignoreExisting: true,
+    });
+    clerkInviteId = inv.id;
+  } catch (err) {
+    logger.error(
+      { err, email: rawEmail },
+      "Clerk invitation failed — not creating local invite row",
+    );
+    res.status(502).json({
+      error:
+        err instanceof Error
+          ? `Could not send invitation email: ${err.message}`
+          : "Could not send invitation email.",
+    });
+    return;
+  }
+
   const id = makeId("inv");
   await db.insert(appInvitesTable).values({
     id,
@@ -92,7 +134,7 @@ router.post("/team/invites", requireAdmin, async (req: AuthedRequest, res) => {
     invitedByUserId: req.appUser?.id ?? "",
   });
   logger.info(
-    { invitedBy: req.appUser?.id, email: rawEmail, role },
+    { invitedBy: req.appUser?.id, email: rawEmail, role, clerkInviteId },
     "Team invite created",
   );
   res.status(201).json({ id, email: rawEmail, role });

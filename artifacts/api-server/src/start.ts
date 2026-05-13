@@ -48,6 +48,13 @@ export interface StartDeps {
   // are no-ops. Only invoked when `isProduction` is true. Injected so
   // tests can stub it out (the default impl writes to the live pool).
   runProdSyncOnce: () => Promise<void>;
+  // One-shot occupant-charge zeroing: clears `charge_per_bed` on every
+  // occupant row the first time it runs in production, then writes a
+  // marker so subsequent boots are no-ops. The bundled prod-sync
+  // snapshot was captured before the operator zeroed dev, so this
+  // brings prod into the same "Housing Recovery starts at $0 until
+  // rates are explicitly set" state.
+  runZeroOccupantChargesOnce: () => Promise<void>;
   backfillOccupantMoveInDates: () => Promise<void>;
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
@@ -285,6 +292,14 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.error(
         { err },
         "prod-sync failed — continuing to serve with existing prod data",
+      );
+    }
+    try {
+      await deps.runZeroOccupantChargesOnce();
+    } catch (err) {
+      deps.logger.error(
+        { err },
+        "zero-occupant-charges failed — continuing without zeroing",
       );
     }
   }

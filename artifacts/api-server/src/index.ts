@@ -24,6 +24,7 @@ import { seedHousingDeductions } from "./lib/seed-housing-deductions";
 import { importDefaultMasterLeasesIfMissing } from "./lib/import-master-leases";
 import { seedPayrollOccupantsIfMissing } from "./lib/seed-payroll-occupants";
 import { runProdSyncOnce } from "./lib/prod-sync";
+import { zeroOccupantChargesOnce } from "./lib/zero-occupant-charges";
 import { start } from "./start";
 
 void start({
@@ -31,6 +32,7 @@ void start({
   seedIfEmpty,
   isAutoSeedDisabled: () => isAutoSeedDisabled(),
   runProdSyncOnce: () => runProdSyncOnce(),
+  runZeroOccupantChargesOnce: () => zeroOccupantChargesOnce(),
   backfillOccupantMoveInDates: async () => {
     await backfillOccupantMoveInDates();
   },

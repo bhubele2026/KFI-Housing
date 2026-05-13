@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, Mail, Trash2, Plus, Loader2, Copy } from "lucide-react";
+import { Users, Mail, Trash2, Plus, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface TeamMember {
@@ -37,15 +37,6 @@ interface TeamInvite {
   email: string;
   role: string;
   createdAt: string | null;
-  inviteUrl: string | null;
-}
-
-interface InviteCreatedResponse {
-  id: string;
-  email: string;
-  role: string;
-  inviteUrl: string | null;
-  emailSent: boolean;
 }
 
 interface TeamMe {
@@ -89,31 +80,15 @@ export function TeamSettings() {
 
   const inviteMutation = useMutation({
     mutationFn: (vars: { email: string; role: string }) =>
-      customFetch<InviteCreatedResponse>("/api/team/invites", {
+      customFetch("/api/team/invites", {
         method: "POST",
         body: JSON.stringify(vars),
       }),
-    onSuccess: (data) => {
+    onSuccess: () => {
       setNewEmail("");
       setNewRole("member");
       qc.invalidateQueries({ queryKey: ["team", "invites"] });
-      if (data?.emailSent) {
-        toast({
-          title: "Invite sent",
-          description: `An invite email was sent to ${data.email}.`,
-        });
-      } else {
-        const url = data?.inviteUrl;
-        if (url && typeof navigator !== "undefined" && navigator.clipboard) {
-          void navigator.clipboard.writeText(url).catch(() => {});
-        }
-        toast({
-          title: "Invite created — email not sent",
-          description: url
-            ? `Email delivery isn't configured yet, so the invite link was copied to your clipboard. Send it to ${data?.email} however you like (Slack, text, etc.).`
-            : `Email delivery isn't configured. Use the "Copy link" button on the pending invite to share it manually.`,
-        });
-      }
+      toast({ title: "Invite sent" });
     },
     onError: (err: unknown) => {
       const msg =
@@ -253,10 +228,8 @@ export function TeamSettings() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              We'll email them a sign-up link. They get the role you choose as
-              soon as they sign in with this email. If your email service isn't
-              wired up, you can copy the invite link from the pending list and
-              send it however you like.
+              They'll get access the next time they sign in with Clerk using
+              this email.
             </p>
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
@@ -338,50 +311,16 @@ export function TeamSettings() {
                     <TableCell>{formatDate(inv.createdAt)}</TableCell>
                     {isAdmin && (
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {inv.inviteUrl && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                if (
-                                  typeof navigator !== "undefined" &&
-                                  navigator.clipboard &&
-                                  inv.inviteUrl
-                                ) {
-                                  void navigator.clipboard
-                                    .writeText(inv.inviteUrl)
-                                    .then(() =>
-                                      toast({
-                                        title: "Invite link copied",
-                                        description: `Send it to ${inv.email}.`,
-                                      }),
-                                    )
-                                    .catch(() =>
-                                      toast({
-                                        title: "Couldn't copy link",
-                                        variant: "destructive",
-                                      }),
-                                    );
-                                }
-                              }}
-                              data-testid="team-copy-invite-link-btn"
-                              aria-label={`Copy invite link for ${inv.email}`}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            disabled={revokeInviteMutation.isPending}
-                            onClick={() => revokeInviteMutation.mutate(inv.id)}
-                            data-testid="team-revoke-invite-btn"
-                            aria-label={`Revoke invite for ${inv.email}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={revokeInviteMutation.isPending}
+                          onClick={() => revokeInviteMutation.mutate(inv.id)}
+                          data-testid="team-revoke-invite-btn"
+                          aria-label={`Revoke invite for ${inv.email}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     )}
                   </TableRow>

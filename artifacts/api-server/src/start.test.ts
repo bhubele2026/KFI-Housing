@@ -24,6 +24,7 @@ function makeDeps(overrides: Partial<StartDeps> = {}): StartDeps {
     }),
     seedIfEmpty: vi.fn().mockResolvedValue(undefined),
     isAutoSeedDisabled: vi.fn().mockResolvedValue(false),
+    runProdSyncOnce: vi.fn().mockResolvedValue(undefined),
     backfillOccupantMoveInDates: vi.fn().mockResolvedValue(undefined),
     seedAdientIfMissing: vi.fn().mockResolvedValue(undefined),
     importDefaultMasterLeasesIfMissing: vi.fn().mockResolvedValue(undefined),

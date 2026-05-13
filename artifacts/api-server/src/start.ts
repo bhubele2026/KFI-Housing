@@ -43,6 +43,11 @@ export interface StartDeps {
   // restarts. Defaults to a no-op `() => false` for tests that don't
   // care.
   isAutoSeedDisabled: () => Promise<boolean>;
+  // One-shot data sync: copies the bundled dev snapshot into the prod
+  // DB the first time it runs, then writes a marker so subsequent boots
+  // are no-ops. Only invoked when `isProduction` is true. Injected so
+  // tests can stub it out (the default impl writes to the live pool).
+  runProdSyncOnce: () => Promise<void>;
   backfillOccupantMoveInDates: () => Promise<void>;
   // Idempotent Adient customer/property/lease seed; runs after
   // seedIfEmpty so it applies on already-populated DBs. Non-fatal.
@@ -273,6 +278,17 @@ export async function start(deps: StartDeps): Promise<void> {
   // an intentionally wiped DB stays empty across restarts. We
   // deliberately keep schema push + backfills + listen + schedulers
   // running — only the data-seeding side of boot is gated.
+  if (isProduction) {
+    try {
+      await deps.runProdSyncOnce();
+    } catch (err) {
+      deps.logger.error(
+        { err },
+        "prod-sync failed — continuing to serve with existing prod data",
+      );
+    }
+  }
+
   let autoSeedDisabled = false;
   if (isProduction) {
     autoSeedDisabled = true;

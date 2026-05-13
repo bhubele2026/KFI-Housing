@@ -23,12 +23,14 @@ import { backfillOccupantPayrollIds } from "./lib/backfill-occupant-payroll-ids"
 import { seedHousingDeductions } from "./lib/seed-housing-deductions";
 import { importDefaultMasterLeasesIfMissing } from "./lib/import-master-leases";
 import { seedPayrollOccupantsIfMissing } from "./lib/seed-payroll-occupants";
+import { runProdSyncOnce } from "./lib/prod-sync";
 import { start } from "./start";
 
 void start({
   pushSchemaIfNeeded,
   seedIfEmpty,
   isAutoSeedDisabled: () => isAutoSeedDisabled(),
+  runProdSyncOnce: () => runProdSyncOnce(),
   backfillOccupantMoveInDates: async () => {
     await backfillOccupantMoveInDates();
   },

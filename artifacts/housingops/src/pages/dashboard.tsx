@@ -21,6 +21,7 @@ import {
   getListUnplacedPayrollQueryKey,
   useListRoomNightLogs,
   useListAllProjectedMoveIns,
+  useListPayrollDeductions,
   type ProjectedMoveIn,
   type UnplacedPayrollRow,
   type LowConfidencePayrollMatch,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/projected-move-in-flag";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
-import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, toMonthlyCharge, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
+import { computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, formatUsd, formatUsdWhole, RATING_CATEGORIES, sumActiveRentEstimated, estimateLeaseMonthlyRent, daysUntil, sumCustomerResponsibleRent, getCustomerResponsibleLeases, type CustomerResponsibleStatusFilter, type RatingCategoryKey, type Lease, type Occupant } from "@/data/mockData";
 import { formatYMDPretty, formatTodayYMD, addDaysToToday } from "@/lib/lease-dates";
 import { StarRating } from "@/components/star-rating";
 import { Link } from "wouter";
@@ -117,6 +118,14 @@ export default function Dashboard() {
   // and date bucket on the client so operators see the same data their
   // selected scope would on each property's Beds tab.
   const { data: allProjectedMoveInsData } = useListAllProjectedMoveIns();
+  // Recorded per-pay-week deductions feed the "Recovered Rent" tile.
+  // Returns [] when nothing has been imported, which surfaces $0 — the
+  // honest answer until the first weekly payroll snapshot lands.
+  const { data: payrollDeductionsData } = useListPayrollDeductions();
+  const payrollDeductions = useMemo(
+    () => payrollDeductionsData ?? [],
+    [payrollDeductionsData],
+  );
   const allProjectedMoveIns = useMemo<ProjectedMoveIn[]>(
     () => allProjectedMoveInsData ?? [],
     [allProjectedMoveInsData],
@@ -1040,14 +1049,17 @@ export default function Dashboard() {
   const vacantBeds = scopedBeds.filter((b) => b.status === "Vacant").length;
   const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
 
-  // "Recovered Rent" = what active occupants are actually paying back
-  // via payroll deductions, NOT the theoretical full per-bed list price.
-  // If no occupants have a chargePerBed set yet, this is $0 — which
-  // correctly reflects that nothing has been recovered.
-  const totalMonthlyRevenue = activeOccupants.reduce(
-    (acc, o) =>
-      acc +
-      toMonthlyCharge(o.chargePerBed || 0, o.billingFrequency ?? "Monthly"),
+  // "Recovered Rent" = sum of *actual* recorded payroll deductions
+  // for the current calendar month (rows in /payroll-deductions whose
+  // Saturday `payWeekEndDate` falls in the current month). Until any
+  // weekly deduction snapshots are imported this is correctly $0 —
+  // we no longer infer it from the theoretical chargePerBed × occupant
+  // count, which conflated "what we plan to charge" with "what was
+  // actually deducted".
+  const now = new Date();
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const totalMonthlyRevenue = (payrollDeductions ?? []).reduce(
+    (acc, r) => (r.payWeekEndDate?.startsWith(ym) ? acc + (r.weeklyAmount || 0) : acc),
     0,
   );
 

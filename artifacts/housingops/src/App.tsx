@@ -1,6 +1,6 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ClerkProvider, RedirectToSignIn, useAuth as useClerkAuth } from "@clerk/react";
+import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
@@ -83,7 +83,7 @@ function SignedInShell() {
     );
   }
   if (!isSignedIn) {
-    return <RedirectToSignIn />;
+    return <Redirect to="/sign-in" />;
   }
   return (
     <DataProvider>
@@ -125,7 +125,9 @@ function App() {
                   the SignedIn gate so the auth flow itself works while
                   the user is signed-out. */}
               <Switch>
+                <Route path="/sign-in" component={SignInPage} />
                 <Route path="/sign-in/:rest*" component={SignInPage} />
+                <Route path="/sign-up" component={SignUpPage} />
                 <Route path="/sign-up/:rest*" component={SignUpPage} />
                 <Route>
                   <SignedInShell />

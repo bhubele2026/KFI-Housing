@@ -41,3 +41,8 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+ADMIN_BOOTSTRAP_EMAIL = "bhubele@kfistaffing.com"

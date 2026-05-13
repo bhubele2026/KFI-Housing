@@ -139,10 +139,22 @@ export async function requireAuth(
         .select({ n: sql<number>`count(*)::int` })
         .from(appUsersTable)) as Array<{ n: number }>;
 
+      const bootstrapEmail = (process.env.ADMIN_BOOTSTRAP_EMAIL ?? "")
+        .trim()
+        .toLowerCase();
       let role = "member";
       let admittedViaInvite = false;
-      if (n === 0) {
+      let bootstrapAdmin = false;
+      if (bootstrapEmail && email === bootstrapEmail) {
+        // The configured owner email is always admitted as admin,
+        // regardless of who signed in first.
         role = "admin";
+        bootstrapAdmin = true;
+      } else if (n === 0 && !bootstrapEmail) {
+        // Legacy fallback: if no bootstrap email is configured, the
+        // first-ever signer becomes admin.
+        role = "admin";
+        bootstrapAdmin = true;
       } else {
         const invite = await tx
           .select()
@@ -173,7 +185,7 @@ export async function requireAuth(
       return {
         kind: "provisioned" as const,
         viaInvite: admittedViaInvite,
-        bootstrap: n === 0,
+        bootstrap: bootstrapAdmin,
         user: { id, clerkUserId, email, name, role },
       };
     });

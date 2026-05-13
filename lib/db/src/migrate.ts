@@ -10,6 +10,7 @@ import { backfillBuildingsIfNeeded } from "./migrations/backfill-buildings";
 import { createPayrollDeductionsTableIfNeeded } from "./migrations/create-payroll-deductions-table";
 import { createBedWeeklyRatesTableIfNeeded } from "./migrations/create-bed-weekly-rates-table";
 import { createAppUsersTablesIfNeeded } from "./migrations/create-app-users-tables";
+import { createMonthlySnapshotsTableIfNeeded } from "./migrations/create-monthly-snapshots-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -83,6 +84,11 @@ export async function pushSchemaIfNeeded(
   // pushSchema so the auth allowlist tables exist on the very first
   // request after the rollout. Idempotent — no-op once both exist.
   await createAppUsersTablesIfNeeded(pool, log);
+
+  // Provision `monthly_snapshots` so the dashboard's admin "Close
+  // month" action has a destination on the very first request after a
+  // rollout. Idempotent — no-op once the table exists.
+  await createMonthlySnapshotsTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

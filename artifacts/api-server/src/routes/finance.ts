@@ -6,12 +6,17 @@ import {
   customersTable,
   db,
   leasesTable,
+  monthlySnapshotsTable,
   occupantsTable,
   otherCostsTable,
   payrollDeductionsTable,
   propertiesTable,
   utilitiesTable,
 } from "@workspace/db";
+import {
+  requireAdmin,
+  type AuthedRequest,
+} from "../middlewares/requireAuth";
 import {
   effectiveBedWeeklyRate,
   groupRatesByBed,
@@ -691,5 +696,110 @@ router.get("/finance/by-customer", async (req, res): Promise<void> => {
     }),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Monthly snapshots — admin-locked freezes of a closed calendar month.
+//
+// The dashboard period picker lets operators cycle backwards through past
+// months; once an admin clicks "Close month" the live computation is
+// frozen here so historical numbers don't drift if a payroll row is
+// later backfilled or a lease edited. Re-opening (admin DELETE) wipes
+// the snapshot so the live view returns.
+//
+// Capture strategy: the client POSTs the values it has just rendered
+// (recovered / rentPaid / utilities / otherCosts / net + occupancy +
+// totalBeds). That keeps the snapshot identical to what the operator
+// signed off on, without us having to re-implement the dashboard's
+// whole-month rollup server-side.
+// ---------------------------------------------------------------------------
+
+const YYYYMM_RE = /^\d{4}-\d{2}$/;
+
+router.get("/finance/snapshots/:yyyymm", async (req, res): Promise<void> => {
+  const yyyymm = req.params.yyyymm;
+  if (!YYYYMM_RE.test(yyyymm)) {
+    res.status(400).json({ error: "Invalid month key" });
+    return;
+  }
+  const rows = await db
+    .select()
+    .from(monthlySnapshotsTable)
+    .where(eq(monthlySnapshotsTable.yyyymm, yyyymm))
+    .limit(1);
+  res.json({ snapshot: rows[0] ?? null });
+});
+
+router.post(
+  "/finance/snapshots/:yyyymm",
+  requireAdmin,
+  async (req: AuthedRequest, res): Promise<void> => {
+    const yyyymm = req.params.yyyymm;
+    if (!YYYYMM_RE.test(yyyymm)) {
+      res.status(400).json({ error: "Invalid month key" });
+      return;
+    }
+    // Refuse to close a month that hasn't fully ended yet — guards
+    // against accidentally freezing the partial in-progress total.
+    const today = new Date();
+    const currentYm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    if (yyyymm >= currentYm) {
+      res.status(400).json({ error: "Can only close a month after it ends" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const num = (k: string) => {
+      const v = body[k];
+      return typeof v === "number" && Number.isFinite(v) ? v : 0;
+    };
+    const row = {
+      yyyymm,
+      recovered: round2(num("recovered")),
+      rentPaid: round2(num("rentPaid")),
+      utilities: round2(num("utilities")),
+      otherCosts: round2(num("otherCosts")),
+      net: round2(num("net")),
+      occupancyAvg: num("occupancyAvg"),
+      totalBeds: Math.max(0, Math.floor(num("totalBeds"))),
+      closedAt: new Date(),
+      closedByUserId: req.appUser?.id ?? "",
+      closedByEmail: req.appUser?.email ?? "",
+    };
+    await db
+      .insert(monthlySnapshotsTable)
+      .values(row)
+      .onConflictDoUpdate({
+        target: monthlySnapshotsTable.yyyymm,
+        set: {
+          recovered: row.recovered,
+          rentPaid: row.rentPaid,
+          utilities: row.utilities,
+          otherCosts: row.otherCosts,
+          net: row.net,
+          occupancyAvg: row.occupancyAvg,
+          totalBeds: row.totalBeds,
+          closedAt: row.closedAt,
+          closedByUserId: row.closedByUserId,
+          closedByEmail: row.closedByEmail,
+        },
+      });
+    res.json({ snapshot: row });
+  },
+);
+
+router.delete(
+  "/finance/snapshots/:yyyymm",
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const yyyymm = req.params.yyyymm;
+    if (!YYYYMM_RE.test(yyyymm)) {
+      res.status(400).json({ error: "Invalid month key" });
+      return;
+    }
+    await db
+      .delete(monthlySnapshotsTable)
+      .where(eq(monthlySnapshotsTable.yyyymm, yyyymm));
+    res.json({ ok: true });
+  },
+);
 
 export default router;

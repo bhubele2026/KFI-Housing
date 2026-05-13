@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send, ChevronDown, Eye, Info } from "lucide-react";
+import { Building2, BedDouble, Zap, DollarSign, TrendingUp, Users, Briefcase, Trophy, AlertTriangle, Receipt, Wand2, CalendarClock, ArrowRight, History, ShieldCheck, BellOff, RotateCcw, Undo2, Send, ChevronDown, Eye, Info, Lock, Unlock, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getOperatorIdentity } from "@/lib/operator-identity";
 import { ToastAction } from "@/components/ui/toast";
@@ -14,7 +14,22 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
+import {
+  DashboardPeriodPicker,
+  currentPeriod,
+  type PeriodSelection,
+} from "@/components/dashboard-period-picker";
+import {
+  weeklyCostSlice,
+  isInPayWeek,
+  isInMonth,
+  isLeaseActiveInWeek as periodIsLeaseActiveInWeek,
+  isLeaseActiveInMonth as periodIsLeaseActiveInMonth,
+  currentMonthKey as periodCurrentMonthKey,
+  mostRecentSaturday as periodMostRecentSaturday,
+} from "@/lib/period-slicing";
 import { useRuntimeConfigQuery, useRuntimeConfigStream } from "@/hooks/use-runtime-config";
 import {
   useListUnplacedPayroll,
@@ -126,6 +141,44 @@ export default function Dashboard() {
     () => payrollDeductionsData ?? [],
     [payrollDeductionsData],
   );
+
+  // Period picker state — drives the headline tile values. Defaults to
+  // the current Mon→Sat pay-week so a fresh dashboard load shows
+  // "this week" (matches the operator's mental model when triaging
+  // recovered rent vs. costs).
+  const [period, setPeriod] = useState<PeriodSelection>(() => currentPeriod("week"));
+
+  // Who's signed in? `req.appUser.role` from /api/team/me decides
+  // whether the "Close month" admin control renders. The dashboard
+  // works fine for non-admins — they just don't see the lock button.
+  const { data: me } = useQuery({
+    queryKey: ["team-me"],
+    queryFn: () =>
+      customFetch<{ id: string; email: string; role: string }>("/team/me"),
+    staleTime: 60_000,
+  });
+  const isAdmin = me?.role === "admin";
+
+  // Snapshot lookup for the *month* mode only. Closed months read from
+  // here; open months recompute live below.
+  const snapshotMonthKey = period.mode === "month" ? period.key : null;
+  const { data: snapshotData, refetch: refetchSnapshot } = useQuery({
+    queryKey: ["finance-snapshot", snapshotMonthKey],
+    queryFn: () =>
+      customFetch<{ snapshot: null | {
+        yyyymm: string;
+        recovered: number;
+        rentPaid: number;
+        utilities: number;
+        otherCosts: number;
+        net: number;
+        closedAt: string;
+        closedByEmail: string;
+      } }>(`/finance/snapshots/${snapshotMonthKey}`),
+    enabled: snapshotMonthKey !== null,
+    staleTime: 30_000,
+  });
+  const closedSnapshot = snapshotData?.snapshot ?? null;
   const allProjectedMoveIns = useMemo<ProjectedMoveIn[]>(
     () => allProjectedMoveInsData ?? [],
     [allProjectedMoveInsData],
@@ -1049,48 +1102,184 @@ export default function Dashboard() {
   const vacantBeds = scopedBeds.filter((b) => b.status === "Vacant").length;
   const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
 
-  // "Recovered Rent" = sum of *actual* recorded payroll deductions
-  // for the current calendar month (rows in /payroll-deductions whose
-  // Saturday `payWeekEndDate` falls in the current month). Until any
-  // weekly deduction snapshots are imported this is correctly $0 —
-  // we no longer infer it from the theoretical chargePerBed × occupant
-  // count, which conflated "what we plan to charge" with "what was
-  // actually deducted".
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const totalMonthlyRevenue = (payrollDeductions ?? []).reduce(
-    (acc, r) => (r.payWeekEndDate?.startsWith(ym) ? acc + (r.weeklyAmount || 0) : acc),
-    0,
-  );
-
-  // Use the hotel-rate–aware estimator so corporate-rate agreements
-  // (nightly × room-nights from the latest logged month) contribute to
-  // the dashboard's Monthly Costs / Net Profit tiles instead of being
-  // silently treated as $0. Monthly leases are unchanged because
-  // `estimateLeaseMonthlyRent` returns their stored `monthlyRent` as-is.
-  const totalMonthlyLeaseCosts = scopedLeases
-    .filter((l) => l.status === "Active")
-    .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
   // Per-property utilities-included-in-rent share (task #518). For
   // each property, compute the fraction of active leases whose rent
   // already bundles utilities, then pro-rate that property's tracked
   // utility expense by `(1 - share)` so dollars already netted into
   // the lease cost above aren't subtracted a second time as utilities.
-  const utilitiesIncludedShareByProp = new Map<string, number>();
-  for (const p of scopedProperties) {
-    const propActive = scopedLeases.filter(
-      (l) => l.propertyId === p.id && l.status === "Active",
-    );
-    if (propActive.length === 0) continue;
-    const flagged = propActive.filter((l) => l.utilitiesIncludedInRent).length;
-    utilitiesIncludedShareByProp.set(p.id, flagged / propActive.length);
-  }
-  const currentMonthUtilities = scopedUtilities.reduce((acc, u) => {
+  const utilitiesIncludedShareByProp = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of scopedProperties) {
+      const propActive = scopedLeases.filter(
+        (l) => l.propertyId === p.id && l.status === "Active",
+      );
+      if (propActive.length === 0) continue;
+      const flagged = propActive.filter((l) => l.utilitiesIncludedInRent).length;
+      map.set(p.id, flagged / propActive.length);
+    }
+    return map;
+  }, [scopedProperties, scopedLeases]);
+
+  // Live rollup for the *full calendar month* (used as the baseline
+  // for both month mode and as the back-stop when no snapshot exists).
+  // Hotel-rate leases are run through `estimateLeaseMonthlyRent` so
+  // corporate-rate agreements still contribute, matching the existing
+  // headline behaviour before the period picker was added.
+  const monthlyLeaseCosts = scopedLeases
+    .filter((l) => l.status === "Active")
+    .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
+  const monthlyUtilities = scopedUtilities.reduce((acc, u) => {
     const share = utilitiesIncludedShareByProp.get(u.propertyId) ?? 0;
     return acc + u.monthlyCost * (1 - share);
   }, 0);
-  const totalMonthlyCosts = totalMonthlyLeaseCosts + currentMonthUtilities;
-  const netProfit = totalMonthlyRevenue - totalMonthlyCosts;
+
+  // ----- Period-aware tile values -----
+  // Recovered: actual deduction snapshots whose Saturday pay-week falls
+  // in the selected period. Costs: a *slice* of each lease/utility's
+  // monthly amount based on the actual days the period covers (week
+  // mode) or the full monthly amount (month mode).
+  const periodValues = useMemo(() => {
+    if (closedSnapshot) {
+      return {
+        recovered: closedSnapshot.recovered,
+        costs:
+          closedSnapshot.rentPaid +
+          closedSnapshot.utilities +
+          closedSnapshot.otherCosts,
+        net: closedSnapshot.net,
+      };
+    }
+    if (period.mode === "month") {
+      const recovered = payrollDeductions.reduce(
+        (acc, r) =>
+          r.payWeekEndDate && isInMonth(r.payWeekEndDate, period.key)
+            ? acc + (r.weeklyAmount || 0)
+            : acc,
+        0,
+      );
+      // For "current month" we keep using the live monthly rollup; for
+      // historical open months we filter leases to only those active in
+      // that month so a since-closed lease doesn't keep contributing.
+      const isCurrentMonth = period.key === periodCurrentMonthKey();
+      const rent = isCurrentMonth
+        ? monthlyLeaseCosts
+        : scopedLeases
+            .filter(
+              (l) =>
+                l.status === "Active" &&
+                periodIsLeaseActiveInMonth(
+                  l.startDate ?? "",
+                  l.endDate ?? "",
+                  period.key,
+                ),
+            )
+            .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
+      const utils = monthlyUtilities;
+      return { recovered, costs: rent + utils, net: recovered - rent - utils };
+    }
+    // Week mode.
+    const recovered = payrollDeductions.reduce(
+      (acc, r) =>
+        r.payWeekEndDate && isInPayWeek(r.payWeekEndDate, period.key)
+          ? acc + (r.weeklyAmount || 0)
+          : acc,
+      0,
+    );
+    const weekRent = scopedLeases
+      .filter(
+        (l) =>
+          l.status === "Active" &&
+          periodIsLeaseActiveInWeek(
+            l.startDate ?? "",
+            l.endDate ?? "",
+            period.key,
+          ),
+      )
+      .reduce(
+        (acc, l) =>
+          acc + weeklyCostSlice(estimateLeaseMonthlyRent(l, roomNightLogs), period.key),
+        0,
+      );
+    const weekUtils = scopedUtilities.reduce((acc, u) => {
+      const share = utilitiesIncludedShareByProp.get(u.propertyId) ?? 0;
+      return acc + weeklyCostSlice(u.monthlyCost * (1 - share), period.key);
+    }, 0);
+    return {
+      recovered,
+      costs: weekRent + weekUtils,
+      net: recovered - weekRent - weekUtils,
+    };
+  }, [
+    closedSnapshot,
+    period,
+    payrollDeductions,
+    scopedLeases,
+    scopedUtilities,
+    roomNightLogs,
+    utilitiesIncludedShareByProp,
+    monthlyLeaseCosts,
+    monthlyUtilities,
+  ]);
+
+  const totalMonthlyRevenue = periodValues.recovered;
+  const totalMonthlyCosts = periodValues.costs;
+  const netProfit = periodValues.net;
+
+  // "Close month" admin action — POSTs the currently-rendered values
+  // for the selected month so the snapshot matches what the operator
+  // signed off on. Only enabled for past months in `month` mode.
+  const closeMutation = useMutation({
+    mutationFn: async () => {
+      if (period.mode !== "month") throw new Error("Switch to Month mode first");
+      const body = {
+        recovered: periodValues.recovered,
+        rentPaid: monthlyLeaseCosts,
+        utilities: monthlyUtilities,
+        otherCosts: 0,
+        net: periodValues.net,
+        occupancyAvg: occupancyRateForPeriod(),
+        totalBeds,
+      };
+      return customFetch<{ snapshot: unknown }>(
+        `/finance/snapshots/${period.key}`,
+        { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+      );
+    },
+    onSuccess: () => {
+      void refetchSnapshot();
+      toast({ title: `Closed ${period.key}`, description: "Snapshot saved." });
+    },
+    onError: (err: unknown) => {
+      toast({
+        variant: "destructive",
+        title: "Could not close month",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    },
+  });
+  const reopenMutation = useMutation({
+    mutationFn: () =>
+      customFetch(`/finance/snapshots/${period.key}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void refetchSnapshot();
+      toast({ title: `Re-opened ${period.key}` });
+    },
+    onError: (err: unknown) =>
+      toast({
+        variant: "destructive",
+        title: "Could not re-open month",
+        description: err instanceof Error ? err.message : String(err),
+      }),
+  });
+
+  function occupancyRateForPeriod(): number {
+    return totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
+  }
+
+  const isPastMonth =
+    period.mode === "month" && period.key < periodCurrentMonthKey();
+  const canCloseThisMonth = isAdmin && isPastMonth && !closedSnapshot;
+  const canReopenThisMonth = isAdmin && isPastMonth && !!closedSnapshot;
 
   // Portfolio-wide per-bed unit economics. Sums first, then divides —
   // not an average of per-property ratios — so a 100-bed property
@@ -1167,9 +1356,24 @@ export default function Dashboard() {
     { title: t("pages.dashboard.metrics.properties"), value: totalProperties, icon: Building2, trend: t("pages.dashboard.metrics.trend.thisYear") },
     { title: t("pages.dashboard.metrics.totalBeds"), value: totalBeds, icon: BedDouble, trend: t("pages.dashboard.metrics.trend.occupied", { count: occupiedBeds }) },
     { title: t("pages.dashboard.metrics.occupancy"), value: `${occupancyRate.toFixed(1)}%`, icon: Users, trend: t("pages.dashboard.metrics.trend.vacant", { count: vacantBeds }) },
-    { title: t("pages.dashboard.metrics.monthlyRevenue"), value: formatUsdWhole(totalMonthlyRevenue), icon: TrendingUp, trend: t("pages.dashboard.metrics.trend.target") },
-    { title: t("pages.dashboard.metrics.monthlyCosts"), value: formatUsdWhole(totalMonthlyCosts), icon: DollarSign, trend: t("pages.dashboard.metrics.trend.leasesUtilities") },
-    { title: t("pages.dashboard.metrics.netProfit"), value: formatUsdWhole(netProfit), icon: Zap, trend: netProfit >= 0 ? t("pages.dashboard.metrics.trend.vsLastMonth") : t("pages.dashboard.metrics.trend.needsAttention") },
+    {
+      title: t("pages.dashboard.metrics.monthlyRevenue"),
+      value: formatUsdWhole(totalMonthlyRevenue),
+      icon: TrendingUp,
+      trend: period.mode === "week" ? "Employee deductions this pay-week" : "Employee deductions this month",
+    },
+    {
+      title: t("pages.dashboard.metrics.monthlyCosts"),
+      value: formatUsdWhole(totalMonthlyCosts),
+      icon: DollarSign,
+      trend: period.mode === "week" ? "Leases + utilities (weekly slice)" : t("pages.dashboard.metrics.trend.leasesUtilities"),
+    },
+    {
+      title: t("pages.dashboard.metrics.netProfit"),
+      value: formatUsdWhole(netProfit),
+      icon: Zap,
+      trend: netProfit >= 0 ? "Recovered − Costs" : "Costs exceed recovered",
+    },
     {
       title: t("pages.dashboard.metrics.rentPerBed"),
       value: portfolioRentPerBed === null ? "—" : formatUsdWhole(portfolioRentPerBed),
@@ -1236,15 +1440,65 @@ export default function Dashboard() {
           title={t("pages.dashboard.title")}
           description={t("pages.dashboard.description")}
           meta={
-            activeCustomerName ? (
-              <p
-                className="text-xs text-muted-foreground flex items-center gap-1"
-                data-testid="text-dashboard-active-customer"
-              >
-                <Briefcase className="h-3 w-3" />
-                {t("pages.dashboard.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
-              </p>
-            ) : null
+            <div className="space-y-2">
+              {activeCustomerName ? (
+                <p
+                  className="text-xs text-muted-foreground flex items-center gap-1"
+                  data-testid="text-dashboard-active-customer"
+                >
+                  <Briefcase className="h-3 w-3" />
+                  {t("pages.dashboard.showingOnly")} <span className="font-semibold">{activeCustomerName}</span>
+                </p>
+              ) : null}
+              <div className="flex items-center gap-2 flex-wrap">
+                <DashboardPeriodPicker
+                  value={period}
+                  onChange={setPeriod}
+                  isClosed={!!closedSnapshot}
+                />
+                {canCloseThisMonth ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => closeMutation.mutate()}
+                    disabled={closeMutation.isPending}
+                    data-testid="button-close-month"
+                  >
+                    {closeMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Close month
+                  </Button>
+                ) : null}
+                {canReopenThisMonth ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => reopenMutation.mutate()}
+                    disabled={reopenMutation.isPending}
+                    data-testid="button-reopen-month"
+                  >
+                    {reopenMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Unlock className="h-3.5 w-3.5 mr-1.5" />
+                    )}
+                    Re-open
+                  </Button>
+                ) : null}
+                {closedSnapshot ? (
+                  <span className="text-[11px] text-muted-foreground" data-testid="text-closed-by">
+                    Closed by {closedSnapshot.closedByEmail || "—"}
+                  </span>
+                ) : null}
+              </div>
+            </div>
           }
           actions={
             <Select value={customerFilter} onValueChange={updateCustomerFilter}>

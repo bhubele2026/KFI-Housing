@@ -70,9 +70,15 @@ export async function runProdSyncOnce(): Promise<void> {
             valuesSql.push(`(${placeholders})`);
             for (const col of columns) {
               const v = row[col];
-              params.push(
-                v !== null && typeof v === "object" ? JSON.stringify(v) : v,
-              );
+              if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+                // jsonb columns: stringify object payloads.
+                params.push(JSON.stringify(v));
+              } else {
+                // Native arrays (text[], etc.) and primitives go through
+                // pg's parameter binding as-is — the driver maps JS
+                // arrays to Postgres array literals correctly.
+                params.push(v);
+              }
             }
           }
           await client.query(

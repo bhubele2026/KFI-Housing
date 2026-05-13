@@ -75,11 +75,15 @@ function daysInMonthOf(date: Date): number {
 }
 
 /**
- * Slice a monthly amount down to one Mon→Sat pay-week using the actual
- * day count in each calendar month the week touches.
+ * Slice a monthly amount down to one full 7-day week (Sun→Sat, ending
+ * on the pay-week Saturday) using the actual day count in each calendar
+ * month the week touches. We use 7 days — not the 6-day Mon→Sat pay
+ * period — because rent and utilities accrue every day; only payroll
+ * *deductions* are bucketed Mon→Sat. Slicing by 6 days would silently
+ * drop ~14% of weekly cost (every Sunday).
  *
  *   weeklyCostSlice(3000, "2026-05-02")
- *     → 3000/30·1 + 3000/31·5  (week of Apr 27 → May 2)
+ *     → 3000/30·2 + 3000/31·5  (week of Apr 26 → May 2)
  *
  * Returns 0 if `monthlyAmount` is 0 or falsy, or if the date is bad.
  */
@@ -91,7 +95,7 @@ export function weeklyCostSlice(
   const sat = parseYmd(saturdayYmd);
   if (!sat) return 0;
   let total = 0;
-  for (let i = 5; i >= 0; i -= 1) {
+  for (let i = 6; i >= 0; i -= 1) {
     const day = new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() - i);
     total += monthlyAmount / daysInMonthOf(day);
   }

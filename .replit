@@ -46,3 +46,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ADMIN_BOOTSTRAP_EMAIL = "bhubele@kfistaffing.com"
+ACCESS_ALLOWLIST_EMAILS = "bhubele@kfistaffing.com"

@@ -61,6 +61,11 @@ export async function requireAuth(
     return;
   }
 
+  const allowlist = (process.env.ACCESS_ALLOWLIST_EMAILS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
   try {
     // Existing member? Update last-seen and continue.
     const existing = await db
@@ -71,6 +76,10 @@ export async function requireAuth(
 
     if (existing.length > 0) {
       const u = existing[0];
+      if (allowlist.length > 0 && !allowlist.includes(u.email.trim().toLowerCase())) {
+        res.status(403).json({ error: "Access has been restricted." });
+        return;
+      }
       void db
         .update(appUsersTable)
         .set({ lastSeenAt: new Date() })
@@ -138,6 +147,14 @@ export async function requireAuth(
       const [{ n }] = (await tx
         .select({ n: sql<number>`count(*)::int` })
         .from(appUsersTable)) as Array<{ n: number }>;
+
+      const allowlist = (process.env.ACCESS_ALLOWLIST_EMAILS ?? "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (allowlist.length > 0 && !allowlist.includes(email)) {
+        return { kind: "denied" as const };
+      }
 
       const bootstrapEmail = (process.env.ADMIN_BOOTSTRAP_EMAIL ?? "")
         .trim()

@@ -3341,6 +3341,18 @@ export default function PropertyDetail() {
                                                   </Tooltip>
                                                 )}
                                               </div>
+                                              <div
+                                                className="text-[10px] text-muted-foreground tabular-nums leading-tight"
+                                                title="Monthly equivalent = weekly × 52 / 12"
+                                                data-testid={`cell-bed-weekly-${bed.id}`}
+                                              >
+                                                <span data-testid={`cell-bed-monthly-${bed.id}`}>
+                                                  {formatUsd(toWeeklyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/wk
+                                                  {" · "}
+                                                  {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/mo
+                                                </span>
+                                              </div>
+                                              </div>
                                             </TableCell>
                                             <TableCell>
                                               <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
@@ -3350,23 +3362,10 @@ export default function PropertyDetail() {
                                                 </SelectContent>
                                               </Select>
                                             </TableCell>
-                                            <TableCell
-                                              className="text-right tabular-nums"
-                                              data-testid={`cell-bed-weekly-${bed.id}`}
-                                            >
-                                              {formatUsd(toWeeklyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
-                                            </TableCell>
-                                            <TableCell
-                                              className="text-right tabular-nums text-muted-foreground"
-                                              data-testid={`cell-bed-monthly-${bed.id}`}
-                                              title="Monthly equivalent = weekly × 52 / 12"
-                                            >
-                                              {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
-                                            </TableCell>
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={9}>
+                                            <TableCell colSpan={7}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable
@@ -3393,8 +3392,6 @@ export default function PropertyDetail() {
                                                 </div>
                                               )}
                                             </TableCell>
-                                            <TableCell className="text-right text-muted-foreground/40 text-sm">—</TableCell>
-                                            <TableCell />
                                           </>
                                         )}
                                         <TableCell>

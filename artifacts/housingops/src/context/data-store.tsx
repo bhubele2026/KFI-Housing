@@ -372,6 +372,48 @@ const EMPTY_SUMMARY: ImportSummary = {
  *
  * Returns the resulting bundle plus per-type counts of added/updated rows.
  */
+/**
+ * Cheap structural equality for the records we merge during import
+ * (task #632). Replaces the prior `JSON.stringify(a) !== JSON.stringify(b)`
+ * compare on the import hot path: that version paid for two full
+ * serialisations per row even when the row was trivially unchanged.
+ *
+ * Walks the two values together — primitives via `===`, arrays
+ * element-wise, plain objects key-by-key — and bails on the first
+ * mismatch. Reference-equal inputs short-circuit immediately, which is
+ * the common case after react-query rehydrates an unchanged row.
+ */
+function recordEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== "object" || typeof b !== "object") return false;
+  const aIsArr = Array.isArray(a);
+  const bIsArr = Array.isArray(b);
+  if (aIsArr !== bIsArr) return false;
+  if (aIsArr && bIsArr) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!recordEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const ka = Object.keys(a as Record<string, unknown>);
+  const kb = Object.keys(b as Record<string, unknown>);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (
+      !recordEqual(
+        (a as Record<string, unknown>)[k],
+        (b as Record<string, unknown>)[k],
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function mergeImportBundles(
   current: ExportData,
   incoming: ExportData,
@@ -391,7 +433,7 @@ export function mergeImportBundles(
       if (!existing) {
         added[key] += 1;
         byId.set(item.id, item);
-      } else if (JSON.stringify(existing) !== JSON.stringify(item)) {
+      } else if (!recordEqual(existing, item)) {
         updated[key] += 1;
         byId.set(item.id, item);
       }
@@ -463,7 +505,7 @@ export function dryRunMergeImport(current: ExportData, incoming: ExportData): Me
       if (!existing) {
         out.added += 1;
         out.addedItems.push({ id: item.id, label: label(item) });
-      } else if (JSON.stringify(existing) !== JSON.stringify(item)) {
+      } else if (!recordEqual(existing, item)) {
         out.updated += 1;
         // Use the EXISTING label so the operator recognizes the row that's
         // about to be overwritten by name they already know, not the
@@ -1542,21 +1584,102 @@ export function DataProvider({ children }: { children: ReactNode }) {
       preview.data,
     );
 
+  // Stable action facade (task #632). Every action above is recreated
+  // on each render (they close over freshly-derived arrays). Without
+  // help, a memoized provider value would still flip identity on every
+  // tick because at least one function ref changed. Stash the latest
+  // implementations in a ref and expose stable wrappers that delegate
+  // through it — the wrappers themselves are created once for the
+  // lifetime of the provider, so the memoized value below only changes
+  // when an actual data field changes.
+  const latestActionsRef = useRef({
+    addCustomer, updateCustomer, deleteCustomer,
+    addProperty, updateProperty, deleteProperty,
+    updateLease, addLease, deleteLease,
+    addBuilding, updateBuilding, deleteBuilding,
+    addRoom, updateRoom, deleteRoom,
+    addBed, deleteBed, updateBed,
+    updateOccupant, addOccupant, deleteOccupant,
+    updateUtility, addUtility, deleteUtility,
+    updateOtherCost, addOtherCost, deleteOtherCost,
+    updateInsuranceCertificate, addInsuranceCertificate, deleteInsuranceCertificate,
+    resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
+  });
+  latestActionsRef.current = {
+    addCustomer, updateCustomer, deleteCustomer,
+    addProperty, updateProperty, deleteProperty,
+    updateLease, addLease, deleteLease,
+    addBuilding, updateBuilding, deleteBuilding,
+    addRoom, updateRoom, deleteRoom,
+    addBed, deleteBed, updateBed,
+    updateOccupant, addOccupant, deleteOccupant,
+    updateUtility, addUtility, deleteUtility,
+    updateOtherCost, addOtherCost, deleteOtherCost,
+    updateInsuranceCertificate, addInsuranceCertificate, deleteInsuranceCertificate,
+    resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
+  };
+
+  const stableActions = useMemo(() => ({
+    addCustomer: (c: Customer) => latestActionsRef.current.addCustomer(c),
+    updateCustomer: (id: string, u: Partial<Customer>) => latestActionsRef.current.updateCustomer(id, u),
+    deleteCustomer: (id: string) => latestActionsRef.current.deleteCustomer(id),
+    addProperty: (p: Property) => latestActionsRef.current.addProperty(p),
+    updateProperty: (id: string, u: Partial<Property>) => latestActionsRef.current.updateProperty(id, u),
+    deleteProperty: (id: string) => latestActionsRef.current.deleteProperty(id),
+    updateLease: (id: string, u: Partial<Lease>) => latestActionsRef.current.updateLease(id, u),
+    addLease: (l: Lease) => latestActionsRef.current.addLease(l),
+    deleteLease: (id: string) => latestActionsRef.current.deleteLease(id),
+    addBuilding: (b: Building) => latestActionsRef.current.addBuilding(b),
+    updateBuilding: (id: string, u: Partial<Building>) => latestActionsRef.current.updateBuilding(id, u),
+    deleteBuilding: (id: string) => latestActionsRef.current.deleteBuilding(id),
+    addRoom: (r: Room) => latestActionsRef.current.addRoom(r),
+    updateRoom: (id: string, u: Partial<Room>) => latestActionsRef.current.updateRoom(id, u),
+    deleteRoom: (id: string) => latestActionsRef.current.deleteRoom(id),
+    addBed: (b: Bed) => latestActionsRef.current.addBed(b),
+    deleteBed: (id: string) => latestActionsRef.current.deleteBed(id),
+    updateBed: (id: string, u: Partial<Bed>) => latestActionsRef.current.updateBed(id, u),
+    updateOccupant: (id: string, u: Partial<Occupant>) => latestActionsRef.current.updateOccupant(id, u),
+    addOccupant: (o: Occupant) => latestActionsRef.current.addOccupant(o),
+    deleteOccupant: (id: string) => latestActionsRef.current.deleteOccupant(id),
+    updateUtility: (id: string, u: Partial<Utility>) => latestActionsRef.current.updateUtility(id, u),
+    addUtility: (u: Utility) => latestActionsRef.current.addUtility(u),
+    deleteUtility: (id: string) => latestActionsRef.current.deleteUtility(id),
+    updateOtherCost: (id: string, u: Partial<OtherCost>) => latestActionsRef.current.updateOtherCost(id, u),
+    addOtherCost: (o: OtherCost) => latestActionsRef.current.addOtherCost(o),
+    deleteOtherCost: (id: string) => latestActionsRef.current.deleteOtherCost(id),
+    updateInsuranceCertificate: (id: string, u: Partial<InsuranceCertificate>) =>
+      latestActionsRef.current.updateInsuranceCertificate(id, u),
+    addInsuranceCertificate: (c: InsuranceCertificate) => latestActionsRef.current.addInsuranceCertificate(c),
+    deleteInsuranceCertificate: (id: string) => latestActionsRef.current.deleteInsuranceCertificate(id),
+    resetToSampleData: (cb?: { onSuccess?: () => void; onError?: () => void; onSettled?: () => void }) =>
+      latestActionsRef.current.resetToSampleData(cb),
+    exportData: () => latestActionsRef.current.exportData(),
+    importData: (input: unknown | ImportPreview, mode?: ImportMode) => latestActionsRef.current.importData(input, mode),
+    previewMergeImport: (preview: ImportPreview) => latestActionsRef.current.previewMergeImport(preview),
+    undoLastImport: () => latestActionsRef.current.undoLastImport(),
+  }), []);
+
+  // Memoize the provider value so consumers that only read e.g.
+  // `customers` keep referential equality when an unrelated entity
+  // changes. The data arrays (customers/properties/…) are stable refs
+  // from react-query whenever the underlying response is unchanged,
+  // and the action facade above is stable for the provider's whole
+  // lifetime — so this useMemo only flips identity when something in
+  // the cache actually moved.
+  const value = useMemo<DataStore>(() => ({
+    customers, properties, buildings, leases, rooms, beds, occupants,
+    utilities, otherCosts, insuranceCertificates, roomNightLogs,
+    isLoading,
+    dataIssues,
+    ...stableActions,
+  }), [
+    customers, properties, buildings, leases, rooms, beds, occupants,
+    utilities, otherCosts, insuranceCertificates, roomNightLogs,
+    isLoading, dataIssues, stableActions,
+  ]);
+
   return (
-    <DataContext.Provider value={{
-      customers, properties, buildings, leases, rooms, beds, occupants, utilities, otherCosts, insuranceCertificates, roomNightLogs, isLoading,
-      dataIssues,
-      addCustomer, updateCustomer, deleteCustomer,
-      addProperty, updateProperty, deleteProperty,
-      updateLease, addLease, deleteLease,
-      addBuilding, updateBuilding, deleteBuilding,
-      addRoom, updateRoom, deleteRoom,
-      addBed, deleteBed, updateBed, updateOccupant, addOccupant, deleteOccupant,
-      updateUtility, addUtility, deleteUtility,
-      updateOtherCost, addOtherCost, deleteOtherCost,
-      updateInsuranceCertificate, addInsuranceCertificate, deleteInsuranceCertificate,
-      resetToSampleData, exportData, importData, previewMergeImport, undoLastImport,
-    }}>
+    <DataContext.Provider value={value}>
       {children}
     </DataContext.Provider>
   );

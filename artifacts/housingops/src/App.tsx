@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
@@ -8,29 +9,48 @@ import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useGoogleMapsKeyErrorToastListener } from "@/hooks/use-google-maps-key-error";
 import { useNewMonthHotelRateReminder } from "@/hooks/use-new-month-hotel-rate-reminder";
+import {
+  getListCustomersQueryKey,
+  getListPropertiesQueryKey,
+  getListBuildingsQueryKey,
+  getListLeasesQueryKey,
+  getListUtilitiesQueryKey,
+  getListOtherCostsQueryKey,
+  getListInsuranceCertificatesQueryKey,
+  getListBedsQueryKey,
+  getListOccupantsQueryKey,
+  getListRoomsQueryKey,
+  getListRoomNightLogsQueryKey,
+} from "@workspace/api-client-react";
 
+// Auth + login pages stay eagerly imported so the sign-in flow never
+// shows a flash of skeleton on initial load. Every other page is
+// code-split so the first-load JS chunk only contains the routing
+// scaffold + Clerk + the page the operator is actually landing on.
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import SignInPage from "@/pages/sign-in";
 import SignUpPage from "@/pages/sign-up";
-import Dashboard from "@/pages/dashboard";
-import Customers from "@/pages/customers";
-import CustomerDetail from "@/pages/customer-detail";
-import Properties from "@/pages/properties";
-import PropertyDetail from "@/pages/property-detail";
-import Leases from "@/pages/leases";
-import LeaseDetail from "@/pages/lease-detail";
-import SnoozedLeaseAlerts from "@/pages/snoozed-lease-alerts";
-import Beds from "@/pages/beds";
-import Occupants from "@/pages/occupants";
-import OccupantDetail from "@/pages/occupant-detail";
-import Utilities from "@/pages/utilities";
-import Finance from "@/pages/finance";
-import InsuranceCertificates from "@/pages/insurance-certificates";
-import SettingsPage from "@/pages/settings";
-import TransportStub from "@/pages/transport-stub";
+
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Customers = lazy(() => import("@/pages/customers"));
+const CustomerDetail = lazy(() => import("@/pages/customer-detail"));
+const Properties = lazy(() => import("@/pages/properties"));
+const PropertyDetail = lazy(() => import("@/pages/property-detail"));
+const Leases = lazy(() => import("@/pages/leases"));
+const LeaseDetail = lazy(() => import("@/pages/lease-detail"));
+const SnoozedLeaseAlerts = lazy(() => import("@/pages/snoozed-lease-alerts"));
+const Beds = lazy(() => import("@/pages/beds"));
+const Occupants = lazy(() => import("@/pages/occupants"));
+const OccupantDetail = lazy(() => import("@/pages/occupant-detail"));
+const Utilities = lazy(() => import("@/pages/utilities"));
+const Finance = lazy(() => import("@/pages/finance"));
+const InsuranceCertificates = lazy(() => import("@/pages/insurance-certificates"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const TransportStub = lazy(() => import("@/pages/transport-stub"));
 
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
   window.location.hostname,
@@ -53,61 +73,107 @@ if (!CLERK_PUBLISHABLE_KEY) {
   );
 }
 
+// Per-resource staleTime tuning (task #632). Global default is bumped
+// to 5 min so slow-changing entities (customers, properties, buildings,
+// leases, utilities, otherCosts, insuranceCertificates) coast on the
+// cache between navigations. Faster-moving resources (beds, occupants,
+// roomNightLogs) keep the prior 30s freshness window via per-key
+// overrides below. useRuntimeConfigQuery sets its own 30s staleTime +
+// 60s refetchInterval explicitly and is unaffected.
+const FIVE_MIN = 5 * 60_000;
+const THIRTY_SEC = 30_000;
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
+    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: FIVE_MIN },
     mutations: { retry: false },
   },
 });
 
+for (const key of [
+  getListBedsQueryKey(),
+  getListOccupantsQueryKey(),
+  getListRoomsQueryKey(),
+  getListRoomNightLogsQueryKey(),
+]) {
+  queryClient.setQueryDefaults(key, { staleTime: THIRTY_SEC });
+}
+// Keep slow-changing entities at the explicit 5 min so the per-resource
+// intent is documented at this surface even though it matches the new
+// global default.
+for (const key of [
+  getListCustomersQueryKey(),
+  getListPropertiesQueryKey(),
+  getListBuildingsQueryKey(),
+  getListLeasesQueryKey(),
+  getListUtilitiesQueryKey(),
+  getListOtherCostsQueryKey(),
+  getListInsuranceCertificatesQueryKey(),
+]) {
+  queryClient.setQueryDefaults(key, { staleTime: FIVE_MIN });
+}
+
+function RouteFallback() {
+  return (
+    <div className="p-6 space-y-4" data-testid="route-suspense-fallback">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-5/6" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
-    <Switch>
-      <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
-      <Route path="/login" component={Login} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/customers" component={Customers} />
-      <Route path="/customers/:id" component={CustomerDetail} />
-      <Route path="/properties" component={Properties} />
-      <Route path="/properties/:id" component={PropertyDetail} />
-      <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
-      <Route path="/leases" component={Leases} />
-      <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
-      <Route path="/leases/new" component={LeaseDetail} />
-      <Route path="/leases/:id" component={LeaseDetail} />
-      <Route path="/beds" component={Beds} />
-      <Route path="/occupants" component={Occupants} />
-      <Route path="/occupants/:id" component={OccupantDetail} />
-      <Route path="/utilities" component={Utilities} />
-      <Route path="/finance" component={Finance} />
-      <Route path="/insurance" component={InsuranceCertificates} />
-      <Route path="/settings" component={SettingsPage} />
-      <Route path="/transport/vehicles">
-        <TransportStub titleKey="nav.transport.vehicles" />
-      </Route>
-      <Route path="/transport/vehicle-leases">
-        <TransportStub titleKey="nav.transport.vehicleLeases" />
-      </Route>
-      <Route path="/transport/drivers">
-        <TransportStub titleKey="nav.transport.drivers" />
-      </Route>
-      <Route path="/transport/trips">
-        <TransportStub titleKey="nav.transport.trips" />
-      </Route>
-      <Route path="/transport/maintenance">
-        <TransportStub titleKey="nav.transport.maintenance" />
-      </Route>
-      <Route path="/transport/fuel-logs">
-        <TransportStub titleKey="nav.transport.fuelLogs" />
-      </Route>
-      <Route path="/transport/routes">
-        <TransportStub titleKey="nav.transport.routes" />
-      </Route>
-      <Route path="/transport/charges">
-        <TransportStub titleKey="nav.transport.charges" />
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
+        <Route path="/login" component={Login} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/customers" component={Customers} />
+        <Route path="/customers/:id" component={CustomerDetail} />
+        <Route path="/properties" component={Properties} />
+        <Route path="/properties/:id" component={PropertyDetail} />
+        <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
+        <Route path="/leases" component={Leases} />
+        <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
+        <Route path="/leases/new" component={LeaseDetail} />
+        <Route path="/leases/:id" component={LeaseDetail} />
+        <Route path="/beds" component={Beds} />
+        <Route path="/occupants" component={Occupants} />
+        <Route path="/occupants/:id" component={OccupantDetail} />
+        <Route path="/utilities" component={Utilities} />
+        <Route path="/finance" component={Finance} />
+        <Route path="/insurance" component={InsuranceCertificates} />
+        <Route path="/settings" component={SettingsPage} />
+        <Route path="/transport/vehicles">
+          <TransportStub titleKey="nav.transport.vehicles" />
+        </Route>
+        <Route path="/transport/vehicle-leases">
+          <TransportStub titleKey="nav.transport.vehicleLeases" />
+        </Route>
+        <Route path="/transport/drivers">
+          <TransportStub titleKey="nav.transport.drivers" />
+        </Route>
+        <Route path="/transport/trips">
+          <TransportStub titleKey="nav.transport.trips" />
+        </Route>
+        <Route path="/transport/maintenance">
+          <TransportStub titleKey="nav.transport.maintenance" />
+        </Route>
+        <Route path="/transport/fuel-logs">
+          <TransportStub titleKey="nav.transport.fuelLogs" />
+        </Route>
+        <Route path="/transport/routes">
+          <TransportStub titleKey="nav.transport.routes" />
+        </Route>
+        <Route path="/transport/charges">
+          <TransportStub titleKey="nav.transport.charges" />
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

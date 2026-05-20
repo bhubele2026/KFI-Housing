@@ -176,6 +176,7 @@ vi.mock("recharts", () => {
 
 const mockData: {
   properties: unknown[];
+  buildings: unknown[];
   beds: unknown[];
   rooms: unknown[];
   leases: unknown[];
@@ -186,6 +187,13 @@ const mockData: {
   isLoading: boolean;
 } = {
   properties: [],
+  // `buildings` is destructured from `useData()` in dashboard.tsx and
+  // iterated via `.map(...)`; omitting it (the original test stub
+  // pre-dated buildings landing in the data store) makes Dashboard
+  // throw on first render. Task #632 keeps it as an empty list so the
+  // rest of the suite — which doesn't exercise the buildings axis —
+  // stays untouched.
+  buildings: [],
   beds: [],
   rooms: [],
   leases: [],
@@ -247,6 +255,14 @@ vi.mock("@workspace/api-client-react", () => ({
     },
   }),
   getListUnplacedPayrollQueryKey: () => ["/payroll/unplaced"],
+  // Task #632: the dashboard's payroll tile reads
+  // `useListPayrollDeductions` to surface per-occupant deduction
+  // history. The dashboard tests don't exercise the tile directly,
+  // but the hook must still resolve cleanly so the page renders.
+  // Defaulting to an empty array keeps the existing dashboard test
+  // expectations stable.
+  useListPayrollDeductions: () => ({ data: [] }),
+  getListPayrollDeductionsQueryKey: () => ["/payroll/deductions"],
   // Task #320 added a hotel-rate / lease-expiry alerts tile that
   // reads from this hook. Tests in this file don't exercise it
   // directly but the hook must still resolve cleanly.
@@ -281,6 +297,33 @@ vi.mock("@tanstack/react-query", async () => {
   return {
     ...actual,
     useQueryClient: () => ({ invalidateQueries: invalidateQueriesMock }),
+    // Dashboard makes two ambient `useQuery` calls (team-me role check
+    // + closed-month finance snapshot). Neither drives the assertions
+    // in this suite — admin-only UI and snapshot-vs-live behaviour are
+    // covered elsewhere — so stub them with empty data. Without this,
+    // the bare `useQuery` reaches into the unmocked QueryClient and
+    // throws "No QueryClient set" the moment we mount Dashboard,
+    // which exploded the entire suite once the missing
+    // `useListPayrollDeductions` mock (below) stopped short-circuiting
+    // the render path.
+    useQuery: () => ({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
+    // Same story for the admin-only Close/Reopen month mutations —
+    // they also reach into the real QueryClient. The dashboard tests
+    // never invoke them, so a no-op mutate keeps render quiet.
+    useMutation: () => ({
+      mutate: vi.fn(),
+      mutateAsync: vi.fn(async () => undefined),
+      isPending: false,
+      isError: false,
+      error: null,
+      reset: vi.fn(),
+    }),
   };
 });
 

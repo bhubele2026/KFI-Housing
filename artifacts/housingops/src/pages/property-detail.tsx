@@ -3016,28 +3016,24 @@ export default function PropertyDetail() {
                               );
                             })()}
                             <CardContent className="p-0 overflow-x-auto">
-                              <Table className="table-fixed w-full min-w-[1100px] [&_td]:py-1.5 [&_td]:px-2 [&_td]:align-middle [&_th]:h-8 [&_th]:py-0 [&_th]:px-2 [&_th]:align-middle [&_th]:whitespace-nowrap [&_th]:text-[10px]">
+                              <Table className="table-fixed w-full [&_td]:py-1.5 [&_td]:px-2 [&_td]:align-middle [&_th]:h-8 [&_th]:py-0 [&_th]:px-2 [&_th]:align-middle [&_th]:whitespace-nowrap [&_th]:text-[10px]">
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-10">{t("pages.propertyDetail.bedTableBedNum")}</TableHead>
                                     <TableHead className="w-24">{t("pages.propertyDetail.bedTableStatus")}</TableHead>
-                                    <TableHead className="w-44">{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
-                                    <TableHead className="w-20">{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
+                                    <TableHead className="w-64">{t("pages.propertyDetail.bedTableOccupant")}</TableHead>
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableCompany")}</TableHead>
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableShift")}</TableHead>
                                     <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
-                                    <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveOut")}</TableHead>
-                                    <TableHead className="w-36 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
-                                    <TableHead className="w-24 whitespace-nowrap">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
-                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
-                                    <TableHead className="w-36 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
+                                    <TableHead className="w-32 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
+                                    <TableHead className="w-32 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={13}
+                                      colSpan={9}
                                       icon={BedDouble}
                                       title={t("pages.propertyDetail.noBedsInRoom")}
                                       description={t("pages.propertyDetail.noBedsInRoomDescription", { room: room.name })}
@@ -3170,14 +3166,14 @@ export default function PropertyDetail() {
                                         </TableCell>
                                         {occ ? (
                                           <>
-                                            <TableCell className="font-medium group/occ">
-                                              <div className="flex flex-col gap-0.5">
-                                                <div className="flex items-center gap-1 flex-wrap whitespace-nowrap">
+                                            <TableCell className="font-medium group/occ align-top">
+                                              <div className="flex flex-col gap-0.5 min-w-0">
+                                                <div className="flex items-center gap-1 min-w-0">
                                                   <Link
                                                     href={`/occupants/${occ.id}`}
-                                                    className="text-sm font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
+                                                    className="text-sm font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors truncate"
                                                     data-testid={`link-occupant-${occ.id}`}
-                                                    title="Open occupant details"
+                                                    title={occ.name ? `Open ${occ.name}` : "Open occupant details"}
                                                   >
                                                     {occ.name || "—"}
                                                   </Link>
@@ -3238,14 +3234,13 @@ export default function PropertyDetail() {
                                                     testIdSuffix={occ.id}
                                                     trigger={
                                                       <Button
-                                                        size="sm"
+                                                        size="icon"
                                                         variant="ghost"
-                                                        className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1"
+                                                        className="ml-auto h-6 w-6 text-muted-foreground hover:text-foreground shrink-0 opacity-0 group-hover/occ:opacity-100 transition-opacity"
                                                         data-testid={`button-move-occupant-${occ.id}`}
                                                         title="Move to another property / customer"
                                                       >
                                                         <ArrowRightLeft className="h-3 w-3" />
-                                                        Move
                                                       </Button>
                                                     }
                                                   />
@@ -3267,6 +3262,21 @@ export default function PropertyDetail() {
                                                     }
                                                   />
                                                 </div>
+                                                {/* Employee ID demoted to a muted subline under
+                                                    the occupant name (task #606) so it's still
+                                                    editable without taking a whole column. */}
+                                                <div
+                                                  className="text-[10px] text-muted-foreground leading-tight"
+                                                  data-testid={`subline-empid-${occ.id}`}
+                                                  title={t("pages.propertyDetail.bedTableEmpId")}
+                                                >
+                                                  <span className="mr-1 uppercase tracking-wide">ID</span>
+                                                  <InlineEdit
+                                                    value={occ.employeeId}
+                                                    placeholder="—"
+                                                    onSave={v => updateOccupant(occ.id, { employeeId: v })}
+                                                  />
+                                                </div>
                                                 {/* Responsibilities list (task #500). Shown
                                                     inline as small chips with an "Add" affordance —
                                                     avoids a separate drawer while still letting
@@ -3280,7 +3290,6 @@ export default function PropertyDetail() {
                                                 />
                                               </div>
                                             </TableCell>
-                                            <TableCell><InlineEdit value={occ.employeeId} onSave={v => updateOccupant(occ.id, { employeeId: v })} /></TableCell>
                                             <TableCell><InlineEdit value={occ.company} onSave={v => updateOccupant(occ.id, { company: v })} /></TableCell>
                                             <TableCell data-testid={`cell-occupant-shift-${occ.id}`}>
                                               <ShiftPicker
@@ -3291,20 +3300,26 @@ export default function PropertyDetail() {
                                                 triggerClassName="h-7 text-xs w-28"
                                               />
                                             </TableCell>
-                                            <TableCell className="whitespace-nowrap"><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
-                                            <TableCell
-                                              className="whitespace-nowrap"
-                                              data-testid={`cell-occupant-moveout-${occ.id}`}
-                                            >
-                                              <InlineEdit
-                                                value={occ.moveOutDate ?? ""}
-                                                placeholder="—"
-                                                onSave={(v) =>
-                                                  updateOccupant(occ.id, {
-                                                    moveOutDate: v.trim() === "" ? null : v,
-                                                  })
-                                                }
-                                              />
+                                            <TableCell className="whitespace-nowrap align-top">
+                                              <div className="flex flex-col gap-0.5 leading-tight">
+                                                <InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} />
+                                                <div
+                                                  className="text-[10px] text-muted-foreground"
+                                                  data-testid={`cell-occupant-moveout-${occ.id}`}
+                                                  title={t("pages.propertyDetail.bedTableMoveOut")}
+                                                >
+                                                  <span className="mr-1">→</span>
+                                                  <InlineEdit
+                                                    value={occ.moveOutDate ?? ""}
+                                                    placeholder="—"
+                                                    onSave={(v) =>
+                                                      updateOccupant(occ.id, {
+                                                        moveOutDate: v.trim() === "" ? null : v,
+                                                      })
+                                                    }
+                                                  />
+                                                </div>
+                                              </div>
                                             </TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex flex-col items-end gap-0.5">
@@ -3350,7 +3365,7 @@ export default function PropertyDetail() {
                                                 )}
                                               </div>
                                               <div
-                                                className="text-[10px] text-muted-foreground tabular-nums leading-tight"
+                                                className="flex items-center justify-end gap-1 text-[10px] text-muted-foreground tabular-nums leading-tight"
                                                 title="Monthly equivalent = weekly × 52 / 12"
                                                 data-testid={`cell-bed-weekly-${bed.id}`}
                                               >
@@ -3359,28 +3374,25 @@ export default function PropertyDetail() {
                                                   {" · "}
                                                   {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/mo
                                                 </span>
+                                                <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
+                                                  <SelectTrigger
+                                                    className="h-4 px-1 text-[10px] gap-0.5 border-0 bg-transparent hover:bg-muted/50 w-auto [&>svg]:h-2.5 [&>svg]:w-2.5"
+                                                    data-testid={`select-billing-${occ.id}`}
+                                                    title={t("pages.propertyDetail.bedTableBilling")}
+                                                  >
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{t(`common.billingFrequencies.${f}`)}</SelectItem>)}
+                                                  </SelectContent>
+                                                </Select>
                                               </div>
                                               </div>
-                                            </TableCell>
-                                            <TableCell>
-                                              <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
-                                                <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                  {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{t(`common.billingFrequencies.${f}`)}</SelectItem>)}
-                                                </SelectContent>
-                                              </Select>
-                                            </TableCell>
-                                            <TableCell
-                                              className="text-right tabular-nums text-muted-foreground"
-                                              data-testid={`cell-bed-monthly-${bed.id}`}
-                                              title="Monthly equivalent = weekly × 52 / 12"
-                                            >
-                                              {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
                                             </TableCell>
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={7}>
+                                            <TableCell colSpan={5}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable

@@ -21,7 +21,7 @@ import {
   Sofa, Refrigerator, Utensils, Bath, WashingMachine, Thermometer, Tv,
   ShieldCheck, Trees, Sparkles, CheckCircle2, Star, Briefcase,
   Cigarette, Car, Volume2, Siren, Wrench, Sparkle, MoreHorizontal,
-  ShieldAlert, ArrowRightLeft,
+  ShieldAlert, ArrowRightLeft, Undo2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -682,6 +682,16 @@ export function InlineEdit({
   const [editing, setEditing] = useState(startEditing);
   const [draft, setDraft] = useState(String(value));
   const lastIncomingRef = useRef(String(value));
+  // Track the previous saved value so we can offer an "undo" affordance
+  // for ~8s after every commit. The undo button calls onSave again with
+  // the previous value, which flows through the same persistence path
+  // (optimistic update + rollback on failure) so there's nothing special
+  // to wire up in callers.
+  const [undoableFrom, setUndoableFrom] = useState<string | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, []);
 
   // Resync the local draft whenever the persisted value changes from the
   // outside — e.g. an optimistic patch settles, or a save fails and the data
@@ -697,8 +707,30 @@ export function InlineEdit({
     setDraft(incoming);
   }, [value]);
 
-  const commit = () => { onSave(draft); setEditing(false); };
+  const startUndoWindow = (previous: string) => {
+    setUndoableFrom(previous);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoableFrom(null), 8000);
+  };
+
+  const commit = () => {
+    const previous = String(value);
+    if (draft !== previous) {
+      onSave(draft);
+      startUndoWindow(previous);
+    }
+    setEditing(false);
+  };
   const cancel = () => { setDraft(String(value)); setEditing(false); };
+  const undo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (undoableFrom === null) return;
+    const previous = undoableFrom;
+    onSave(previous);
+    setDraft(previous);
+    setUndoableFrom(null);
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+  };
 
   if (!editing) {
     const isEmpty = String(value).length === 0;
@@ -723,6 +755,18 @@ export function InlineEdit({
           <span className={`text-sm ${displayClassName ?? ""}`}>{prefix}{displayValue ?? value}</span>
         )}
         <Edit2 className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        {undoableFrom !== null && (
+          <button
+            type="button"
+            onClick={undo}
+            title={`Undo (revert to ${undoableFrom || "previous value"})`}
+            aria-label="Undo last change"
+            data-testid={testId ? `${testId}-undo` : undefined}
+            className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          >
+            <Undo2 className="h-3 w-3" />
+          </button>
+        )}
       </span>
     );
   }

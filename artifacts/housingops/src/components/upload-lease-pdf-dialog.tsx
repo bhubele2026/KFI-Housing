@@ -116,13 +116,27 @@ interface QueueItem {
   newCustomerName: string;
 }
 
-function emptyPropertyDraft(extracted: ExtractedLeaseFromPdf): PropertyDraft {
+function emptyPropertyDraft(extracted?: ExtractedLeaseFromPdf): PropertyDraft {
   return {
-    name: extracted.propertyName ?? "",
-    address: extracted.propertyAddress ?? "",
-    city: extracted.city ?? "",
-    state: extracted.state ?? "",
-    zip: extracted.zip ?? "",
+    name: extracted?.propertyName ?? "",
+    address: extracted?.propertyAddress ?? "",
+    city: extracted?.city ?? "",
+    state: extracted?.state ?? "",
+    zip: extracted?.zip ?? "",
+  };
+}
+
+function blankLeaseDraft(): LeaseDraft {
+  return {
+    startDate: "",
+    endDate: "",
+    monthlyRent: "",
+    securityDeposit: "",
+    status: "Active",
+    notes: "",
+    clauses: "",
+    buyoutAvailable: false,
+    buyoutCost: "",
   };
 }
 
@@ -396,32 +410,12 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
 
   const runUploadsAndMaybeFallback = async (
     items: QueueItem[],
-    isFirstBatch: boolean,
+    _isFirstBatch: boolean,
   ) => {
     await runUploads(items);
-    // If the very first batch produced ONLY failures, and nothing in the
-    // queue is reviewable or saved, fall through to the parent's manual
-    // fallback so the user isn't stuck staring at a list of red errors.
-    if (!isFirstBatch) return;
-    setQueue((prev) => {
-      const anyUseful = prev.some(
-        (q) => q.status === "needs-review" || q.status === "saved",
-      );
-      if (!anyUseful && prev.length > 0 && prev.every((q) => q.status === "failed")) {
-        const summary =
-          prev.length === 1
-            ? prev[0].errorMessage ?? "Couldn't import the PDF."
-            : `None of the ${prev.length} PDFs could be parsed.`;
-        toast({
-          title: "Couldn't import PDF",
-          description: `${summary} Opening manual lease entry — you can add it by hand.`,
-          variant: "destructive",
-        });
-        setOpen(false);
-        onPdfImportFailed?.();
-      }
-      return prev;
-    });
+    // Stay in the queue even when every file failed — the failed rows now
+    // offer an "Add manually" button so the operator can enter the lease
+    // (incl. creating a new property) without leaving this dialog.
   };
 
   // ── Drag and drop ────────────────────────────────────────────────────────
@@ -460,6 +454,17 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
 
   // ── Review actions ───────────────────────────────────────────────────────
   const handleStartReview = (id: string) => {
+    // For failed parses, seed empty drafts so the operator can still add the
+    // lease manually (incl. "+ Create new property") instead of being stuck.
+    const target = queue.find((q) => q.id === id);
+    if (target && (target.status === "failed" || !target.leaseDraft)) {
+      updateQueueItem(id, {
+        status: "needs-review",
+        leaseDraft: target.leaseDraft ?? blankLeaseDraft(),
+        selectedPropertyId: target.selectedPropertyId || "",
+        propertyDraft: target.propertyDraft ?? null,
+      });
+    }
     setReviewingId(id);
     setStage("review");
   };
@@ -482,9 +487,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     if (value === NEW_PROPERTY_VALUE) {
       const draft =
         reviewingItem.propertyDraft ??
-        (reviewingItem.importResult
-          ? emptyPropertyDraft(reviewingItem.importResult.extracted)
-          : null);
+        emptyPropertyDraft(reviewingItem.importResult?.extracted);
       updateQueueItem(reviewingItem.id, {
         selectedPropertyId: value,
         propertyDraft: draft,
@@ -878,24 +881,35 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
           </div>
         )}
 
-        {stage === "review" && reviewingItem && reviewingItem.importResult && reviewingItem.leaseDraft && (
+        {stage === "review" && reviewingItem && reviewingItem.leaseDraft && (
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="font-normal">
                 <FileUp className="h-3 w-3 mr-1" />
                 {reviewingItem.fileName}
               </Badge>
-              <ConfidenceBadge confidence={reviewingItem.importResult.extracted.confidence} />
-              {reviewingItem.importResult.extracted.landlordName && (
-                <Badge variant="outline" className="font-normal">
-                  Landlord: {reviewingItem.importResult.extracted.landlordName}
+              {reviewingItem.importResult ? (
+                <>
+                  <ConfidenceBadge confidence={reviewingItem.importResult.extracted.confidence} />
+                  {reviewingItem.importResult.extracted.landlordName && (
+                    <Badge variant="outline" className="font-normal">
+                      Landlord: {reviewingItem.importResult.extracted.landlordName}
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                <Badge variant="secondary" className="font-normal">
+                  Manual entry — PDF couldn't be parsed
                 </Badge>
               )}
             </div>
 
-            <PdfFixupsSection fixups={reviewingItem.importResult.fixups ?? []} />
-
-            <Separator />
+            {reviewingItem.importResult && (
+              <>
+                <PdfFixupsSection fixups={reviewingItem.importResult.fixups ?? []} />
+                <Separator />
+              </>
+            )}
 
             {/* ── Property section ─────────────────────────────────────── */}
             <div>
@@ -903,16 +917,22 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 <Building2 className="h-4 w-4" />
                 Property
               </Label>
-              {reviewingItem.importResult.candidates.length > 0 ? (
-                <PropertyMatchPicker
-                  candidates={reviewingItem.importResult.candidates}
-                  topMatch={reviewingItem.importResult.topMatch}
-                  selectedValue={reviewingItem.selectedPropertyId}
-                  onSelect={handleSelectProperty}
-                />
+              {reviewingItem.importResult ? (
+                reviewingItem.importResult.candidates.length > 0 ? (
+                  <PropertyMatchPicker
+                    candidates={reviewingItem.importResult.candidates}
+                    topMatch={reviewingItem.importResult.topMatch}
+                    selectedValue={reviewingItem.selectedPropertyId}
+                    onSelect={handleSelectProperty}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No close matches found in your portfolio. We'll create a new property.
+                  </p>
+                )
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">
-                  No close matches found in your portfolio. We'll create a new property.
+                  Pick an existing property or create a new one below, then fill in the lease details.
                 </p>
               )}
               <Select value={reviewingItem.selectedPropertyId} onValueChange={handleSelectProperty}>
@@ -1296,6 +1316,17 @@ function QueueRow({
           data-testid={`button-review-${item.id}`}
         >
           Review
+        </Button>
+      )}
+      {item.status === "failed" && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onReview}
+          data-testid={`button-add-manually-${item.id}`}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add manually
         </Button>
       )}
     </div>

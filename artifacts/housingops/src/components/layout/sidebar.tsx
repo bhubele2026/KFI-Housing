@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import logoUrl from "@/assets/kfi-staffing-logo.png";
@@ -48,18 +48,71 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
-  { href: "/customers", labelKey: "nav.customers", icon: Briefcase },
-  { href: "/properties", labelKey: "nav.properties", icon: Home },
-  { href: "/leases", labelKey: "nav.leases", icon: KeyRound },
-  { href: "/beds", labelKey: "nav.beds", icon: BedDouble },
-  { href: "/occupants", labelKey: "nav.occupants", icon: Users },
-  { href: "/utilities", labelKey: "nav.utilities", icon: Zap },
-  { href: "/finance", labelKey: "nav.finance", icon: DollarSign },
-  { href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings },
+type NavLeaf = {
+  kind: "leaf";
+  href: string;
+  labelKey: string;
+  icon: LucideIcon;
+};
+type NavGroup = {
+  kind: "group";
+  id: string;
+  labelKey: string;
+  icon: LucideIcon;
+  defaultOpen: boolean;
+  children: NavLeaf[];
+};
+type NavEntry = NavLeaf | NavGroup;
+
+const HOUSING_CHILDREN: NavLeaf[] = [
+  { kind: "leaf", href: "/customers", labelKey: "nav.customers", icon: Briefcase },
+  { kind: "leaf", href: "/properties", labelKey: "nav.properties", icon: Home },
+  { kind: "leaf", href: "/leases", labelKey: "nav.leases", icon: KeyRound },
+  { kind: "leaf", href: "/beds", labelKey: "nav.beds", icon: BedDouble },
+  { kind: "leaf", href: "/occupants", labelKey: "nav.occupants", icon: Users },
+  { kind: "leaf", href: "/utilities", labelKey: "nav.utilities", icon: Zap },
+  { kind: "leaf", href: "/finance", labelKey: "nav.finance", icon: DollarSign },
+  { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
 ];
+
+const TRANSPORT_CHILDREN: NavLeaf[] = [
+  { kind: "leaf", href: "/transport/vehicles", labelKey: "nav.transport.vehicles", icon: Truck },
+  { kind: "leaf", href: "/transport/vehicle-leases", labelKey: "nav.transport.vehicleLeases", icon: FileText },
+  { kind: "leaf", href: "/transport/drivers", labelKey: "nav.transport.drivers", icon: Contact },
+  { kind: "leaf", href: "/transport/trips", labelKey: "nav.transport.trips", icon: MapPin },
+  { kind: "leaf", href: "/transport/maintenance", labelKey: "nav.transport.maintenance", icon: Wrench },
+  { kind: "leaf", href: "/transport/fuel-logs", labelKey: "nav.transport.fuelLogs", icon: Fuel },
+  { kind: "leaf", href: "/transport/routes", labelKey: "nav.transport.routes", icon: MapIcon },
+  { kind: "leaf", href: "/transport/charges", labelKey: "nav.transport.charges", icon: Receipt },
+];
+
+const NAV_ENTRIES: NavEntry[] = [
+  { kind: "leaf", href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  {
+    kind: "group",
+    id: "housing",
+    labelKey: "nav.housing",
+    icon: Building2,
+    defaultOpen: true,
+    children: HOUSING_CHILDREN,
+  },
+  {
+    kind: "group",
+    id: "transportation",
+    labelKey: "nav.transportation",
+    icon: Truck,
+    defaultOpen: false,
+    children: TRANSPORT_CHILDREN,
+  },
+  { kind: "leaf", href: "/settings", labelKey: "nav.settings", icon: Settings },
+];
+
+/** Flat list of every leaf (Dashboard + Housing kids + Transportation kids + Settings),
+ *  in the order they appear on the rendered desktop sidebar. The collapsed icon-rail
+ *  variant renders this list directly so each route stays one click away. */
+const ALL_LEAVES: NavLeaf[] = NAV_ENTRIES.flatMap((e) =>
+  e.kind === "leaf" ? [e] : e.children,
+);
 
 export type SidebarProps = {
   /** Render the icon-only ~56px rail (desktop only). When undefined, renders the full 256px rail. */
@@ -402,6 +455,111 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
       node
     );
 
+  // Session-scoped expand/collapse state per nav group. Defaults are seeded
+  // from each group's `defaultOpen`: Housing opens on first load so existing
+  // operators don't lose their links; Transportation stays closed so the
+  // placeholder section doesn't visually compete on first paint.
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const e of NAV_ENTRIES) {
+      if (e.kind === "group") init[e.id] = e.defaultOpen;
+    }
+    return init;
+  });
+
+  // Maps a leaf href to the top-level NAV_ENTRIES bucket it belongs to.
+  // Used by the collapsed icon-rail to draw a hairline divider between
+  // Dashboard / Housing / Transportation / Settings sections.
+  function groupOfHref(href: string): string {
+    for (const e of NAV_ENTRIES) {
+      if (e.kind === "leaf" && e.href === href) return `__leaf__${href}`;
+      if (e.kind === "group" && e.children.some((c) => c.href === href)) return e.id;
+    }
+    return "__unknown__";
+  }
+
+  function renderLeaf(item: NavLeaf, opts: { indented: boolean }) {
+    const label = t(item.labelKey);
+    const isActive = location === item.href;
+    const showAddressBadge =
+      item.href === "/properties" && addressesNeedingFixCount > 0;
+    const linkNode = (
+      <Link key={item.href} href={item.href}>
+        <span
+          onClick={onNavigate}
+          data-testid={`nav-leaf-${item.href}`}
+          className={cn(
+            "group relative flex items-center rounded-md text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
+            collapsed
+              ? "h-10 w-10 justify-center mx-auto"
+              : opts.indented
+                ? "px-2.5 py-1.5"
+                : "px-3 py-2",
+            isActive
+              ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+              : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+          )}
+        >
+          {isActive && !collapsed && (
+            <span
+              aria-hidden="true"
+              className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-sidebar-primary-foreground/80"
+            />
+          )}
+          <item.icon
+            className={cn(
+              "h-[18px] w-[18px] flex-shrink-0 transition-colors",
+              !collapsed && "mr-3",
+              isActive
+                ? "text-sidebar-primary-foreground"
+                : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground",
+            )}
+            aria-hidden="true"
+          />
+          {!collapsed && <span className="flex-1">{label}</span>}
+          {showAddressBadge ? (
+            collapsed ? (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-sidebar",
+                  isActive ? "bg-sidebar-primary-foreground" : "bg-destructive",
+                )}
+                data-testid="badge-properties-needing-address-fix"
+              />
+            ) : (
+              <span
+                className={cn(
+                  "ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
+                  isActive
+                    ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
+                    : "bg-destructive/15 text-destructive",
+                )}
+                aria-label={addressesNeedingFixTooltip}
+                title={addressesNeedingFixTooltip}
+                data-testid="badge-properties-needing-address-fix"
+              >
+                {addressesNeedingFixCount}
+              </span>
+            )
+          ) : null}
+        </span>
+      </Link>
+    );
+    const tipLabel =
+      showAddressBadge && addressesNeedingFixTooltip
+        ? `${label} — ${addressesNeedingFixTooltip}`
+        : label;
+    return collapsed ? (
+      <Tooltip key={item.href}>
+        <TooltipTrigger asChild>{linkNode}</TooltipTrigger>
+        <TooltipContent side="right">{tipLabel}</TooltipContent>
+      </Tooltip>
+    ) : (
+      <div key={item.href}>{linkNode}</div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -538,79 +696,89 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           collapsed ? "px-2" : "px-3",
         )}
       >
-        {NAV_ITEMS.map((item) => {
-          const label = t(item.labelKey);
-          const isActive = location === item.href;
-          const showAddressBadge =
-            item.href === "/properties" && addressesNeedingFixCount > 0;
-          const linkNode = (
-            <Link key={item.href} href={item.href}>
-              <span
-                onClick={onNavigate}
-                className={cn(
-                  "group relative flex items-center rounded-md text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
-                  collapsed ? "h-10 w-10 justify-center mx-auto" : "px-3 py-2",
-                  isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                    : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                )}
-              >
-                {isActive && !collapsed && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-sidebar-primary-foreground/80"
-                  />
-                )}
-                <item.icon
-                  className={cn(
-                    "h-[18px] w-[18px] flex-shrink-0 transition-colors",
-                    !collapsed && "mr-3",
-                    isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground"
-                  )}
-                  aria-hidden="true"
-                />
-                {!collapsed && <span className="flex-1">{label}</span>}
-                {showAddressBadge ? (
-                  collapsed ? (
-                    <span
+        {collapsed
+          ? ALL_LEAVES.map((leaf, idx) => {
+              // Insert a subtle hairline divider before the first leaf of each
+              // grouped section so the icon rail still hints at the
+              // Dashboard / Housing / Transportation / Settings shape.
+              const prev = ALL_LEAVES[idx - 1];
+              const showDivider =
+                idx > 0 &&
+                (groupOfHref(leaf.href) !== groupOfHref(prev.href));
+              return (
+                <div key={leaf.href}>
+                  {showDivider ? (
+                    <div
                       aria-hidden="true"
-                      className={cn(
-                        "absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-sidebar",
-                        isActive ? "bg-sidebar-primary-foreground" : "bg-destructive",
-                      )}
-                      data-testid="badge-properties-needing-address-fix"
+                      className="my-1 mx-2 h-px bg-sidebar-border/70"
                     />
-                  ) : (
-                    <span
+                  ) : null}
+                  {renderLeaf(leaf, { indented: false })}
+                </div>
+              );
+            })
+          : NAV_ENTRIES.map((entry) => {
+              if (entry.kind === "leaf") {
+                return renderLeaf(entry, { indented: false });
+              }
+              const open = groupOpen[entry.id] ?? entry.defaultOpen;
+              const activeChild = entry.children.some((c) => c.href === location);
+              const GroupIcon = entry.icon;
+              return (
+                <Collapsible
+                  key={entry.id}
+                  open={open}
+                  onOpenChange={(o) =>
+                    setGroupOpen((prev) => ({ ...prev, [entry.id]: o }))
+                  }
+                >
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      data-testid={`nav-group-${entry.id}`}
+                      data-active-child={activeChild ? "true" : "false"}
                       className={cn(
-                        "ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-                        isActive
-                          ? "bg-sidebar-primary-foreground/20 text-sidebar-primary-foreground"
-                          : "bg-destructive/15 text-destructive"
+                        "group relative flex w-full items-center rounded-md px-3 py-2 text-[13.5px] font-medium transition-all duration-150 cursor-pointer",
+                        activeChild && !open
+                          ? "bg-sidebar-primary/15 text-sidebar-primary-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
                       )}
-                      aria-label={addressesNeedingFixTooltip}
-                      title={addressesNeedingFixTooltip}
-                      data-testid="badge-properties-needing-address-fix"
                     >
-                      {addressesNeedingFixCount}
-                    </span>
-                  )
-                ) : null}
-              </span>
-            </Link>
-          );
-          const tipLabel = showAddressBadge && addressesNeedingFixTooltip
-            ? `${label} — ${addressesNeedingFixTooltip}`
-            : label;
-          return collapsed ? (
-            <Tooltip key={item.href}>
-              <TooltipTrigger asChild>{linkNode}</TooltipTrigger>
-              <TooltipContent side="right">{tipLabel}</TooltipContent>
-            </Tooltip>
-          ) : (
-            linkNode
-          );
-        })}
+                      {activeChild && !open && (
+                        <span
+                          aria-hidden="true"
+                          className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r-full bg-sidebar-primary-foreground/80"
+                        />
+                      )}
+                      <GroupIcon
+                        className={cn(
+                          "h-[18px] w-[18px] flex-shrink-0 mr-3 transition-colors",
+                          activeChild
+                            ? "text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground",
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 text-left">{t(entry.labelKey)}</span>
+                      {open ? (
+                        <ChevronDown className="h-4 w-4 text-sidebar-foreground/55" aria-hidden="true" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-sidebar-foreground/55" aria-hidden="true" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent
+                    className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-2"
+                    data-testid={`nav-group-${entry.id}-children`}
+                  >
+                    {entry.children.map((child) =>
+                      renderLeaf(child, { indented: true }),
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
       </nav>
 
       <div

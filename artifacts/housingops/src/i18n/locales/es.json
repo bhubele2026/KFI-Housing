@@ -93,6 +93,18 @@
     "utilities": "Servicios",
     "finance": "Finanzas",
     "insurance": "Seguros",
+    "housing": "Vivienda",
+    "transportation": "Transporte",
+    "transport": {
+      "vehicles": "Vehículos",
+      "vehicleLeases": "Contratos de vehículos",
+      "drivers": "Conductores",
+      "trips": "Viajes",
+      "maintenance": "Mantenimiento",
+      "fuelLogs": "Registros de combustible",
+      "routes": "Rutas",
+      "charges": "Cobros de transporte"
+    },
     "settings": "Ajustes",
     "logout": "Cerrar sesión",
     "expandSidebar": "Expandir barra lateral",
@@ -115,6 +127,12 @@
     "emailPlaceholder": "nombre@empresa.com",
     "signIn": "Iniciar sesión",
     "demoNote": "Cualquier correo sirve para la demo — no se requiere contraseña."
+  },
+  "transport": {
+    "stub": {
+      "description": "Marcador de posición para la próxima subsección de Transporte.",
+      "comingSoon": "Próximamente — marcador de posición."
+    }
   },
   "pages": {
     "dashboard": {

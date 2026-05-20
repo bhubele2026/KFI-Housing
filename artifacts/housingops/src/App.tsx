@@ -30,6 +30,7 @@ import Utilities from "@/pages/utilities";
 import Finance from "@/pages/finance";
 import InsuranceCertificates from "@/pages/insurance-certificates";
 import SettingsPage from "@/pages/settings";
+import TransportStub from "@/pages/transport-stub";
 
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
   window.location.hostname,
@@ -81,6 +82,30 @@ function AppRoutes() {
       <Route path="/finance" component={Finance} />
       <Route path="/insurance" component={InsuranceCertificates} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/transport/vehicles">
+        <TransportStub titleKey="nav.transport.vehicles" />
+      </Route>
+      <Route path="/transport/vehicle-leases">
+        <TransportStub titleKey="nav.transport.vehicleLeases" />
+      </Route>
+      <Route path="/transport/drivers">
+        <TransportStub titleKey="nav.transport.drivers" />
+      </Route>
+      <Route path="/transport/trips">
+        <TransportStub titleKey="nav.transport.trips" />
+      </Route>
+      <Route path="/transport/maintenance">
+        <TransportStub titleKey="nav.transport.maintenance" />
+      </Route>
+      <Route path="/transport/fuel-logs">
+        <TransportStub titleKey="nav.transport.fuelLogs" />
+      </Route>
+      <Route path="/transport/routes">
+        <TransportStub titleKey="nav.transport.routes" />
+      </Route>
+      <Route path="/transport/charges">
+        <TransportStub titleKey="nav.transport.charges" />
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

@@ -93,6 +93,18 @@
     "utilities": "Utilities",
     "finance": "Finance",
     "insurance": "Insurance",
+    "housing": "Housing",
+    "transportation": "Transportation",
+    "transport": {
+      "vehicles": "Vehicles",
+      "vehicleLeases": "Vehicle Leases",
+      "drivers": "Drivers",
+      "trips": "Trips",
+      "maintenance": "Maintenance",
+      "fuelLogs": "Fuel Logs",
+      "routes": "Routes",
+      "charges": "Transport Charges"
+    },
     "settings": "Settings",
     "logout": "Sign out",
     "expandSidebar": "Expand sidebar",
@@ -115,6 +127,12 @@
     "emailPlaceholder": "name@company.com",
     "signIn": "Sign in",
     "demoNote": "Any email will work for the demo — no password required."
+  },
+  "transport": {
+    "stub": {
+      "description": "Placeholder for the upcoming Transportation sub-section.",
+      "comingSoon": "Coming soon — placeholder."
+    }
   },
   "pages": {
     "dashboard": {

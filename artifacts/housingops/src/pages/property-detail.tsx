@@ -334,11 +334,45 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {beds.sort((a, b) => a.bedNumber - b.bedNumber).map((bed, i) => {
-            const occ = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
-            const isOccupied = bed.status === "Occupied";
-            return (
+        {(() => {
+          // Group beds by room so the tile numbers have visible context
+          // (a flat strip of 1/2/3… reads as noise — the user just sees
+          // numbers with no anchor). Rooms with no beds are skipped, and
+          // any orphaned beds (room missing from the rooms list) fall
+          // into a final "Other" group so nothing silently disappears.
+          const roomOrder = rooms.map(r => r.id);
+          const bedsByRoom = new Map<string, typeof beds>();
+          for (const bed of beds) {
+            const key = roomNameById.has(bed.roomId) ? bed.roomId : "__orphan";
+            const arr = bedsByRoom.get(key) ?? [];
+            arr.push(bed);
+            bedsByRoom.set(key, arr);
+          }
+          const orderedKeys = [
+            ...roomOrder.filter(id => bedsByRoom.has(id)),
+            ...(bedsByRoom.has("__orphan") ? ["__orphan"] : []),
+          ];
+          let globalIdx = 0;
+          return (
+            <div className="flex flex-wrap gap-x-5 gap-y-3">
+              {orderedKeys.map(roomKey => {
+                const roomBeds = (bedsByRoom.get(roomKey) ?? []).sort(
+                  (a, b) => a.bedNumber - b.bedNumber,
+                );
+                const label = roomKey === "__orphan"
+                  ? t("pages.propertyDetail.bedsWithoutRoom", { defaultValue: "No room" })
+                  : roomNameById.get(roomKey) ?? "";
+                return (
+                  <div key={roomKey} className="flex flex-col gap-1 min-w-0">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
+                      {label}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {roomBeds.map(bed => {
+                        const i = globalIdx++;
+                        const occ = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
+                        const isOccupied = bed.status === "Occupied";
+                        return (
               <Tooltip key={bed.id} delayDuration={100}>
                 <TooltipTrigger asChild>
                   <motion.button
@@ -371,9 +405,15 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                   }
                 </TooltipContent>
               </Tooltip>
-            );
-          })}
-        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

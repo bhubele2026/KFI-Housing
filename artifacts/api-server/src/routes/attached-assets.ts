@@ -3,8 +3,190 @@ import path from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import { objectStorageClient } from "../lib/objectStorage";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+/**
+ * Object Storage fallback for bundled `attached_assets/` (Task #640).
+ *
+ * Republishing the app gives the container a fresh local filesystem,
+ * so any PDF that landed under `attached_assets/` after the last
+ * build is gone the moment the user republishes. To make the read
+ * path republish-safe, we:
+ *
+ *   1. Serve from local disk first (fast, no network hop).
+ *   2. On miss, fall back to a `legacy-attached-assets/<filename>`
+ *      object in the configured Object Storage bucket.
+ *   3. Stream the object body back to disk in the bucket-served case
+ *      so subsequent reads (and the thumbnail cache) are warm again.
+ *
+ * The one-time backfill (`backfillAttachedAssetsToObjectStorage`)
+ * uploads anything on local disk into Object Storage so a republish
+ * later finds the same set of files there.
+ */
+const ATTACHED_ASSETS_PREFIX = "legacy-attached-assets/";
+
+function objectStorageBucketName(): string | null {
+  const dir = process.env.PRIVATE_OBJECT_DIR;
+  if (!dir || dir.trim() === "") return null;
+  const trimmed = dir.replace(/^\/+/, "");
+  const bucket = trimmed.split("/")[0];
+  return bucket || null;
+}
+
+function objectStoragePrefix(): string {
+  const dir = process.env.PRIVATE_OBJECT_DIR ?? "";
+  const trimmed = dir.replace(/^\/+/, "");
+  const parts = trimmed.split("/").filter((p) => p.length > 0);
+  const subPath = parts.slice(1).join("/");
+  return subPath
+    ? `${subPath}/${ATTACHED_ASSETS_PREFIX}`
+    : ATTACHED_ASSETS_PREFIX;
+}
+
+async function downloadFromObjectStorage(filename: string): Promise<Buffer | null> {
+  const bucketName = objectStorageBucketName();
+  if (!bucketName) return null;
+  try {
+    const file = objectStorageClient
+      .bucket(bucketName)
+      .file(`${objectStoragePrefix()}${filename}`);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [buf] = await file.download();
+    return buf;
+  } catch (err) {
+    logger.warn(
+      { err, filename },
+      "Object Storage fallback download failed for attached asset",
+    );
+    return null;
+  }
+}
+
+async function uploadToObjectStorage(
+  filename: string,
+  body: Buffer,
+  contentType: string,
+): Promise<boolean> {
+  const bucketName = objectStorageBucketName();
+  if (!bucketName) return false;
+  try {
+    const file = objectStorageClient
+      .bucket(bucketName)
+      .file(`${objectStoragePrefix()}${filename}`);
+    await file.save(body, { resumable: false, contentType });
+    return true;
+  } catch (err) {
+    logger.warn(
+      { err, filename },
+      "Object Storage upload failed for attached asset",
+    );
+    return false;
+  }
+}
+
+async function restoreAssetToDisk(
+  fullPath: string,
+  body: Buffer,
+): Promise<void> {
+  try {
+    const dir = path.dirname(fullPath);
+    await fsp.mkdir(dir, { recursive: true });
+    const tmp =
+      fullPath + ".tmp." + process.pid + "." + Math.random().toString(36).slice(2, 8);
+    await fsp.writeFile(tmp, body);
+    await fsp.rename(tmp, fullPath);
+  } catch (err) {
+    logger.warn(
+      { err, fullPath },
+      "Failed to restore Object-Storage-served attached asset to local disk",
+    );
+  }
+}
+
+/**
+ * One-time idempotent backfill: uploads every bundled `.pdf` under
+ * `attached_assets/` into Object Storage under `legacy-attached-assets/`,
+ * so a republish — which gives the container a fresh filesystem —
+ * still has the source PDFs to fall back to. Re-running this is
+ * cheap: we list the bucket first and skip any object that already
+ * exists.
+ */
+export interface BackfillLogger {
+  info: (obj: Record<string, unknown> | string, msg?: string) => void;
+  warn: (obj: Record<string, unknown> | string, msg?: string) => void;
+}
+
+export async function backfillAttachedAssetsToObjectStorage(
+  log: BackfillLogger = logger as unknown as BackfillLogger,
+): Promise<{ uploaded: number; skipped: number; failed: number }> {
+  const bucketName = objectStorageBucketName();
+  if (!bucketName) {
+    log.info(
+      "PRIVATE_OBJECT_DIR is not set — skipping attached-assets backfill",
+    );
+    return { uploaded: 0, skipped: 0, failed: 0 };
+  }
+  const baseDir = attachedAssetsDir();
+  let entries: string[] = [];
+  try {
+    entries = await fsp.readdir(baseDir);
+  } catch {
+    log.info({ baseDir }, "attached_assets/ does not exist — skipping backfill");
+    return { uploaded: 0, skipped: 0, failed: 0 };
+  }
+  const pdfs = entries.filter((e) => e.toLowerCase().endsWith(".pdf"));
+  if (pdfs.length === 0) return { uploaded: 0, skipped: 0, failed: 0 };
+
+  // List already-uploaded objects once so we don't HEAD per-file.
+  const prefix = objectStoragePrefix();
+  let existingNames = new Set<string>();
+  try {
+    const [files] = await objectStorageClient
+      .bucket(bucketName)
+      .getFiles({ prefix });
+    for (const f of files) {
+      existingNames.add(f.name.slice(prefix.length));
+    }
+  } catch (err) {
+    log.warn(
+      { err },
+      "Could not list Object Storage backfill prefix — will HEAD per-file",
+    );
+    existingNames = new Set();
+  }
+
+  let uploaded = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const filename of pdfs) {
+    if (existingNames.has(filename)) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      const buf = await fsp.readFile(path.join(baseDir, filename));
+      const ok = await uploadToObjectStorage(
+        filename,
+        buf,
+        "application/pdf",
+      );
+      if (ok) uploaded += 1;
+      else failed += 1;
+    } catch (err) {
+      log.warn({ err, filename }, "Backfill failed for asset");
+      failed += 1;
+    }
+  }
+  log.info(
+    { uploaded, skipped, failed, total: pdfs.length },
+    "Attached-assets Object Storage backfill complete",
+  );
+  return { uploaded, skipped, failed };
+}
 
 function attachedAssetsDir(): string {
   return path.resolve(process.cwd(), "..", "..", "attached_assets");
@@ -144,13 +326,29 @@ router.get("/attached-assets/:filename/thumbnail", async (req, res): Promise<voi
     res.status(resolved.status).json({ error: resolved.error });
     return;
   }
-  let stat: fs.Stats;
+  let stat: fs.Stats | null = null;
   try {
     stat = await fsp.stat(resolved.fullPath);
-    if (!stat.isFile()) throw new Error("not a file");
+    if (!stat.isFile()) stat = null;
   } catch {
-    res.status(404).json({ error: "Source PDF not found." });
-    return;
+    stat = null;
+  }
+  if (!stat) {
+    // Republish fallback: try Object Storage and rehydrate disk.
+    const remote = await downloadFromObjectStorage(resolved.filename);
+    if (!remote) {
+      res.status(404).json({ error: "Source PDF not found." });
+      return;
+    }
+    await restoreAssetToDisk(resolved.fullPath, remote);
+    try {
+      stat = await fsp.stat(resolved.fullPath);
+    } catch {
+      // Fall back to a synthetic stat from `now` so the cache key is
+      // stable across this request — disk persistence may have failed
+      // but rendering should still work.
+      stat = { mtimeMs: Date.now() } as fs.Stats;
+    }
   }
 
   const widthParam = Number.parseInt(String(req.query.w ?? ""), 10);
@@ -217,9 +415,24 @@ router.get("/attached-assets/:filename", (req, res): void => {
     return;
   }
 
-  fs.stat(fullPath, (err, stat) => {
-    if (err || !stat.isFile()) {
-      res.status(404).json({ error: "Source PDF not found." });
+  fs.stat(fullPath, async (err, stat) => {
+    if (err || !stat || !stat.isFile()) {
+      // Republish fallback: republished containers get a fresh
+      // filesystem, so a missing local PDF may still live in Object
+      // Storage from a previous boot. If we find it, restore it to
+      // disk and serve.
+      const remote = await downloadFromObjectStorage(filename);
+      if (!remote) {
+        res.status(404).json({ error: "Source PDF not found." });
+        return;
+      }
+      await restoreAssetToDisk(fullPath, remote);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${filename}"`,
+      );
+      res.send(remote);
       return;
     }
     res.setHeader("Content-Type", "application/pdf");

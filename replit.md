@@ -48,3 +48,43 @@ Portfolio map geocoding: properties carry optional `lat`/`lng` columns. The port
 ## Gotchas
 
 - **Production schema drift is non-fatal (warn-and-continue).** `artifacts/api-server/src/start.ts` used to `exit(1)` whenever the Drizzle source-of-truth schema and the prod DB disagreed on anything — including cosmetic `SET DEFAULT` diffs that don't affect runtime behavior (defaults are also expressed in the schema via `.default(...)`). That blocked publishes with no in-app remediation path on this platform. The startup now logs a loud `warn`, fires the `SCHEMA_DRIFT_WEBHOOK_URL` chat notification (capped at 3s so a hung webhook can't block startup), and continues serving. **Real errors (DB unreachable, non-drift exceptions) still `exit(1)`** so bad revisions don't promote. Drift detection is message-based via `isSchemaDriftError`. Apply pending statements through the Replit publish flow's schema sync (or contact Replit support) when convenient — they will not auto-apply.
+
+## Data safety (Task #640)
+
+Republishing the app is **data-safe by design**. Three layers protect production data from a botched deploy or stray destructive call:
+
+1. **Pre-boot database snapshots.** Every time api-server starts in production, before any schema push, it shells out to `pg_dump` and uploads a gzipped dump to Object Storage at `<PRIVATE_OBJECT_DIR>/backups/<iso-timestamp>__<git-sha>.sql.gz`. Snapshots for the same git SHA are skipped (a flapping autoscale revision doesn't fill the bucket). The most recent 20 snapshots are retained; older ones are pruned. Failures log but never block boot.
+2. **Reset endpoints are token-gated in production.** `POST /api/reset` and `POST /api/reset/wipe` (which wipe every business table) refuse with `403` in production unless the request carries `x-reset-confirm: <RESET_CONFIRM_TOKEN>` matching the server-side secret. In development they remain unrestricted. If `RESET_CONFIRM_TOKEN` is not set on the server, the endpoints are blocked outright in production.
+3. **Uploads persist in Object Storage.** Lease/insurance PDFs uploaded after Task #397 already live in GCS via `lib/objectStorage.ts`. Bundled `attached_assets/` PDFs now have an Object-Storage fallback (`legacy-attached-assets/<filename>`): on first boot after this change, a one-shot backfill uploads every on-disk PDF; on every subsequent read, if the file is missing locally (e.g. after a republish), the route falls back to Object Storage and rehydrates the disk cache.
+4. **Data-safety marker.** The first production boot stamps a `data-safety` row in `scheduler_state`. While present, every boot-time seeder/auto-importer is skipped regardless of how empty the tables look — preventing a corrupted prod DB from being "helpfully" reseeded with sample data on the next restart.
+
+### Listing and restoring backups
+
+Both endpoints reuse the `x-reset-confirm` / `RESET_CONFIRM_TOKEN` gate.
+
+```bash
+# List recent snapshots (id, size, createdAt, gitSha)
+curl -H "x-reset-confirm: $RESET_CONFIRM_TOKEN" \
+  https://<your-deploy>/api/admin/backup/list
+
+# Dry-run a restore — reports bytes + row counts but never mutates the DB
+curl -X POST -H "Content-Type: application/json" \
+  -H "x-reset-confirm: $RESET_CONFIRM_TOKEN" \
+  -d '{"id":"backups/2026-05-20T12-00-00.000Z__abc123.sql.gz","dryRun":true}' \
+  https://<your-deploy>/api/admin/backup/restore
+
+# Real restore — runs inside a single transaction; rolls back on any error
+curl -X POST -H "Content-Type: application/json" \
+  -H "x-reset-confirm: $RESET_CONFIRM_TOKEN" \
+  -d '{"id":"backups/2026-05-20T12-00-00.000Z__abc123.sql.gz"}' \
+  https://<your-deploy>/api/admin/backup/restore
+```
+
+### Required secrets
+
+- `RESET_CONFIRM_TOKEN` — long random string; gates `/api/reset`, `/api/reset/wipe`, `/api/admin/backup/list`, `/api/admin/backup/restore` in production.
+- `PRIVATE_OBJECT_DIR` — Object Storage path (already set for uploads); `backups/` and `legacy-attached-assets/` prefixes are created alongside it.
+
+### Out of scope
+
+No point-in-time recovery between snapshots (we keep discrete dumps, not continuous WAL), no cross-region replication, and prior already-lost `attached_assets/` content from earlier republishes can't be recovered — only data from this change forward is protected.

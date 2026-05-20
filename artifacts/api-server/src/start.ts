@@ -48,6 +48,22 @@ export interface StartDeps {
   // are no-ops. Only invoked when `isProduction` is true. Injected so
   // tests can stub it out (the default impl writes to the live pool).
   runProdSyncOnce: () => Promise<void>;
+  // Pre-boot DB snapshot (Task #640). Best-effort — failures log and
+  // we continue serving so a hiccup with Object Storage can't block
+  // the deploy. Only invoked in production. Returns the snapshot id
+  // when one was taken, or `null` when skipped (e.g. already-have-SHA).
+  snapshotDatabaseIfNeeded?: () => Promise<string | null>;
+  // One-time backfill: uploads anything on disk under attached_assets/
+  // into Object Storage so a future republish (which gives the
+  // container a fresh filesystem) can still find the PDFs via the
+  // bucket fallback. Idempotent — re-runs skip already-uploaded files.
+  backfillAttachedAssetsToObjectStorage?: () => Promise<void>;
+  // Data-safety marker check (Task #640). When true, every boot-time
+  // seeder/auto-importer is additionally skipped even if the tables
+  // look empty — defence against a corrupted prod DB being
+  // "helpfully" reseeded with sample data on restart.
+  isDataSafetyMarkerPresent?: () => Promise<boolean>;
+  setDataSafetyMarker?: () => Promise<void>;
   // One-shot occupant-charge zeroing: clears `charge_per_bed` on every
   // occupant row the first time it runs in production, then writes a
   // marker so subsequent boots are no-ops. The bundled prod-sync
@@ -241,6 +257,22 @@ export async function start(deps: StartDeps): Promise<void> {
     return;
   }
 
+  // Pre-boot database snapshot (Task #640). Runs BEFORE
+  // `pushSchemaIfNeeded` so an unexpected schema change can be rolled
+  // back from the most recent snapshot. Best-effort: a failure logs
+  // and continues, because a botched backup must not block a new
+  // revision from coming up and serving real traffic.
+  if (isProduction && deps.snapshotDatabaseIfNeeded) {
+    try {
+      await deps.snapshotDatabaseIfNeeded();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Pre-boot database snapshot failed — continuing to start. Backups for this revision will be missing.",
+      );
+    }
+  }
+
   try {
     await deps.pushSchemaIfNeeded(
       buildPushSchemaOptions(deps.env, deps.logger),
@@ -310,7 +342,41 @@ export async function start(deps: StartDeps): Promise<void> {
     deps.logger.info(
       "Production environment — skipping all boot-time seeders/auto-importers. Production data is managed through the app, not bootstrapped from code.",
     );
-  } else {
+    // Stamp the data-safety marker (Task #640) the first time a
+    // production boot reaches this point. Subsequent boots find it
+    // already set; the value is purely informational (a timestamp).
+    // The presence check below is the real teeth — every seeder is
+    // gated on `autoSeedDisabled`, which is now ALSO true whenever
+    // the marker exists (belt-and-suspenders).
+    if (deps.setDataSafetyMarker) {
+      try {
+        await deps.setDataSafetyMarker();
+      } catch (err) {
+        deps.logger.warn(
+          { err },
+          "Failed to stamp data-safety marker — continuing to serve",
+        );
+      }
+    }
+  } else if (deps.isDataSafetyMarkerPresent) {
+    // Dev / staging defence: if a dev environment has been
+    // explicitly marked as safety-protected (an operator ran the
+    // restore flow and set the marker), respect it.
+    try {
+      if (await deps.isDataSafetyMarkerPresent()) {
+        autoSeedDisabled = true;
+        deps.logger.info(
+          "data-safety marker present — skipping all boot-time seeders/auto-importers.",
+        );
+      }
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to read data-safety marker — falling back to auto-seed-disabled marker check",
+      );
+    }
+  }
+  if (!autoSeedDisabled && !isProduction) {
     try {
       autoSeedDisabled = await deps.isAutoSeedDisabled();
     } catch (err) {

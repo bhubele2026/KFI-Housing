@@ -3,7 +3,14 @@ import { eq } from "drizzle-orm";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { postSchemaDriftNotification } from "./lib/notify-schema-drift";
-import { isAutoSeedDisabled, seedIfEmpty } from "./lib/seed";
+import {
+  isAutoSeedDisabled,
+  isDataSafetyMarkerPresent,
+  seedIfEmpty,
+  setDataSafetyMarker,
+} from "./lib/seed";
+import { snapshotIfNeeded } from "./lib/backup";
+import { backfillAttachedAssetsToObjectStorage } from "./routes/attached-assets";
 import { seedAdientIfMissing } from "./lib/seed-adient";
 import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedChateauKnollIfMissing } from "./lib/seed-chateau-knoll";
@@ -32,6 +39,15 @@ void start({
   seedIfEmpty,
   isAutoSeedDisabled: () => isAutoSeedDisabled(),
   runProdSyncOnce: () => runProdSyncOnce(),
+  snapshotDatabaseIfNeeded: async () => {
+    const snap = await snapshotIfNeeded();
+    return snap?.id ?? null;
+  },
+  backfillAttachedAssetsToObjectStorage: async () => {
+    await backfillAttachedAssetsToObjectStorage();
+  },
+  isDataSafetyMarkerPresent: () => isDataSafetyMarkerPresent(),
+  setDataSafetyMarker: () => setDataSafetyMarker(),
   runZeroOccupantChargesOnce: () => zeroOccupantChargesOnce(),
   backfillOccupantMoveInDates: async () => {
     await backfillOccupantMoveInDates();

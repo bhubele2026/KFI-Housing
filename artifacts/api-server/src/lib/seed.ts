@@ -561,6 +561,47 @@ interface DataBundle {
 export const AUTO_SEED_DISABLED_MARKER_ID = "auto-seed-disabled";
 
 /**
+ * Belt-and-suspenders data-safety marker (Task #640). The first time
+ * a production boot completes its schema push without errors, we
+ * write this row. Every subsequent boot-time seeder additionally
+ * checks for it and refuses to run when present — even if the
+ * tables look empty. This prevents a corrupted / accidentally wiped
+ * production DB from being "helpfully" reseeded with sample data on
+ * the next restart, which would otherwise quietly overwrite the
+ * thing the operator is trying to restore from a snapshot.
+ *
+ * The marker is namespaced under `scheduler_state` for the same
+ * reason as `auto-seed-disabled` — that table already exists for
+ * "remember a small fact across boots" use cases.
+ */
+export const DATA_SAFETY_MARKER_ID = "data-safety";
+
+export async function isDataSafetyMarkerPresent(
+  database: typeof db = db,
+): Promise<boolean> {
+  const rows = await database
+    .select({ lastSentKey: schedulerStateTable.lastSentKey })
+    .from(schedulerStateTable)
+    .where(eq(schedulerStateTable.id, DATA_SAFETY_MARKER_ID))
+    .limit(1);
+  if (rows.length === 0) return false;
+  return (rows[0]?.lastSentKey ?? "") !== "";
+}
+
+export async function setDataSafetyMarker(
+  database: typeof db = db,
+): Promise<void> {
+  const stampedAt = new Date().toISOString();
+  await database
+    .insert(schedulerStateTable)
+    .values({ id: DATA_SAFETY_MARKER_ID, lastSentKey: stampedAt })
+    .onConflictDoUpdate({
+      target: schedulerStateTable.id,
+      set: { lastSentKey: stampedAt },
+    });
+}
+
+/**
  * Returns true when the auto-seed-disabled marker is present, meaning
  * an operator ran the wipe-only entry point and the boot sequence
  * should not refill the database with sample / Adient / Chateau Knoll

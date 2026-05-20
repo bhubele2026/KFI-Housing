@@ -789,6 +789,7 @@
       "bedTableCompany": "Empresa",
       "bedTableShift": "Turno",
       "bedTableMoveIn": "Entrada",
+      "bedTableMoveOut": "Salida (prev.)",
       "bedTableCharge": "Cargo",
       "bedTableBedRate": "Tarifa semanal de cama",
       "bedRate": {

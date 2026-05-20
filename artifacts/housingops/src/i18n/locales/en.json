@@ -800,6 +800,7 @@
       "bedTableCompany": "Company",
       "bedTableShift": "Shift",
       "bedTableMoveIn": "Move-in",
+      "bedTableMoveOut": "Move-out (proj.)",
       "bedTableCharge": "Charge",
       "bedTableBedRate": "Bed weekly rate",
       "bedRate": {

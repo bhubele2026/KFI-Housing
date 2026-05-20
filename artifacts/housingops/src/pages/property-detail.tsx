@@ -3025,12 +3025,13 @@ export default function PropertyDetail() {
                                     <TableHead className="w-20">{t("pages.propertyDetail.bedTableEmpId")}</TableHead>
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableCompany")}</TableHead>
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableShift")}</TableHead>
-                                    <TableHead className="w-24">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
-                                    <TableHead className="w-20 text-right">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
-                                    <TableHead className="w-24">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
-                                    <TableHead className="w-24 text-right">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
-                                    <TableHead className="w-24 text-right">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
-                                    <TableHead className="w-32">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
+                                    <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
+                                    <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveOut")}</TableHead>
+                                    <TableHead className="w-24 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
+                                    <TableHead className="w-24 whitespace-nowrap">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
+                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
+                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
+                                    <TableHead className="w-36 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
                                 </TableHeader>
@@ -3232,13 +3233,14 @@ export default function PropertyDetail() {
                                                     testIdSuffix={occ.id}
                                                     trigger={
                                                       <Button
-                                                        size="icon"
+                                                        size="sm"
                                                         variant="ghost"
-                                                        className="h-6 w-6 text-muted-foreground hover:text-foreground opacity-0 group-hover/occ:opacity-100 transition-opacity"
+                                                        className="h-6 px-1.5 text-[11px] text-muted-foreground hover:text-foreground gap-1"
                                                         data-testid={`button-move-occupant-${occ.id}`}
                                                         title="Move to another property / customer"
                                                       >
                                                         <ArrowRightLeft className="h-3 w-3" />
+                                                        Move
                                                       </Button>
                                                     }
                                                   />
@@ -3285,6 +3287,20 @@ export default function PropertyDetail() {
                                               />
                                             </TableCell>
                                             <TableCell className="whitespace-nowrap"><InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} /></TableCell>
+                                            <TableCell
+                                              className="whitespace-nowrap"
+                                              data-testid={`cell-occupant-moveout-${occ.id}`}
+                                            >
+                                              <InlineEdit
+                                                value={occ.moveOutDate ?? ""}
+                                                placeholder="—"
+                                                onSave={(v) =>
+                                                  updateOccupant(occ.id, {
+                                                    moveOutDate: v.trim() === "" ? null : v,
+                                                  })
+                                                }
+                                              />
+                                            </TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex items-center justify-end gap-1.5">
                                                 <InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} />
@@ -3352,7 +3368,7 @@ export default function PropertyDetail() {
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={8}>
+                                            <TableCell colSpan={9}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable

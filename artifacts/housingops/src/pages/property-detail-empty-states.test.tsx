@@ -52,6 +52,7 @@ vi.mock("@/hooks/use-toast", () => ({
 vi.mock("wouter", () => ({
   useParams: () => ({ id: "p1" }),
   useLocation: () => ["/properties/p1", vi.fn()] as const,
+  useSearch: () => window.location.search.replace(/^\?/, ""),
   Link: ({ children, ...rest }: { children: ReactNode } & Record<string, unknown>) => (
     <a {...rest}>{children}</a>
   ),
@@ -138,7 +139,11 @@ const emptyState = {
   occupants: [],
   utilities: [],
   insuranceCertificates: [],
+  buildings: [],
+  otherCosts: [],
   isLoading: false,
+  addProperty: vi.fn(),
+  addCustomer: vi.fn(),
   updateProperty: vi.fn(),
   updateLease: vi.fn(),
   addLease: vi.fn(),
@@ -167,13 +172,19 @@ vi.mock("@/context/data-store", () => ({
 }));
 
 import PropertyDetail from "./property-detail";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 function mount(node: ReactNode, container: HTMLDivElement) {
   let root: Root | null = null;
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
   act(() => {
     root = createRoot(container);
-    root.render(node);
+    root.render(
+      <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>,
+    );
   });
   return root!;
 }

@@ -3116,6 +3116,9 @@ export default function PropertyDetail() {
                                                 "occupied" cleaning state and have nothing to advance. */}
                                             {!isOccupied && (() => {
                                               const cs = bed.cleaningStatus ?? "ready";
+                                              // "ready" is the resting state — hide the chip so
+                                              // only actionable cleaning states surface (task #604).
+                                              if (cs === "ready") return null;
                                               const next: Record<string, { label: string; status: string } | null> = {
                                                 needs_cleaning: { label: t("pages.propertyDetail.startCleaning"), status: "in_progress" },
                                                 in_progress: { label: t("pages.propertyDetail.markReady"), status: "ready" },
@@ -3124,17 +3127,13 @@ export default function PropertyDetail() {
                                               };
                                               const nextStep = next[cs];
                                               const chipStyle =
-                                                cs === "ready"
-                                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                                  : cs === "in_progress"
-                                                    ? "bg-sky-50 text-sky-700 border-sky-200"
-                                                    : "bg-amber-50 text-amber-700 border-amber-200";
+                                                cs === "in_progress"
+                                                  ? "bg-sky-50 text-sky-700 border-sky-200"
+                                                  : "bg-amber-50 text-amber-700 border-amber-200";
                                               const chipLabel =
-                                                cs === "ready"
-                                                  ? t("pages.propertyDetail.cleaningReady")
-                                                  : cs === "in_progress"
-                                                    ? t("pages.propertyDetail.cleaningInProgress")
-                                                    : t("pages.propertyDetail.cleaningNeeds");
+                                                cs === "in_progress"
+                                                  ? t("pages.propertyDetail.cleaningInProgress")
+                                                  : t("pages.propertyDetail.cleaningNeeds");
                                               return (
                                                 <div className="flex items-center gap-1">
                                                   <Badge

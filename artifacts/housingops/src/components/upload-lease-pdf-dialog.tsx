@@ -51,7 +51,7 @@ import {
   useRecentLeaseUploads,
   type RecentLeaseUpload,
 } from "@/lib/recent-lease-uploads";
-import { type Lease, type Property } from "@/data/mockData";
+import { type Building, type Lease, type Property } from "@/data/mockData";
 import { cn } from "@/lib/utils";
 
 const NEW_PROPERTY_VALUE = "__new_property__";
@@ -95,13 +95,22 @@ type QueueItemStatus =
 
 interface QueueItem {
   id: string;
-  file: File;
+  file: File | null;
   fileName: string;
   status: QueueItemStatus;
   importResult?: LeasePdfImportResponse;
   errorMessage?: string;
+  /** True when this item was created via the "Enter manually" entry point
+   *  (no PDF was uploaded). Used to hide PDF-specific UI like the file size
+   *  badge, fixups, and confidence chip in the review form. */
+  manualEntry?: boolean;
   /** Persisted review-form state so navigating back to the queue preserves edits. */
   selectedPropertyId: string;
+  /** Empty string = "All buildings / unassigned". Stored as a string so the
+   *  Select stays controlled; sent as null on the lease when blank. Only
+   *  surfaced when the dialog is locked to a property and that property has
+   *  more than one building (Task #608, mirrors AddLeaseDialog behavior). */
+  buildingId: string;
   propertyDraft: PropertyDraft | null;
   leaseDraft: LeaseDraft | null;
   /**
@@ -225,6 +234,24 @@ export interface UploadLeasePdfDialogProps {
    * don't want to yank the user out of a batch where some files succeeded.
    */
   onPdfImportFailed?: () => void;
+  /**
+   * Lock the dialog to a specific property (Task #608). When set:
+   *   - the property pick / match UI is hidden and every imported lease is
+   *     attached to this property regardless of what the matcher returned;
+   *   - the customer pick is hidden — leases inherit the property's customer;
+   *   - the pick stage shows an "Enter manually" option so this dialog can
+   *     fully replace the property-detail Add Lease button.
+   * Leases page callers (no `propertyId`) keep the original cross-property
+   * upload UX.
+   */
+  propertyId?: string;
+  /**
+   * Buildings under the locked property. When more than one is provided we
+   * render a Building picker in the review form so multi-building properties
+   * can attach the lease to the correct one. Ignored when `propertyId`
+   * isn't set.
+   */
+  buildings?: readonly Building[];
 }
 
 /**
@@ -239,9 +266,31 @@ export interface UploadLeasePdfDialogProps {
  *
  * The PDF itself is never stored — only the extracted fields land in our DB.
  */
-export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFailed }: UploadLeasePdfDialogProps) {
+export function UploadLeasePdfDialog({
+  trigger,
+  onLeaseCreated,
+  onPdfImportFailed,
+  propertyId: lockedPropertyId,
+  buildings,
+}: UploadLeasePdfDialogProps) {
   const { properties, customers, addProperty, addCustomer, addLease, updateProperty } = useData();
   const { toast } = useToast();
+
+  // Resolve the locked property once so downstream branches don't have to
+  // keep re-scanning the properties list. When the prop is set but the id
+  // doesn't (yet) match anything in cache, we still treat the dialog as
+  // locked — the operator can't pick a different property here.
+  const lockedProperty = lockedPropertyId
+    ? properties.find((p) => p.id === lockedPropertyId) ?? null
+    : null;
+  const lockedCustomerId = lockedProperty?.customerId ?? "";
+  // Buildings under the locked property — only render the picker when
+  // there's a real choice to make (single-building properties keep the
+  // one-click flow). Matches AddLeaseDialog's `showBuildingPicker` rule.
+  const lockedPropertyBuildings = lockedPropertyId
+    ? (buildings ?? []).filter((b) => b.propertyId === lockedPropertyId)
+    : [];
+  const showBuildingPicker = !!lockedPropertyId && lockedPropertyBuildings.length > 1;
 
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<"pick" | "queue" | "review">("pick");
@@ -293,9 +342,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
       while (true) {
         const item = next();
         if (!item) return;
+        // Manual-entry items have no underlying File and never enter the
+        // upload queue — guard anyway so this worker stays typesafe.
+        if (!item.file) continue;
+        const itemFile = item.file;
         updateQueueItem(item.id, { status: "uploading" });
         try {
-          const result = await importLeasePdf(item.file);
+          const result = await importLeasePdf(itemFile);
           // Pre-fill the customer slot from the auto-matched property's
           // current customer, if any — operators can still override it
           // in the review form (e.g. when the matched property happens
@@ -303,15 +356,25 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
           const matchedPropertyCustomerId = result.topMatch
             ? properties.find((p) => p.id === result.topMatch!.propertyId)?.customerId ?? ""
             : "";
+          // When the dialog is locked to a property, ignore matcher
+          // suggestions and pin the upload to that property/customer —
+          // operators picked "Add Lease" on a specific property and
+          // expect the lease to land there, not on a fuzzy match.
+          const resolvedPropertyId = lockedPropertyId
+            ? lockedPropertyId
+            : result.topMatch
+              ? result.topMatch.propertyId
+              : "";
+          const resolvedCustomerId = lockedPropertyId
+            ? lockedCustomerId
+            : matchedPropertyCustomerId;
           updateQueueItem(item.id, {
             status: "needs-review",
             importResult: result,
             leaseDraft: leaseDraftFromExtracted(result.extracted),
-            // Auto-pick the top match only when it's confident; otherwise force
-            // an explicit choice in the review form (existing OR create new).
-            selectedPropertyId: result.topMatch ? result.topMatch.propertyId : "",
+            selectedPropertyId: resolvedPropertyId,
             propertyDraft: null,
-            customerId: matchedPropertyCustomerId,
+            customerId: resolvedCustomerId,
             newCustomerName: "",
           });
           recordLeaseUpload({
@@ -336,7 +399,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
             fileName: item.fileName,
             status: "failed",
             errorMessage: message,
-            file: item.file,
+            file: itemFile,
             timestamp: Date.now(),
           });
         }
@@ -381,10 +444,16 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
         file,
         fileName: file.name,
         status: "pending",
-        selectedPropertyId: "",
+        // When the dialog is locked to a property, pre-seed every queue
+        // item so the post-upload override (and any failure path) already
+        // points at the right property/customer instead of forcing the
+        // operator to re-pick. Building stays unset by default — the
+        // explicit picker handles multi-building properties.
+        selectedPropertyId: lockedPropertyId ?? "",
+        buildingId: "",
         propertyDraft: null,
         leaseDraft: null,
-        customerId: "",
+        customerId: lockedCustomerId,
         newCustomerName: "",
       });
     }
@@ -482,6 +551,36 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     handleFilesChosen([entry.file], entry.id);
   };
 
+  /**
+   * "Enter manually" entry point — only available when the dialog is
+   * locked to a property (Task #608). Creates a synthetic queue item with
+   * no PDF and blank lease drafts, then jumps straight into the review
+   * stage so the operator can fill in the fields by hand without leaving
+   * the Add Lease flow. Equivalent to the original AddLeaseDialog manual
+   * path on the property detail page, but rendered through this dialog
+   * so the upload + manual entry points stay unified.
+   */
+  const handleEnterManually = () => {
+    if (!lockedPropertyId) return;
+    const id = `qi-manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const manualItem: QueueItem = {
+      id,
+      file: null,
+      fileName: "Manual entry",
+      status: "needs-review",
+      manualEntry: true,
+      selectedPropertyId: lockedPropertyId,
+      buildingId: "",
+      propertyDraft: null,
+      leaseDraft: blankLeaseDraft(),
+      customerId: lockedCustomerId,
+      newCustomerName: "",
+    };
+    setQueue((prev) => [...prev, manualItem]);
+    setReviewingId(id);
+    setStage("review");
+  };
+
   const handleSelectProperty = (value: string) => {
     if (!reviewingItem) return;
     if (value === NEW_PROPERTY_VALUE) {
@@ -536,6 +635,12 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     if (!reviewingItem) return false;
     const lease = reviewingItem.leaseDraft;
     if (!lease || !lease.startDate || !lease.endDate || !lease.monthlyRent) return false;
+    // When the dialog is locked to a property the customer + property
+    // are inherited automatically, so skip the cross-property checks —
+    // operators just need the lease fields filled in.
+    if (lockedPropertyId) {
+      return reviewingItem.selectedPropertyId === lockedPropertyId;
+    }
     // Customer is always required now — the operator must confirm who
     // owns this lease before we save (whether the property is new or
     // already in the portfolio).
@@ -561,6 +666,13 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
     let propertyId = reviewingItem.selectedPropertyId;
     setSaving(true);
     try {
+      // Locked-to-a-property flow (Task #608): skip every cross-property
+      // branch — property is fixed, customer is inherited, and there's no
+      // new-property draft to create. The lease just lands on the locked
+      // property with the inherited customer.
+      if (lockedPropertyId) {
+        propertyId = lockedPropertyId;
+      } else {
       // Resolve the customer up-front. This block runs for BOTH paths
       // (new property and existing property) so the operator's customer
       // pick — including inline "+ Create new customer" — is always
@@ -652,6 +764,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
           }
         }
       }
+      } // end of !lockedPropertyId branch
 
       // Buyout cost only carries through when the toggle is on AND the input
       // parses to a finite number — same invariant the lease detail page
@@ -675,6 +788,10 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
       const newLease: Lease = {
         id: `l-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         propertyId,
+        // Building only carries through when the operator explicitly
+        // picked one — otherwise the lease applies at the property level
+        // (same null-means-unscoped semantics as AddLeaseDialog).
+        buildingId: reviewingItem.buildingId ? reviewingItem.buildingId : null,
         startDate: reviewingItem.leaseDraft.startDate,
         endDate: reviewingItem.leaseDraft.endDate,
         monthlyRent: parseFloat(reviewingItem.leaseDraft.monthlyRent) || 0,
@@ -703,8 +820,9 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
       addLease(newLease);
 
       const property = properties.find((p) => p.id === propertyId);
+      const isManual = reviewingItem.manualEntry;
       toast({
-        title: "Lease imported",
+        title: isManual ? "Lease added" : "Lease imported",
         description: property
           ? `Attached to ${property.name}.`
           : "New lease and property created from PDF.",
@@ -783,6 +901,18 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
 
         {stage === "pick" && (
           <div className="space-y-3 py-2">
+            {lockedPropertyId && lockedProperty && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="text-pdf-locked-property-hint"
+              >
+                Leases will be attached to{" "}
+                <span className="font-medium text-foreground">
+                  {lockedProperty.name}
+                </span>
+                .
+              </p>
+            )}
             <div
               onDragOver={handleDragOver}
               onDragEnter={handleDragOver}
@@ -823,6 +953,24 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
               onChange={(e) => handleFilesChosen(e.target.files)}
               data-testid="input-lease-pdf-file"
             />
+            {lockedPropertyId && (
+              <div
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+                data-testid="pdf-manual-entry-row"
+              >
+                <span>Don't have a PDF?</span>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={handleEnterManually}
+                  data-testid="button-enter-lease-manually"
+                >
+                  Enter the lease details manually
+                </Button>
+              </div>
+            )}
             {recentUploads.length > 0 && (
               <RecentUploadsList
                 uploads={recentUploads}
@@ -858,7 +1006,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
               ))}
             </div>
 
-            <div>
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
@@ -868,6 +1016,17 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 <Plus className="h-4 w-4 mr-1.5" />
                 Add more files
               </Button>
+              {lockedPropertyId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEnterManually}
+                  data-testid="button-enter-lease-manually-queue"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Enter manually
+                </Button>
+              )}
               <Input
                 ref={fileInputRef}
                 type="file"
@@ -897,6 +1056,10 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                     </Badge>
                   )}
                 </>
+              ) : reviewingItem.manualEntry ? (
+                <Badge variant="secondary" className="font-normal">
+                  Manual entry — no PDF
+                </Badge>
               ) : (
                 <Badge variant="secondary" className="font-normal">
                   Manual entry — PDF couldn't be parsed
@@ -911,7 +1074,60 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
               </>
             )}
 
+            {/* ── Locked property header + building picker (Task #608) ──
+                Replaces the property + customer pickers when the dialog
+                was opened from a specific property. Shows what the lease
+                will land on as a non-editable summary and exposes the
+                building choice when the property has more than one. */}
+            {lockedPropertyId && (
+              <div className="space-y-2" data-testid="pdf-locked-property">
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4" />
+                  Property
+                </Label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <p className="font-medium">
+                    {lockedProperty?.name ?? lockedPropertyId}
+                  </p>
+                  {lockedProperty?.address && (
+                    <p className="text-xs text-muted-foreground">
+                      {lockedProperty.address}
+                    </p>
+                  )}
+                </div>
+                {showBuildingPicker && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pdf-lease-building">Building</Label>
+                    <Select
+                      value={reviewingItem.buildingId || "__all__"}
+                      onValueChange={(v) =>
+                        updateQueueItem(reviewingItem.id, {
+                          buildingId: v === "__all__" ? "" : v,
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        id="pdf-lease-building"
+                        data-testid="select-pdf-lease-building"
+                      >
+                        <SelectValue placeholder="All buildings" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All buildings</SelectItem>
+                        {lockedPropertyBuildings.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── Property section ─────────────────────────────────────── */}
+            {!lockedPropertyId && (
             <div>
               <Label className="text-sm font-semibold flex items-center gap-1.5">
                 <Building2 className="h-4 w-4" />
@@ -950,8 +1166,9 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 </SelectContent>
               </Select>
             </div>
+            )}
 
-            {reviewingItem.selectedPropertyId === NEW_PROPERTY_VALUE && reviewingItem.propertyDraft && (
+            {!lockedPropertyId && reviewingItem.selectedPropertyId === NEW_PROPERTY_VALUE && reviewingItem.propertyDraft && (
               <div className="space-y-3 p-3 rounded-md border bg-muted/30">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   New property
@@ -1007,7 +1224,11 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 new properties — so operators can re-assign an existing
                 property's customer at the same time they import the
                 lease, or correct an auto-matched property that belongs
-                to the wrong customer in the PDF. */}
+                to the wrong customer in the PDF. Hidden when the dialog
+                is locked to a single property (Task #608) — the customer
+                is inherited from the property and changing it from the
+                lease form would be confusing in that context. */}
+            {!lockedPropertyId && (
             <div className="space-y-1.5">
               <Label
                 htmlFor="pdf-lease-customer"
@@ -1069,6 +1290,7 @@ export function UploadLeasePdfDialog({ trigger, onLeaseCreated, onPdfImportFaile
                 </div>
               )}
             </div>
+            )}
 
             <Separator />
 
@@ -1291,7 +1513,14 @@ function QueueRow({
   item: QueueItem;
   onReview: () => void;
 }) {
-  const sizeKb = Math.max(1, Math.round(item.file.size / 1024));
+  // Manual-entry items don't have an underlying File, so guard the size
+  // calculation — the row still renders fine without a size suffix.
+  const sizeKb = item.file ? Math.max(1, Math.round(item.file.size / 1024)) : 0;
+  const sizeLabel = item.file
+    ? sizeKb >= 1024
+      ? `${(sizeKb / 1024).toFixed(1)} MB`
+      : `${sizeKb} KB`
+    : "Manual entry — no file";
   return (
     <div
       className="flex items-center gap-3 rounded-md border px-3 py-2"
@@ -1303,7 +1532,7 @@ function QueueRow({
           {item.fileName}
         </p>
         <p className="text-xs text-muted-foreground">
-          {sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`}
+          {sizeLabel}
           {item.status === "failed" && item.errorMessage ? ` — ${item.errorMessage}` : ""}
         </p>
       </div>

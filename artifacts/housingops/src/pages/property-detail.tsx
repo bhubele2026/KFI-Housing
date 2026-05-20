@@ -46,8 +46,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { BuildingPicker } from "@/components/building-picker";
-import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { AddBuildingDialog } from "@/components/add-building-dialog";
+import { UploadLeasePdfDialog } from "@/components/upload-lease-pdf-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
@@ -2441,7 +2441,16 @@ export default function PropertyDetail() {
                     </Select>
                   </div>
                 )}
-                <AddLeaseDialog propertyId={id} buildings={propBuildings} onAdd={addLease} />
+                <UploadLeasePdfDialog
+                  propertyId={id}
+                  buildings={propBuildings}
+                  trigger={
+                    <Button size="sm" data-testid="button-add-lease">
+                      <Plus className="h-4 w-4 mr-1.5" />
+                      {t("dialogs.addLease.triggerLabel")}
+                    </Button>
+                  }
+                />
               </div>
             </div>
             <Card>
@@ -2489,10 +2498,9 @@ export default function PropertyDetail() {
                     //     task #132 removed the placeholder-row shortcut.
                     //     `from=` round-trips back to this Leases tab.
                     <div className="flex flex-col items-center gap-2">
-                      <AddLeaseDialog
+                      <UploadLeasePdfDialog
                         propertyId={id}
                         buildings={propBuildings}
-                        onAdd={addLease}
                         trigger={
                           <Button size="sm" data-testid="button-add-lease-empty">
                             <Plus className="h-4 w-4 mr-1.5" />{t("pages.propertyDetail.addLease")}

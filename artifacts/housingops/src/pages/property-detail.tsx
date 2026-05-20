@@ -3027,10 +3027,8 @@ export default function PropertyDetail() {
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableShift")}</TableHead>
                                     <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
                                     <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveOut")}</TableHead>
-                                    <TableHead className="w-24 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
+                                    <TableHead className="w-36 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
                                     <TableHead className="w-24 whitespace-nowrap">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
-                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableWeeklyDeduction")}</TableHead>
-                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
                                     <TableHead className="w-36 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
@@ -3301,6 +3299,7 @@ export default function PropertyDetail() {
                                               />
                                             </TableCell>
                                             <TableCell className="text-right">
+                                              <div className="flex flex-col items-end gap-0.5">
                                               <div className="flex items-center justify-end gap-1.5">
                                                 <InlineEdit value={occ.chargePerBed} prefix="$" type="number" onSave={v => updateOccupant(occ.id, { chargePerBed: parseFloat(v) })} />
                                                 {occ.chargeSource === "payroll" && (

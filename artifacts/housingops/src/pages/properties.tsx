@@ -2409,10 +2409,11 @@ export default function Properties() {
                   <SelectValue placeholder={t("pages.properties.addDialog.customerPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={NEW_CUSTOMER_VALUE}>{t("pages.properties.addDialog.createNewCustomer")}</SelectItem>
+                  {customers.length > 0 && <div className="my-1 h-px bg-border" />}
                   {customers.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
-                  <SelectItem value={NEW_CUSTOMER_VALUE}>{t("pages.properties.addDialog.createNewCustomer")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

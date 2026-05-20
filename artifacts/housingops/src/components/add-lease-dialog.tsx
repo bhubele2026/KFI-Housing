@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
 import type { Building, Customer, Lease, Property } from "@/data/mockData";
+import { useData } from "@/context/data-store";
+import { useToast } from "@/hooks/use-toast";
 
 export interface AddLeaseDialogProps {
   propertyId?: string;
@@ -28,6 +30,10 @@ interface DraftState {
   // Empty string = "All buildings / unassigned"; sent as null on the
   // wire so single-building properties don't have to remember an id.
   buildingId: string;
+  // Optional customer override for the lease (Task #607). Empty string
+  // means "fall back to the property's customer" so we don't fabricate
+  // an override that doesn't exist.
+  customerId: string;
   startDate: string;
   endDate: string;
   monthlyRent: string;
@@ -39,12 +45,33 @@ interface DraftState {
 const EMPTY_DRAFT: DraftState = {
   propertyId: "",
   buildingId: "",
+  customerId: "",
   startDate: "",
   endDate: "",
   monthlyRent: "",
   securityDeposit: "",
   status: "Active",
   notes: "",
+};
+
+// Sentinel values used inside the customer <Select>. Kept as `__…__`
+// to match the same pattern the Add Property dialog and Upload-PDF
+// dialog already use for their "+ Create new customer" rows.
+const NEW_CUSTOMER_VALUE = "__new__";
+const SAME_AS_PROPERTY_VALUE = "__same__";
+
+interface NewCustomerDraft {
+  name: string;
+  contactName: string;
+  email: string;
+  phone: string;
+}
+
+const EMPTY_NEW_CUSTOMER: NewCustomerDraft = {
+  name: "",
+  contactName: "",
+  email: "",
+  phone: "",
 };
 
 export function AddLeaseDialog({
@@ -58,6 +85,8 @@ export function AddLeaseDialog({
   onOpenChange,
 }: AddLeaseDialogProps) {
   const { t } = useTranslation();
+  const { addCustomer } = useData();
+  const { toast } = useToast();
   const customerNameById = new Map((customers ?? []).map((c) => [c.id, c.name] as const));
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -67,6 +96,14 @@ export function AddLeaseDialog({
   };
 
   const [form, setForm] = useState<DraftState>({ ...EMPTY_DRAFT, propertyId: propertyId ?? "" });
+  // Inline "+ Create new customer…" state (Task #607). Mirrors the
+  // same pattern the Add Property dialog and PDF-import flow already
+  // use: a sentinel option in the customer <Select> reveals a small
+  // sub-form, and submit creates the customer first before the lease
+  // is added so the new customerId can be threaded onto the lease.
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [newCustomer, setNewCustomer] = useState<NewCustomerDraft>(EMPTY_NEW_CUSTOMER);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (propertyId) {
@@ -77,6 +114,12 @@ export function AddLeaseDialog({
   useEffect(() => {
     if (!open) {
       setForm({ ...EMPTY_DRAFT, propertyId: propertyId ?? "" });
+      // Reset the inline new-customer state alongside the form so the
+      // next open starts clean — nothing typed into the inline form
+      // is persisted when the operator cancels (Task #607).
+      setShowNewCustomerForm(false);
+      setNewCustomer(EMPTY_NEW_CUSTOMER);
+      setSaving(false);
     }
   }, [open, propertyId]);
 
@@ -94,10 +137,54 @@ export function AddLeaseDialog({
     !!form.propertyId &&
     !!form.startDate &&
     !!form.endDate &&
-    !!form.monthlyRent;
+    !!form.monthlyRent &&
+    !saving;
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSubmit) return;
+
+    // If the operator chose "+ Create new customer…", persist the
+    // customer FIRST and await the server response so the lease's
+    // customerId is real before we hand the lease off to the parent
+    // (Task #607). Mirrors the inline-create flow in the Add Property
+    // dialog: name required; contact/email/phone optional.
+    let leaseCustomerId: string | null = form.customerId || null;
+    if (showNewCustomerForm) {
+      const cName = newCustomer.name.trim();
+      if (!cName) {
+        toast({
+          title: t("toasts.newCustomerNameRequiredTitle"),
+          description: t("toasts.newCustomerNameRequiredDescription"),
+          variant: "destructive",
+        });
+        return;
+      }
+      const newId = `cust-${Date.now()}`;
+      setSaving(true);
+      try {
+        await addCustomer({
+          id: newId,
+          name: cName,
+          contactName: newCustomer.contactName.trim(),
+          email: newCustomer.email.trim(),
+          phone: newCustomer.phone.trim(),
+          notes: "",
+          state: "",
+          customShifts: [],
+          isInactive: false,
+        });
+      } catch {
+        toast({
+          title: t("toasts.couldntCreateCustomerTitle"),
+          description: t("toasts.couldntCreateCustomerDescription"),
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
+      leaseCustomerId = newId;
+    }
+
     // Task #492: a brand-new lease inherits its parent property's
     // `defaultNoticePeriodDays` at creation time, so the value is
     // pinned on the lease row even if the property default later
@@ -115,6 +202,9 @@ export function AddLeaseDialog({
       // null means "lease applies at the property level / single
       // building" so we don't fabricate a bldg_*_1 id (Task #570).
       buildingId: form.buildingId ? form.buildingId : null,
+      // Customer override (Task #607). Null = fall back to the
+      // property's customerId, which is the historical behavior.
+      customerId: leaseCustomerId,
       startDate: form.startDate,
       endDate: form.endDate,
       monthlyRent: parseFloat(form.monthlyRent) || 0,
@@ -133,6 +223,7 @@ export function AddLeaseDialog({
       customerResponsibleForRent: false,
       noticePeriodDays: inheritedNoticePeriodDays,
     });
+    setSaving(false);
     setOpen(false);
   };
 
@@ -142,6 +233,10 @@ export function AddLeaseDialog({
       {t("dialogs.addLease.triggerLabel")}
     </Button>
   );
+
+  const customerSelectValue = showNewCustomerForm
+    ? NEW_CUSTOMER_VALUE
+    : form.customerId || SAME_AS_PROPERTY_VALUE;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -207,6 +302,110 @@ export function AddLeaseDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {/* Optional customer override (Task #607). Defaults to "Same
+              as property" so the historical behavior — lease inherits
+              the property's customer — is preserved when the operator
+              doesn't touch this field. The "+ Create new customer…"
+              row at the top mirrors the Add Property dialog and the
+              PDF-import flow. */}
+          <div>
+            <Label htmlFor="add-lease-customer">{t("dialogs.addLease.customer")}</Label>
+            <Select
+              value={customerSelectValue}
+              onValueChange={(v) => {
+                if (v === NEW_CUSTOMER_VALUE) {
+                  setShowNewCustomerForm(true);
+                  setForm((f) => ({ ...f, customerId: "" }));
+                } else if (v === SAME_AS_PROPERTY_VALUE) {
+                  setShowNewCustomerForm(false);
+                  setForm((f) => ({ ...f, customerId: "" }));
+                } else {
+                  setShowNewCustomerForm(false);
+                  setForm((f) => ({ ...f, customerId: v }));
+                }
+              }}
+            >
+              <SelectTrigger id="add-lease-customer" data-testid="select-add-lease-customer">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NEW_CUSTOMER_VALUE}>
+                  {t("dialogs.addLease.createNewCustomer")}
+                </SelectItem>
+                <SelectItem value={SAME_AS_PROPERTY_VALUE}>
+                  {t("dialogs.addLease.sameAsProperty")}
+                </SelectItem>
+                {(customers ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {showNewCustomerForm && (
+            <div
+              className="space-y-3 p-3 rounded-md border bg-muted/30"
+              data-testid="section-add-lease-new-customer"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {t("dialogs.addLease.newCustomerSection")}
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-lease-new-cust-name">
+                  {t("dialogs.addLease.newCustomerName")}
+                </Label>
+                <Input
+                  id="add-lease-new-cust-name"
+                  value={newCustomer.name}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+                  data-testid="input-add-lease-new-customer-name"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="add-lease-new-cust-contact">
+                    {t("dialogs.addLease.newCustomerContact")}
+                  </Label>
+                  <Input
+                    id="add-lease-new-cust-contact"
+                    value={newCustomer.contactName}
+                    onChange={(e) =>
+                      setNewCustomer({ ...newCustomer, contactName: e.target.value })
+                    }
+                    data-testid="input-add-lease-new-customer-contact"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="add-lease-new-cust-phone">
+                    {t("dialogs.addLease.newCustomerPhone")}
+                  </Label>
+                  <Input
+                    id="add-lease-new-cust-phone"
+                    value={newCustomer.phone}
+                    onChange={(e) =>
+                      setNewCustomer({ ...newCustomer, phone: e.target.value })
+                    }
+                    data-testid="input-add-lease-new-customer-phone"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="add-lease-new-cust-email">
+                  {t("dialogs.addLease.newCustomerEmail")}
+                </Label>
+                <Input
+                  id="add-lease-new-cust-email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={(e) =>
+                    setNewCustomer({ ...newCustomer, email: e.target.value })
+                  }
+                  data-testid="input-add-lease-new-customer-email"
+                />
+              </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">

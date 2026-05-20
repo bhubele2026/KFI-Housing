@@ -143,11 +143,24 @@ export function AssignOccupantDialog({
   // edits made in a previous open session would persist.
   useEffect(() => {
     if (open) {
-      setForm(buildInitialForm(initial));
+      const base = buildInitialForm(initial);
+      // Default Company to the property's customer — when an operator
+      // assigns someone to a bed inside, say, "Burnett Dairy" housing,
+      // 99% of the time they work for Burnett Dairy. Operator can still
+      // override. Only applied when the parent fixed the bed AND nothing
+      // was explicitly passed via `initial.company`.
+      if (bed && !initial?.company) {
+        const prop = properties.find((p) => p.id === bed.propertyId);
+        const customer = prop
+          ? customers.find((c) => c.id === prop.customerId)
+          : null;
+        if (customer?.name) base.company = customer.name;
+      }
+      setForm(base);
       setPickedPropertyId("");
       setPickedBedId("");
     }
-  }, [open, initial]);
+  }, [open, initial, bed, properties, customers]);
 
   const f =
     (k: keyof typeof form) =>

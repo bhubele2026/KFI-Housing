@@ -627,14 +627,14 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Tooltip>
           ) : null
         ) : (
-          <div className="relative flex items-center">
-            {/* The KFI Staffing logo artwork has a dark-navy background
-                tuned to match the --sidebar token, so it sits seamlessly
-                on the sidebar with no chip or extra wordmark. */}
+          <div className="relative flex items-center justify-center px-2 py-1">
+            {/* The KFI Staffing logo is a transparent-background PNG, so
+                it blends directly onto the sidebar token without a chip
+                or wordmark behind it. */}
             <img
               src={logoUrl}
               alt="KFI Staffing"
-              className="h-20 w-full rounded-md object-contain select-none"
+              className="h-20 w-auto max-w-full object-contain select-none"
               draggable={false}
               data-testid="img-sidebar-logo"
             />

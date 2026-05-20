@@ -118,16 +118,54 @@ export async function extractLeaseFromText(
   // real-world residential lease.
   const trimmed = text.length > 20_000 ? text.slice(0, 20_000) : text;
 
+  return extractLeaseFromMessages([
+    {
+      role: "user",
+      content: `Lease PDF text:\n\n${trimmed}`,
+    },
+  ]);
+}
+
+/**
+ * Vision/OCR fallback: send the raw PDF bytes to Claude as a document
+ * attachment so it can read scanned/image-only leases that pdf-parse
+ * can't extract text from. Claude handles OCR internally.
+ */
+export async function extractLeaseFromPdfBuffer(
+  pdfBuffer: Buffer | Uint8Array,
+): Promise<ExtractLeaseResult> {
+  const base64 = Buffer.from(pdfBuffer).toString("base64");
+  return extractLeaseFromMessages([
+    {
+      role: "user",
+      content: [
+        {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: base64,
+          },
+        },
+        {
+          type: "text",
+          text:
+            "This lease PDF is image-only (scanned). Read the pages, OCR " +
+            "the text, and extract the lease fields per the JSON schema.",
+        },
+      ],
+    },
+  ]);
+}
+
+async function extractLeaseFromMessages(
+  messages: Parameters<typeof anthropic.messages.create>[0]["messages"],
+): Promise<ExtractLeaseResult> {
   const resp = await anthropic.messages.create({
     model: "claude-sonnet-4-5",
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Lease PDF text:\n\n${trimmed}`,
-      },
-    ],
+    messages,
   });
 
   // Pull the first text block.

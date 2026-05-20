@@ -3,6 +3,7 @@ import multer, { MulterError } from "multer";
 import { db, customersTable, propertiesTable } from "@workspace/db";
 import {
   extractLeaseFromText,
+  extractLeaseFromPdfBuffer,
   rankPropertyCandidates,
 } from "../lib/lease-pdf-import";
 import { logger } from "../lib/logger";
@@ -128,7 +129,7 @@ router.post(
     }
 
     try {
-      let text: string;
+      let text = "";
       try {
         // PDFParse needs a Uint8Array (it transfers ownership to the worker),
         // so hand it a fresh copy of the upload buffer rather than the Node
@@ -138,32 +139,28 @@ router.post(
         text = (parsed.text ?? "").trim();
         await parser.destroy?.();
       } catch (err) {
-        logger.warn({ err }, "pdf-parse failed");
-        res.status(422).json({
-          error:
-            "Couldn't read this PDF. It may be image-only (scanned) — OCR isn't supported here.",
-        });
-        return;
+        // pdf-parse can blow up on scanned/encrypted PDFs. Don't bail —
+        // fall through to the vision/OCR path below, which can usually
+        // still read the document.
+        logger.warn({ err }, "pdf-parse failed; falling back to vision OCR");
       }
 
-      if (text.length < 50) {
-        // pdf-parse returns text even for image-only PDFs, but it's almost
-        // empty. Treat that the same as an unreadable file rather than
-        // silently asking the LLM to hallucinate from nothing.
-        res.status(422).json({
-          error:
-            "This PDF doesn't contain readable text — it may be a scanned image. OCR isn't supported.",
-        });
-        return;
-      }
+      // pdf-parse returns text even for image-only PDFs, but it's almost
+      // empty. Use the vision/OCR path when there's not enough text to
+      // trust — Claude will read the PDF pages directly.
+      const needsOcr = text.length < 50;
 
       let extractResult;
       try {
-        extractResult = await extractLeaseFromText(text);
+        extractResult = needsOcr
+          ? await extractLeaseFromPdfBuffer(file.buffer)
+          : await extractLeaseFromText(text);
       } catch (err) {
-        logger.error({ err }, "Lease LLM extraction failed");
+        logger.error({ err, needsOcr }, "Lease LLM extraction failed");
         res.status(502).json({
-          error: "Couldn't extract lease fields from this PDF. Please try again.",
+          error: needsOcr
+            ? "Couldn't read this scanned PDF, even with OCR. Try a clearer scan or enter the lease manually."
+            : "Couldn't extract lease fields from this PDF. Please try again.",
         });
         return;
       }

@@ -764,6 +764,10 @@
       "total": "Total",
       "leasesForProperty_one": "{{count}} contrato para esta propiedad",
       "leasesForProperty_other": "{{count}} contratos para esta propiedad",
+      "leasesDropzone": {
+        "headline": "Suelta los PDFs de contratos aquí, o haz clic para elegir",
+        "helper": "Se admiten varios archivos. Máx. 10 MB cada uno. No se admiten PDFs solo de imagen / escaneados (OCR desactivado)."
+      },
       "multiActiveCombined": "{{count}} activos — rentas combinadas en el encabezado",
       "addLease": "Agregar contrato",
       "openFullForm": "Abrir formulario completo",

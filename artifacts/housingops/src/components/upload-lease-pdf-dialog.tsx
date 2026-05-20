@@ -61,6 +61,10 @@ const NEW_CUSTOMER_VALUE = "__new_customer__";
  * sockets when a manager drops 30 PDFs at once. */
 const CLIENT_CONCURRENCY = 3;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+/** Re-exported so callers that render their own drop surface (e.g. the
+ * property-detail Leases tab visible drop zone, Task #622) share the same
+ * size cap as the upload dialog. */
+export const MAX_LEASE_PDF_FILE_SIZE_BYTES = MAX_FILE_SIZE_BYTES;
 
 interface PropertyDraft {
   name: string;
@@ -172,6 +176,33 @@ function isPdfFile(file: File): boolean {
   return lcType === "application/pdf" || lcName.endsWith(".pdf");
 }
 
+/**
+ * Run the same PDF + 10 MB validation the dialog applies, returning the
+ * accepted files plus human-readable reasons for each rejection. Shared with
+ * the property-detail Leases tab drop zone (Task #622) so both entry points
+ * behave identically.
+ */
+export function partitionLeasePdfFiles(
+  files: FileList | File[] | null | undefined,
+): { accepted: File[]; rejected: string[] } {
+  const accepted: File[] = [];
+  const rejected: string[] = [];
+  if (!files) return { accepted, rejected };
+  const list = Array.from(files);
+  for (const file of list) {
+    if (!isPdfFile(file)) {
+      rejected.push(`${file.name} — not a PDF`);
+      continue;
+    }
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      rejected.push(`${file.name} — over 10 MB`);
+      continue;
+    }
+    accepted.push(file);
+  }
+  return { accepted, rejected };
+}
+
 function ConfidenceBadge({ confidence }: { confidence: ExtractedLeaseFromPdf["confidence"] }) {
   const variant: "default" | "secondary" | "destructive" =
     confidence === "high" ? "default" : confidence === "medium" ? "secondary" : "destructive";
@@ -252,6 +283,23 @@ export interface UploadLeasePdfDialogProps {
    * isn't set.
    */
   buildings?: readonly Building[];
+  /**
+   * Controlled open state (Task #622). When provided the dialog is fully
+   * controlled — callers (e.g. the property-detail Leases tab dropzone)
+   * open / close it themselves so they can pre-stage files via
+   * `pendingFiles` before showing the queue stage.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /**
+   * Files to push into the dialog's upload queue once it opens. Used by the
+   * visible drop zone on the property-detail Leases tab so a drop / pick
+   * outside the dialog still ends up in the same upload + review flow.
+   * The dialog consumes the batch exactly once and then calls
+   * `onPendingFilesConsumed` so the parent can clear its own buffer.
+   */
+  pendingFiles?: File[] | null;
+  onPendingFilesConsumed?: () => void;
 }
 
 /**
@@ -272,6 +320,10 @@ export function UploadLeasePdfDialog({
   onPdfImportFailed,
   propertyId: lockedPropertyId,
   buildings,
+  open: openProp,
+  onOpenChange,
+  pendingFiles,
+  onPendingFilesConsumed,
 }: UploadLeasePdfDialogProps) {
   const { properties, customers, addProperty, addCustomer, addLease, updateProperty } = useData();
   const { toast } = useToast();
@@ -292,7 +344,13 @@ export function UploadLeasePdfDialog({
     : [];
   const showBuildingPicker = !!lockedPropertyId && lockedPropertyBuildings.length > 1;
 
-  const [open, setOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? (openProp as boolean) : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [stage, setStage] = useState<"pick" | "queue" | "review">("pick");
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -428,17 +486,9 @@ export function UploadLeasePdfDialog({
     if (list.length === 0) return;
     if (replacingId) clearLeaseUpload(replacingId);
 
+    const { accepted: acceptedFiles, rejected } = partitionLeasePdfFiles(list);
     const accepted: QueueItem[] = [];
-    const rejected: string[] = [];
-    for (const file of list) {
-      if (!isPdfFile(file)) {
-        rejected.push(`${file.name} — not a PDF`);
-        continue;
-      }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        rejected.push(`${file.name} — over 10 MB`);
-        continue;
-      }
+    for (const file of acceptedFiles) {
       accepted.push({
         id: `qi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         file,
@@ -486,6 +536,23 @@ export function UploadLeasePdfDialog({
     // offer an "Add manually" button so the operator can enter the lease
     // (incl. creating a new property) without leaving this dialog.
   };
+
+  // Consume any files pushed in via the controlled `pendingFiles` prop
+  // (Task #622). We track the batch reference so the same array doesn't
+  // get fed in twice if the parent re-renders before clearing it.
+  const consumedPendingRef = useRef<File[] | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (!pendingFiles || pendingFiles.length === 0) return;
+    if (consumedPendingRef.current === pendingFiles) return;
+    consumedPendingRef.current = pendingFiles;
+    handleFilesChosen(pendingFiles);
+    onPendingFilesConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pendingFiles]);
+  useEffect(() => {
+    if (!open) consumedPendingRef.current = null;
+  }, [open]);
 
   // ── Drag and drop ────────────────────────────────────────────────────────
   const handleDragOver = (e: React.DragEvent) => {
@@ -1744,6 +1811,129 @@ function PropertyMatchPicker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Reusable visible drop zone (Task #622) ─────────────────────────────────
+// Used by the property-detail Leases tab to expose the same drag-and-drop
+// surface that lives inside the dialog, without forcing the operator to
+// open the dialog first. The component validates files with the same
+// shared helper (`partitionLeasePdfFiles`), shows the same "files skipped"
+// toast, and hands the accepted Files to the parent — which is responsible
+// for routing them into <UploadLeasePdfDialog> via `pendingFiles`.
+
+export interface LeasePdfDropzoneProps {
+  /** Called with the validated PDF files. Only fires when at least one
+   *  file passes validation. */
+  onFilesAccepted: (files: File[]) => void;
+  /** Optional headline copy. Defaults to the same wording as the dialog. */
+  headline?: string;
+  /** Optional helper / sub-text below the headline. */
+  helperText?: string;
+  /** Hides the zone (read-only views). */
+  disabled?: boolean;
+  className?: string;
+  /** Data-testid for the outer drop region — defaults to a unique id so
+   *  the dialog's own dropzone (`dropzone-lease-pdfs`) stays addressable. */
+  testId?: string;
+}
+
+export function LeasePdfDropzone({
+  onFilesAccepted,
+  headline = "Drop lease PDFs here, or click to choose",
+  helperText = "Multiple files supported. Max 10 MB each. Image-only / scanned PDFs aren't supported (OCR is off).",
+  disabled = false,
+  className,
+  testId = "dropzone-lease-pdfs-inline",
+}: LeasePdfDropzoneProps) {
+  const { toast } = useToast();
+  const [isDragging, setIsDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const acceptFiles = (files: FileList | File[] | null) => {
+    const { accepted, rejected } = partitionLeasePdfFiles(files);
+    if (rejected.length > 0) {
+      toast({
+        title: rejected.length === 1 ? "File skipped" : `${rejected.length} files skipped`,
+        description: rejected.join("\n"),
+        variant: "destructive",
+      });
+    }
+    if (inputRef.current) inputRef.current.value = "";
+    if (accepted.length === 0) return;
+    onFilesAccepted(accepted);
+  };
+
+  if (disabled) return null;
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isDragging) setIsDragging(true);
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isDragging) setIsDragging(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const dt = e.dataTransfer;
+        if (!dt) return;
+        const dropped: File[] = [];
+        if (dt.items && dt.items.length > 0) {
+          for (let i = 0; i < dt.items.length; i++) {
+            const it = dt.items[i];
+            if (it.kind === "file") {
+              const f = it.getAsFile();
+              if (f) dropped.push(f);
+            }
+          }
+        } else if (dt.files) {
+          for (let i = 0; i < dt.files.length; i++) dropped.push(dt.files[i]);
+        }
+        acceptFiles(dropped);
+      }}
+      onClick={() => inputRef.current?.click()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          inputRef.current?.click();
+        }
+      }}
+      data-testid={testId}
+      className={cn(
+        "flex flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors",
+        isDragging
+          ? "border-primary bg-primary/5"
+          : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/40",
+        className,
+      )}
+    >
+      <Upload className="h-6 w-6 text-muted-foreground" />
+      <p className="text-sm font-medium">{headline}</p>
+      <p className="text-xs text-muted-foreground">{helperText}</p>
+      <Input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf"
+        multiple
+        className="hidden"
+        onChange={(e) => acceptFiles(e.target.files)}
+        data-testid={`${testId}-input`}
+      />
     </div>
   );
 }

@@ -47,7 +47,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { BuildingPicker } from "@/components/building-picker";
 import { AddBuildingDialog } from "@/components/add-building-dialog";
-import { UploadLeasePdfDialog } from "@/components/upload-lease-pdf-dialog";
+import { UploadLeasePdfDialog, LeasePdfDropzone } from "@/components/upload-lease-pdf-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
@@ -1039,6 +1039,16 @@ export default function PropertyDetail() {
   // building + first-lease dialog regardless of which tab the operator
   // is on.
   const [addBuildingOpen, setAddBuildingOpen] = useState(false);
+  // Visible drop zone on the Leases tab (Task #622). Files dropped /
+  // picked on the page are pushed into the existing UploadLeasePdfDialog
+  // via `pendingFiles`, opening it straight into the queue stage so the
+  // operator skips the in-dialog drop step.
+  const [leaseUploadDialogOpen, setLeaseUploadDialogOpen] = useState(false);
+  const [leaseUploadPendingFiles, setLeaseUploadPendingFiles] = useState<File[] | null>(null);
+  const handleLeasePdfDropped = useCallback((files: File[]) => {
+    setLeaseUploadPendingFiles(files);
+    setLeaseUploadDialogOpen(true);
+  }, []);
   const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -2481,6 +2491,13 @@ export default function PropertyDetail() {
                 <UploadLeasePdfDialog
                   propertyId={id}
                   buildings={propBuildings}
+                  open={leaseUploadDialogOpen}
+                  onOpenChange={(next) => {
+                    setLeaseUploadDialogOpen(next);
+                    if (!next) setLeaseUploadPendingFiles(null);
+                  }}
+                  pendingFiles={leaseUploadPendingFiles}
+                  onPendingFilesConsumed={() => setLeaseUploadPendingFiles(null)}
                   trigger={
                     <Button size="sm" data-testid="button-add-lease">
                       <Plus className="h-4 w-4 mr-1.5" />
@@ -2490,6 +2507,16 @@ export default function PropertyDetail() {
                 />
               </div>
             </div>
+            {/* Visible drop zone (Task #622). Pre-binds to the current
+                propertyId via the controlled dialog above so dropping a
+                PDF here lands the operator in the same review step as
+                the in-dialog drop zone. */}
+            <LeasePdfDropzone
+              onFilesAccepted={handleLeasePdfDropped}
+              headline={t("pages.propertyDetail.leasesDropzone.headline")}
+              helperText={t("pages.propertyDetail.leasesDropzone.helper")}
+              testId="dropzone-property-leases"
+            />
             <Card>
               <CardContent className="p-0">
                 <LeasesTable

@@ -775,6 +775,10 @@
       "total": "Total",
       "leasesForProperty_one": "{{count}} lease for this property",
       "leasesForProperty_other": "{{count}} leases for this property",
+      "leasesDropzone": {
+        "headline": "Drop lease PDFs here, or click to choose",
+        "helper": "Multiple files supported. Max 10 MB each. Image-only / scanned PDFs aren't supported (OCR is off)."
+      },
       "multiActiveCombined": "{{count}} active — rents combined in header",
       "addLease": "Add Lease",
       "openFullForm": "Open full form",

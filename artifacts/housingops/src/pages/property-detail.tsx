@@ -47,6 +47,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LeasesTable } from "@/components/leases-table";
 import { BuildingPicker } from "@/components/building-picker";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
+import { AddBuildingDialog } from "@/components/add-building-dialog";
 import { EmptyState, EmptyStateRow } from "@/components/empty-state";
 import { PropertyLocationMap } from "@/components/property-location-map";
 import { PropertyFinanceMiniChart } from "@/components/property-finance-mini-chart";
@@ -1033,6 +1034,11 @@ export default function PropertyDetail() {
   // dropdown stays in sync with the Buildings roster. Not persisted —
   // task #592's persistence was scoped to Units / Leases.
   const [bedsBuildingFilter, setBedsBuildingFilter] = useState<string>("all");
+  // Add-Building dialog open state (Task #609). Hoisted to component
+  // scope so the Buildings-card button can pop the same combined
+  // building + first-lease dialog regardless of which tab the operator
+  // is on.
+  const [addBuildingOpen, setAddBuildingOpen] = useState(false);
   const [highlightedBedIds, setHighlightedBedIds] = useState<Set<string>>(new Set());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -2540,23 +2546,7 @@ export default function PropertyDetail() {
                     size="sm"
                     variant="outline"
                     data-testid="button-add-building"
-                    onClick={async () => {
-                      const nextNum = propBuildings.length + 1;
-                      try {
-                        await addBuilding({
-                          id: `bldg_${id}_${Date.now()}`,
-                          propertyId: id,
-                          name: `Building ${nextNum}`,
-                          address: "",
-                          city: "",
-                          state: "",
-                          zip: "",
-                          notes: "",
-                        });
-                      } catch {
-                        /* toast already shown */
-                      }
-                    }}
+                    onClick={() => setAddBuildingOpen(true)}
                   >
                     <Plus className="h-4 w-4 mr-1.5" />
                     Add building
@@ -4021,6 +4011,14 @@ export default function PropertyDetail() {
             </Card>
           </TabsContent>
         </Tabs>
+        <AddBuildingDialog
+          open={addBuildingOpen}
+          onOpenChange={setAddBuildingOpen}
+          property={property}
+          defaultBuildingName={`Building ${propBuildings.length + 1}`}
+          addBuilding={addBuilding}
+          addLease={addLease}
+        />
       </motion.div>
     </MainLayout>
   );

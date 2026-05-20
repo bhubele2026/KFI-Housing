@@ -733,7 +733,7 @@ interface DataStore {
   updateProperty: (id: string, updates: Partial<Property>) => void;
   deleteProperty: (id: string) => void;
   updateLease: (id: string, updates: Partial<Lease>) => void;
-  addLease: (lease: Lease) => void;
+  addLease: (lease: Lease) => Promise<void>;
   deleteLease: (id: string) => void;
   addBuilding: (building: Building) => Promise<Building>;
   updateBuilding: (id: string, updates: Partial<Building>) => void;
@@ -1180,10 +1180,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     patchInList<Lease>(leasesKey, id, updates);
     updateLeaseMut.mutate({ id, data: updates }, handlers);
   };
-  const addLease = (lease: Lease) => {
+  const addLease = (lease: Lease): Promise<void> => {
+    // captureRollback gives us the same optimistic-then-revert UX we use
+    // for every other mutation. We additionally surface the server result
+    // as a promise so callers that chain a follow-up create (e.g. the
+    // combined Add-Building + first-lease dialog from Task #609) can
+    // wait for the lease to land before declaring success.
     const handlers = captureRollback<Lease[]>(leasesKey, "add the new lease");
     pushToList<Lease>(leasesKey, lease);
-    createLeaseMut.mutate({ data: lease }, handlers);
+    return createLeaseMut
+      .mutateAsync({ data: lease })
+      .then(
+        () => {
+          handlers.onSettled();
+        },
+        (err) => {
+          handlers.onError();
+          handlers.onSettled();
+          throw err;
+        },
+      );
   };
   const deleteLease = (id: string) => {
     const handlers = captureRollback<Lease[]>(leasesKey, "delete the lease");

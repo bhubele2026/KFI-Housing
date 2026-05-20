@@ -5,11 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
 import type { Building, Customer, Lease, Property } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
+import {
+  EMPTY_LEASE_DRAFT,
+  LeaseFormFields,
+  buildLeaseFromDraft,
+  leaseDraftCanSubmit,
+  type LeaseDraftState,
+} from "@/components/lease-form-fields";
 
 export interface AddLeaseDialogProps {
   propertyId?: string;
@@ -25,7 +31,7 @@ export interface AddLeaseDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-interface DraftState {
+interface DraftState extends LeaseDraftState {
   propertyId: string;
   // Empty string = "All buildings / unassigned"; sent as null on the
   // wire so single-building properties don't have to remember an id.
@@ -34,24 +40,13 @@ interface DraftState {
   // means "fall back to the property's customer" so we don't fabricate
   // an override that doesn't exist.
   customerId: string;
-  startDate: string;
-  endDate: string;
-  monthlyRent: string;
-  securityDeposit: string;
-  status: Lease["status"];
-  notes: string;
 }
 
 const EMPTY_DRAFT: DraftState = {
+  ...EMPTY_LEASE_DRAFT,
   propertyId: "",
   buildingId: "",
   customerId: "",
-  startDate: "",
-  endDate: "",
-  monthlyRent: "",
-  securityDeposit: "",
-  status: "Active",
-  notes: "",
 };
 
 // Sentinel values used inside the customer <Select>. Kept as `__…__`
@@ -133,12 +128,7 @@ export function AddLeaseDialog({
   );
   const showBuildingPicker = propertyBuildings.length > 1;
 
-  const canSubmit =
-    !!form.propertyId &&
-    !!form.startDate &&
-    !!form.endDate &&
-    !!form.monthlyRent &&
-    !saving;
+  const canSubmit = !!form.propertyId && leaseDraftCanSubmit(form) && !saving;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -185,43 +175,20 @@ export function AddLeaseDialog({
       leaseCustomerId = newId;
     }
 
-    // Task #492: a brand-new lease inherits its parent property's
-    // `defaultNoticePeriodDays` at creation time, so the value is
-    // pinned on the lease row even if the property default later
-    // changes. Operators can still override (or clear back to null) on
-    // the lease detail page. When the property has no default
-    // configured, the lease starts at null and the alert simply skips
-    // it — same null-means-skip semantics the digest uses.
     const selectedProperty = propertyList.find((p) => p.id === form.propertyId);
-    const inheritedNoticePeriodDays =
-      selectedProperty?.defaultNoticePeriodDays ?? null;
-    onAdd({
-      id: `l-${Date.now()}`,
+    const baseLease = buildLeaseFromDraft(form, {
       propertyId: form.propertyId,
-      // Persist the explicit picker choice when the operator picked one;
-      // null means "lease applies at the property level / single
+      // Persist the explicit picker choice when the operator picked
+      // one; null means "lease applies at the property level / single
       // building" so we don't fabricate a bldg_*_1 id (Task #570).
       buildingId: form.buildingId ? form.buildingId : null,
+      property: selectedProperty,
+    });
+    onAdd({
+      ...baseLease,
       // Customer override (Task #607). Null = fall back to the
       // property's customerId, which is the historical behavior.
       customerId: leaseCustomerId,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      monthlyRent: parseFloat(form.monthlyRent) || 0,
-      securityDeposit: parseFloat(form.securityDeposit) || 0,
-      status: form.status,
-      notes: form.notes,
-      clauses: "",
-      buyoutAvailable: false,
-      buyoutCost: null,
-      rateType: "monthly",
-      nightlyRate: 0,
-      guaranteedRooms: 0,
-      monthlyRoomNightMin: 0,
-      longStayTaxExempt: false,
-      utilitiesIncludedInRent: false,
-      customerResponsibleForRent: false,
-      noticePeriodDays: inheritedNoticePeriodDays,
     });
     setSaving(false);
     setOpen(false);
@@ -237,6 +204,12 @@ export function AddLeaseDialog({
   const customerSelectValue = showNewCustomerForm
     ? NEW_CUSTOMER_VALUE
     : form.customerId || SAME_AS_PROPERTY_VALUE;
+
+  // Adapter — LeaseFormFields only knows about LeaseDraftState, but our
+  // local state is a superset (propertyId + buildingId + customerId).
+  const setLeaseForm = (
+    updater: (prev: LeaseDraftState) => LeaseDraftState,
+  ) => setForm((f) => ({ ...f, ...updater(f) }));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -408,68 +381,7 @@ export function AddLeaseDialog({
               </div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t("dialogs.addLease.startDateRequired")}</Label>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                data-testid="input-add-lease-start"
-              />
-            </div>
-            <div>
-              <Label>{t("dialogs.addLease.endDateRequired")}</Label>
-              <Input
-                type="date"
-                value={form.endDate}
-                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                data-testid="input-add-lease-end"
-              />
-            </div>
-            <div>
-              <Label>{t("dialogs.addLease.monthlyRentRequired")}</Label>
-              <Input
-                type="number"
-                value={form.monthlyRent}
-                onChange={(e) => setForm((f) => ({ ...f, monthlyRent: e.target.value }))}
-                data-testid="input-add-lease-rent"
-              />
-            </div>
-            <div>
-              <Label>{t("dialogs.addLease.securityDeposit")}</Label>
-              <Input
-                type="number"
-                value={form.securityDeposit}
-                onChange={(e) => setForm((f) => ({ ...f, securityDeposit: e.target.value }))}
-                data-testid="input-add-lease-deposit"
-              />
-            </div>
-          </div>
-          <div>
-            <Label>{t("dialogs.addLease.status")}</Label>
-            <Select
-              value={form.status}
-              onValueChange={(v) => setForm((f) => ({ ...f, status: v as Lease["status"] }))}
-            >
-              <SelectTrigger data-testid="select-add-lease-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Active">{t("dialogs.addLease.statusActive")}</SelectItem>
-                <SelectItem value="Expired">{t("dialogs.addLease.statusExpired")}</SelectItem>
-                <SelectItem value="Upcoming">{t("dialogs.addLease.statusUpcoming")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>{t("dialogs.addLease.notes")}</Label>
-            <Textarea
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              data-testid="textarea-add-lease-notes"
-            />
-          </div>
+          <LeaseFormFields form={form} setForm={setLeaseForm} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>{t("dialogs.addLease.cancel")}</Button>

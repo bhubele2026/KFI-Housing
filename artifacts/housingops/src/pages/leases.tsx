@@ -653,7 +653,7 @@ export default function Leases() {
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 w-full sm:w-auto min-w-0 sm:flex-1">
                 <Select value={customerFilter} onValueChange={updateCustomerFilter}>
                   <SelectTrigger className="w-full sm:w-56" data-testid="select-customer-filter">
                     <SelectValue placeholder={t("pages.leases.customerPlaceholder")} />

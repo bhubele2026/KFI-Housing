@@ -107,12 +107,29 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: "leaf", href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
-/** Flat list of every leaf (Dashboard + Housing kids + Transportation kids + Settings),
- *  in the order they appear on the rendered desktop sidebar. The collapsed icon-rail
- *  variant renders this list directly so each route stays one click away. */
-const ALL_LEAVES: NavLeaf[] = NAV_ENTRIES.flatMap((e) =>
-  e.kind === "leaf" ? [e] : e.children,
-);
+/** sessionStorage key that holds the {[groupId]: open} map for the
+ *  collapsible nav groups. Stored under sessionStorage (not localStorage)
+ *  so the choice survives client-side route changes that remount
+ *  MainLayout/Sidebar, but doesn't bleed across tabs or full reloads —
+ *  matches the "session memory is enough for now" scope. */
+const GROUP_OPEN_STORAGE_KEY = "housingops.sidebar.groupOpen";
+
+function readPersistedGroupOpen(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(GROUP_OPEN_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "boolean") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 export type SidebarProps = {
   /** Render the icon-only ~56px rail (desktop only). When undefined, renders the full 256px rail. */
@@ -458,25 +475,37 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
   // Session-scoped expand/collapse state per nav group. Defaults are seeded
   // from each group's `defaultOpen`: Housing opens on first load so existing
   // operators don't lose their links; Transportation stays closed so the
-  // placeholder section doesn't visually compete on first paint.
-  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>(() => {
+  // placeholder section doesn't visually compete on first paint. Persisted
+  // to sessionStorage so the choice survives the sidebar remount that
+  // happens on every client-side route change (MainLayout is mounted inside
+  // each page component).
+  const [groupOpen, setGroupOpenState] = useState<Record<string, boolean>>(() => {
+    const persisted = readPersistedGroupOpen();
     const init: Record<string, boolean> = {};
     for (const e of NAV_ENTRIES) {
-      if (e.kind === "group") init[e.id] = e.defaultOpen;
+      if (e.kind === "group") {
+        init[e.id] = persisted[e.id] ?? e.defaultOpen;
+      }
     }
     return init;
   });
-
-  // Maps a leaf href to the top-level NAV_ENTRIES bucket it belongs to.
-  // Used by the collapsed icon-rail to draw a hairline divider between
-  // Dashboard / Housing / Transportation / Settings sections.
-  function groupOfHref(href: string): string {
-    for (const e of NAV_ENTRIES) {
-      if (e.kind === "leaf" && e.href === href) return `__leaf__${href}`;
-      if (e.kind === "group" && e.children.some((c) => c.href === href)) return e.id;
-    }
-    return "__unknown__";
-  }
+  const setGroupOpen = (
+    updater: (prev: Record<string, boolean>) => Record<string, boolean>,
+  ) => {
+    setGroupOpenState((prev) => {
+      const next = updater(prev);
+      try {
+        window.sessionStorage.setItem(
+          GROUP_OPEN_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch {
+        // sessionStorage can throw in private-mode/quota cases — the in-memory
+        // state still updates, we just lose the cross-route persistence.
+      }
+      return next;
+    });
+  };
 
   function renderLeaf(item: NavLeaf, opts: { indented: boolean }) {
     const label = t(item.labelKey);
@@ -697,24 +726,51 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
         )}
       >
         {collapsed
-          ? ALL_LEAVES.map((leaf, idx) => {
-              // Insert a subtle hairline divider before the first leaf of each
-              // grouped section so the icon rail still hints at the
-              // Dashboard / Housing / Transportation / Settings shape.
-              const prev = ALL_LEAVES[idx - 1];
-              const showDivider =
-                idx > 0 &&
-                (groupOfHref(leaf.href) !== groupOfHref(prev.href));
+          ? NAV_ENTRIES.map((entry) => {
+              if (entry.kind === "leaf") {
+                return renderLeaf(entry, { indented: false });
+              }
+              // Collapsed rail keeps each group as a single icon
+              // (Building2 for Housing, Truck for Transportation) with a
+              // tooltip showing its label. Clicking the icon expands the
+              // rail and opens that group so children are reachable —
+              // we reuse the existing rail-expand toggle rather than
+              // inventing a flyout primitive.
+              const activeChild = entry.children.some((c) => c.href === location);
+              const GroupIcon = entry.icon;
+              const onClickGroupIcon = () => {
+                setGroupOpen((prev) => ({ ...prev, [entry.id]: true }));
+                onToggleCollapsed?.();
+              };
               return (
-                <div key={leaf.href}>
-                  {showDivider ? (
-                    <div
-                      aria-hidden="true"
-                      className="my-1 mx-2 h-px bg-sidebar-border/70"
-                    />
-                  ) : null}
-                  {renderLeaf(leaf, { indented: false })}
-                </div>
+                <Tooltip key={entry.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={onClickGroupIcon}
+                      aria-label={t(entry.labelKey)}
+                      data-testid={`nav-group-${entry.id}`}
+                      data-active-child={activeChild ? "true" : "false"}
+                      className={cn(
+                        "group relative mx-auto flex h-10 w-10 items-center justify-center rounded-md transition-colors",
+                        activeChild
+                          ? "bg-sidebar-primary/15 text-sidebar-primary-foreground"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                      )}
+                    >
+                      <GroupIcon
+                        className={cn(
+                          "h-[18px] w-[18px] transition-colors",
+                          activeChild
+                            ? "text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/55 group-hover:text-sidebar-accent-foreground",
+                        )}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{t(entry.labelKey)}</TooltipContent>
+                </Tooltip>
               );
             })
           : NAV_ENTRIES.map((entry) => {

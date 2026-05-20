@@ -1427,25 +1427,163 @@ describe("Sidebar collapsed rail grouping", () => {
     });
   }
 
-  it("renders every leaf inline (no group headers) when the rail is collapsed", async () => {
+  it("renders Dashboard + Settings leaves plus a single icon per group in the icon rail", async () => {
     await renderCollapsed();
 
-    // Group headers disappear in the icon rail.
-    expect(container.querySelector('[data-testid="nav-group-housing"]')).toBeNull();
-    expect(container.querySelector('[data-testid="nav-group-transportation"]')).toBeNull();
+    // Standalone leaves still render as icons.
+    expect(container.querySelector('[data-testid="nav-leaf-/dashboard"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="nav-leaf-/settings"]')).not.toBeNull();
 
-    // Every leaf, including Transportation children that are normally
-    // hidden behind a closed group in the expanded rail, is rendered.
-    for (const href of [
-      "/dashboard",
+    // Each group collapses down to its single header icon (Building2 /
+    // Truck). Children render only when the operator expands the rail.
+    expect(container.querySelector('[data-testid="nav-group-housing"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="nav-group-transportation"]')).not.toBeNull();
+
+    for (const childHref of [
       "/customers",
       "/properties",
       "/leases",
-      "/beds",
-      "/occupants",
-      "/utilities",
-      "/finance",
-      "/insurance",
+      "/transport/vehicles",
+      "/transport/drivers",
+    ]) {
+      expect(
+        container.querySelector(`[data-testid="nav-leaf-${childHref}"]`),
+        `child ${childHref} should be hidden in the collapsed icon rail`,
+      ).toBeNull();
+    }
+  });
+
+  it("clicking a collapsed group icon expands the rail and opens that group", async () => {
+    const onToggleCollapsed = vi.fn();
+    window.history.replaceState({}, "", "/dashboard");
+    await act(async () => {
+      root = createRoot(container);
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      root.render(
+        <QueryClientProvider client={client}>
+          <TooltipProvider>
+            <CustomerScopeProvider>
+              <Sidebar collapsed onToggleCollapsed={onToggleCollapsed} />
+            </CustomerScopeProvider>
+          </TooltipProvider>
+        </QueryClientProvider>,
+      );
+    });
+
+    const transportIcon = container.querySelector(
+      `[data-testid="nav-group-transportation"]`,
+    ) as HTMLElement;
+    expect(transportIcon).not.toBeNull();
+    await act(async () => { transportIcon.click(); });
+    // Clicking the icon both expands the rail and remembers that
+    // Transportation should be open when the rail reappears expanded.
+    expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+    const raw = window.sessionStorage.getItem("housingops.sidebar.groupOpen");
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw as string).transportation).toBe(true);
+  });
+
+  it("active-route highlight bubbles up to the collapsed Housing icon", async () => {
+    window.history.replaceState({}, "", "/properties");
+    await renderCollapsed();
+    const housingIcon = container.querySelector(
+      `[data-testid="nav-group-housing"]`,
+    ) as HTMLElement;
+    expect(housingIcon.getAttribute("data-active-child")).toBe("true");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sidebar group state persistence across sidebar remounts
+// ─────────────────────────────────────────────────────────────────────────
+//
+// MainLayout (and therefore Sidebar) is mounted inside each page
+// component, so client-side route changes remount the sidebar. The
+// open/closed state of each nav group must survive that remount within
+// the same browser session — operators who open Transportation should
+// see it stay open as they navigate between pages.
+
+describe("Sidebar group state persistence", () => {
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    mockData.customers = [];
+    mockData.properties = [];
+    mockData.isLoading = false;
+    window.sessionStorage.clear();
+    window.history.replaceState({}, "", "/dashboard");
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => { r.unmount(); });
+      root = null;
+    }
+    container.remove();
+  });
+
+  async function mount() {
+    await act(async () => {
+      root = createRoot(container);
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      });
+      root.render(
+        <QueryClientProvider client={client}>
+          <CustomerScopeProvider>
+            <Sidebar />
+          </CustomerScopeProvider>
+        </QueryClientProvider>,
+      );
+    });
+  }
+
+  it("restores a previously-opened group from sessionStorage on remount", async () => {
+    // Simulate a prior session where the operator opened Transportation
+    // and closed Housing.
+    window.sessionStorage.setItem(
+      "housingops.sidebar.groupOpen",
+      JSON.stringify({ housing: false, transportation: true }),
+    );
+    await mount();
+
+    // Transportation children should be present (group open), Housing
+    // children should be hidden (group closed).
+    expect(container.querySelector(`[data-testid="nav-leaf-/transport/vehicles"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-testid="nav-leaf-/customers"]`)).toBeNull();
+  });
+
+  it("writes group toggle changes back to sessionStorage so they survive route remounts", async () => {
+    await mount();
+    const transportHeader = container.querySelector(
+      `[data-testid="nav-group-transportation"]`,
+    ) as HTMLElement;
+    expect(transportHeader).not.toBeNull();
+    await act(async () => { transportHeader.click(); });
+    const raw = window.sessionStorage.getItem("housingops.sidebar.groupOpen");
+    expect(raw).not.toBeNull();
+    const parsed = JSON.parse(raw as string);
+    expect(parsed.transportation).toBe(true);
+    expect(parsed.housing).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Transportation stub routes render the shared Coming-soon page
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("Transportation stub routes", () => {
+  it("every /transport/* path resolves to the shared stub page in App.tsx", async () => {
+    const appSource = await import("fs").then((fs) =>
+      fs.promises.readFile("src/App.tsx", "utf8"),
+    );
+    for (const path of [
       "/transport/vehicles",
       "/transport/vehicle-leases",
       "/transport/drivers",
@@ -1454,21 +1592,13 @@ describe("Sidebar collapsed rail grouping", () => {
       "/transport/fuel-logs",
       "/transport/routes",
       "/transport/charges",
-      "/settings",
     ]) {
       expect(
-        container.querySelector(`[data-testid="nav-leaf-${href}"]`),
-        `missing collapsed-rail icon for ${href}`,
-      ).not.toBeNull();
+        appSource.includes(`"${path}"`),
+        `expected ${path} to be registered in App.tsx`,
+      ).toBe(true);
     }
-  });
-
-  it("preserves the Properties address-fix badge in collapsed mode", async () => {
-    // Inject a property + a cached geocode failure so the badge fires.
-    mockData.properties = [{ id: "p1", address: "123 Bad St", city: "Nowhere", state: "WI", zip: "00000" }];
-    await renderCollapsed();
-    // The Properties leaf is still rendered in collapsed mode even though
-    // it sits inside the Housing group — covering the badge regression.
-    expect(container.querySelector(`[data-testid="nav-leaf-/properties"]`)).not.toBeNull();
+    // The shared stub component must be wired in.
+    expect(appSource).toMatch(/TransportStub/);
   });
 });

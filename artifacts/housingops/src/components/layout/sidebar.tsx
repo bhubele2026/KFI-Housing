@@ -881,6 +881,9 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </div>
           )}
         </div>
+        {/* Footer actions (Export data, Import occupants, Reset to sample
+            data, Sign out) hidden per user request — kept commented in
+            place so they can be flipped back on without re-plumbing.
         {wrapTip(
           t("sidebar.exportData"),
           <Button
@@ -918,6 +921,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             }
           />,
         )}
+        */}
         {/* Legacy JSON-backup file picker kept mounted but detached
             from the visible button. The handlers (handlePickImportFile,
             handleFileSelected) and import dialog state stay reachable
@@ -931,6 +935,8 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           onChange={handleFileSelected}
           data-testid="input-import-file"
         />
+        {/* Reset to sample data hidden per user request — see footer
+            comment above. Dev-only "Reset demo data" below stays.
         {wrapTip(
           t("sidebar.resetSampleData"),
           <Button
@@ -948,6 +954,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             {!collapsed && t("sidebar.resetSampleData")}
           </Button>,
         )}
+        */}
         {isDevBuild ? (
           wrapTip(
             t("sidebar.resetDemoData"),
@@ -968,6 +975,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Button>,
           )
         ) : null}
+        {/* Sign out hidden per user request — see footer comment above.
         {wrapTip(
           t("nav.logout"),
           <Button
@@ -984,6 +992,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             {!collapsed && t("nav.logout")}
           </Button>,
         )}
+        */}
       </div>
 
       <AlertDialog open={demoResetOpen} onOpenChange={setDemoResetOpen}>

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link, useParams } from "wouter";
 import {
   ChevronLeft, Briefcase, Building2, Bed, DollarSign, User, AlertTriangle,
+  IdCard,
 } from "lucide-react";
 import { useListPayrollDeductions } from "@workspace/api-client-react";
 
@@ -11,6 +12,9 @@ import { useData } from "@/context/data-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -22,7 +26,19 @@ import {
 import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { shortPropertyName } from "@/lib/property-name";
-import { formatUsd } from "@/data/mockData";
+import { InlineEdit } from "@/pages/property-detail";
+import { ShiftPicker } from "@/components/shift-picker";
+import {
+  formatUsd,
+  BILLING_FREQUENCIES,
+  OCCUPANT_LANGUAGES,
+  OCCUPANT_GENDERS,
+  OCCUPANT_TITLES,
+  type BillingFrequency,
+  type OccupantLanguage,
+  type OccupantGender,
+  type OccupantTitle,
+} from "@/data/mockData";
 
 // Per-occupant detail page (Task #598 follow-up). Shows the occupant's
 // identity + current placement and an immutable, week-by-week table of
@@ -38,7 +54,7 @@ import { formatUsd } from "@/data/mockData";
 export default function OccupantDetail() {
   const params = useParams<{ id: string }>();
   const occupantId = params.id;
-  const { occupants, properties, beds, isLoading } = useData();
+  const { occupants, properties, beds, customers, isLoading, updateOccupant } = useData();
 
   const occupant = useMemo(
     () => occupants.find((o) => o.id === occupantId) ?? null,
@@ -144,6 +160,218 @@ export default function OccupantDetail() {
           </Link>
         }
       />
+
+      <Card className="mt-6" data-testid="card-occupant-profile">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <IdCard className="h-4 w-4" />
+            Profile
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Hover any field for the pen icon to edit it.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+            <Field label="Full name">
+              <InlineEdit
+                value={occupant.name}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { name: v })}
+                testId="edit-occupant-name"
+              />
+            </Field>
+            <Field label="Employee ID">
+              <InlineEdit
+                value={occupant.employeeId ?? ""}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { employeeId: v })}
+                testId="edit-occupant-employee-id"
+              />
+            </Field>
+            <Field label="Company">
+              <InlineEdit
+                value={occupant.company ?? ""}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { company: v })}
+                testId="edit-occupant-company"
+              />
+            </Field>
+            <Field label="Email">
+              <InlineEdit
+                value={occupant.email ?? ""}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { email: v })}
+                testId="edit-occupant-email"
+              />
+            </Field>
+            <Field label="Phone">
+              <InlineEdit
+                value={occupant.phone ?? ""}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { phone: v })}
+                testId="edit-occupant-phone"
+              />
+            </Field>
+            <Field label="Shift">
+              <ShiftPicker
+                value={occupant.shift ?? null}
+                onChange={(v) => updateOccupant(occupant.id, { shift: v })}
+                customerId={property?.customerId ?? null}
+                testId="edit-occupant-shift"
+                triggerClassName="h-7 text-xs w-40"
+              />
+            </Field>
+            <Field label="Move-in date">
+              <InlineEdit
+                value={occupant.moveInDate ?? ""}
+                placeholder="—"
+                onSave={(v) => updateOccupant(occupant.id, { moveInDate: v })}
+                testId="edit-occupant-move-in"
+              />
+            </Field>
+            <Field label="Move-out (projected)">
+              <InlineEdit
+                value={occupant.moveOutDate ?? ""}
+                placeholder="—"
+                onSave={(v) =>
+                  updateOccupant(occupant.id, {
+                    moveOutDate: v.trim() === "" ? null : v,
+                  })
+                }
+                testId="edit-occupant-move-out"
+              />
+            </Field>
+            <Field label="Charge / bed">
+              <InlineEdit
+                value={occupant.chargePerBed}
+                type="number"
+                prefix="$"
+                onSave={(v) =>
+                  updateOccupant(occupant.id, { chargePerBed: parseFloat(v) || 0 })
+                }
+                testId="edit-occupant-charge"
+              />
+            </Field>
+            <Field label="Billing frequency">
+              <Select
+                value={occupant.billingFrequency ?? "Monthly"}
+                onValueChange={(v) =>
+                  updateOccupant(occupant.id, { billingFrequency: v as BillingFrequency })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 text-xs w-40"
+                  data-testid="edit-occupant-billing"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILLING_FREQUENCIES.map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {f}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Language">
+              <Select
+                value={occupant.language ?? "__unset"}
+                onValueChange={(v) =>
+                  updateOccupant(occupant.id, {
+                    language: v === "__unset" ? null : (v as OccupantLanguage),
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 text-xs w-40"
+                  data-testid="edit-occupant-language"
+                >
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unset">—</SelectItem>
+                  {OCCUPANT_LANGUAGES.map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Gender">
+              <Select
+                value={occupant.gender ?? "__unset"}
+                onValueChange={(v) =>
+                  updateOccupant(occupant.id, {
+                    gender: v === "__unset" ? null : (v as OccupantGender),
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 text-xs w-40"
+                  data-testid="edit-occupant-gender"
+                >
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unset">—</SelectItem>
+                  {OCCUPANT_GENDERS.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Title">
+              <Select
+                value={occupant.title ?? "__unset"}
+                onValueChange={(v) =>
+                  updateOccupant(occupant.id, {
+                    title: v === "__unset" ? null : (v as OccupantTitle),
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 text-xs w-40"
+                  data-testid="edit-occupant-title"
+                >
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unset">—</SelectItem>
+                  {OCCUPANT_TITLES.map((tt) => (
+                    <SelectItem key={tt} value={tt}>
+                      {tt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Status">
+              <Select
+                value={occupant.status}
+                onValueChange={(v) =>
+                  updateOccupant(occupant.id, { status: v as "Active" | "Former" })
+                }
+              >
+                <SelectTrigger
+                  className="h-7 text-xs w-40"
+                  data-testid="edit-occupant-status"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Former">Former</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <Card data-testid="card-current-placement">
@@ -313,5 +541,16 @@ export default function OccupantDetail() {
         </CardContent>
       </Card>
     </MainLayout>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <div className="min-h-[28px] flex items-center">{children}</div>
+    </div>
   );
 }

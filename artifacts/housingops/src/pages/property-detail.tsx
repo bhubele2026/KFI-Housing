@@ -3173,7 +3173,14 @@ export default function PropertyDetail() {
                                             <TableCell className="font-medium group/occ">
                                               <div className="flex flex-col gap-0.5">
                                                 <div className="flex items-center gap-1 flex-wrap whitespace-nowrap">
-                                                  <InlineEdit value={occ.name} onSave={v => updateOccupant(occ.id, { name: v })} />
+                                                  <Link
+                                                    href={`/occupants/${occ.id}`}
+                                                    className="text-sm font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
+                                                    data-testid={`link-occupant-${occ.id}`}
+                                                    title="Open occupant details"
+                                                  >
+                                                    {occ.name || "—"}
+                                                  </Link>
                                                   {/* Lead-tenant badge + key count (task #500).
                                                       Only meaningful in shared (multi-bed) rooms;
                                                       single-bed rooms hide the affordance entirely

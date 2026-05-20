@@ -1147,6 +1147,7 @@ export default function Dashboard() {
           closedSnapshot.utilities +
           closedSnapshot.otherCosts,
         rent: closedSnapshot.rentPaid,
+        utils: closedSnapshot.utilities,
         net: closedSnapshot.net,
       };
     }
@@ -1176,7 +1177,7 @@ export default function Dashboard() {
             )
             .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
       const utils = monthlyUtilities;
-      return { recovered, costs: rent + utils, rent, net: recovered - rent - utils };
+      return { recovered, costs: rent + utils, rent, utils, net: recovered - rent - utils };
     }
     // Week mode.
     const recovered = payrollDeductions.reduce(
@@ -1209,6 +1210,7 @@ export default function Dashboard() {
       recovered,
       costs: weekRent + weekUtils,
       rent: weekRent,
+      utils: weekUtils,
       net: recovered - weekRent - weekUtils,
     };
   }, [
@@ -1379,6 +1381,15 @@ export default function Dashboard() {
         period.mode === "week"
           ? t("pages.dashboard.metrics.trend.weeklyRentSlice")
           : t("pages.dashboard.metrics.trend.monthlyRentOnly"),
+    },
+    {
+      title: t("pages.dashboard.metrics.utilities"),
+      value: periodValues.utils === undefined ? "—" : formatUsdWhole(periodValues.utils),
+      icon: Zap,
+      trend:
+        period.mode === "week"
+          ? t("pages.dashboard.metrics.trend.weeklyUtilitiesSlice")
+          : t("pages.dashboard.metrics.trend.monthlyUtilitiesOnly"),
     },
     {
       title: t("pages.dashboard.metrics.netProfit"),

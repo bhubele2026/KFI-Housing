@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft, ChevronDown, ChevronUp, Building2, Edit2, Check, X, Plus, Trash2,
@@ -270,106 +269,6 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", te
   );
 }
 
-function BedTileOccupiedPopover({
-  bed,
-  occupant,
-  roomName,
-  trigger,
-  onUpdateOccupant,
-  onOpenRow,
-}: {
-  bed: Bed;
-  occupant: Occupant;
-  roomName: string;
-  trigger: ReactNode;
-  onUpdateOccupant?: (id: string, patch: Partial<Occupant>) => void;
-  onOpenRow?: (bedId: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  // Local draft so typing doesn't fire one store-write per keystroke; we
-  // commit on blur (or on Save). Numeric charge is held as string so the
-  // input is comfortable to edit (empty / partial values allowed).
-  const [name, setName] = useState(occupant.name);
-  const [company, setCompany] = useState(occupant.company ?? "");
-  const [moveIn, setMoveIn] = useState(occupant.moveInDate ?? "");
-  const [charge, setCharge] = useState(
-    occupant.chargePerBed != null ? String(occupant.chargePerBed) : "",
-  );
-  useEffect(() => {
-    if (!open) return;
-    setName(occupant.name);
-    setCompany(occupant.company ?? "");
-    setMoveIn(occupant.moveInDate ?? "");
-    setCharge(occupant.chargePerBed != null ? String(occupant.chargePerBed) : "");
-  }, [open, occupant.id, occupant.name, occupant.company, occupant.moveInDate, occupant.chargePerBed]);
-
-  const commit = () => {
-    if (!onUpdateOccupant) return;
-    const patch: Partial<Occupant> = {};
-    if (name !== occupant.name) patch.name = name.trim();
-    const nextCompany = company.trim();
-    if (nextCompany !== (occupant.company ?? "")) patch.company = nextCompany;
-    if (moveIn !== (occupant.moveInDate ?? "")) patch.moveInDate = moveIn || null;
-    const parsed = charge === "" ? null : parseFloat(charge);
-    const current = occupant.chargePerBed ?? null;
-    if (parsed !== current && !(parsed != null && Number.isNaN(parsed))) {
-      patch.chargePerBed = parsed as number;
-    }
-    if (Object.keys(patch).length > 0) onUpdateOccupant(occupant.id, patch);
-  };
-
-  return (
-    <Popover open={open} onOpenChange={(v) => { if (!v) commit(); setOpen(v); }}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent side="top" align="center" className="w-72 p-3 space-y-3" data-testid={`bedmap-popover-${bed.id}`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="text-xs font-semibold tabular-nums">
-            {t("pages.propertyDetail.bedTooltipLabel", { number: bed.bedNumber, suffix: roomName ? ` · ${roomName}` : "" })}
-          </div>
-          <span className="text-[10px] text-emerald-600 font-medium">{t("pages.propertyDetail.occupiedLabel", { defaultValue: "Occupied" })}</span>
-        </div>
-        <div className="space-y-2">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("pages.propertyDetail.bedTableOccupantName")}</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-sm" data-testid={`bedmap-popover-name-${bed.id}`} />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("pages.propertyDetail.bedTableCompany")}</Label>
-            <Input value={company} onChange={(e) => setCompany(e.target.value)} className="h-8 text-sm" data-testid={`bedmap-popover-company-${bed.id}`} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("pages.propertyDetail.bedTableMoveIn")}</Label>
-              <Input type="date" value={moveIn} onChange={(e) => setMoveIn(e.target.value)} className="h-8 text-sm" data-testid={`bedmap-popover-movein-${bed.id}`} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("pages.propertyDetail.bedTableCharge")}</Label>
-              <Input type="number" inputMode="decimal" value={charge} onChange={(e) => setCharge(e.target.value)} className="h-8 text-sm" data-testid={`bedmap-popover-charge-${bed.id}`} />
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between pt-1">
-          <Button
-            type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground"
-            onClick={() => { commit(); setOpen(false); onOpenRow?.(bed.id); }}
-            data-testid={`bedmap-popover-openrow-${bed.id}`}
-          >
-            {t("pages.propertyDetail.bedMapOpenRow", { defaultValue: "Open row" })}
-          </Button>
-          <Button
-            type="button" size="sm" className="h-7 px-3 text-xs"
-            onClick={() => { commit(); setOpen(false); }}
-            data-testid={`bedmap-popover-save-${bed.id}`}
-          >
-            {t("common.save", { defaultValue: "Save" })}
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onBedClick, onAssignOccupant, onUpdateOccupant }: {
   beds: Bed[];
   occupants: Occupant[];
@@ -499,14 +398,12 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                           </motion.button>
                         );
                         return isOccupied && occ ? (
-                          <BedTileOccupiedPopover
+                          <AssignOccupantDialog
                             key={bed.id}
-                            bed={bed}
                             occupant={occ}
-                            roomName={roomNameById.get(bed.roomId) ?? ""}
+                            onUpdate={onUpdateOccupant}
                             trigger={tileButton}
-                            onUpdateOccupant={onUpdateOccupant}
-                            onOpenRow={onBedClick}
+                            testIdSuffix={`bed-${bed.id}`}
                           />
                         ) : onAssignOccupant ? (
                           <AssignOccupantDialog

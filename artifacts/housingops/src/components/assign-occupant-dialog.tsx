@@ -59,13 +59,25 @@ export interface AssignOccupantDialogProps {
   /** Pre-fill the form. Useful for the dashboard "Unplaced payroll" tile. */
   initial?: AssignOccupantInitialValues;
   /**
+   * When provided, switches the dialog into edit mode: every field is
+   * pre-filled from this occupant's current values and the submit button
+   * calls `onUpdate` instead of `onAssign`. The property/bed picker is
+   * hidden because the occupant is already assigned.
+   */
+  occupant?: Occupant;
+  /**
    * Called after the parent should run `addOccupant(occ)` and
    * `updateBed(bed.id, { status: "Occupied", occupantId: occ.id })`. The
    * dialog handles building the Occupant; the parent decides whether to
    * persist via the data-store hooks (so this component stays usable
    * without baking the data-store into it).
    */
-  onAssign: (occupant: Occupant, bed: { id: string; propertyId: string }) => void;
+  onAssign?: (occupant: Occupant, bed: { id: string; propertyId: string }) => void;
+  /**
+   * Called in edit mode when the operator saves the dialog. Receives only
+   * the changed fields so the data-store/API patch is minimal.
+   */
+  onUpdate?: (id: string, patch: Partial<Occupant>) => void;
   /** Custom trigger. Defaults to the small italic "Assign occupant" link. */
   trigger?: ReactNode;
   /**
@@ -73,6 +85,13 @@ export interface AssignOccupantDialogProps {
    * `data-testid`s (e.g. one per unplaced-payroll row).
    */
   testIdSuffix?: string;
+  /**
+   * Controlled-open support. The bed-map tile wraps the trigger directly,
+   * but other entry points (keyboard handlers, "Open row" buttons) need to
+   * open the dialog imperatively, so we expose a controlled mode.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Sentinel option value used by the optional Language/Gender/Title
@@ -86,6 +105,7 @@ const EMPTY_FORM = {
   employeeId: "",
   company: "",
   moveInDate: "",
+  moveOutDate: "",
   chargePerBed: "",
   billingFrequency: "Monthly" as BillingFrequency,
   email: "",
@@ -109,6 +129,7 @@ function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
     employeeId: initial.employeeId ?? "",
     company: initial.company ?? "",
     moveInDate: "",
+    moveOutDate: "",
     chargePerBed:
       typeof initial.chargePerBed === "number" && Number.isFinite(initial.chargePerBed)
         ? String(initial.chargePerBed)
@@ -124,17 +145,51 @@ function buildInitialForm(initial: AssignOccupantInitialValues | undefined) {
   };
 }
 
+function buildEditForm(occupant: Occupant) {
+  return {
+    name: occupant.name ?? "",
+    employeeId: occupant.employeeId ?? "",
+    company: occupant.company ?? "",
+    moveInDate: occupant.moveInDate ?? "",
+    moveOutDate: occupant.moveOutDate ?? "",
+    chargePerBed:
+      typeof occupant.chargePerBed === "number" && Number.isFinite(occupant.chargePerBed)
+        ? String(occupant.chargePerBed)
+        : "",
+    billingFrequency: (occupant.billingFrequency ?? "Monthly") as BillingFrequency,
+    email: occupant.email ?? "",
+    phone: occupant.phone ?? "",
+    language: (occupant.language ?? UNSET) as OccupantLanguage | typeof UNSET,
+    gender: (occupant.gender ?? UNSET) as OccupantGender | typeof UNSET,
+    title: (occupant.title ?? UNSET) as OccupantTitle | typeof UNSET,
+    kfisAuthorizedToDrive: occupant.kfisAuthorizedToDrive ?? null,
+    shift: occupant.shift ?? null,
+  };
+}
+
 export function AssignOccupantDialog({
   bed,
   initial,
+  occupant,
   onAssign,
+  onUpdate,
   trigger,
   testIdSuffix,
+  open: openProp,
+  onOpenChange,
 }: AssignOccupantDialogProps) {
   const { t } = useTranslation();
   const { properties, beds, customers } = useData();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(() => buildInitialForm(initial));
+  const isEdit = !!occupant;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (v: boolean) => {
+    if (onOpenChange) onOpenChange(v);
+    if (openProp === undefined) setInternalOpen(v);
+  };
+  const [form, setForm] = useState(() =>
+    isEdit ? buildEditForm(occupant!) : buildInitialForm(initial),
+  );
   const [pickedPropertyId, setPickedPropertyId] = useState<string>("");
   const [pickedBedId, setPickedBedId] = useState<string>("");
 
@@ -143,36 +198,45 @@ export function AssignOccupantDialog({
   // edits made in a previous open session would persist.
   useEffect(() => {
     if (open) {
-      const base = buildInitialForm(initial);
-      // Default Company to the property's customer — when an operator
-      // assigns someone to a bed inside, say, "Burnett Dairy" housing,
-      // 99% of the time they work for Burnett Dairy. Operator can still
-      // override. Only applied when the parent fixed the bed AND nothing
-      // was explicitly passed via `initial.company`.
-      if (bed && !initial?.company) {
-        const prop = properties.find((p) => p.id === bed.propertyId);
-        const customer = prop
-          ? customers.find((c) => c.id === prop.customerId)
-          : null;
-        if (customer?.name) base.company = customer.name;
+      if (isEdit && occupant) {
+        setForm(buildEditForm(occupant));
+      } else {
+        const base = buildInitialForm(initial);
+        // Default Company to the property's customer — when an operator
+        // assigns someone to a bed inside, say, "Burnett Dairy" housing,
+        // 99% of the time they work for Burnett Dairy. Operator can still
+        // override. Only applied when the parent fixed the bed AND nothing
+        // was explicitly passed via `initial.company`.
+        if (bed && !initial?.company) {
+          const prop = properties.find((p) => p.id === bed.propertyId);
+          const customer = prop
+            ? customers.find((c) => c.id === prop.customerId)
+            : null;
+          if (customer?.name) base.company = customer.name;
+        }
+        setForm(base);
       }
-      setForm(base);
       setPickedPropertyId("");
       setPickedBedId("");
     }
-  }, [open, initial, bed, properties, customers]);
+  }, [open, initial, bed, properties, customers, isEdit, occupant]);
 
   const f =
     (k: keyof typeof form) =>
     (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  // When a bed is supplied by the parent, lock to that bed/property.
-  // Otherwise the user picks both via dropdowns inside the dialog.
-  const fixedBed = bed ?? null;
+  // When a bed is supplied by the parent (or we're editing an already-
+  // placed occupant), lock to that bed/property. Otherwise the user picks
+  // both via dropdowns inside the dialog.
+  const fixedBed = isEdit
+    ? occupant!.bedId && occupant!.propertyId
+      ? { id: occupant!.bedId, propertyId: occupant!.propertyId }
+      : null
+    : (bed ?? null);
 
   const propertyOptions = useMemo(() => {
-    if (fixedBed) return [];
+    if (fixedBed || isEdit) return [];
     // Only properties that have at least one *ready* vacant bed are worth
     // picking. A vacant bed mid-cleaning (needs_cleaning / in_progress)
     // is not assignable yet — task #500's cleaning workflow gates new
@@ -185,10 +249,10 @@ export function AssignOccupantDialog({
     return properties
       .filter((p) => propertyIdsWithVacancy.has(p.id))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [fixedBed, properties, beds]);
+  }, [fixedBed, isEdit, properties, beds]);
 
   const vacantBedsForProperty = useMemo(() => {
-    if (fixedBed) return [];
+    if (fixedBed || isEdit) return [];
     if (!pickedPropertyId) return [];
     return beds
       .filter(
@@ -198,15 +262,15 @@ export function AssignOccupantDialog({
           b.cleaningStatus === "ready",
       )
       .sort((a, b) => a.bedNumber - b.bedNumber);
-  }, [fixedBed, beds, pickedPropertyId]);
+  }, [fixedBed, isEdit, beds, pickedPropertyId]);
 
   // Reset the picked bed if the property changes underneath it.
   useEffect(() => {
-    if (fixedBed) return;
+    if (fixedBed || isEdit) return;
     if (pickedBedId && !vacantBedsForProperty.some((b) => b.id === pickedBedId)) {
       setPickedBedId("");
     }
-  }, [fixedBed, pickedBedId, vacantBedsForProperty]);
+  }, [fixedBed, isEdit, pickedBedId, vacantBedsForProperty]);
 
   const resolvedBed: { id: string; propertyId: string } | null = fixedBed
     ? fixedBed
@@ -214,11 +278,61 @@ export function AssignOccupantDialog({
       ? { id: pickedBedId, propertyId: pickedPropertyId }
       : null;
 
-  const canSubmit = !!form.name && !!resolvedBed;
+  const canSubmit = isEdit ? !!form.name : !!form.name && !!resolvedBed;
 
   const submit = () => {
-    if (!resolvedBed) return;
     if (!form.name) return;
+    if (isEdit && occupant) {
+      if (!onUpdate) return;
+      const patch: Partial<Occupant> = {};
+      const nextName = form.name.trim();
+      if (nextName !== occupant.name) patch.name = nextName;
+      const nextEmployeeId = form.employeeId.trim();
+      if (nextEmployeeId !== (occupant.employeeId ?? "")) patch.employeeId = nextEmployeeId;
+      const nextCompany = form.company.trim();
+      if (nextCompany !== (occupant.company ?? "")) patch.company = nextCompany;
+      if (form.moveInDate !== (occupant.moveInDate ?? "")) {
+        patch.moveInDate = form.moveInDate;
+      }
+      const nextMoveOut = form.moveOutDate === "" ? null : form.moveOutDate;
+      if (nextMoveOut !== (occupant.moveOutDate ?? null)) {
+        patch.moveOutDate = nextMoveOut;
+      }
+      const parsedCharge = form.chargePerBed === "" ? 0 : parseFloat(form.chargePerBed);
+      if (!Number.isNaN(parsedCharge) && parsedCharge !== (occupant.chargePerBed ?? 0)) {
+        patch.chargePerBed = parsedCharge;
+      }
+      if (form.billingFrequency !== occupant.billingFrequency) {
+        patch.billingFrequency = form.billingFrequency;
+      }
+      const nextEmail = form.email.trim();
+      if (nextEmail !== (occupant.email ?? "")) patch.email = nextEmail;
+      const nextPhone = form.phone.trim();
+      if (nextPhone !== (occupant.phone ?? "")) patch.phone = nextPhone;
+      const nextLanguage = form.language === UNSET ? null : form.language;
+      if (nextLanguage !== (occupant.language ?? null)) {
+        patch.language = nextLanguage;
+      }
+      const nextGender = form.gender === UNSET ? null : form.gender;
+      if (nextGender !== (occupant.gender ?? null)) {
+        patch.gender = nextGender;
+      }
+      const nextTitle = form.title === UNSET ? null : form.title;
+      if (nextTitle !== (occupant.title ?? null)) {
+        patch.title = nextTitle;
+      }
+      if (form.kfisAuthorizedToDrive !== (occupant.kfisAuthorizedToDrive ?? null)) {
+        patch.kfisAuthorizedToDrive = form.kfisAuthorizedToDrive;
+      }
+      if ((form.shift ?? null) !== (occupant.shift ?? null)) {
+        patch.shift = form.shift;
+      }
+      if (Object.keys(patch).length > 0) onUpdate(occupant.id, patch);
+      setOpen(false);
+      return;
+    }
+    if (!resolvedBed) return;
+    if (!onAssign) return;
     const occ: Occupant = {
       id: `occ-${Date.now()}`,
       propertyId: resolvedBed.propertyId,
@@ -227,7 +341,7 @@ export function AssignOccupantDialog({
       employeeId: form.employeeId,
       company: form.company,
       moveInDate: form.moveInDate || new Date().toISOString().split("T")[0],
-      moveOutDate: null,
+      moveOutDate: form.moveOutDate === "" ? null : form.moveOutDate,
       status: "Active",
       chargePerBed: parseFloat(form.chargePerBed) || 0,
       billingFrequency: form.billingFrequency,
@@ -253,24 +367,30 @@ export function AssignOccupantDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:text-foreground italic flex items-center gap-1 transition-colors"
-            data-testid={`button-assign-occupant${tidSuffix}`}
-          >
-            <Plus className="h-3 w-3" />
-            {t("dialogs.assignOccupant.triggerDefault")}
-          </button>
-        )}
-      </DialogTrigger>
+      {trigger !== undefined || !isEdit ? (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground italic flex items-center gap-1 transition-colors"
+              data-testid={`button-assign-occupant${tidSuffix}`}
+            >
+              <Plus className="h-3 w-3" />
+              {t("dialogs.assignOccupant.triggerDefault")}
+            </button>
+          )}
+        </DialogTrigger>
+      ) : null}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("dialogs.assignOccupant.title")}</DialogTitle>
+          <DialogTitle>
+            {isEdit
+              ? t("dialogs.assignOccupant.editTitle", { defaultValue: "Edit Occupant" })
+              : t("dialogs.assignOccupant.title")}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-2">
-          {!fixedBed && (
+          {!fixedBed && !isEdit && (
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>{t("dialogs.assignOccupant.propertyRequired")}</Label>
@@ -366,6 +486,17 @@ export function AssignOccupantDialog({
                 value={form.moveInDate}
                 onChange={f("moveInDate")}
                 data-testid={`input-assign-move-in${tidSuffix}`}
+              />
+            </div>
+            <div>
+              <Label>
+                {t("dialogs.assignOccupant.moveOutDate", { defaultValue: "Move-out Date" })}
+              </Label>
+              <Input
+                type="date"
+                value={form.moveOutDate}
+                onChange={f("moveOutDate")}
+                data-testid={`input-assign-move-out${tidSuffix}`}
               />
             </div>
             <div>
@@ -559,7 +690,9 @@ export function AssignOccupantDialog({
               disabled={!canSubmit}
               data-testid={`button-assign-submit${tidSuffix}`}
             >
-              {t("dialogs.assignOccupant.submit")}
+              {isEdit
+                ? t("dialogs.assignOccupant.save", { defaultValue: "Save" })
+                : t("dialogs.assignOccupant.submit")}
             </Button>
           </div>
         </div>

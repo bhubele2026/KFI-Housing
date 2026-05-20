@@ -627,14 +627,24 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Tooltip>
           ) : null
         ) : (
-          <div className="relative flex items-center justify-center px-2 py-1">
+          <div className="group relative flex items-center justify-center px-2 py-3">
+            {/* Soft radial swoosh behind the logo so the dark-navy roof
+                and door read against the sidebar token instead of melting
+                into it. The blur sweeps on hover for a little life. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-0 overflow-hidden rounded-2xl"
+            >
+              <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,255,255,0.35),rgba(255,255,255,0.12)_55%,transparent_75%)] blur-md transition-transform duration-500 ease-out group-hover:scale-110" />
+              <div className="absolute -right-6 top-1/2 h-24 w-32 -translate-y-1/2 rotate-12 rounded-full bg-[radial-gradient(closest-side,rgba(120,180,255,0.25),transparent_70%)] blur-lg transition-transform duration-700 ease-out group-hover:translate-x-2" />
+            </div>
             {/* The KFI Staffing logo is a transparent-background PNG, so
-                it blends directly onto the sidebar token without a chip
-                or wordmark behind it. */}
+                it blends directly onto the sidebar token. The radial
+                swoosh above lifts the dark tones without adding a chip. */}
             <img
               src={logoUrl}
               alt="KFI Staffing"
-              className="h-20 w-auto max-w-full object-contain select-none"
+              className="relative z-10 h-32 w-auto max-w-full object-contain select-none drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out group-hover:scale-[1.03]"
               draggable={false}
               data-testid="img-sidebar-logo"
             />

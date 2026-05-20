@@ -57,19 +57,43 @@ vi.mock("@/components/ui/popover", () => {
   return { Popover: Pass, PopoverTrigger: Pass, PopoverContent: () => null };
 });
 
-// Minimal Select stub — render the trigger inline and each SelectItem as
-// a button keyed on its value. None of the assertions below depend on a
-// Select, but the review stage renders the lease-status Select and would
-// otherwise crash trying to portal under jsdom.
-vi.mock("@/components/ui/select", () => {
+// Select is stubbed so it doesn't try to portal under jsdom, but we still
+// route `onValueChange` from the parent Select down to its SelectItem
+// children via context. That way tests can drive a real selection by
+// clicking the SelectItem button (used by the multi-building tests below
+// to pick a building from the dropdown).
+vi.mock("@/components/ui/select", async () => {
+  const React = await import("react");
+  const SelectChangeCtx = React.createContext<((value: string) => void) | null>(
+    null,
+  );
   const Pass = ({ children }: { children?: ReactNode }) => <>{children}</>;
   return {
-    Select: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    Select: ({
+      children,
+      onValueChange,
+    }: {
+      children?: ReactNode;
+      onValueChange?: (value: string) => void;
+    }) => (
+      <SelectChangeCtx.Provider value={onValueChange ?? null}>
+        <div>{children}</div>
+      </SelectChangeCtx.Provider>
+    ),
     SelectContent: Pass,
     SelectGroup: Pass,
-    SelectItem: ({ children, value }: { children?: ReactNode; value: string }) => (
-      <button type="button" data-value={value}>{children}</button>
-    ),
+    SelectItem: ({ children, value }: { children?: ReactNode; value: string }) => {
+      const onChange = React.useContext(SelectChangeCtx);
+      return (
+        <button
+          type="button"
+          data-value={value}
+          onClick={() => onChange?.(value)}
+        >
+          {children}
+        </button>
+      );
+    },
     SelectLabel: Pass,
     SelectScrollDownButton: Pass,
     SelectScrollUpButton: Pass,
@@ -351,5 +375,162 @@ describe("UploadLeasePdfDialog — locked-property flows (Task #608)", () => {
     expect(saved.endDate).toBe("2027-06-30");
     expect(saved.monthlyRent).toBe(1800);
     expect(saved.securityDeposit).toBe(1800);
+  });
+});
+
+// Coverage for Task #620 — when the locked property has more than one
+// building, the review form must render a Building picker (showBuildingPicker
+// branch) and forward the chosen buildingId through to addLease. The
+// pre-existing tests above only exercise the single/no-building case, so a
+// regression that hid the picker or dropped the buildingId would slip past.
+describe("UploadLeasePdfDialog — multi-building locked property (Task #620)", () => {
+  const BUILDINGS = [
+    { id: "b1", propertyId: "p1", name: "Building A",
+      address: "", city: "", state: "", zip: "", notes: "" },
+    { id: "b2", propertyId: "p1", name: "Building B",
+      address: "", city: "", state: "", zip: "", notes: "" },
+    // Different property — must be filtered out of the picker.
+    { id: "b3", propertyId: "p2", name: "Other Property Building",
+      address: "", city: "", state: "", zip: "", notes: "" },
+  ];
+
+  let container: HTMLDivElement;
+  let root: Root | null = null;
+
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    addLeaseMock.mockClear();
+    importLeasePdfMock.mockReset();
+    toastMock.mockReset();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(async () => {
+    if (root) {
+      const r = root;
+      await act(async () => {
+        r.unmount();
+      });
+      root = null;
+    }
+    container.remove();
+    document
+      .querySelectorAll('[role="dialog"], [data-radix-portal]')
+      .forEach((el) => el.remove());
+  });
+
+  async function mountDialogWithBuildings(): Promise<void> {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <UploadLeasePdfDialog propertyId="p1" buildings={BUILDINGS} />,
+      );
+    });
+  }
+
+  async function openManualEntryAndFillRequiredFields(): Promise<void> {
+    await openDialog();
+    const manualLink = document.body.querySelector(
+      '[data-testid="button-enter-lease-manually"]',
+    ) as HTMLButtonElement | null;
+    expect(manualLink).not.toBeNull();
+    await act(async () => {
+      manualLink!.click();
+    });
+    const startInput = document.body.querySelector(
+      '[data-testid="input-pdf-lease-start"]',
+    ) as HTMLInputElement;
+    const endInput = document.body.querySelector(
+      '[data-testid="input-pdf-lease-end"]',
+    ) as HTMLInputElement;
+    const rentInput = document.body.querySelector(
+      '[data-testid="input-pdf-lease-rent"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      setNativeInputValue(startInput, "2026-06-01");
+      setNativeInputValue(endInput, "2027-05-31");
+      setNativeInputValue(rentInput, "2400");
+    });
+  }
+
+  it("renders the Building picker and forwards the chosen buildingId to addLease", async () => {
+    await mountDialogWithBuildings();
+    await openManualEntryAndFillRequiredFields();
+
+    // The picker is only rendered when showBuildingPicker is true (i.e.
+    // 2+ buildings on the locked property). The trigger's data-testid is
+    // dropped by our Pass-through SelectTrigger stub, so detect the
+    // picker via its Label and the SelectItem buttons it renders. With
+    // our Select mock each SelectItem is rendered as a button keyed by
+    // value, so we can assert on data-value directly.
+    const buildingLabel = document.body.querySelector(
+      'label[for="pdf-lease-building"]',
+    );
+    expect(buildingLabel).not.toBeNull();
+    expect(buildingLabel!.textContent).toContain("Building");
+
+    const buildingButtons = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("[data-value]"),
+    );
+    const values = buildingButtons.map((b) => b.getAttribute("data-value"));
+    expect(values).toContain("b1");
+    expect(values).toContain("b2");
+    // Buildings under other properties must not leak into the picker.
+    expect(values).not.toContain("b3");
+    // The "All buildings" sentinel is also rendered as an option.
+    expect(values).toContain("__all__");
+
+    // Pick Building B by clicking its SelectItem button — the upgraded
+    // Select mock wires this through to the parent Select's onValueChange.
+    const pickB = buildingButtons.find(
+      (b) => b.getAttribute("data-value") === "b2",
+    )!;
+    await act(async () => {
+      pickB.click();
+    });
+
+    const saveBtn = document.body.querySelector(
+      '[data-testid="button-confirm-pdf-import"]',
+    ) as HTMLButtonElement;
+    expect(saveBtn).not.toBeNull();
+    expect(saveBtn.disabled).toBe(false);
+
+    await act(async () => {
+      saveBtn.click();
+    });
+
+    expect(addLeaseMock).toHaveBeenCalledTimes(1);
+    const saved = addLeaseMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(saved.propertyId).toBe("p1");
+    expect(saved.buildingId).toBe("b2");
+  });
+
+  it("saves with buildingId: null when no building is chosen", async () => {
+    await mountDialogWithBuildings();
+    await openManualEntryAndFillRequiredFields();
+
+    // Picker is rendered, but the operator leaves it on the default
+    // "All buildings" option. We expect that to land as buildingId: null
+    // on the persisted lease (empty-string buildingId is normalized to
+    // null when the queue item is handed to addLease).
+    // Picker is rendered (detected via its Label since our SelectTrigger
+    // stub drops the data-testid).
+    expect(
+      document.body.querySelector('label[for="pdf-lease-building"]'),
+    ).not.toBeNull();
+
+    const saveBtn = document.body.querySelector(
+      '[data-testid="button-confirm-pdf-import"]',
+    ) as HTMLButtonElement;
+    await act(async () => {
+      saveBtn.click();
+    });
+
+    expect(addLeaseMock).toHaveBeenCalledTimes(1);
+    const saved = addLeaseMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(saved.propertyId).toBe("p1");
+    expect(saved.buildingId).toBeNull();
   });
 });

@@ -1146,6 +1146,7 @@ export default function Dashboard() {
           closedSnapshot.rentPaid +
           closedSnapshot.utilities +
           closedSnapshot.otherCosts,
+        rent: closedSnapshot.rentPaid,
         net: closedSnapshot.net,
       };
     }
@@ -1175,7 +1176,7 @@ export default function Dashboard() {
             )
             .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
       const utils = monthlyUtilities;
-      return { recovered, costs: rent + utils, net: recovered - rent - utils };
+      return { recovered, costs: rent + utils, rent, net: recovered - rent - utils };
     }
     // Week mode.
     const recovered = payrollDeductions.reduce(
@@ -1207,6 +1208,7 @@ export default function Dashboard() {
     return {
       recovered,
       costs: weekRent + weekUtils,
+      rent: weekRent,
       net: recovered - weekRent - weekUtils,
     };
   }, [
@@ -1223,6 +1225,7 @@ export default function Dashboard() {
 
   const totalMonthlyRevenue = periodValues.recovered;
   const totalMonthlyCosts = periodValues.costs;
+  const totalPeriodRent = periodValues.rent;
   const netProfit = periodValues.net;
 
   // "Close month" admin action — POSTs the currently-rendered values
@@ -1367,6 +1370,15 @@ export default function Dashboard() {
       value: formatUsdWhole(totalMonthlyCosts),
       icon: DollarSign,
       trend: period.mode === "week" ? "Leases + utilities (weekly slice)" : t("pages.dashboard.metrics.trend.leasesUtilities"),
+    },
+    {
+      title: t("pages.dashboard.metrics.weeklyRent"),
+      value: totalPeriodRent === undefined ? "—" : formatUsdWhole(totalPeriodRent),
+      icon: DollarSign,
+      trend:
+        period.mode === "week"
+          ? t("pages.dashboard.metrics.trend.weeklyRentSlice")
+          : t("pages.dashboard.metrics.trend.monthlyRentOnly"),
     },
     {
       title: t("pages.dashboard.metrics.netProfit"),

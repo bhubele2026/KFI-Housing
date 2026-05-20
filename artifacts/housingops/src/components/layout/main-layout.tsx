@@ -62,7 +62,9 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
-  if (!isAuthenticated) {
+  const publicMode =
+    String(import.meta.env.VITE_PUBLIC_MODE ?? "").toLowerCase() === "true";
+  if (!publicMode && !isAuthenticated) {
     return <Redirect to="/login" />;
   }
 

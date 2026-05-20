@@ -54,6 +54,38 @@ export async function requireAuth(
     return;
   }
 
+  // Public-share mode: when PUBLIC_MODE=true, skip Clerk entirely and
+  // attach the first admin in the DB as the request user. Everyone who
+  // hits the API acts as that admin (read+write). Use only for trusted
+  // shared links.
+  if ((process.env.PUBLIC_MODE ?? "").toLowerCase() === "true") {
+    try {
+      const admin = await db
+        .select()
+        .from(appUsersTable)
+        .where(eq(appUsersTable.role, "admin"))
+        .limit(1);
+      if (admin.length === 0) {
+        res.status(503).json({ error: "Public mode: no admin user provisioned yet." });
+        return;
+      }
+      const u = admin[0];
+      req.appUser = {
+        id: u.id,
+        clerkUserId: u.clerkUserId,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+      };
+      next();
+      return;
+    } catch (err) {
+      logger.error({ err }, "PUBLIC_MODE auth failed");
+      res.status(500).json({ error: "Auth check failed" });
+      return;
+    }
+  }
+
   const auth = getAuth(req);
   const clerkUserId = auth?.userId;
   if (!clerkUserId) {

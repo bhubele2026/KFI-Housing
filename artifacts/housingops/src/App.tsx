@@ -86,17 +86,22 @@ function AppRoutes() {
   );
 }
 
+const PUBLIC_MODE =
+  String(import.meta.env.VITE_PUBLIC_MODE ?? "").toLowerCase() === "true";
+
 function SignedInShell() {
   const { isLoaded, isSignedIn } = useClerkAuth();
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f6f1e7] text-sm text-muted-foreground">
-        Loading…
-      </div>
-    );
-  }
-  if (!isSignedIn) {
-    return <Redirect to="/sign-in" />;
+  if (!PUBLIC_MODE) {
+    if (!isLoaded) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-[#f6f1e7] text-sm text-muted-foreground">
+          Loading…
+        </div>
+      );
+    }
+    if (!isSignedIn) {
+      return <Redirect to="/sign-in" />;
+    }
   }
   return (
     <DataProvider>

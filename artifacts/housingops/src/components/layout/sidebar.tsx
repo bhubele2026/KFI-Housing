@@ -107,17 +107,18 @@ const NAV_ENTRIES: NavEntry[] = [
   { kind: "leaf", href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
-/** sessionStorage key that holds the {[groupId]: open} map for the
- *  collapsible nav groups. Stored under sessionStorage (not localStorage)
+/** localStorage key that holds the {[groupId]: open} map for the
+ *  collapsible nav groups. Stored under localStorage (not sessionStorage)
  *  so the choice survives client-side route changes that remount
- *  MainLayout/Sidebar, but doesn't bleed across tabs or full reloads —
- *  matches the "session memory is enough for now" scope. */
+ *  MainLayout/Sidebar AND full page reloads / next-day visits — matching
+ *  the existing collapse-rail toggle's persistence model so operators
+ *  don't have to re-open their preferred sections every time. */
 const GROUP_OPEN_STORAGE_KEY = "housingops.sidebar.groupOpen";
 
 function readPersistedGroupOpen(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.sessionStorage.getItem(GROUP_OPEN_STORAGE_KEY);
+    const raw = window.localStorage.getItem(GROUP_OPEN_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return {};
@@ -495,13 +496,13 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     setGroupOpenState((prev) => {
       const next = updater(prev);
       try {
-        window.sessionStorage.setItem(
+        window.localStorage.setItem(
           GROUP_OPEN_STORAGE_KEY,
           JSON.stringify(next),
         );
       } catch {
-        // sessionStorage can throw in private-mode/quota cases — the in-memory
-        // state still updates, we just lose the cross-route persistence.
+        // localStorage can throw in private-mode/quota cases — the in-memory
+        // state still updates, we just lose the cross-reload persistence.
       }
       return next;
     });

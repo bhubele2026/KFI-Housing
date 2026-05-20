@@ -1480,7 +1480,7 @@ describe("Sidebar collapsed rail grouping", () => {
     // Clicking the icon both expands the rail and remembers that
     // Transportation should be open when the rail reappears expanded.
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
-    const raw = window.sessionStorage.getItem("housingops.sidebar.groupOpen");
+    const raw = window.localStorage.getItem("housingops.sidebar.groupOpen");
     expect(raw).not.toBeNull();
     expect(JSON.parse(raw as string).transportation).toBe(true);
   });
@@ -1496,14 +1496,15 @@ describe("Sidebar collapsed rail grouping", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sidebar group state persistence across sidebar remounts
+// Sidebar group state persistence across sidebar remounts AND reloads
 // ─────────────────────────────────────────────────────────────────────────
 //
 // MainLayout (and therefore Sidebar) is mounted inside each page
 // component, so client-side route changes remount the sidebar. The
-// open/closed state of each nav group must survive that remount within
-// the same browser session — operators who open Transportation should
-// see it stay open as they navigate between pages.
+// open/closed state of each nav group must survive that remount AND
+// full page reloads — operators who open Transportation should see it
+// stay open the next time they reload the tab or come back tomorrow.
+// Persisted under localStorage to match the collapse-rail toggle.
 
 describe("Sidebar group state persistence", () => {
   let container: HTMLDivElement;
@@ -1513,6 +1514,7 @@ describe("Sidebar group state persistence", () => {
     mockData.customers = [];
     mockData.properties = [];
     mockData.isLoading = false;
+    window.localStorage.clear();
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/dashboard");
     container = document.createElement("div");
@@ -1544,10 +1546,11 @@ describe("Sidebar group state persistence", () => {
     });
   }
 
-  it("restores a previously-opened group from sessionStorage on remount", async () => {
-    // Simulate a prior session where the operator opened Transportation
-    // and closed Housing.
-    window.sessionStorage.setItem(
+  it("restores a previously-persisted group state from localStorage on remount", async () => {
+    // Simulate a prior visit where the operator opened Transportation
+    // and closed Housing — persisted to localStorage so it survives a
+    // full reload, not just an in-session route change.
+    window.localStorage.setItem(
       "housingops.sidebar.groupOpen",
       JSON.stringify({ housing: false, transportation: true }),
     );
@@ -1559,18 +1562,44 @@ describe("Sidebar group state persistence", () => {
     expect(container.querySelector(`[data-testid="nav-leaf-/customers"]`)).toBeNull();
   });
 
-  it("writes group toggle changes back to sessionStorage so they survive route remounts", async () => {
+  it("writes group toggle changes back to localStorage so they survive route remounts AND reloads", async () => {
     await mount();
     const transportHeader = container.querySelector(
       `[data-testid="nav-group-transportation"]`,
     ) as HTMLElement;
     expect(transportHeader).not.toBeNull();
     await act(async () => { transportHeader.click(); });
-    const raw = window.sessionStorage.getItem("housingops.sidebar.groupOpen");
+    const raw = window.localStorage.getItem("housingops.sidebar.groupOpen");
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw as string);
     expect(parsed.transportation).toBe(true);
     expect(parsed.housing).toBe(true);
+  });
+
+  it("applies the defaults (Housing open, Transportation closed) when no stored value exists", async () => {
+    // No localStorage write — operator's first-ever visit.
+    expect(window.localStorage.getItem("housingops.sidebar.groupOpen")).toBeNull();
+    await mount();
+
+    // Housing children present (defaultOpen: true), Transportation hidden
+    // (defaultOpen: false).
+    expect(container.querySelector(`[data-testid="nav-leaf-/customers"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-testid="nav-leaf-/transport/vehicles"]`)).toBeNull();
+  });
+
+  it("ignores leftover sessionStorage values now that persistence lives in localStorage", async () => {
+    // A stray sessionStorage entry from the prior session-scoped impl
+    // must NOT be honored — otherwise the migration would silently
+    // resurrect stale state for operators with an open tab. Defaults
+    // should apply since localStorage is empty.
+    window.sessionStorage.setItem(
+      "housingops.sidebar.groupOpen",
+      JSON.stringify({ housing: false, transportation: true }),
+    );
+    await mount();
+
+    expect(container.querySelector(`[data-testid="nav-leaf-/customers"]`)).not.toBeNull();
+    expect(container.querySelector(`[data-testid="nav-leaf-/transport/vehicles"]`)).toBeNull();
   });
 });
 

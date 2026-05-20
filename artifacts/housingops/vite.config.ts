@@ -75,6 +75,53 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("/recharts/") ||
+            id.includes("/victory-vendor/") ||
+            id.includes("/d3-") ||
+            id.includes("/d3/")
+          ) {
+            return "charts";
+          }
+          if (id.includes("/@radix-ui/")) return "radix";
+          if (id.includes("/framer-motion/") || id.includes("/motion-")) {
+            return "motion";
+          }
+          if (
+            id.includes("/lucide-react/") ||
+            id.includes("/react-icons/")
+          ) {
+            return "icons";
+          }
+          if (
+            id.includes("/react-hook-form/") ||
+            id.includes("/@hookform/")
+          ) {
+            return "forms";
+          }
+          if (
+            id.includes("/date-fns/") ||
+            id.includes("/react-day-picker/")
+          ) {
+            return "dates";
+          }
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/scheduler/") ||
+            id.includes("/react-is/")
+          ) {
+            return "react";
+          }
+          if (id.includes("/@tanstack/")) return "query";
+          return undefined;
+        },
+      },
+    },
   },
   server: {
     port,

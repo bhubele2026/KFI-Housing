@@ -807,7 +807,6 @@
         "invalidAmount": "Ingresa un número no negativo."
       },
       "bedTableBilling": "Facturación",
-      "bedTableWeeklyDeduction": "Deducción semanal",
       "bedTableMonthlyEquivalent": "Equivalente mensual",
       "bedTableEmail": "Correo",
       "bedTablePhone": "Teléfono",

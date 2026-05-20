@@ -818,7 +818,6 @@
         "invalidAmount": "Enter a non-negative number."
       },
       "bedTableBilling": "Billing",
-      "bedTableWeeklyDeduction": "Weekly Deduction",
       "bedTableMonthlyEquivalent": "Monthly Equivalent",
       "bedTableEmail": "Email",
       "bedTablePhone": "Phone",

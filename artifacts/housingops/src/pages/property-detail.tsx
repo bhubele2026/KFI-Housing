@@ -3029,6 +3029,7 @@ export default function PropertyDetail() {
                                     <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveOut")}</TableHead>
                                     <TableHead className="w-36 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
                                     <TableHead className="w-24 whitespace-nowrap">{t("pages.propertyDetail.bedTableBilling")}</TableHead>
+                                    <TableHead className="w-28 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableMonthlyEquivalent")}</TableHead>
                                     <TableHead className="w-36 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
                                   </TableRow>
@@ -3361,6 +3362,13 @@ export default function PropertyDetail() {
                                                   {BILLING_FREQUENCIES.map(f => <SelectItem key={f} value={f}>{t(`common.billingFrequencies.${f}`)}</SelectItem>)}
                                                 </SelectContent>
                                               </Select>
+                                            </TableCell>
+                                            <TableCell
+                                              className="text-right tabular-nums text-muted-foreground"
+                                              data-testid={`cell-bed-monthly-${bed.id}`}
+                                              title="Monthly equivalent = weekly × 52 / 12"
+                                            >
+                                              {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}
                                             </TableCell>
                                           </>
                                         ) : (

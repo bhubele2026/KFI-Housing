@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&display=swap');
+
+.ho-arch-dark {
+  background-color: hsl(216, 62%, 22%);
+  color: hsl(210, 40%, 98%);
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+}
+
+.ho-arch-dark h1, 
+.ho-arch-dark h2, 
+.ho-arch-dark h3, 
+.ho-arch-dark h4, 
+.ho-arch-dark h5, 
+.ho-arch-dark h6,
+.ho-arch-dark .font-heading {
+  font-family: 'Inter Tight', sans-serif;
+}
+
+.ho-arch-dark-card {
+  background-color: hsl(222, 47%, 11%);
+  border: 1px solid hsl(216, 50%, 30%);
+}
+
+.ho-arch-dark-input {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid hsl(216, 50%, 30%);
+  color: hsl(210, 40%, 98%);
+}
+
+.ho-arch-dark-btn-primary {
+  background-color: #d4be8a;
+  color: hsl(222, 47%, 11%);
+  font-weight: 600;
+  border-radius: 4px;
+}
+.ho-arch-dark-btn-primary:hover {
+  background-color: #e5d1a1;
+}
+
+.ho-arch-dark-btn-secondary {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: hsl(210, 40%, 98%);
+  border-radius: 4px;
+}
+.ho-arch-dark-btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.ho-arch-dark-badge-green {
+  background-color: rgba(127, 184, 138, 0.15);
+  color: #7fb88a;
+  border: 1px solid rgba(127, 184, 138, 0.3);
+}
+
+.ho-arch-dark-badge-amber {
+  background-color: rgba(212, 168, 87, 0.15);
+  color: #d4a857;
+  border: 1px solid rgba(212, 168, 87, 0.3);
+}
+
+.ho-arch-dark-badge-red {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ho-arch-dark-badge-neutral {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: hsl(215, 20%, 65%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ho-arch-dark-text-muted {
+  color: hsl(215, 20%, 65%);
+}
+
+.ho-arch-dark-table th {
+  color: hsl(215, 20%, 65%);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid hsl(216, 50%, 30%);
+  padding: 0.75rem 1rem;
+}
+
+.ho-arch-dark-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ho-arch-dark-table tr:last-child td {
+  border-bottom: none;
+}

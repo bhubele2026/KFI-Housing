@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+.operator-console {
+  /* Brand palette */
+  --primary: hsl(217 71% 21%);
+  --sidebar: hsl(216 62% 22%);
+  --sidebar-border: hsl(216 50% 30%);
+  --sidebar-primary: hsl(217 75% 55%);
+  --chart-1: hsl(217 71% 21%);
+  --chart-2: hsl(217 75% 45%);
+  --chart-3: hsl(200 80% 42%);
+  --chart-4: hsl(180 55% 38%);
+  --chart-5: hsl(217 40% 65%);
+  --foreground: hsl(222 47% 11%);
+  --muted-foreground: hsl(215 16% 47%);
+  --border: hsl(214 32% 91%);
+  --muted: hsl(214 32% 96%);
+
+  /* Status colors */
+  --status-active: hsl(142 71% 45%);
+  --status-expiring: hsl(38 92% 50%);
+  --status-review: hsl(0 84% 60%);
+
+  color: var(--foreground);
+  font-family: 'Inter', sans-serif;
+}
+
+.operator-console * {
+  border-color: var(--border);
+}
+
+.operator-console-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.operator-console-table-row {
+  height: 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+.operator-console-table-row:last-child {
+  border-bottom: none;
+}
+
+/* Custom scrollbar for drawer */
+.operator-drawer-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.operator-drawer-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.operator-drawer-scroll::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  opacity: 0.3;
+  border-radius: 2px;
+}

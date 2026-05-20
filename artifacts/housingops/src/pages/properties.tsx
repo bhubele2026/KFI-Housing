@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { useData } from "@/context/data-store";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
-import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, PROPERTY_TYPE_OPTIONS, type Property, type Customer, type RatingCategoryKey, type PropertyType } from "@/data/mockData";
+import { getRenewalInfo, computeOverallRating, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, daysUntil, RATING_CATEGORIES, PROPERTY_TYPE_OPTIONS, type Property, type Customer, type RatingCategoryKey, type PropertyType, type Bed, type Lease, type InsuranceCertificate } from "@/data/mockData";
 import { isBlankYMD, formatYMDPretty } from "@/lib/lease-dates";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -540,6 +540,93 @@ export default function Properties() {
     list.sort((a, b) => a.customer.name.localeCompare(b.customer.name));
     return list;
   }, [filtered, customerById, customerFilter]);
+
+  // Per-property derived data used by the grouped table rows. Previously
+  // these filter/find/IIFE chains were computed inline inside
+  // `customerGroups.map(...)`, so every parent render walked `beds`,
+  // `leases`, `insuranceCertificates`, and `buildings` once per visible
+  // property. Memoizing a Map keyed by property id collapses all of that
+  // into a single pass that only re-runs when the underlying lists
+  // change.
+  const propertyRowDataById = useMemo(() => {
+    // Group source lists by propertyId in a single pass so the per-row
+    // lookup is O(1) instead of an O(N) `.filter` per property.
+    const bedsByProp = new Map<string, Bed[]>();
+    for (const b of beds) {
+      const arr = bedsByProp.get(b.propertyId);
+      if (arr) arr.push(b);
+      else bedsByProp.set(b.propertyId, [b]);
+    }
+    const activeLeaseByProp = new Map<string, Lease>();
+    for (const l of leases) {
+      if (l.status !== "Active") continue;
+      if (!activeLeaseByProp.has(l.propertyId)) {
+        activeLeaseByProp.set(l.propertyId, l);
+      }
+    }
+    const certsByProp = new Map<string, InsuranceCertificate[]>();
+    for (const c of insuranceCertificates) {
+      if (!c.coverageEnd) continue;
+      const arr = certsByProp.get(c.propertyId);
+      if (arr) arr.push(c);
+      else certsByProp.set(c.propertyId, [c]);
+    }
+    const buildingCountByProp = new Map<string, number>();
+    for (const b of buildings) {
+      buildingCountByProp.set(
+        b.propertyId,
+        (buildingCountByProp.get(b.propertyId) ?? 0) + 1,
+      );
+    }
+    const out = new Map<
+      string,
+      {
+        propBeds: Bed[];
+        occupied: number;
+        vacant: number;
+        activeLease: Lease | undefined;
+        renewal: ReturnType<typeof getRenewalInfo>;
+        showNoEndDate: boolean;
+        overallRating: number | null;
+        customer: Customer | undefined;
+        worstInsuranceCert: { days: number; coverageEnd: string } | null;
+        buildingCount: number;
+      }
+    >();
+    for (const property of filtered) {
+      const propBeds = bedsByProp.get(property.id) ?? [];
+      let occupied = 0;
+      for (const b of propBeds) if (b.status === "Occupied") occupied++;
+      const activeLease = activeLeaseByProp.get(property.id);
+      const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
+      const showNoEndDate =
+        !!activeLease && !renewal && isBlankYMD(activeLease.endDate);
+      const overallRating = computeOverallRating(property.ratings);
+      const customer = customerById.get(property.customerId);
+      const propCerts = certsByProp.get(property.id) ?? [];
+      let worstInsuranceCert: { days: number; coverageEnd: string } | null = null;
+      for (const c of propCerts) {
+        const d = daysUntil(c.coverageEnd);
+        if (d > 30) continue;
+        if (!worstInsuranceCert || d < worstInsuranceCert.days) {
+          worstInsuranceCert = { days: d, coverageEnd: c.coverageEnd };
+        }
+      }
+      out.set(property.id, {
+        propBeds,
+        occupied,
+        vacant: propBeds.length - occupied,
+        activeLease,
+        renewal,
+        showNoEndDate,
+        overallRating,
+        customer,
+        worstInsuranceCert,
+        buildingCount: buildingCountByProp.get(property.id) ?? 0,
+      });
+    }
+    return out;
+  }, [filtered, beds, leases, insuranceCertificates, buildings, customerById]);
 
   // Search auto-expands every group containing a match. Since `filtered`
   // already excludes non-matching properties, the presence of any
@@ -2064,33 +2151,22 @@ export default function Properties() {
                     );
                     if (!isExpanded) return [headerRow];
                     const propertyRows = group.properties.map((property, i) => {
-                    const propBeds = beds.filter((b) => b.propertyId === property.id);
-                    const occupied = propBeds.filter((b) => b.status === "Occupied").length;
-                    const vacant = propBeds.length - occupied;
-                    const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
-                    const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
+                    // Per-row derived data (beds/occupancy/active lease/
+                    // renewal/insurance cert/customer) is precomputed in
+                    // the `propertyRowDataById` memo so unrelated re-renders
+                    // don't redo the filter/find/IIFE chains for every
+                    // visible row.
+                    const rowData = propertyRowDataById.get(property.id);
+                    const propBeds = rowData?.propBeds ?? [];
+                    const occupied = rowData?.occupied ?? 0;
+                    const vacant = rowData?.vacant ?? 0;
+                    const activeLease = rowData?.activeLease;
+                    const renewal = rowData?.renewal ?? null;
                     const showRenewal = renewal && renewal.level !== "ok";
-                    // A lease whose endDate is blank yields a null
-                    // `renewal` (see `getRenewalInfo`). Surface a neutral
-                    // "No end date" pill so operators can tell that
-                    // apart from "no active lease" and "ok renewal".
-                    const showNoEndDate =
-                      !!activeLease && !renewal && isBlankYMD(activeLease.endDate);
-                    const overallRating = computeOverallRating(property.ratings);
-                    const customer = customerById.get(property.customerId);
-                    const worstInsuranceCert = (() => {
-                      const certs = insuranceCertificates.filter(
-                        (c) => c.propertyId === property.id && c.coverageEnd,
-                      );
-                      if (certs.length === 0) return null;
-                      let worst: { days: number; coverageEnd: string } | null = null;
-                      for (const c of certs) {
-                        const d = daysUntil(c.coverageEnd);
-                        if (d > 30) continue;
-                        if (!worst || d < worst.days) worst = { days: d, coverageEnd: c.coverageEnd };
-                      }
-                      return worst;
-                    })();
+                    const showNoEndDate = rowData?.showNoEndDate ?? false;
+                    const overallRating = rowData?.overallRating ?? null;
+                    const customer = rowData?.customer;
+                    const worstInsuranceCert = rowData?.worstInsuranceCert ?? null;
 
                     return (
                       <motion.tr
@@ -2124,9 +2200,10 @@ export default function Properties() {
                             // operators can spot duplexes / multi-units
                             // without drilling in. Single-building rows
                             // (the back-filled common case) stay clean.
-                            const propertyBuildingCount = buildings.filter(
-                              (b) => b.propertyId === property.id,
-                            ).length;
+                            // Building count comes from the per-row memo so
+                            // we don't re-walk `buildings` for every visible
+                            // property on every render.
+                            const propertyBuildingCount = rowData?.buildingCount ?? 0;
                             return (
                               <div className="flex items-center gap-2">
                                 <InlineEdit

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, ExternalLink, MapPin, RefreshCw } from "lucide-react";
@@ -859,6 +859,40 @@ export function PortfolioMap({
     }
   }, [status, properties, onGeocoded]);
 
+  // Resolved-coord inputs to `spreadOverlappingPins` + the spread
+  // result. Hoisted out of the marker-rebuild effect into memos so
+  // that (a) the work only happens when `properties` or `coords`
+  // actually change, not on every parent re-render, and (b) the
+  // unmappable-id effect below can share the same single pass instead
+  // of re-walking `properties` independently. Unresolved properties
+  // (no entry in `coords`, or `null`) are skipped so they never
+  // affect the centroid math.
+  const spreadInputs = useMemo(() => {
+    const out: Array<{ id: string; lat: number; lng: number }> = [];
+    for (const p of properties) {
+      const c = coords.get(p.id);
+      if (c) out.push({ id: p.id, lat: c.lat, lng: c.lng });
+    }
+    return out;
+  }, [properties, coords]);
+  const displayCoords = useMemo(
+    () => spreadOverlappingPins(spreadInputs),
+    [spreadInputs],
+  );
+  // Address-present-but-Google-returned-null ids surfaced to the side
+  // panel. Memoized so a re-render that didn't change properties/
+  // coords doesn't redo the walk and re-fire `onUnmappableChange`.
+  const unmappableIds = useMemo(() => {
+    const out: string[] = [];
+    for (const p of properties) {
+      if (!fullAddress(p)) continue;
+      if (coords.has(p.id) && coords.get(p.id) === null) {
+        out.push(p.id);
+      }
+    }
+    return out;
+  }, [properties, coords]);
+
   // Sync markers + viewport whenever resolved coords change. We drop
   // every marker and rebuild — properties is small (operators look at
   // ~tens, not thousands), so the simpler "blow away & rebuild" path
@@ -889,20 +923,9 @@ export function PortfolioMap({
     }
     const infoWindow = infoWindowRef.current;
 
-    // Spread pins that share (near-)identical coords onto a small ring
-    // around their shared anchor. Without this, properties at the same
-    // building or street would stack into one visually-overlapping
-    // marker that the operator can't hover or click individually —
-    // defeating the new info-bubble flow for any dense neighborhood.
-    // We only feed in resolved coords (`c` truthy) so unresolved
-    // properties never affect the centroid math.
-    const spreadInputs: Array<{ id: string; lat: number; lng: number }> = [];
-    for (const p of properties) {
-      const c = coords.get(p.id);
-      if (c) spreadInputs.push({ id: p.id, lat: c.lat, lng: c.lng });
-    }
-    const displayCoords = spreadOverlappingPins(spreadInputs);
-
+    // `displayCoords` (post-spread positions) and its source
+    // `spreadInputs` are computed in memos above so the heavy
+    // group-and-spread math doesn't redo on every parent re-render.
     const bounds = new maps.LatLngBounds();
     let added = 0;
     for (const p of properties) {
@@ -958,7 +981,7 @@ export function PortfolioMap({
     } else if (added > 1) {
       mapRef.current.fitBounds(bounds, 64);
     }
-  }, [status, coords, properties]);
+  }, [status, properties, displayCoords]);
 
   // Close the bubble when the operator presses Escape — Google's
   // built-in close affordance is a tiny ✕ that's easy to miss, and the
@@ -976,23 +999,13 @@ export function PortfolioMap({
   }, []);
 
   // Bubble unmappable ids (address present but Google had no result)
-  // back to the parent so the side panel can list them. Properties
-  // whose address is wholly blank are already handled by the parent —
-  // we only report rows that *should* have geocoded but didn't.
+  // back to the parent so the side panel can list them. The set is
+  // computed in the `unmappableIds` memo above; here we only fire the
+  // callback when that memoized array actually changes identity.
   useEffect(() => {
     if (!onUnmappableChange) return;
-    const unmappable: string[] = [];
-    for (const p of properties) {
-      if (!fullAddress(p)) continue;
-      // Only consider properties we've actually attempted to resolve;
-      // a key that hasn't appeared in `coords` yet is still pending,
-      // not failed.
-      if (coords.has(p.id) && coords.get(p.id) === null) {
-        unmappable.push(p.id);
-      }
-    }
-    onUnmappableChange(unmappable);
-  }, [coords, properties, onUnmappableChange]);
+    onUnmappableChange(unmappableIds);
+  }, [unmappableIds, onUnmappableChange]);
 
   // Sustained-failure banner — rendered above whichever Card branch
   // wins below. The banner itself is a no-op when `isRefreshStale` is

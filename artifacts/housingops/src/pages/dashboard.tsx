@@ -1098,8 +1098,19 @@ export default function Dashboard() {
 
   const totalProperties = scopedProperties.length;
   const totalBeds = scopedBeds.length;
-  const occupiedBeds = scopedBeds.filter((b) => b.status === "Occupied").length;
-  const vacantBeds = scopedBeds.filter((b) => b.status === "Vacant").length;
+  // Single-pass tally so we only walk `scopedBeds` once per change to the
+  // bed list rather than three times every render.
+  const bedTallies = useMemo(() => {
+    let occupied = 0;
+    let vacant = 0;
+    for (const b of scopedBeds) {
+      if (b.status === "Occupied") occupied++;
+      else if (b.status === "Vacant") vacant++;
+    }
+    return { occupied, vacant };
+  }, [scopedBeds]);
+  const occupiedBeds = bedTallies.occupied;
+  const vacantBeds = bedTallies.vacant;
   const occupancyRate = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
 
   // Per-property utilities-included-in-rent share (task #518). For
@@ -1125,13 +1136,21 @@ export default function Dashboard() {
   // Hotel-rate leases are run through `estimateLeaseMonthlyRent` so
   // corporate-rate agreements still contribute, matching the existing
   // headline behaviour before the period picker was added.
-  const monthlyLeaseCosts = scopedLeases
-    .filter((l) => l.status === "Active")
-    .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0);
-  const monthlyUtilities = scopedUtilities.reduce((acc, u) => {
-    const share = utilitiesIncludedShareByProp.get(u.propertyId) ?? 0;
-    return acc + u.monthlyCost * (1 - share);
-  }, 0);
+  const monthlyLeaseCosts = useMemo(
+    () =>
+      scopedLeases
+        .filter((l) => l.status === "Active")
+        .reduce((acc, l) => acc + estimateLeaseMonthlyRent(l, roomNightLogs), 0),
+    [scopedLeases, roomNightLogs],
+  );
+  const monthlyUtilities = useMemo(
+    () =>
+      scopedUtilities.reduce((acc, u) => {
+        const share = utilitiesIncludedShareByProp.get(u.propertyId) ?? 0;
+        return acc + u.monthlyCost * (1 - share);
+      }, 0),
+    [scopedUtilities, utilitiesIncludedShareByProp],
+  );
 
   // ----- Period-aware tile values -----
   // Recovered: actual deduction snapshots whose Saturday pay-week falls
@@ -1290,10 +1309,17 @@ export default function Dashboard() {
   // not an average of per-property ratios — so a 100-bed property
   // weighs 100x a 1-bed property and the number matches what an
   // operator would compute with a calculator across the whole book.
-  const portfolioMonthlyRent = scopedProperties.reduce((s, p) => s + (p.monthlyRent || 0), 0);
-  const portfolioMonthlyElectric = scopedUtilities.reduce(
-    (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
-    0,
+  const portfolioMonthlyRent = useMemo(
+    () => scopedProperties.reduce((s, p) => s + (p.monthlyRent || 0), 0),
+    [scopedProperties],
+  );
+  const portfolioMonthlyElectric = useMemo(
+    () =>
+      scopedUtilities.reduce(
+        (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
+        0,
+      ),
+    [scopedUtilities],
   );
   const portfolioRentPerBed = computeRentPerBed(portfolioMonthlyRent, totalBeds);
   const portfolioElectricPerBed = computeElectricPerBed(portfolioMonthlyElectric, totalBeds);

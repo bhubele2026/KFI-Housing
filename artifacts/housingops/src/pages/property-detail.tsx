@@ -1196,6 +1196,158 @@ export default function PropertyDetail() {
     );
   }, [propertyUnits, unitsBuildingFilter]);
 
+  // Hoisted above the early returns (same reason as `propOtherCosts*` above)
+  // so the hook count stays stable across the loading → loaded transition.
+  // These were previously recomputed on every render down in the main JSX
+  // body — wrapping them as memos avoids redoing the filter/sort/reduce
+  // chains every time an unrelated piece of context state updates.
+  const propUtils = useMemo(
+    () =>
+      utilities
+        .filter((u) => u.propertyId === id)
+        .sort(
+          (a, b) =>
+            a.type.localeCompare(b.type) || a.company.localeCompare(b.company),
+        ),
+    [utilities, id],
+  );
+  const propCerts = useMemo(
+    () =>
+      insuranceCertificates
+        .filter((c) => c.propertyId === id)
+        .sort((a, b) => (a.coverageEnd || "").localeCompare(b.coverageEnd || "")),
+    [insuranceCertificates, id],
+  );
+  const activeLeases = useMemo(
+    () => getActiveLeasesForProperty(propLeases, id),
+    [propLeases, id],
+  );
+  const primaryActiveLease = useMemo(
+    () =>
+      [...activeLeases].sort((a, b) => a.endDate.localeCompare(b.endDate))[0],
+    [activeLeases],
+  );
+  const bedCounts = useMemo(() => {
+    let occupied = 0;
+    let available = 0;
+    let needsCleaning = 0;
+    for (const b of propBeds) {
+      if (b.status === "Occupied") {
+        occupied++;
+      } else if (b.status === "Vacant") {
+        if ((b.cleaningStatus ?? "ready") === "ready") available++;
+        else needsCleaning++;
+      }
+    }
+    return {
+      occupied,
+      available,
+      needsCleaning,
+      vacant: propBeds.length - occupied,
+    };
+  }, [propBeds]);
+  const weeklyRecovery = useMemo(
+    () =>
+      propOccupants.reduce(
+        (s, o) =>
+          s + toWeeklyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"),
+        0,
+      ),
+    [propOccupants],
+  );
+  const monthlyRevenueFromOccupants = useMemo(
+    () =>
+      propOccupants.reduce(
+        (s, o) =>
+          s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"),
+        0,
+      ),
+    [propOccupants],
+  );
+  const monthlyUtilCost = useMemo(
+    () => propUtils.reduce((s, u) => s + u.monthlyCost, 0),
+    [propUtils],
+  );
+  const monthlyElectricCost = useMemo(
+    () =>
+      propUtils.reduce(
+        (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
+        0,
+      ),
+    [propUtils],
+  );
+  const hotelRateLeaseEstimates = useMemo(
+    () =>
+      activeLeases
+        .filter((l) => (l.rateType ?? "monthly") === "room-night")
+        .map((l) => {
+          const latest = getLatestRoomNightLog(roomNightLogs, l.id);
+          return {
+            lease: l,
+            nights: latest?.roomNights ?? 0,
+            month: latest?.month ?? null,
+            nightlyRate: l.nightlyRate ?? 0,
+            estimate: estimateLeaseMonthlyRent(l, roomNightLogs),
+          };
+        }),
+    [activeLeases, roomNightLogs],
+  );
+  // Beds-tab grouping: bucket beds into rooms, surface unknown-room beds
+  // as orphans, apply the building filter, then sort. All driven by
+  // memoized inputs so the heavy work only re-runs when the underlying
+  // bed/room set or the toolbar selections actually change.
+  const bedRoomGrouping = useMemo(() => {
+    const bedsByRoomId = new Map<string, Bed[]>();
+    for (const r of propRooms) bedsByRoomId.set(r.id, []);
+    const orphans: Bed[] = [];
+    for (const b of propBeds) {
+      const list = bedsByRoomId.get(b.roomId);
+      if (list) list.push(b);
+      else orphans.push(b);
+    }
+    const allGroups = propRooms.map((r) => ({
+      room: r,
+      beds: bedsByRoomId.get(r.id) ?? [],
+    }));
+    return { allGroups, orphans };
+  }, [propRooms, propBeds]);
+  // Apply the Beds-tab building filter + user sort to the room cards.
+  // Memoized so the filter + sort + array copy only re-run when one of
+  // their actual inputs changes (not every parent render).
+  const sortedBedGroups = useMemo(() => {
+    const { allGroups } = bedRoomGrouping;
+    const groups =
+      bedsBuildingFilter === "all" || focusedBuildingId
+        ? allGroups
+        : allGroups.filter((g) => g.room.buildingId === bedsBuildingFilter);
+    if (bedsSort === "default") return groups;
+    const valueFor = (g: { room: Room; beds: Bed[] }): number | null => {
+      switch (bedsSort) {
+        case "ppsf-desc":
+        case "ppsf-asc":
+          return computePricePerSqft(g.room.monthlyRent, g.room.sqft);
+        case "rent-desc":
+        case "rent-asc":
+          return g.room.monthlyRent > 0 ? g.room.monthlyRent : null;
+        case "sqft-desc":
+        case "sqft-asc":
+          return g.room.sqft > 0 ? g.room.sqft : null;
+        default:
+          return null;
+      }
+    };
+    const isAsc = bedsSort.endsWith("-asc");
+    return [...groups].sort((a, b) => {
+      const av = valueFor(a);
+      const bv = valueFor(b);
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      const cmp = av - bv;
+      return isAsc ? cmp : -cmp;
+    });
+  }, [bedRoomGrouping, bedsBuildingFilter, focusedBuildingId, bedsSort]);
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -1282,53 +1434,22 @@ export default function PropertyDetail() {
       </MainLayout>
     );
   }
-  const propUtils = utilities.filter(u => u.propertyId === id).sort((a, b) => a.type.localeCompare(b.type) || a.company.localeCompare(b.company));
-  const propCerts = insuranceCertificates
-    .filter(c => c.propertyId === id)
-    .sort((a, b) => (a.coverageEnd || "").localeCompare(b.coverageEnd || ""));
-  // A property can have more than one Active lease at a time (overlapping
-  // renewals, multi-room agreements). Picking just the first match silently
-  // under-reports rent and profit, so the header and Finance tab sum across
-  // all active leases via `sumActiveRent`/`getActiveLeasesForProperty`.
-  const activeLeases = getActiveLeasesForProperty(propLeases, id);
-  // The lease whose end date is closest (used for the renewal badge / popover
-  // and for the inline rent editor). Picking the soonest-expiring active
-  // lease keeps the urgency signal honest when several overlap.
-  const primaryActiveLease = [...activeLeases].sort((a, b) =>
-    a.endDate.localeCompare(b.endDate),
-  )[0];
-
-  const occupiedBeds = propBeds.filter(b => b.status === "Occupied").length;
-  // Vacant beds split by cleaning workflow (task #500). Only "ready"
-  // beds count as actually available for a new placement; the rest
-  // are mid-turnover and surface as a separate "Needs cleaning"
-  // signal so operators can chase them down.
-  const availableBeds = propBeds.filter(
-    (b) => b.status === "Vacant" && (b.cleaningStatus ?? "ready") === "ready",
-  ).length;
-  const bedsNeedsCleaning = propBeds.filter(
-    (b) => b.status === "Vacant" && (b.cleaningStatus ?? "ready") !== "ready",
-  ).length;
-  const vacantBeds = propBeds.length - occupiedBeds;
+  // `propUtils`, `propCerts`, `activeLeases`, `primaryActiveLease`,
+  // `bedCounts`, `weeklyRecovery`, `monthlyUtilCost`,
+  // `monthlyElectricCost`, and `hotelRateLeaseEstimates` are all
+  // memoized above the early returns so the heavy filter/sort/reduce
+  // chains only re-run when their inputs actually change.
+  const { occupied: occupiedBeds, available: availableBeds, needsCleaning: bedsNeedsCleaning, vacant: vacantBeds } = bedCounts;
   // Housing Recovery (monthly snapshot) = sum of per-occupant weekly
   // deduction × 4. Same source as the "Weekly Deduction" column on the
   // bed table, so the stat card and the per-bed rows always agree.
   // Editing the deduction on the occupant or bed row immediately moves
   // this number. Empty / unset deductions contribute $0.
-  const weeklyRecovery = propOccupants.reduce(
-    (s, o) => s + toWeeklyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"),
-    0,
-  );
   const monthlyRevenue = weeklyRecovery * 4;
-  const monthlyUtilCost = propUtils.reduce((s, u) => s + u.monthlyCost, 0);
   // Per-bed unit economics use property.monthlyRent (not the sum of
   // active-lease rent) so the number matches the Properties list and
   // Dashboard cards — those views key off the property's canonical
   // monthly rent and don't see leases yet for greenfield properties.
-  const monthlyElectricCost = propUtils.reduce(
-    (s, u) => (u.type === "Electric" ? s + (u.monthlyCost || 0) : s),
-    0,
-  );
   const rentPerBed = computeRentPerBed(property.monthlyRent, propBeds.length);
   const electricPerBed = computeElectricPerBed(monthlyElectricCost, propBeds.length);
   const rentPlusElectricPerBed = computeRentPlusElectricPerBed(
@@ -1349,22 +1470,7 @@ export default function PropertyDetail() {
   // operator sees the cleaning fee total instead of a perpetual $0.
   // `propOtherCostsTotal` and `propOtherCosts` are computed above the
   // early returns (Task #596) so refer to those bindings here.
-  // Per-lease hotel-rate breakdown — used by the Lease Rent stat sub and
-  // by the Finance tab Costs section to surface the
-  // "≈ $X this month (Y nights × $Z/night)" figure operators want next
-  // to the raw $0 stored on these leases.
-  const hotelRateLeaseEstimates = activeLeases
-    .filter((l) => (l.rateType ?? "monthly") === "room-night")
-    .map((l) => {
-      const latest = getLatestRoomNightLog(roomNightLogs, l.id);
-      return {
-        lease: l,
-        nights: latest?.roomNights ?? 0,
-        month: latest?.month ?? null,
-        nightlyRate: l.nightlyRate ?? 0,
-        estimate: estimateLeaseMonthlyRent(l, roomNightLogs),
-      };
-    });
+  // `hotelRateLeaseEstimates` is memoized above the early returns.
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
   const roomTotals = computeRoomTotals(propRooms);
@@ -2821,7 +2927,7 @@ export default function PropertyDetail() {
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{t("pages.propertyDetail.bedsOccupied", { count: occupiedBeds })}</span>
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />{t("pages.propertyDetail.bedsVacant", { count: vacantBeds })}</span>
                 <span>{t("pages.propertyDetail.roomsCount", { count: propRooms.length })}</span>
-                <span className="text-foreground font-medium">{formatUsd(propOccupants.reduce((s, o) => s + toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly"), 0))}{t("pages.propertyDetail.revenueSuffix")}</span>
+                <span className="text-foreground font-medium">{formatUsd(monthlyRevenueFromOccupants)}{t("pages.propertyDetail.revenueSuffix")}</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Beds-tab building filter (Task #596). Mirrors the
@@ -2946,63 +3052,14 @@ export default function PropertyDetail() {
             ) : (
               <div className="space-y-4">
                 {(() => {
-                  // Group beds by room. Beds whose roomId no longer matches a
-                  // known room (shouldn't happen post-migration, but be
-                  // defensive) are bucketed under "Unassigned" so they're still
-                  // visible and editable.
-                  const bedsByRoomId = new Map<string, Bed[]>();
-                  for (const r of propRooms) bedsByRoomId.set(r.id, []);
-                  const orphans: Bed[] = [];
-                  for (const b of propBeds) {
-                    const list = bedsByRoomId.get(b.roomId);
-                    if (list) list.push(b);
-                    else orphans.push(b);
-                  }
-                  const allGroups = propRooms.map((r) => ({ room: r, beds: bedsByRoomId.get(r.id) ?? [] }));
-                  // Apply the Beds-tab building filter (Task #596). When
-                  // the URL focus is active, propRooms is already
-                  // narrowed to that building so the filter is a no-op;
-                  // otherwise we narrow here so the toolbar dropdown
-                  // works even without a URL drill-down.
-                  const groups = bedsBuildingFilter === "all" || focusedBuildingId
-                    ? allGroups
-                    : allGroups.filter((g) => g.room.buildingId === bedsBuildingFilter);
-
-                  // Apply the user's sort to the room cards. Rooms with a
-                  // missing sort value (e.g. $/sqft is null because rent or
-                  // sqft is 0) always sort to the bottom in either
-                  // direction so the comparable rows stay clustered at the
-                  // top — matching the Properties-list sort behavior.
-                  const sortedGroups = (() => {
-                    if (bedsSort === "default") return groups;
-                    const valueFor = (
-                      g: { room: Room; beds: Bed[] },
-                    ): number | null => {
-                      switch (bedsSort) {
-                        case "ppsf-desc":
-                        case "ppsf-asc":
-                          return computePricePerSqft(g.room.monthlyRent, g.room.sqft);
-                        case "rent-desc":
-                        case "rent-asc":
-                          return g.room.monthlyRent > 0 ? g.room.monthlyRent : null;
-                        case "sqft-desc":
-                        case "sqft-asc":
-                          return g.room.sqft > 0 ? g.room.sqft : null;
-                        default:
-                          return null;
-                      }
-                    };
-                    const isAsc = bedsSort.endsWith("-asc");
-                    return [...groups].sort((a, b) => {
-                      const av = valueFor(a);
-                      const bv = valueFor(b);
-                      if (av === null && bv === null) return 0;
-                      if (av === null) return 1;
-                      if (bv === null) return -1;
-                      const cmp = av - bv;
-                      return isAsc ? cmp : -cmp;
-                    });
-                  })();
+                  // Grouping + building filter + user sort live in the
+                  // `bedRoomGrouping` / `sortedBedGroups` memos hoisted
+                  // above the early returns so the heavy work only re-runs
+                  // when its inputs actually change. `orphans` (beds whose
+                  // roomId no longer matches a known room — defensive
+                  // post-migration) come from the same memo.
+                  const { orphans } = bedRoomGrouping;
+                  const sortedGroups = sortedBedGroups;
 
                   return (
                     <>

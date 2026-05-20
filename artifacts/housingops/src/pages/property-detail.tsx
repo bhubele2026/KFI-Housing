@@ -3184,6 +3184,7 @@ export default function PropertyDetail() {
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableCompany")}</TableHead>
                                     <TableHead className="w-28">{t("pages.propertyDetail.bedTableShift")}</TableHead>
                                     <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveIn")}</TableHead>
+                                    <TableHead className="w-28 whitespace-nowrap">{t("pages.propertyDetail.bedTableMoveOut")}</TableHead>
                                     <TableHead className="w-32 text-right whitespace-nowrap">{t("pages.propertyDetail.bedTableCharge")}</TableHead>
                                     <TableHead className="w-32 whitespace-nowrap">{t("pages.propertyDetail.bedTableRoom")}</TableHead>
                                     <TableHead className="w-10" />
@@ -3192,7 +3193,7 @@ export default function PropertyDetail() {
                                 <TableBody>
                                   {roomBeds.length === 0 ? (
                                     <EmptyStateRow
-                                      colSpan={9}
+                                      colSpan={10}
                                       icon={BedDouble}
                                       title={t("pages.propertyDetail.noBedsInRoom")}
                                       description={t("pages.propertyDetail.noBedsInRoomDescription", { room: room.name })}
@@ -3459,45 +3460,22 @@ export default function PropertyDetail() {
                                                 triggerClassName="h-7 text-xs w-28"
                                               />
                                             </TableCell>
-                                            <TableCell className="whitespace-nowrap align-top">
-                                              <div className="flex flex-col gap-0.5 leading-tight">
-                                                <InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} />
-                                                {occ.moveOutDate ? (
-                                                  <div
-                                                    className="text-[10px] text-muted-foreground"
-                                                    data-testid={`cell-occupant-moveout-${occ.id}`}
-                                                    title={t("pages.propertyDetail.bedTableMoveOut")}
-                                                  >
-                                                    <span className="mr-1">→</span>
-                                                    <InlineEdit
-                                                      value={occ.moveOutDate}
-                                                      placeholder="—"
-                                                      onSave={(v) =>
-                                                        updateOccupant(occ.id, {
-                                                          moveOutDate: v.trim() === "" ? null : v,
-                                                        })
-                                                      }
-                                                    />
-                                                  </div>
-                                                ) : (
-                                                  <div
-                                                    className="text-[10px] text-muted-foreground/60 opacity-0 group-hover/occ:opacity-100 transition-opacity"
-                                                    data-testid={`cell-occupant-moveout-${occ.id}`}
-                                                    title={t("pages.propertyDetail.bedTableMoveOut")}
-                                                  >
-                                                    <span className="mr-1">→</span>
-                                                    <InlineEdit
-                                                      value=""
-                                                      placeholder="set move-out"
-                                                      onSave={(v) =>
-                                                        updateOccupant(occ.id, {
-                                                          moveOutDate: v.trim() === "" ? null : v,
-                                                        })
-                                                      }
-                                                    />
-                                                  </div>
-                                                )}
-                                              </div>
+                                            <TableCell className="whitespace-nowrap">
+                                              <InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} />
+                                            </TableCell>
+                                            <TableCell
+                                              className="whitespace-nowrap"
+                                              data-testid={`cell-occupant-moveout-${occ.id}`}
+                                            >
+                                              <InlineEdit
+                                                value={occ.moveOutDate ?? ""}
+                                                placeholder="—"
+                                                onSave={(v) =>
+                                                  updateOccupant(occ.id, {
+                                                    moveOutDate: v.trim() === "" ? null : v,
+                                                  })
+                                                }
+                                              />
                                             </TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex flex-col items-end gap-0.5">
@@ -3569,7 +3547,7 @@ export default function PropertyDetail() {
                                           </>
                                         ) : (
                                           <>
-                                            <TableCell colSpan={5}>
+                                            <TableCell colSpan={6}>
                                               {/* Cleaning workflow gate (task #500). Only beds
                                                   in the "ready" state expose the assign action.
                                                   Beds still being cleaned show a non-actionable

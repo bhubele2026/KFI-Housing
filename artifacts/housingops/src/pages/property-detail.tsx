@@ -3098,7 +3098,7 @@ export default function PropertyDetail() {
                                         <TableCell>
                                           <div className="flex flex-col gap-1">
                                             <Select value={bed.status} onValueChange={handleStatusChange}>
-                                              <SelectTrigger className={`h-7 text-xs w-28 ${isOccupied ? "border-emerald-300 text-emerald-700 bg-emerald-50" : "border-rose-300 text-rose-600 bg-rose-50"}`}>
+                                              <SelectTrigger className={`h-7 text-xs w-28 border-border bg-background ${isOccupied ? "text-foreground" : "text-muted-foreground"}`}>
                                                 <SelectValue />
                                               </SelectTrigger>
                                               <SelectContent>
@@ -3303,22 +3303,41 @@ export default function PropertyDetail() {
                                             <TableCell className="whitespace-nowrap align-top">
                                               <div className="flex flex-col gap-0.5 leading-tight">
                                                 <InlineEdit value={occ.moveInDate} onSave={v => updateOccupant(occ.id, { moveInDate: v })} />
-                                                <div
-                                                  className="text-[10px] text-muted-foreground"
-                                                  data-testid={`cell-occupant-moveout-${occ.id}`}
-                                                  title={t("pages.propertyDetail.bedTableMoveOut")}
-                                                >
-                                                  <span className="mr-1">→</span>
-                                                  <InlineEdit
-                                                    value={occ.moveOutDate ?? ""}
-                                                    placeholder="—"
-                                                    onSave={(v) =>
-                                                      updateOccupant(occ.id, {
-                                                        moveOutDate: v.trim() === "" ? null : v,
-                                                      })
-                                                    }
-                                                  />
-                                                </div>
+                                                {occ.moveOutDate ? (
+                                                  <div
+                                                    className="text-[10px] text-muted-foreground"
+                                                    data-testid={`cell-occupant-moveout-${occ.id}`}
+                                                    title={t("pages.propertyDetail.bedTableMoveOut")}
+                                                  >
+                                                    <span className="mr-1">→</span>
+                                                    <InlineEdit
+                                                      value={occ.moveOutDate}
+                                                      placeholder="—"
+                                                      onSave={(v) =>
+                                                        updateOccupant(occ.id, {
+                                                          moveOutDate: v.trim() === "" ? null : v,
+                                                        })
+                                                      }
+                                                    />
+                                                  </div>
+                                                ) : (
+                                                  <div
+                                                    className="text-[10px] text-muted-foreground/60 opacity-0 group-hover/occ:opacity-100 transition-opacity"
+                                                    data-testid={`cell-occupant-moveout-${occ.id}`}
+                                                    title={t("pages.propertyDetail.bedTableMoveOut")}
+                                                  >
+                                                    <span className="mr-1">→</span>
+                                                    <InlineEdit
+                                                      value=""
+                                                      placeholder="set move-out"
+                                                      onSave={(v) =>
+                                                        updateOccupant(occ.id, {
+                                                          moveOutDate: v.trim() === "" ? null : v,
+                                                        })
+                                                      }
+                                                    />
+                                                  </div>
+                                                )}
                                               </div>
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -3328,13 +3347,12 @@ export default function PropertyDetail() {
                                                 {occ.chargeSource === "payroll" && (
                                                   <Tooltip delayDuration={100}>
                                                     <TooltipTrigger asChild>
-                                                      <Badge
-                                                        variant="secondary"
-                                                        className="h-5 px-1.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800 cursor-help"
+                                                      <span
+                                                        className="text-[10px] text-muted-foreground tabular-nums cursor-help"
                                                         data-testid={`badge-payroll-source-${occ.id}`}
                                                       >
-                                                        from payroll
-                                                      </Badge>
+                                                        payroll
+                                                      </span>
                                                     </TooltipTrigger>
                                                     <TooltipContent side="top" className="text-xs">
                                                       <p className="font-semibold">Auto-reconciled from payroll</p>
@@ -3347,13 +3365,12 @@ export default function PropertyDetail() {
                                                 {occ.chargeSource === "manual_override" && (
                                                   <Tooltip delayDuration={100}>
                                                     <TooltipTrigger asChild>
-                                                      <Badge
-                                                        variant="secondary"
-                                                        className="h-5 px-1.5 text-[10px] font-medium bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800 cursor-help"
+                                                      <span
+                                                        className="text-[10px] text-muted-foreground italic cursor-help"
                                                         data-testid={`badge-manual-override-${occ.id}`}
                                                       >
-                                                        manually overridden
-                                                      </Badge>
+                                                        override
+                                                      </span>
                                                     </TooltipTrigger>
                                                     <TooltipContent side="top" className="text-xs">
                                                       <p className="font-semibold">{t("pages.propertyDetail.manuallyOverridden")}</p>
@@ -3374,9 +3391,10 @@ export default function PropertyDetail() {
                                                   {" · "}
                                                   {formatUsd(toMonthlyCharge(occ.chargePerBed, occ.billingFrequency ?? "Monthly"))}/mo
                                                 </span>
+                                                <span className="text-muted-foreground/60">·</span>
                                                 <Select value={occ.billingFrequency ?? "Monthly"} onValueChange={v => updateOccupant(occ.id, { billingFrequency: v as BillingFrequency })}>
                                                   <SelectTrigger
-                                                    className="h-4 px-1 text-[10px] gap-0.5 border-0 bg-transparent hover:bg-muted/50 w-auto [&>svg]:h-2.5 [&>svg]:w-2.5"
+                                                    className="h-4 px-0 text-[10px] gap-0 border-0 bg-transparent hover:underline shadow-none w-auto text-muted-foreground [&>svg]:hidden focus:ring-0 focus:ring-offset-0"
                                                     data-testid={`select-billing-${occ.id}`}
                                                     title={t("pages.propertyDetail.bedTableBilling")}
                                                   >

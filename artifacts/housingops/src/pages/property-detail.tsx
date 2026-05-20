@@ -343,21 +343,24 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                 <TooltipTrigger asChild>
                   <motion.button
                     type="button"
-                    initial={{ opacity: 0, scale: 0.6 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.03, type: "spring", stiffness: 300, damping: 20 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.015, duration: 0.15 }}
                     onClick={() => onBedClick?.(bed.id)}
                     data-testid={`bedmap-tile-${bed.id}`}
                     aria-label={isOccupied && occ ? t("pages.propertyDetail.bedAriaLabelOccupied", { number: bed.bedNumber, name: occ.name }) : t("pages.propertyDetail.bedAriaLabelVacant", { number: bed.bedNumber })}
-                    className={`flex flex-col items-center justify-center rounded-lg border-2 cursor-pointer select-none transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1
+                    className={`relative flex items-center justify-center rounded-md border cursor-pointer select-none transition-colors hover:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 tabular-nums text-[11px] font-medium
                       ${isOccupied
-                        ? "bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950 dark:border-emerald-600"
-                        : "bg-rose-50 border-rose-300 text-rose-500 dark:bg-rose-950 dark:border-rose-700"
+                        ? "border-border bg-background text-foreground"
+                        : "border-dashed border-border/70 bg-muted/30 text-muted-foreground"
                       }`}
-                    style={{ width: 52, height: 52 }}
+                    style={{ width: 32, height: 32 }}
                   >
-                    <BedDouble className="h-5 w-5" />
-                    <span className="text-[10px] font-bold leading-none mt-0.5">#{bed.bedNumber}</span>
+                    <span
+                      aria-hidden="true"
+                      className={`absolute top-1 right-1 h-1.5 w-1.5 rounded-full ${isOccupied ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
+                    />
+                    {bed.bedNumber}
                   </motion.button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">

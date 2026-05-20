@@ -1619,6 +1619,27 @@
       "invalidDatePickFirst": "Pick a new end date before applying.",
       "invalidDateAfterCurrent": "New end date must be after the current end date."
     },
+    "addBuilding": {
+      "title": "Add building",
+      "descriptionWithLease": "Create a new building and its first lease in one step.",
+      "descriptionBuildingOnly": "Create a building with no lease — use this for hotels or other shared-occupancy buildings.",
+      "descriptionRetryLease": "Building saved. Add the first lease, or close the dialog to add it later.",
+      "buildingNameRequired": "Building name *",
+      "address": "Address",
+      "city": "City",
+      "state": "State",
+      "zip": "Zip",
+      "notes": "Notes",
+      "firstLease": "First lease",
+      "errorBuildingCreate": "Couldn't create the building. Please try again.",
+      "errorLeaseCreate": "Building saved, but we couldn't create the first lease. Adjust the lease and try again, or close to add the lease later.",
+      "cancel": "Cancel",
+      "addWithoutLease": "Add building without a lease",
+      "createBuildingOnly": "Create building only",
+      "includeLeaseInstead": "Include a lease instead",
+      "addBuildingAndLease": "Add building & lease",
+      "retryLease": "Retry lease"
+    },
     "uploadPdf": {
       "triggerButton": "Upload lease PDF",
       "titlePick": "Import leases from PDF",

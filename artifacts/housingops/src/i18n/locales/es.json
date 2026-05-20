@@ -1606,6 +1606,27 @@
       "invalidDatePickFirst": "Elige una nueva fecha de fin antes de aplicar.",
       "invalidDateAfterCurrent": "La nueva fecha de fin debe ser posterior a la actual."
     },
+    "addBuilding": {
+      "title": "Añadir edificio",
+      "descriptionWithLease": "Crea un nuevo edificio y su primer contrato en un solo paso.",
+      "descriptionBuildingOnly": "Crea un edificio sin contrato — úsalo para hoteles u otros edificios de ocupación compartida.",
+      "descriptionRetryLease": "Edificio guardado. Añade el primer contrato o cierra el diálogo para añadirlo más tarde.",
+      "buildingNameRequired": "Nombre del edificio *",
+      "address": "Dirección",
+      "city": "Ciudad",
+      "state": "Estado",
+      "zip": "Código postal",
+      "notes": "Notas",
+      "firstLease": "Primer contrato",
+      "errorBuildingCreate": "No se pudo crear el edificio. Inténtalo de nuevo.",
+      "errorLeaseCreate": "Edificio guardado, pero no se pudo crear el primer contrato. Ajusta el contrato e inténtalo de nuevo, o cierra para añadirlo más tarde.",
+      "cancel": "Cancelar",
+      "addWithoutLease": "Añadir edificio sin contrato",
+      "createBuildingOnly": "Crear solo el edificio",
+      "includeLeaseInstead": "Incluir un contrato en su lugar",
+      "addBuildingAndLease": "Añadir edificio y contrato",
+      "retryLease": "Reintentar contrato"
+    },
     "uploadPdf": {
       "triggerButton": "Subir PDF de contrato",
       "titlePick": "Importar contratos desde PDF",

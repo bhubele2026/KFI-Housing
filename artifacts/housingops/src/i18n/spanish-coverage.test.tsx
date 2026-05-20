@@ -946,6 +946,44 @@ describe("Spanish-language end-to-end coverage", () => {
     expect(i18n.t("pages.properties.notRated")).toBe("Sin calificar");
   });
 
+  it("Add-building dialog bundle has Spanish copy for title, fields, buttons and errors", () => {
+    expect(i18n.t("dialogs.addBuilding.title")).toBe("Añadir edificio");
+    expect(i18n.t("dialogs.addBuilding.descriptionWithLease")).toContain(
+      "primer contrato",
+    );
+    expect(i18n.t("dialogs.addBuilding.descriptionBuildingOnly")).toContain(
+      "ocupación compartida",
+    );
+    expect(i18n.t("dialogs.addBuilding.descriptionRetryLease")).toContain(
+      "Edificio guardado",
+    );
+    expect(i18n.t("dialogs.addBuilding.buildingNameRequired")).toBe(
+      "Nombre del edificio *",
+    );
+    expect(i18n.t("dialogs.addBuilding.firstLease")).toBe("Primer contrato");
+    expect(i18n.t("dialogs.addBuilding.addWithoutLease")).toBe(
+      "Añadir edificio sin contrato",
+    );
+    expect(i18n.t("dialogs.addBuilding.createBuildingOnly")).toBe(
+      "Crear solo el edificio",
+    );
+    expect(i18n.t("dialogs.addBuilding.includeLeaseInstead")).toBe(
+      "Incluir un contrato en su lugar",
+    );
+    expect(i18n.t("dialogs.addBuilding.addBuildingAndLease")).toBe(
+      "Añadir edificio y contrato",
+    );
+    expect(i18n.t("dialogs.addBuilding.retryLease")).toBe(
+      "Reintentar contrato",
+    );
+    expect(i18n.t("dialogs.addBuilding.errorBuildingCreate")).toContain(
+      "No se pudo crear el edificio",
+    );
+    expect(i18n.t("dialogs.addBuilding.errorLeaseCreate")).toContain(
+      "Edificio guardado",
+    );
+  });
+
   it("Property Detail bundle has Spanish copy for hidden-records, other-costs and manual-override", () => {
     expect(i18n.t("pages.propertyDetail.droppedNotice")).toContain(
       "ocultados",

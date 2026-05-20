@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,7 @@ export function AddBuildingDialog({
   addBuilding,
   addLease,
 }: AddBuildingDialogProps) {
+  const { t } = useTranslation();
   const [building, setBuilding] = useState<BuildingDraft>(() => ({
     ...EMPTY_BUILDING,
     name: defaultBuildingName,
@@ -134,7 +136,7 @@ export function AddBuildingDialog({
     } catch {
       // addBuilding already surfaced a toast; show inline error too so
       // the dialog explains why submit didn't close.
-      setError("Couldn't create the building. Please try again.");
+      setError(t("dialogs.addBuilding.errorBuildingCreate"));
       setSubmitting(false);
       return;
     }
@@ -148,9 +150,7 @@ export function AddBuildingDialog({
       );
       onOpenChange(false);
     } catch {
-      setError(
-        "Building saved, but we couldn't create the first lease. Adjust the lease and try again, or close to add the lease later.",
-      );
+      setError(t("dialogs.addBuilding.errorLeaseCreate"));
       setSubmitting(false);
     }
   };
@@ -172,7 +172,7 @@ export function AddBuildingDialog({
       });
       onOpenChange(false);
     } catch {
-      setError("Couldn't create the building. Please try again.");
+      setError(t("dialogs.addBuilding.errorBuildingCreate"));
       setSubmitting(false);
     }
   };
@@ -180,24 +180,26 @@ export function AddBuildingDialog({
   const buildingLocked = createdBuildingId !== null;
   const description = useMemo(() => {
     if (buildingLocked) {
-      return "Building saved. Add the first lease, or close the dialog to add it later.";
+      return t("dialogs.addBuilding.descriptionRetryLease");
     }
     return mode === "buildingOnly"
-      ? "Create a building with no lease — use this for hotels or other shared-occupancy buildings."
-      : "Create a new building and its first lease in one step.";
-  }, [buildingLocked, mode]);
+      ? t("dialogs.addBuilding.descriptionBuildingOnly")
+      : t("dialogs.addBuilding.descriptionWithLease");
+  }, [buildingLocked, mode, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add building</DialogTitle>
+          <DialogTitle>{t("dialogs.addBuilding.title")}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div className="space-y-3">
             <div>
-              <Label htmlFor="add-building-name">Building name *</Label>
+              <Label htmlFor="add-building-name">
+                {t("dialogs.addBuilding.buildingNameRequired")}
+              </Label>
               <Input
                 id="add-building-name"
                 value={building.name}
@@ -209,7 +211,9 @@ export function AddBuildingDialog({
               />
             </div>
             <div>
-              <Label htmlFor="add-building-address">Address</Label>
+              <Label htmlFor="add-building-address">
+                {t("dialogs.addBuilding.address")}
+              </Label>
               <Input
                 id="add-building-address"
                 value={building.address}
@@ -222,7 +226,9 @@ export function AddBuildingDialog({
             </div>
             <div className="grid grid-cols-[1fr_120px_120px] gap-3">
               <div>
-                <Label htmlFor="add-building-city">City</Label>
+                <Label htmlFor="add-building-city">
+                  {t("dialogs.addBuilding.city")}
+                </Label>
                 <Input
                   id="add-building-city"
                   value={building.city}
@@ -234,7 +240,9 @@ export function AddBuildingDialog({
                 />
               </div>
               <div>
-                <Label htmlFor="add-building-state">State</Label>
+                <Label htmlFor="add-building-state">
+                  {t("dialogs.addBuilding.state")}
+                </Label>
                 <Input
                   id="add-building-state"
                   value={building.state}
@@ -246,7 +254,9 @@ export function AddBuildingDialog({
                 />
               </div>
               <div>
-                <Label htmlFor="add-building-zip">Zip</Label>
+                <Label htmlFor="add-building-zip">
+                  {t("dialogs.addBuilding.zip")}
+                </Label>
                 <Input
                   id="add-building-zip"
                   value={building.zip}
@@ -259,7 +269,9 @@ export function AddBuildingDialog({
               </div>
             </div>
             <div>
-              <Label htmlFor="add-building-notes">Notes</Label>
+              <Label htmlFor="add-building-notes">
+                {t("dialogs.addBuilding.notes")}
+              </Label>
               <Textarea
                 id="add-building-notes"
                 value={building.notes}
@@ -277,7 +289,9 @@ export function AddBuildingDialog({
               className="space-y-3 border-t pt-4"
               data-testid="add-building-lease-section"
             >
-              <div className="text-sm font-medium">First lease</div>
+              <div className="text-sm font-medium">
+                {t("dialogs.addBuilding.firstLease")}
+              </div>
               <LeaseFormFields
                 form={lease}
                 setForm={setLease}
@@ -304,7 +318,7 @@ export function AddBuildingDialog({
               onClick={() => onOpenChange(false)}
               data-testid="button-cancel-add-building"
             >
-              Cancel
+              {t("dialogs.addBuilding.cancel")}
             </Button>
             {!buildingLocked && (
               <Button
@@ -325,8 +339,8 @@ export function AddBuildingDialog({
                 data-testid="button-add-building-without-lease"
               >
                 {mode === "withLease"
-                  ? "Add building without a lease"
-                  : "Create building only"}
+                  ? t("dialogs.addBuilding.addWithoutLease")
+                  : t("dialogs.addBuilding.createBuildingOnly")}
               </Button>
             )}
             {mode === "buildingOnly" && !buildingLocked && (
@@ -339,7 +353,7 @@ export function AddBuildingDialog({
                 }}
                 data-testid="button-add-building-include-lease"
               >
-                Include a lease instead
+                {t("dialogs.addBuilding.includeLeaseInstead")}
               </Button>
             )}
           </div>
@@ -350,7 +364,9 @@ export function AddBuildingDialog({
               disabled={!canSubmit}
               data-testid="button-save-building-and-lease"
             >
-              {buildingLocked ? "Retry lease" : "Add building & lease"}
+              {buildingLocked
+                ? t("dialogs.addBuilding.retryLease")
+                : t("dialogs.addBuilding.addBuildingAndLease")}
             </Button>
           )}
         </DialogFooter>

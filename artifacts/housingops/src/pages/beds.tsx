@@ -15,14 +15,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonRows } from "@/components/skeleton-rows";
-import { Briefcase, Download, X, BedDouble } from "lucide-react";
+import { Briefcase, Download, X, BedDouble, Trash2 } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { useToast } from "@/hooks/use-toast";
 import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 
 export default function Beds() {
   const { t } = useTranslation();
-  const { beds, properties, rooms, occupants, customers, isLoading } = useData();
+  const { beds, properties, rooms, occupants, customers, isLoading, deleteBed } = useData();
   const { toast } = useToast();
   const { customerId: customerFilter, setCustomerId: updateCustomerFilter } =
     useCustomerScope();
@@ -56,8 +57,8 @@ export default function Beds() {
   // Hide the Customer column when a customer filter is active, since every
   // row already belongs to that customer.
   const showCustomerColumn = customerFilter === ALL_CUSTOMERS;
-  // +1 column for Room (always shown).
-  const columnCount = showCustomerColumn ? 6 : 5;
+  // Columns: Property, [Customer], Room, Bed #, Occupant, Status, Actions
+  const columnCount = showCustomerColumn ? 7 : 6;
 
   const propertiesForFilter = useMemo(() => {
     if (!scopedPropertyIds) return properties;
@@ -232,6 +233,9 @@ export default function Beds() {
                   <TableHead>{t("pages.beds.table.bedNumber")}</TableHead>
                   <TableHead>{t("pages.beds.table.occupant")}</TableHead>
                   <TableHead className="text-center">{t("pages.beds.table.status")}</TableHead>
+                  <TableHead className="text-right w-16">
+                    <span className="sr-only">{t("pages.beds.table.actions")}</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -300,6 +304,34 @@ export default function Beds() {
                           <Badge variant={bed.status === "Occupied" ? "default" : "outline"} className={bed.status === "Vacant" ? "text-emerald-600 border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30" : ""}>
                             {bed.status === "Occupied" ? t("pages.beds.statusOccupied") : t("pages.beds.statusVacant")}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <ConfirmDeleteButton
+                            title={t("pages.beds.deleteBedTitle", { number: bed.bedNumber })}
+                            description={t("pages.beds.deleteBedDescription", {
+                              property: property?.name ?? "",
+                            })}
+                            confirmLabel={t("pages.beds.deleteBedConfirm")}
+                            onConfirm={() => deleteBed(bed.id)}
+                            testId={`dialog-confirm-delete-bed-${bed.id}`}
+                            trigger={
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                disabled={bed.status === "Occupied"}
+                                title={
+                                  bed.status === "Occupied"
+                                    ? t("pages.beds.deleteBedOccupiedTitle")
+                                    : t("pages.beds.deleteBedAria", { number: bed.bedNumber })
+                                }
+                                aria-label={t("pages.beds.deleteBedAria", { number: bed.bedNumber })}
+                                data-testid={`button-delete-bed-${bed.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            }
+                          />
                         </TableCell>
                       </TableRow>
                     );

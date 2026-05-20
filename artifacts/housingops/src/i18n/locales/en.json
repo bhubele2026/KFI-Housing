@@ -1060,10 +1060,16 @@
         "room": "Room",
         "bedNumber": "Bed #",
         "occupant": "Occupant",
-        "status": "Status"
+        "status": "Status",
+        "actions": "Actions"
       },
       "bedNumberPrefix": "Bed {{number}}",
       "filterByCustomerAria": "Filter by customer {{customer}}",
+      "deleteBedAria": "Remove bed {{number}}",
+      "deleteBedOccupiedTitle": "Mark vacant before removing",
+      "deleteBedTitle": "Remove bed {{number}}?",
+      "deleteBedDescription": "This permanently removes the bed from {{property}}. Any history tied to this bed will be lost and you can't undo this.",
+      "deleteBedConfirm": "Remove bed",
       "empty": {
         "noBedsFound": "No beds found",
         "noBedsDescription": "Add a property and its rooms to start tracking beds.",

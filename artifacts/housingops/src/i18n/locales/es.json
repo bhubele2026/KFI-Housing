@@ -1049,10 +1049,16 @@
         "room": "Habitación",
         "bedNumber": "Cama N°",
         "occupant": "Ocupante",
-        "status": "Estado"
+        "status": "Estado",
+        "actions": "Acciones"
       },
       "bedNumberPrefix": "Cama {{number}}",
       "filterByCustomerAria": "Filtrar por cliente {{customer}}",
+      "deleteBedAria": "Eliminar cama {{number}}",
+      "deleteBedOccupiedTitle": "Marca como vacante antes de eliminar",
+      "deleteBedTitle": "¿Eliminar la cama {{number}}?",
+      "deleteBedDescription": "Esto eliminará permanentemente la cama de {{property}}. Se perderá cualquier historial asociado a esta cama y no podrás deshacer este cambio.",
+      "deleteBedConfirm": "Eliminar cama",
       "empty": {
         "noBedsFound": "No se encontraron camas",
         "noBedsDescription": "Agrega una propiedad y sus habitaciones para empezar a registrar camas.",

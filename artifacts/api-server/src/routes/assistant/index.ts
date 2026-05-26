@@ -540,6 +540,52 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
     sseSend(res, "proposal_resolved", { id: proposalId, status: "rejected" });
   } else {
     const finalInput = { ...wrappedInput, ...(edits ?? {}) };
+    // Re-run the customer-scope guard on the FINAL input (after any
+    // operator edits), not just the originally-proposed input. Without
+    // this an operator with a scope active could approve a write whose
+    // edits silently retarget another customer's records.
+    const ctx = parseAssistantContext(req);
+    if (ctx.customerScopeId) {
+      const implied = await impliedCustomerIdForWrite(proposal.toolName, finalInput);
+      if (implied === null || implied !== ctx.customerScopeId) {
+        const errMsg =
+          implied === null
+            ? `Refused on confirm: could not prove which customer this change belongs to under the active scope ${ctx.customerScopeId}.`
+            : `Refused on confirm: edited input targets customer ${implied} but the active scope is ${ctx.customerScopeId}.`;
+        await db
+          .update(assistantProposalsTable)
+          .set({ status: "rejected", resolvedAt: new Date(), result: { error: errMsg } as any })
+          .where(eq(assistantProposalsTable.id, proposalId));
+        sseSend(res, "proposal_resolved", {
+          id: proposalId,
+          status: "rejected",
+          error: errMsg,
+        });
+        toolResultBlock = {
+          type: "tool_result",
+          tool_use_id: proposal.toolUseId,
+          content: errMsg,
+          is_error: true,
+        };
+        // Skip execution; fall through to the deferred-results / runLoop
+        // path so the model sees the refusal and can explain it. Reuse
+        // the priorResults + deferredIds already unwrapped from
+        // `wrapped` above.
+        const refusalDeferredBlocks = deferredIds.map((id) => ({
+          type: "tool_result" as const,
+          tool_use_id: id,
+          content:
+            "Deferred — the previous proposal has now been resolved. Re-issue this tool call if it's still needed.",
+          is_error: true,
+        }));
+        await persistMessage(proposal.conversationId, "user", "", {
+          blocks: [...priorResults, toolResultBlock, ...refusalDeferredBlocks],
+        });
+        await runLoop(proposal.conversationId, res, ctx);
+        res.end();
+        return;
+      }
+    }
     try {
       const result = await def.execute(finalInput);
       await db

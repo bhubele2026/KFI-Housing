@@ -668,7 +668,7 @@ tools.push({
 tools.push({
   name: "assign_occupant_to_bed",
   kind: "write",
-  description: "Place an occupant in a bed. The bed must be vacant. If the occupant is already in another bed, that bed is vacated (set to needs_cleaning) first.",
+  description: "Place an occupant in a bed. The bed must be vacant AND cleaningStatus must be 'ready'. If the occupant is already in another bed, that bed is vacated (set to needs_cleaning) first.",
   input_schema: obj({ occupantId: Str, bedId: Str }, ["occupantId", "bedId"]),
   summarize: (i) => `Assign occupant ${i.occupantId} to bed ${i.bedId}`,
   execute: async (input) => {
@@ -677,6 +677,13 @@ tools.push({
       if (!bed) throw new Error(`Bed ${input.bedId} not found`);
       if (bed.occupantId && bed.occupantId !== input.occupantId) {
         throw new Error(`Bed ${input.bedId} already occupied by ${bed.occupantId}`);
+      }
+      // Mirror the cleaning-workflow guard from PATCH /api/beds/:id:
+      // refuse to place an occupant on a bed that's not yet "ready".
+      if (bed.cleaningStatus !== "ready" && bed.occupantId !== input.occupantId) {
+        throw new Error(
+          `Bed ${input.bedId} is not ready for a new occupant (cleaningStatus=${bed.cleaningStatus}). Finish the cleaning workflow first.`,
+        );
       }
       const [occ] = await tx.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
       if (!occ) throw new Error(`Occupant ${input.occupantId} not found`);
@@ -704,7 +711,7 @@ tools.push({
 tools.push({
   name: "move_occupant_to_bed",
   kind: "write",
-  description: "Move an already-placed occupant from their current bed to a new bed (target must be vacant). Source bed becomes vacant + needs_cleaning.",
+  description: "Move an already-placed occupant from their current bed to a new bed (target must be vacant AND cleaningStatus must be 'ready'). Source bed becomes vacant + needs_cleaning.",
   input_schema: obj({ occupantId: Str, newBedId: Str }, ["occupantId", "newBedId"]),
   summarize: (i) => `Move occupant ${i.occupantId} to bed ${i.newBedId}`,
   execute: async (input) => {
@@ -715,6 +722,11 @@ tools.push({
       if (!newBed) throw new Error(`Bed ${input.newBedId} not found`);
       if (newBed.occupantId && newBed.occupantId !== input.occupantId) {
         throw new Error(`Target bed ${input.newBedId} already occupied`);
+      }
+      if (newBed.cleaningStatus !== "ready" && newBed.occupantId !== input.occupantId) {
+        throw new Error(
+          `Target bed ${input.newBedId} is not ready (cleaningStatus=${newBed.cleaningStatus}). Finish the cleaning workflow first.`,
+        );
       }
       if (occ.bedId && occ.bedId !== input.newBedId) {
         await tx
@@ -1039,7 +1051,290 @@ tools.push({
   },
 });
 
+// ─────────────── Additional GET tools (per task spec) ────────────────
+
+tools.push({
+  name: "get_occupant",
+  kind: "read",
+  description: "Get one occupant by id, including the current bed (if any) and active leases for the same property.",
+  input_schema: obj({ id: Str }, ["id"]),
+  summarize: (i) => `Getting occupant ${i.id}`,
+  execute: async (input) => {
+    const [occ] = await db.select().from(occupantsTable).where(eq(occupantsTable.id, input.id));
+    if (!occ) throw new Error(`Occupant ${input.id} not found`);
+    const bed = occ.bedId
+      ? (await db.select().from(bedsTable).where(eq(bedsTable.id, occ.bedId)))[0] ?? null
+      : null;
+    const leases = occ.propertyId
+      ? await db.select().from(leasesTable).where(eq(leasesTable.propertyId, occ.propertyId))
+      : [];
+    return { occupant: occ, bed, leases };
+  },
+});
+
+tools.push({
+  name: "get_lease",
+  kind: "read",
+  description: "Get one lease by id.",
+  input_schema: obj({ id: Str }, ["id"]),
+  summarize: (i) => `Getting lease ${i.id}`,
+  execute: async (input) => {
+    const [row] = await db.select().from(leasesTable).where(eq(leasesTable.id, input.id));
+    if (!row) throw new Error(`Lease ${input.id} not found`);
+    return row;
+  },
+});
+
+tools.push({
+  name: "get_bed",
+  kind: "read",
+  description: "Get one bed by id.",
+  input_schema: obj({ id: Str }, ["id"]),
+  summarize: (i) => `Getting bed ${i.id}`,
+  execute: async (input) => {
+    const [row] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.id));
+    if (!row) throw new Error(`Bed ${input.id} not found`);
+    return row;
+  },
+});
+
+// ─────────────── Composite write tools (per task spec) ───────────────
+
+tools.push({
+  name: "create_property_with_layout",
+  kind: "write",
+  description:
+    "Create a property AND its buildings, rooms, and beds in a single transaction. Use this for the 'create a property with 2 buildings, 8 rooms each, double-occupancy at $750/week' style of request — one Confirm card runs everything atomically.",
+  input_schema: obj(
+    {
+      property: obj(
+        {
+          name: Str,
+          address: StrOpt,
+          city: StrOpt,
+          state: StrOpt,
+          zip: StrOpt,
+          customerId: StrOpt,
+          status: StrOpt,
+        },
+        ["name"],
+      ),
+      buildings: {
+        type: "array",
+        items: obj(
+          {
+            name: Str,
+            address: StrOpt,
+            rooms: {
+              type: "array",
+              items: obj(
+                {
+                  name: Str,
+                  monthlyRent: NumOpt,
+                  beds: {
+                    type: "array",
+                    items: obj(
+                      {
+                        bedNumber: Num,
+                      },
+                      ["bedNumber"],
+                    ),
+                  },
+                },
+                ["name"],
+              ),
+            },
+          },
+          ["name"],
+        ),
+      },
+    },
+    ["property", "buildings"],
+  ),
+  summarize: (i) => {
+    const buildings = (i.buildings ?? []) as any[];
+    const rooms = buildings.reduce((n, b) => n + ((b.rooms ?? []).length as number), 0);
+    const beds = buildings.reduce(
+      (n, b) =>
+        n +
+        ((b.rooms ?? []) as any[]).reduce(
+          (rn: number, r: any) => rn + ((r.beds ?? []).length as number),
+          0,
+        ),
+      0,
+    );
+    return `Create property "${i.property?.name}" with ${buildings.length} building(s), ${rooms} room(s), ${beds} bed(s)`;
+  },
+  execute: async (input) => {
+    return db.transaction(async (tx) => {
+      const pid = newId("p");
+      const p = input.property ?? {};
+      await tx.insert(propertiesTable).values({
+        id: pid,
+        name: p.name,
+        address: p.address ?? "",
+        city: p.city ?? "",
+        state: p.state ?? "",
+        zip: p.zip ?? "",
+        customerId: p.customerId ?? "",
+        status: p.status ?? "Active",
+      });
+      const createdBuildings: any[] = [];
+      const createdRooms: any[] = [];
+      const createdBeds: any[] = [];
+      for (const b of (input.buildings ?? []) as any[]) {
+        const bid = newId("bld");
+        await tx.insert(buildingsTable).values({
+          id: bid,
+          propertyId: pid,
+          name: b.name,
+          address: b.address ?? "",
+        });
+        createdBuildings.push({ id: bid, name: b.name });
+        for (const r of (b.rooms ?? []) as any[]) {
+          const rid = newId("r");
+          await tx.insert(roomsTable).values({
+            id: rid,
+            buildingId: bid,
+            propertyId: pid,
+            name: r.name,
+            monthlyRent: r.monthlyRent ?? 0,
+          });
+          createdRooms.push({ id: rid, name: r.name, buildingId: bid });
+          for (const bedDef of (r.beds ?? []) as any[]) {
+            const bedId = newId("bed");
+            await tx.insert(bedsTable).values({
+              id: bedId,
+              roomId: rid,
+              propertyId: pid,
+              bedNumber: bedDef.bedNumber,
+              status: "Vacant",
+              cleaningStatus: "ready",
+            });
+            createdBeds.push({ id: bedId, bedNumber: bedDef.bedNumber, roomId: rid });
+          }
+        }
+      }
+      return {
+        property: { id: pid, ...p },
+        buildings: createdBuildings,
+        rooms: createdRooms,
+        beds: createdBeds,
+      };
+    });
+  },
+});
+
+tools.push({
+  name: "bulk_create_occupants",
+  kind: "write",
+  description:
+    "Create multiple occupants in one transaction. Optionally place each new occupant on a bed by passing parallel `assignToBedIds` (same length as `occupants`). Use this for the 'add 8 occupants to Atlas crew' flow.",
+  input_schema: obj(
+    {
+      occupants: {
+        type: "array",
+        items: obj(
+          {
+            name: Str,
+            propertyId: StrOpt,
+            chargePerBed: NumOpt,
+            company: StrOpt,
+            chargeSourceCustomer: StrOpt,
+          },
+          ["name"],
+        ),
+      },
+      assignToBedIds: { type: ["array", "null"], items: StrOpt },
+    },
+    ["occupants"],
+  ),
+  summarize: (i) => `Create ${(i.occupants ?? []).length} occupants`,
+  execute: async (input) => {
+    const list = (input.occupants ?? []) as any[];
+    const bedIds = (input.assignToBedIds ?? []) as Array<string | null>;
+    return db.transaction(async (tx) => {
+      const created: any[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const o = list[i];
+        const oid = newId("o");
+        const targetBedId = bedIds[i] ?? null;
+        let propertyId: string | null = o.propertyId ?? null;
+        if (targetBedId) {
+          const [bed] = await tx.select().from(bedsTable).where(eq(bedsTable.id, targetBedId));
+          if (!bed) throw new Error(`Bed ${targetBedId} not found`);
+          if (bed.occupantId) throw new Error(`Bed ${targetBedId} already occupied`);
+          if (bed.cleaningStatus !== "ready") {
+            throw new Error(
+              `Bed ${targetBedId} is not ready (cleaningStatus=${bed.cleaningStatus}).`,
+            );
+          }
+          propertyId = bed.propertyId;
+        }
+        await tx.insert(occupantsTable).values({
+          id: oid,
+          name: o.name,
+          propertyId,
+          bedId: targetBedId,
+          chargePerBed: o.chargePerBed ?? 0,
+          company: o.company ?? "",
+          chargeSourceCustomer: o.chargeSourceCustomer ?? "",
+          status: targetBedId ? "Active" : "Pending",
+        });
+        if (targetBedId) {
+          await tx
+            .update(bedsTable)
+            .set({ occupantId: oid, status: "Occupied", cleaningStatus: "occupied" })
+            .where(eq(bedsTable.id, targetBedId));
+        }
+        created.push({ id: oid, name: o.name, bedId: targetBedId });
+      }
+      return { occupants: created };
+    });
+  },
+});
+
 export const TOOLS: ReadonlyArray<ToolDef> = tools;
+
+// Returns the customerId implied by a write tool's input, if any — used
+// by the assistant runtime to enforce the active customer scope so the
+// assistant can't accidentally bridge across customers.
+export async function impliedCustomerIdForWrite(
+  toolName: string,
+  input: any,
+): Promise<string | null> {
+  if (input && typeof input.customerId === "string" && input.customerId) {
+    return input.customerId as string;
+  }
+  if (toolName === "create_property_with_layout") {
+    return (input?.property?.customerId as string) || null;
+  }
+  // Resolve via parent for tools that reference a propertyId / bedId / etc.
+  try {
+    if (typeof input?.propertyId === "string") {
+      const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, input.propertyId));
+      return p?.customerId ?? null;
+    }
+    if (typeof input?.bedId === "string") {
+      const [b] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.bedId));
+      if (b?.propertyId) {
+        const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, b.propertyId));
+        return p?.customerId ?? null;
+      }
+    }
+    if (typeof input?.occupantId === "string") {
+      const [o] = await db.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
+      if (o?.propertyId) {
+        const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, o.propertyId));
+        return p?.customerId ?? null;
+      }
+      return null;
+    }
+  } catch {
+    /* ignore — guard is best-effort, not authoritative */
+  }
+  return null;
+}
 
 export const TOOL_BY_NAME: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));
 

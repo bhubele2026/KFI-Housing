@@ -1,5 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCustomerScope } from "@/context/customer-scope";
 
 export interface AssistantMessage {
   id: string;
@@ -30,26 +32,108 @@ function apiBase(): string {
   return `${b}api/assistant`;
 }
 
+const STORAGE_KEY = "housingops:assistant:conversationId";
+
 let msgCounter = 0;
 function localId(prefix: string): string {
   msgCounter += 1;
   return `${prefix}-${Date.now()}-${msgCounter}`;
 }
 
+function loadStoredConversationId(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeConversationId(id: string | null): void {
+  try {
+    if (id) window.localStorage.setItem(STORAGE_KEY, id);
+    else window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useAssistant() {
   const [state, setState] = useState<InternalState>({
     messages: [],
-    conversationId: null,
+    conversationId: loadStoredConversationId(),
     proposals: [],
     busy: false,
     error: null,
   });
   const queryClient = useQueryClient();
   const abortRef = useRef<AbortController | null>(null);
+  const location = useLocation();
+  const { customerId } = useCustomerScope();
+
+  // Build the X-Assistant-Context header injected on every request so the
+  // server-side system prompt knows what page the operator is looking at
+  // and which customer scope is active.
+  const contextHeader = useCallback((): string => {
+    return JSON.stringify({
+      customerId: customerId ?? "ALL",
+      page: location.pathname,
+    });
+  }, [customerId, location.pathname]);
+
+  // Bootstrap: if we have a persisted conversationId, hydrate messages +
+  // pending proposals from the server so the panel survives refresh.
+  useEffect(() => {
+    const cid = state.conversationId;
+    if (!cid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${apiBase()}/conversations/${cid}`, {
+          credentials: "include",
+        });
+        if (!r.ok) {
+          // 404 → stale id; clear it so a fresh thread starts on next send.
+          if (r.status === 404) {
+            storeConversationId(null);
+            setState((s) => ({ ...s, conversationId: null }));
+          }
+          return;
+        }
+        const data = await r.json();
+        if (cancelled) return;
+        const msgs: AssistantMessage[] = ((data.messages ?? []) as any[])
+          .filter((m) => typeof m.content === "string" && m.content.length > 0)
+          .map((m) => ({
+            id: m.id,
+            role: m.role === "user" ? "user" : "assistant",
+            text: m.content,
+          }));
+        const proposals: PendingProposal[] = ((data.proposals ?? []) as any[])
+          .filter((p) => p.status === "pending")
+          .map((p) => ({
+            id: p.id,
+            tool: p.toolName ?? p.tool,
+            summary: p.summary,
+            input: p.input ?? {},
+            status: p.status,
+            error: p.error,
+          }));
+        setState((s) => ({ ...s, messages: msgs, proposals }));
+      } catch {
+        /* offline / network — leave persisted id, will retry next mount */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Intentional: bootstrap once per persisted conversation id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    storeConversationId(null);
     setState({ messages: [], conversationId: null, proposals: [], busy: false, error: null });
   }, []);
 
@@ -71,7 +155,11 @@ export function useAssistant() {
       try {
         res = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+            "X-Assistant-Context": contextHeader(),
+          },
           body: JSON.stringify(body),
           credentials: "include",
           signal: controller.signal,
@@ -107,6 +195,7 @@ export function useAssistant() {
 
       const handle = (event: string, payload: any) => {
         if (event === "conversation") {
+          storeConversationId(payload.id);
           setState((s) => ({ ...s, conversationId: payload.id }));
         } else if (event === "text") {
           setState((s) => ({
@@ -141,6 +230,8 @@ export function useAssistant() {
           }));
         } else if (event === "tool_result") {
           // read tool — no-op for UI
+        } else if (event === "tool_error") {
+          setState((s) => ({ ...s, error: payload.message }));
         } else if (event === "error") {
           setState((s) => ({ ...s, error: payload.message }));
         } else if (event === "done") {
@@ -187,7 +278,7 @@ export function useAssistant() {
       }));
       if (needRefetch) invalidateData();
     },
-    [invalidateData],
+    [contextHeader, invalidateData],
   );
 
   const send = useCallback(

@@ -9,23 +9,73 @@ import {
   type AssistantMessageRow,
 } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
-import { anthropicToolDefs, TOOL_BY_NAME } from "./tools";
+import { customersTable } from "@workspace/db";
+import { anthropicToolDefs, TOOL_BY_NAME, impliedCustomerIdForWrite } from "./tools";
 
 const router: IRouter = Router();
 
 const MODEL = "claude-sonnet-4-5";
 const MAX_TURNS = 8;
 
-const SYSTEM_PROMPT = `You are the HousingOps assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
+const SYSTEM_PROMPT_BASE = `You are the HousingOps assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
 
-You have read-only and write tools. READ tools (list_*, get_*, find_*) execute immediately. WRITE tools (create_*, update_*, delete_*, assign_*, move_*, unassign_*) are PROPOSALS — the user must confirm each one before it executes.
+You have read-only and write tools. READ tools (list_*, get_*, find_*) execute immediately. WRITE tools (create_*, update_*, delete_*, assign_*, move_*, unassign_*, bulk_*) are PROPOSALS — the user must confirm each one before it executes.
 
 Guidelines:
 - When the user names something by label ("Penda", "Schuette", "Sarah Jones"), first call find_property_by_name or find_occupant_by_name to resolve the id. Never invent ids.
 - Prefer one tool call at a time so the user can follow along.
 - Before any destructive action (delete_*, unassign_*), confirm in plain English what will happen and which records are affected.
 - After a write tool runs (the system will tell you the result), summarize what changed in 1–2 short sentences.
-- Keep replies short and operational. No fluff.`;
+- For multi-step setup ("create a property with 2 buildings, 8 rooms each, $750/week beds"), prefer the composite tool create_property_with_layout — one Confirm card runs everything atomically.
+- For batch occupant creation, prefer bulk_create_occupants.
+- If a required field is missing, ASK the user instead of guessing.
+- Keep replies short and operational. No fluff.
+
+Naming conventions:
+- Bed labels typically combine building code + room number + bed letter (e.g. "MG-04B" = building MG, room 04, bed B).
+- Lease status: active / expired / pending.
+- Bed status: Occupied / Vacant. cleaningStatus: ready / needs_cleaning / in_progress / occupied.`;
+
+interface AssistantCtx {
+  customerScopeId: string | null;
+  pageContext: string | null;
+}
+
+function parseAssistantContext(req: Request): AssistantCtx {
+  const raw = req.headers["x-assistant-context"];
+  if (typeof raw !== "string" || !raw) return { customerScopeId: null, pageContext: null };
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      customerScopeId:
+        typeof parsed?.customerId === "string" && parsed.customerId !== "ALL"
+          ? parsed.customerId
+          : null,
+      pageContext: typeof parsed?.page === "string" ? parsed.page : null,
+    };
+  } catch {
+    return { customerScopeId: null, pageContext: null };
+  }
+}
+
+async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
+  const customers = await db
+    .select({ id: customersTable.id, name: customersTable.name })
+    .from(customersTable);
+  const customerList = customers
+    .map((c) => `- ${c.id}: ${c.name}`)
+    .join("\n");
+  const scopeNote = ctx.customerScopeId
+    ? `\n\nACTIVE CUSTOMER SCOPE: ${ctx.customerScopeId}. The operator is currently viewing only this customer's data. When they say "this customer" or "our properties", assume they mean ${ctx.customerScopeId}. WRITE TOOLS that touch a different customer's data will be REJECTED — you must ask the operator to switch scope first.`
+    : "\n\nNo customer scope is active — the operator is viewing all customers.";
+  const pageNote = ctx.pageContext
+    ? `\n\nCURRENT PAGE: ${ctx.pageContext}. When the operator says "this property" / "this lease" / etc., assume they're referring to whatever is in focus on that page.`
+    : "";
+  return `${SYSTEM_PROMPT_BASE}
+
+Customers in this workspace:
+${customerList || "(no customers yet)"}${scopeNote}${pageNote}`;
+}
 
 function newId(prefix: string): string {
   return `${prefix}-${randomUUID().slice(0, 8)}`;
@@ -172,7 +222,9 @@ async function persistMessage(
 async function runLoop(
   conversationId: string,
   res: Response,
+  ctx: AssistantCtx,
 ): Promise<void> {
+  const systemPrompt = await buildSystemPrompt(ctx);
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const rows = await loadMessages(conversationId);
     const messages = buildAnthropicMessages(rows);
@@ -189,7 +241,7 @@ async function runLoop(
       const stream = anthropic.messages.stream({
         model: MODEL,
         max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         tools: anthropicToolDefs() as any,
         messages: messages as any,
       });
@@ -282,6 +334,24 @@ async function runLoop(
           sseSend(res, "tool_result", { tool: tu.name, ok: false, error: err?.message });
         }
       } else {
+        // Customer-scope guard — refuse to even propose a write that crosses
+        // the active customer scope. The result becomes a tool_error the
+        // model can react to (it will explain to the operator and ask to
+        // switch scope, per the system prompt).
+        if (ctx.customerScopeId) {
+          const implied = await impliedCustomerIdForWrite(tu.name, tu.input ?? {});
+          if (implied && implied !== ctx.customerScopeId) {
+            const errMsg = `Refused: this change targets customer ${implied} but the active scope is ${ctx.customerScopeId}. Ask the operator to switch the customer scope first.`;
+            toolResults.push({
+              type: "tool_result",
+              tool_use_id: tu.id,
+              content: errMsg,
+              is_error: true,
+            });
+            sseSend(res, "tool_error", { tool: tu.name, message: errMsg });
+            continue;
+          }
+        }
         // First write — record proposal, capture prior results, then continue
         // the loop to mark all remaining tool_uses as deferred.
         const proposalId = newId("ap");
@@ -375,6 +445,8 @@ router.post("/assistant/chat", async (req, res): Promise<void> => {
     }
   }
 
+  const ctx = parseAssistantContext(req);
+
   sseInit(res);
   sseSend(res, "conversation", { id: conversationId });
 
@@ -384,7 +456,7 @@ router.post("/assistant/chat", async (req, res): Promise<void> => {
     /* client disconnected */
   });
 
-  await runLoop(conversationId, res);
+  await runLoop(conversationId, res, ctx);
   res.end();
 });
 
@@ -512,7 +584,7 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
     blocks: [...priorResults, toolResultBlock, ...deferredBlocks],
   });
 
-  await runLoop(proposal.conversationId, res);
+  await runLoop(proposal.conversationId, res, parseAssistantContext(req));
   res.end();
 });
 

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
+import { useData } from "@/context/data-store";
 
 export interface AssistantMessage {
   id: string;
@@ -125,6 +126,54 @@ function parsePageFocus(
   return null;
 }
 
+/**
+ * Resolve a parsed page-focus entity to the customer that owns it, using
+ * the same scope-resolver chain the server's `customerIdForFocus` uses
+ * but powered by the React Query cache we already have in memory. Used to
+ * surface the implicit page-focus scope as a badge in the chat header.
+ */
+function resolveFocusCustomerId(
+  focus: { entityType: string; entityId: string } | null,
+  data: ReturnType<typeof useData>,
+): string | null {
+  if (!focus) return null;
+  switch (focus.entityType) {
+    case "customer":
+      return data.customers.find((c) => c.id === focus.entityId)?.id ?? null;
+    case "property":
+      return (
+        data.properties.find((p) => p.id === focus.entityId)?.customerId ?? null
+      );
+    case "building": {
+      const b = data.buildings.find((x) => x.id === focus.entityId);
+      if (!b) return null;
+      return (
+        data.properties.find((p) => p.id === b.propertyId)?.customerId ?? null
+      );
+    }
+    case "lease": {
+      const l = data.leases.find((x) => x.id === focus.entityId);
+      if (!l) return null;
+      // A lease can override its owning customer; fall back to the parent
+      // property's customer the way LEASE_RESPONSIBLE_CUSTOMER does on the
+      // server.
+      if (l.customerId) return l.customerId;
+      return (
+        data.properties.find((p) => p.id === l.propertyId)?.customerId ?? null
+      );
+    }
+    case "occupant": {
+      const o = data.occupants.find((x) => x.id === focus.entityId);
+      if (!o || !o.propertyId) return null;
+      return (
+        data.properties.find((p) => p.id === o.propertyId)?.customerId ?? null
+      );
+    }
+    default:
+      return null;
+  }
+}
+
 export function useAssistant() {
   const [state, setState] = useState<InternalState>({
     messages: [],
@@ -137,6 +186,21 @@ export function useAssistant() {
   const abortRef = useRef<AbortController | null>(null);
   const [location] = useLocation();
   const { customerId } = useCustomerScope();
+  const data = useData();
+
+  // Surface the implicit page-focus customer for the chat header badge.
+  // Only meaningful when the global dropdown is "All" — when the operator
+  // has explicitly picked a customer, the existing dropdown indicator
+  // already communicates the scope and we don't want a second badge.
+  const pageFocusCustomer = useMemo<{ id: string; name: string } | null>(() => {
+    if (customerId !== ALL_CUSTOMERS) return null;
+    const focus = parsePageFocus(location);
+    const cid = resolveFocusCustomerId(focus, data);
+    if (!cid) return null;
+    const c = data.customers.find((x) => x.id === cid);
+    if (!c) return null;
+    return { id: c.id, name: c.name || c.id };
+  }, [customerId, location, data]);
 
   // Build the X-Assistant-Context header injected on every request so the
   // server-side system prompt knows what page the operator is looking at
@@ -503,5 +567,6 @@ export function useAssistant() {
     undoProposal,
     reset,
     uploadFile,
+    pageFocusCustomer,
   };
 }

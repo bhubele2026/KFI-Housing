@@ -25,6 +25,7 @@ export function AssistantBubble() {
     undoProposal,
     reset,
     uploadFile,
+    pageFocusCustomer,
   } = useAssistant();
   // Only the *most recent* approved & reversible change can be undone
   // from the bubble — older approved changes might have been built on
@@ -101,12 +102,26 @@ export function AssistantBubble() {
           data-testid="assistant-panel"
           className="fixed bottom-5 right-5 z-50 flex h-[min(640px,calc(100vh-2.5rem))] w-[420px] max-w-[calc(100vw-2.5rem)] flex-col rounded-xl border border-border bg-background shadow-2xl"
         >
-          <header className="flex items-center justify-between border-b border-border px-3 py-2">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">HousingOps Assistant</span>
+          <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Bot className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-semibold shrink-0">HousingOps Assistant</span>
+              {pageFocusCustomer && (
+                <span
+                  data-testid="assistant-page-focus-badge"
+                  data-customer-id={pageFocusCustomer.id}
+                  title={`Writes from this chat will be limited to ${pageFocusCustomer.name} because the page you're on belongs to that customer. Change the customer dropdown to override.`}
+                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary min-w-0"
+                >
+                  <span className="opacity-70 shrink-0">Scoped to:</span>
+                  <span className="truncate" data-testid="assistant-page-focus-badge-name">
+                    {pageFocusCustomer.name}
+                  </span>
+                  <span className="opacity-70 shrink-0">via page</span>
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <Button
                 type="button"
                 variant="ghost"

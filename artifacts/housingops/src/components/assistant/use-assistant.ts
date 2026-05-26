@@ -57,6 +57,38 @@ function storeConversationId(id: string | null): void {
   }
 }
 
+/**
+ * Map the current wouter location to an { entityType, entityId } focus so
+ * the assistant can resolve phrases like "this property" / "this lease"
+ * without the operator having to paste an id. Order matters — the more
+ * specific routes (e.g. /properties/:id/buildings/:buildingId) come
+ * first.
+ */
+function parsePageFocus(
+  loc: string,
+): { entityType: string; entityId: string } | null {
+  const path = loc.split("?")[0]!.replace(/\/$/, "");
+  const patterns: Array<[RegExp, string]> = [
+    [/^\/properties\/([^/]+)\/buildings\/([^/]+)$/, "building"],
+    [/^\/properties\/([^/]+)$/, "property"],
+    [/^\/customers\/([^/]+)$/, "customer"],
+    [/^\/leases\/([^/]+)$/, "lease"],
+    [/^\/occupants\/([^/]+)$/, "occupant"],
+  ];
+  for (const [re, entityType] of patterns) {
+    const m = path.match(re);
+    if (m) {
+      // For nested building route we want the BUILDING id (m[2]); for the
+      // others the first capture is the entity id.
+      const entityId = entityType === "building" ? m[2]! : m[1]!;
+      // Skip placeholder routes (/leases/new).
+      if (entityId === "new") return null;
+      return { entityType, entityId };
+    }
+  }
+  return null;
+}
+
 export function useAssistant() {
   const [state, setState] = useState<InternalState>({
     messages: [],
@@ -72,11 +104,17 @@ export function useAssistant() {
 
   // Build the X-Assistant-Context header injected on every request so the
   // server-side system prompt knows what page the operator is looking at
-  // and which customer scope is active.
+  // and which customer scope is active. We parse the URL into a
+  // structured { route, entityType, entityId } so the server can fetch a
+  // one-line summary of the focused record and inject it — that's what
+  // makes "rename this property" / "what leases expire here?" / "add a
+  // bed to this room" work without the operator having to repeat ids.
   const contextHeader = useCallback((): string => {
+    const focus = parsePageFocus(location);
     return JSON.stringify({
       customerId: customerId ?? "ALL",
       page: location,
+      focus, // { entityType, entityId } | null
     });
   }, [customerId, location]);
 

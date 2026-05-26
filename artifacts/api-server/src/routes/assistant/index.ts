@@ -7,6 +7,10 @@ import {
   assistantMessagesTable,
   assistantProposalsTable,
   type AssistantMessageRow,
+  propertiesTable,
+  buildingsTable,
+  leasesTable,
+  occupantsTable,
 } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
@@ -36,26 +40,173 @@ Naming conventions:
 - Lease status: active / expired / pending.
 - Bed status: Occupied / Vacant. cleaningStatus: ready / needs_cleaning / in_progress / occupied.`;
 
+interface PageFocus {
+  entityType: "property" | "building" | "customer" | "lease" | "occupant";
+  entityId: string;
+}
+
 interface AssistantCtx {
   customerScopeId: string | null;
   pageContext: string | null;
+  focus: PageFocus | null;
 }
 
 function parseAssistantContext(req: Request): AssistantCtx {
   const raw = req.headers["x-assistant-context"];
-  if (typeof raw !== "string" || !raw) return { customerScopeId: null, pageContext: null };
+  if (typeof raw !== "string" || !raw)
+    return { customerScopeId: null, pageContext: null, focus: null };
   try {
     const parsed = JSON.parse(raw);
+    let focus: PageFocus | null = null;
+    if (
+      parsed?.focus &&
+      typeof parsed.focus.entityType === "string" &&
+      typeof parsed.focus.entityId === "string" &&
+      ["property", "building", "customer", "lease", "occupant"].includes(
+        parsed.focus.entityType,
+      )
+    ) {
+      focus = { entityType: parsed.focus.entityType, entityId: parsed.focus.entityId };
+    }
     return {
       customerScopeId:
         typeof parsed?.customerId === "string" && parsed.customerId !== "ALL"
           ? parsed.customerId
           : null,
       pageContext: typeof parsed?.page === "string" ? parsed.page : null,
+      focus,
     };
   } catch {
-    return { customerScopeId: null, pageContext: null };
+    return { customerScopeId: null, pageContext: null, focus: null };
   }
+}
+
+/**
+ * Resolve the focused entity into a one-line summary the model can use
+ * verbatim (id + display name + parent ownership). Returns null when
+ * the id no longer exists — the model is told the focus is stale and
+ * should re-resolve rather than guess.
+ */
+async function summarizeFocus(focus: PageFocus): Promise<string | null> {
+  switch (focus.entityType) {
+    case "property": {
+      const [row] = await db
+        .select({ id: propertiesTable.id, name: propertiesTable.name, customerId: propertiesTable.customerId })
+        .from(propertiesTable)
+        .where(eq(propertiesTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `property ${row.id} ("${row.name}", customer ${row.customerId})`;
+    }
+    case "building": {
+      const [row] = await db
+        .select({
+          id: buildingsTable.id,
+          name: buildingsTable.name,
+          propertyId: buildingsTable.propertyId,
+        })
+        .from(buildingsTable)
+        .where(eq(buildingsTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `building ${row.id} ("${row.name}", property ${row.propertyId})`;
+    }
+    case "customer": {
+      const [row] = await db
+        .select({ id: customersTable.id, name: customersTable.name })
+        .from(customersTable)
+        .where(eq(customersTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `customer ${row.id} ("${row.name}")`;
+    }
+    case "lease": {
+      const [row] = await db
+        .select({
+          id: leasesTable.id,
+          propertyId: leasesTable.propertyId,
+          status: leasesTable.status,
+          endDate: leasesTable.endDate,
+        })
+        .from(leasesTable)
+        .where(eq(leasesTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `lease ${row.id} (property ${row.propertyId}, status ${row.status}, ends ${row.endDate || "?"})`;
+    }
+    case "occupant": {
+      const [row] = await db
+        .select({
+          id: occupantsTable.id,
+          name: occupantsTable.name,
+          propertyId: occupantsTable.propertyId,
+          status: occupantsTable.status,
+        })
+        .from(occupantsTable)
+        .where(eq(occupantsTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `occupant ${row.id} ("${row.name}", property ${row.propertyId}, status ${row.status})`;
+    }
+  }
+}
+
+/**
+ * Per-page "common asks" — these aren't commands the model executes;
+ * they're hints so suggestions ("what next?") match what the operator
+ * usually does on this page. Keep these tight and operational.
+ */
+function pageSuggestions(ctx: AssistantCtx): string {
+  const path = ctx.pageContext?.split("?")[0] ?? "";
+  const lines: string[] = [];
+  if (ctx.focus?.entityType === "property") {
+    lines.push(
+      "- list rooms / beds / occupants for this property",
+      "- show leases expiring soon for this property",
+      "- add a building, or add rooms with beds to an existing building",
+      "- find an unassigned bed and assign an occupant",
+    );
+  } else if (ctx.focus?.entityType === "building") {
+    lines.push(
+      "- list rooms in this building",
+      "- add a room (with beds at a weekly rate)",
+      "- mark a room or bed needs_cleaning / ready",
+    );
+  } else if (ctx.focus?.entityType === "lease") {
+    lines.push(
+      "- update lease end date or status",
+      "- snooze / unsnooze this lease's expiry alert",
+      "- show the property's other leases",
+    );
+  } else if (ctx.focus?.entityType === "occupant") {
+    lines.push(
+      "- move this occupant to another bed (cleaning-ready required)",
+      "- unassign (mark Former) — confirms before running",
+      "- check this occupant's recent payroll deductions",
+    );
+  } else if (ctx.focus?.entityType === "customer") {
+    lines.push(
+      "- list this customer's properties",
+      "- find unmatched payroll for this customer (list_payroll_deductions unmatched=true)",
+      "- list leases expiring in the next 30 days for this customer",
+    );
+  } else if (path === "/leases" || path === "/leases/snoozed") {
+    lines.push(
+      "- show leases expiring in the next 30/60/90 days (list_leases expiringWithinDays=N)",
+      "- filter by customer (list_leases customerId=...)",
+    );
+  } else if (path === "/dashboard") {
+    lines.push(
+      "- 'what needs attention today?' — pull expiring leases + unmatched payroll for the active customer",
+      "- jump to a property by name (find_property_by_name)",
+    );
+  } else if (path === "/occupants") {
+    lines.push(
+      "- find an occupant by name",
+      "- bulk create occupants for a property",
+    );
+  }
+  return lines.length ? `\n\nCOMMON ASKS ON THIS PAGE:\n${lines.join("\n")}` : "";
 }
 
 async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
@@ -68,13 +219,24 @@ async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
   const scopeNote = ctx.customerScopeId
     ? `\n\nACTIVE CUSTOMER SCOPE: ${ctx.customerScopeId}. The operator is currently viewing only this customer's data. When they say "this customer" or "our properties", assume they mean ${ctx.customerScopeId}. WRITE TOOLS that touch a different customer's data will be REJECTED — you must ask the operator to switch scope first.`
     : "\n\nNo customer scope is active — the operator is viewing all customers.";
+  // Resolve the focused entity to a one-line summary. If the id is
+  // stale (deleted while the tab sat open) we say so explicitly so the
+  // model re-asks instead of using the dead id.
+  let focusNote = "";
+  if (ctx.focus) {
+    const summary = await summarizeFocus(ctx.focus);
+    focusNote = summary
+      ? `\n\nIN FOCUS: ${summary}. When the operator says "this ${ctx.focus.entityType}" / "here", that's the record they mean — use its id directly without re-asking.`
+      : `\n\nIN FOCUS: ${ctx.focus.entityType} id ${ctx.focus.entityId} (NOT FOUND — the record may have been deleted; ask the operator what they meant).`;
+  }
   const pageNote = ctx.pageContext
-    ? `\n\nCURRENT PAGE: ${ctx.pageContext}. When the operator says "this property" / "this lease" / etc., assume they're referring to whatever is in focus on that page.`
+    ? `\n\nCURRENT PAGE: ${ctx.pageContext}.`
     : "";
+  const suggestions = pageSuggestions(ctx);
   return `${SYSTEM_PROMPT_BASE}
 
 Customers in this workspace:
-${customerList || "(no customers yet)"}${scopeNote}${pageNote}`;
+${customerList || "(no customers yet)"}${scopeNote}${pageNote}${focusNote}${suggestions}`;
 }
 
 function newId(prefix: string): string {

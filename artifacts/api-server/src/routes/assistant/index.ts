@@ -16,7 +16,14 @@ import {
 } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
-import { anthropicToolDefs, TOOL_BY_NAME, impliedCustomerIdForWrite } from "./tools";
+import {
+  anthropicToolDefs,
+  TOOL_BY_NAME,
+  impliedCustomerIdForWrite,
+  customerIdForFocus,
+  evaluateWriteScope,
+  type FocusEntityType,
+} from "./tools";
 import {
   buildUndoPlan,
   captureSnapshot,
@@ -53,9 +60,22 @@ Naming conventions:
 - Bed status: Occupied / Vacant. cleaningStatus: ready / needs_cleaning / in_progress / occupied.`;
 
 interface PageFocus {
-  entityType: "property" | "building" | "customer" | "lease" | "occupant";
+  entityType: FocusEntityType;
   entityId: string;
 }
+
+const FOCUS_ENTITY_TYPES: readonly FocusEntityType[] = [
+  "property",
+  "building",
+  "room",
+  "bed",
+  "customer",
+  "lease",
+  "occupant",
+  "utility",
+  "insurance",
+  "payroll",
+];
 
 interface AssistantCtx {
   customerScopeId: string | null;
@@ -63,13 +83,23 @@ interface AssistantCtx {
   focus: PageFocus | null;
   /** Authenticated operator — required by tools that read user-owned data (e.g. uploads). */
   userId: string;
+  // Resolved owning customerId for `focus`, or null when there is no
+  // focus or the focused row no longer exists. Populated by
+  // resolveFocusCustomer; parseAssistantContext leaves it null.
+  focusCustomerId: string | null;
 }
 
 function parseAssistantContext(req: Request): AssistantCtx {
   const userId = getUserId(req);
   const raw = req.headers["x-assistant-context"];
-  if (typeof raw !== "string" || !raw)
-    return { customerScopeId: null, pageContext: null, focus: null, userId };
+  const empty: AssistantCtx = {
+    customerScopeId: null,
+    pageContext: null,
+    focus: null,
+    focusCustomerId: null,
+    userId,
+  };
+  if (typeof raw !== "string" || !raw) return empty;
   try {
     const parsed = JSON.parse(raw);
     let focus: PageFocus | null = null;
@@ -77,11 +107,12 @@ function parseAssistantContext(req: Request): AssistantCtx {
       parsed?.focus &&
       typeof parsed.focus.entityType === "string" &&
       typeof parsed.focus.entityId === "string" &&
-      ["property", "building", "customer", "lease", "occupant"].includes(
-        parsed.focus.entityType,
-      )
+      (FOCUS_ENTITY_TYPES as readonly string[]).includes(parsed.focus.entityType)
     ) {
-      focus = { entityType: parsed.focus.entityType, entityId: parsed.focus.entityId };
+      focus = {
+        entityType: parsed.focus.entityType as FocusEntityType,
+        entityId: parsed.focus.entityId,
+      };
     }
     return {
       customerScopeId:
@@ -90,10 +121,29 @@ function parseAssistantContext(req: Request): AssistantCtx {
           : null,
       pageContext: typeof parsed?.page === "string" ? parsed.page : null,
       focus,
+      focusCustomerId: null,
       userId,
     };
   } catch {
-    return { customerScopeId: null, pageContext: null, focus: null, userId };
+    return empty;
+  }
+}
+
+/**
+ * Resolve the page-focus customer once per request and stash it on the
+ * ctx. The write guard treats focusCustomerId as the implicit "effective
+ * scope" when the dropdown is "All", so we resolve eagerly here rather
+ * than lazily inside the loop. A stale/missing focus row leaves
+ * focusCustomerId as null — the guard then behaves as if no focus was
+ * sent (back-compat).
+ */
+async function resolveFocusCustomer(ctx: AssistantCtx): Promise<AssistantCtx> {
+  if (!ctx.focus) return ctx;
+  try {
+    const id = await customerIdForFocus(ctx.focus.entityType, ctx.focus.entityId);
+    return { ...ctx, focusCustomerId: id };
+  } catch {
+    return ctx;
   }
 }
 
@@ -164,6 +214,13 @@ async function summarizeFocus(focus: PageFocus): Promise<string | null> {
       if (!row) return null;
       return `occupant ${row.id} ("${row.name}", property ${row.propertyId}, status ${row.status})`;
     }
+    default: {
+      // Other focus types (room/bed/utility/insurance/payroll) are
+      // accepted by parseAssistantContext for scope resolution but
+      // don't have a one-line summary today; the model still gets the
+      // raw id via the focusNote fallback below.
+      return null;
+    }
   }
 }
 
@@ -232,9 +289,21 @@ async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
   const customerList = customers
     .map((c) => `- ${c.id}: ${c.name}`)
     .join("\n");
-  const scopeNote = ctx.customerScopeId
-    ? `\n\nACTIVE CUSTOMER SCOPE: ${ctx.customerScopeId}. The operator is currently viewing only this customer's data. When they say "this customer" or "our properties", assume they mean ${ctx.customerScopeId}. WRITE TOOLS that touch a different customer's data will be REJECTED — you must ask the operator to switch scope first.`
-    : "\n\nNo customer scope is active — the operator is viewing all customers.";
+  let scopeNote: string;
+  if (ctx.customerScopeId) {
+    // When a focus is also resolved, the page belongs to the same (or a
+    // different) customer; either way the dropdown is the binding scope,
+    // so we keep the existing nudge intact.
+    scopeNote = `\n\nACTIVE CUSTOMER SCOPE: ${ctx.customerScopeId}. The operator is currently viewing only this customer's data. When they say "this customer" or "our properties", assume they mean ${ctx.customerScopeId}. WRITE TOOLS that touch a different customer's data will be REJECTED — you must ask the operator to switch scope first.`;
+  } else if (ctx.focusCustomerId) {
+    // Dropdown is "All" but the page identifies a single customer —
+    // treat that as the implicit scope. Tell the model it MAY propose
+    // writes against that customer (and entities under it) directly
+    // instead of asking the operator to switch the dropdown.
+    scopeNote = `\n\nNo global customer scope is active, but the current page belongs to customer ${ctx.focusCustomerId}. You MAY propose writes against this customer (and any entities under it — its properties, buildings, rooms, beds, occupants, leases, utilities, insurance certificates, payroll deductions) WITHOUT asking the operator to change their global scope. Writes targeting a different customer will still be rejected.`;
+  } else {
+    scopeNote = "\n\nNo customer scope is active — the operator is viewing all customers.";
+  }
   // Resolve the focused entity to a one-line summary. If the id is
   // stale (deleted while the tab sat open) we say so explicitly so the
   // model re-asks instead of using the dead id.
@@ -589,28 +658,27 @@ async function runLoop(
           sseSend(res, "tool_result", { tool: tu.name, ok: false, error: err?.message });
         }
       } else {
-        // Customer-scope guard — refuse to even propose a write that crosses
-        // the active customer scope. The result becomes a tool_error the
-        // model can react to (it will explain to the operator and ask to
-        // switch scope, per the system prompt).
-        if (ctx.customerScopeId) {
+        // Customer-scope guard — refuse to even propose a write that
+        // crosses the effective scope. The "effective scope" is the
+        // dropdown's customerScopeId if set, otherwise the page-focus
+        // customer (so a property/occupant/lease/etc. detail page
+        // implicitly scopes writes to that customer without forcing the
+        // operator to flip the dropdown). The result becomes a
+        // tool_error the model can react to.
+        if (ctx.customerScopeId || ctx.focusCustomerId) {
           const implied = await impliedCustomerIdForWrite(tu.name, tu.input ?? {});
-          // Fail closed: if we couldn't prove ownership for a write under
-          // an active customer scope, refuse rather than silently allowing
-          // the mutation. The only legitimate `null` cases are top-level
-          // "create_customer"-style tools, which aren't in this registry.
-          if (implied === null || implied !== ctx.customerScopeId) {
-            const errMsg =
-              implied === null
-                ? `Refused: could not prove which customer this change belongs to under the active scope ${ctx.customerScopeId}. Resolve the target record first (e.g. find_property_by_name) or have the operator clear the customer scope.`
-                : `Refused: this change targets customer ${implied} but the active scope is ${ctx.customerScopeId}. Ask the operator to switch the customer scope first.`;
+          const decision = evaluateWriteScope(implied, {
+            scopeCustomerId: ctx.customerScopeId,
+            focusCustomerId: ctx.focusCustomerId,
+          });
+          if (!decision.ok) {
             toolResults.push({
               type: "tool_result",
               tool_use_id: tu.id,
-              content: errMsg,
+              content: decision.reason,
               is_error: true,
             });
-            sseSend(res, "tool_error", { tool: tu.name, message: errMsg });
+            sseSend(res, "tool_error", { tool: tu.name, message: decision.reason });
             continue;
           }
         }
@@ -726,7 +794,7 @@ router.post("/assistant/chat", async (req, res): Promise<void> => {
     }
   }
 
-  const ctx = parseAssistantContext(req);
+  const ctx = await resolveFocusCustomer(parseAssistantContext(req));
 
   sseInit(res);
   sseSend(res, "conversation", { id: conversationId });
@@ -831,15 +899,21 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
     // operator edits). If edits changed a parent id
     // (propertyId/buildingId/roomId/...), impliedCustomerIdForWrite
     // resolves ownership from the NEW target graph and fails closed
-    // when it would cross the active customer scope.
-    const ctx = parseAssistantContext(req);
-    if (ctx.customerScopeId) {
+    // when it would cross the effective scope (dropdown scope, or the
+    // page-focus customer when the dropdown is "All").
+    const ctx = await resolveFocusCustomer(parseAssistantContext(req));
+    if (ctx.customerScopeId || ctx.focusCustomerId) {
       const implied = await impliedCustomerIdForWrite(proposal.toolName, finalInput);
-      if (implied === null || implied !== ctx.customerScopeId) {
-        const errMsg =
-          implied === null
-            ? `Refused on confirm: could not prove which customer this change belongs to under the active scope ${ctx.customerScopeId}.`
-            : `Refused on confirm: edited input targets customer ${implied} but the active scope is ${ctx.customerScopeId}.`;
+      const decision = evaluateWriteScope(
+        implied,
+        {
+          scopeCustomerId: ctx.customerScopeId,
+          focusCustomerId: ctx.focusCustomerId,
+        },
+        { phase: "confirm" },
+      );
+      if (!decision.ok) {
+        const errMsg = decision.reason;
         await db
           .update(assistantProposalsTable)
           .set({ status: "rejected", resolvedAt: new Date(), result: { error: errMsg } as any })
@@ -942,7 +1016,11 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
     blocks: [...priorResults, toolResultBlock, ...deferredBlocks],
   });
 
-  await runLoop(proposal.conversationId, res, parseAssistantContext(req));
+  await runLoop(
+    proposal.conversationId,
+    res,
+    await resolveFocusCustomer(parseAssistantContext(req)),
+  );
   res.end();
 });
 

@@ -2126,6 +2126,95 @@ export async function impliedCustomerIdForWrite(
   return null;
 }
 
+/**
+ * Focus entity types the assistant runtime can resolve to a customer.
+ * Covers everything the X-Assistant-Context focus header may carry —
+ * the client today only emits a subset (property/building/customer/
+ * lease/occupant), but the resolver accepts every entity that has an
+ * owning customer so future focus sources don't need a server change.
+ */
+export type FocusEntityType =
+  | "property"
+  | "building"
+  | "room"
+  | "bed"
+  | "customer"
+  | "lease"
+  | "occupant"
+  | "utility"
+  | "insurance"
+  | "payroll";
+
+/**
+ * Resolve a focused entity to its owning customerId, using the same
+ * scope-resolver graph the write guard uses. Returns null if the row
+ * no longer exists (stale focus) — the caller MUST treat null as "no
+ * page-focus scope" rather than as a match against anything.
+ */
+export async function customerIdForFocus(
+  entityType: FocusEntityType,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === "customer") {
+    const [c] = await db
+      .select({ id: customersTable.id })
+      .from(customersTable)
+      .where(eq(customersTable.id, entityId));
+    return c?.id ?? null;
+  }
+  return customerIdForRow(entityType, entityId);
+}
+
+/**
+ * Pure scope-decision for a single write tool call. The "effective
+ * scope" is the dropdown's `customerScopeId` if set, otherwise the
+ * page-focus customer (`focusCustomerId`). With no effective scope,
+ * any write is allowed (back-compat with the no-focus + "All" case).
+ * With an effective scope, an unknown owner (`implied === null`) fails
+ * closed and a known-but-different owner is refused.
+ */
+export interface WriteScopeContext {
+  scopeCustomerId: string | null;
+  focusCustomerId: string | null;
+}
+
+export type WriteScopeDecision =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+function describeScopeForRefusal(ctx: WriteScopeContext): string {
+  if (ctx.scopeCustomerId && ctx.focusCustomerId) {
+    return `the active customer scope is ${ctx.scopeCustomerId} (the current page belongs to customer ${ctx.focusCustomerId})`;
+  }
+  if (ctx.scopeCustomerId) {
+    return `the active customer scope is ${ctx.scopeCustomerId}`;
+  }
+  return `the current page belongs to customer ${ctx.focusCustomerId}`;
+}
+
+export function evaluateWriteScope(
+  implied: string | null,
+  ctx: WriteScopeContext,
+  options: { phase?: "propose" | "confirm" } = {},
+): WriteScopeDecision {
+  const effective = ctx.scopeCustomerId ?? ctx.focusCustomerId;
+  if (!effective) return { ok: true };
+  const prefix = options.phase === "confirm" ? "Refused on confirm" : "Refused";
+  if (implied === null) {
+    return {
+      ok: false,
+      reason: `${prefix}: could not prove which customer this change belongs to under ${describeScopeForRefusal(ctx)}. Resolve the target record first (e.g. find_property_by_name) or have the operator clear the customer scope.`,
+    };
+  }
+  if (implied !== effective) {
+    return {
+      ok: false,
+      reason: `${prefix}: this change targets customer ${implied} but ${describeScopeForRefusal(ctx)}.`,
+    };
+  }
+  return { ok: true };
+}
+
 export const TOOL_BY_NAME: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));
 
 export function anthropicToolDefs(): Array<{

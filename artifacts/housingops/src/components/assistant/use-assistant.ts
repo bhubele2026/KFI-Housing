@@ -79,6 +79,21 @@ function storeConversationId(id: string | null): void {
  * without the operator having to paste an id. Order matters — the more
  * specific routes (e.g. /properties/:id/buildings/:buildingId) come
  * first.
+ *
+ * Supported URL patterns (kept in sync with the server-side
+ * FocusEntityType union in api-server/src/routes/assistant/tools.ts):
+ *   /properties/:id/buildings/:buildingId  → building
+ *   /properties/:id                        → property
+ *   /customers/:id                         → customer
+ *   /leases/:id                            → lease
+ *   /occupants/:id                         → occupant
+ *   /rooms/:id                             → room
+ *   /beds/:id                              → bed
+ *   /utilities/:id                         → utility
+ *   /insurance/:id                         → insurance
+ *   /payroll/:id                           → payroll
+ * Placeholder ids ("new") are skipped so create routes don't emit a
+ * bogus focus header.
  */
 function parsePageFocus(
   loc: string,
@@ -90,6 +105,11 @@ function parsePageFocus(
     [/^\/customers\/([^/]+)$/, "customer"],
     [/^\/leases\/([^/]+)$/, "lease"],
     [/^\/occupants\/([^/]+)$/, "occupant"],
+    [/^\/rooms\/([^/]+)$/, "room"],
+    [/^\/beds\/([^/]+)$/, "bed"],
+    [/^\/utilities\/([^/]+)$/, "utility"],
+    [/^\/insurance\/([^/]+)$/, "insurance"],
+    [/^\/payroll\/([^/]+)$/, "payroll"],
   ];
   for (const [re, entityType] of patterns) {
     const m = path.match(re);

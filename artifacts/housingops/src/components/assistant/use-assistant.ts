@@ -34,7 +34,6 @@ export interface AssistantAttachment {
   mime: string;
   sizeBytes: number;
 }
-}
 
 interface InternalState {
   messages: AssistantMessage[];

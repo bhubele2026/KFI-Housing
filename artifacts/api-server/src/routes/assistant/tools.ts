@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, ne, or } from "drizzle-orm";
 import {
   db,
   customersTable,
@@ -424,10 +424,37 @@ tools.push({
 tools.push({
   name: "delete_building",
   kind: "write",
-  description: "Delete a building. Rooms pointing at it will become unassigned.",
+  description:
+    "Delete a building. Refuses if the building still has rooms, or if it is the last building on its property (mirrors DELETE /api/buildings/:id).",
   input_schema: obj({ id: Str }, ["id"]),
   summarize: (i) => `Delete building ${i.id}`,
   execute: async (input) => {
+    const [target] = await db
+      .select()
+      .from(buildingsTable)
+      .where(eq(buildingsTable.id, input.id));
+    if (!target) return { ok: true };
+    const linkedRooms = await db
+      .select({ id: roomsTable.id })
+      .from(roomsTable)
+      .where(eq(roomsTable.buildingId, input.id))
+      .limit(1);
+    if (linkedRooms.length > 0) {
+      throw new Error("Cannot delete a building that still has rooms.");
+    }
+    const siblings = await db
+      .select({ id: buildingsTable.id })
+      .from(buildingsTable)
+      .where(
+        and(
+          eq(buildingsTable.propertyId, target.propertyId),
+          ne(buildingsTable.id, target.id),
+        ),
+      )
+      .limit(1);
+    if (siblings.length === 0) {
+      throw new Error("Cannot delete the only remaining building on a property.");
+    }
     await db.delete(buildingsTable).where(eq(buildingsTable.id, input.id));
     return { ok: true };
   },
@@ -490,12 +517,20 @@ tools.push({
 tools.push({
   name: "delete_room",
   kind: "write",
-  description: "Delete a room (and its beds).",
+  description:
+    "Delete a room. Refuses if the room still has beds (mirrors DELETE /api/rooms/:id). To delete a populated room, delete each of its beds first (or vacate + delete them).",
   input_schema: obj({ id: Str }, ["id"]),
-  summarize: (i) => `Delete room ${i.id} and its beds`,
+  summarize: (i) => `Delete room ${i.id}`,
   execute: async (input) => {
     await db.transaction(async (tx) => {
-      await tx.delete(bedsTable).where(eq(bedsTable.roomId, input.id));
+      const linked = await tx
+        .select({ id: bedsTable.id })
+        .from(bedsTable)
+        .where(eq(bedsTable.roomId, input.id))
+        .limit(1);
+      if (linked.length > 0) {
+        throw new Error("Cannot delete a room that still has beds.");
+      }
       await tx.delete(roomsTable).where(eq(roomsTable.id, input.id));
     });
     return { ok: true };
@@ -590,6 +625,13 @@ tools.push({
   summarize: (i) => `Create occupant "${i.name}"`,
   execute: async (input) => {
     const id = newId("o");
+    // Mirror POST /api/occupants: moveInDate is required for a useful
+    // occupant record. Default to today if the caller didn't supply one
+    // rather than persisting "" (which breaks downstream date math).
+    const moveInDate =
+      typeof input.moveInDate === "string" && input.moveInDate.length > 0
+        ? input.moveInDate
+        : new Date().toISOString().slice(0, 10);
     const [row] = await db
       .insert(occupantsTable)
       .values({
@@ -597,12 +639,14 @@ tools.push({
         name: input.name,
         email: input.email ?? "",
         phone: input.phone ?? "",
-        moveInDate: input.moveInDate ?? "",
+        moveInDate,
         chargePerBed: input.chargePerBed ?? 0,
         billingFrequency: input.billingFrequency ?? "Monthly",
         employeeId: input.employeeId ?? "",
         company: input.company ?? "",
         shift: input.shift ?? null,
+        // canonical status is Active | Former — the normalizer coerces
+        // anything else to Active.
         status: "Active",
       })
       .returning();
@@ -769,7 +813,9 @@ tools.push({
         .update(occupantsTable)
         .set({
           bedId: null,
-          status: "Inactive",
+          // canonical occupant status is Active | Former (mirrors the
+          // normalizer in src/lib/db-row-normalizers.ts)
+          status: "Former",
           moveOutDate: input.moveOutDate ?? new Date().toISOString().slice(0, 10),
         })
         .where(eq(occupantsTable.id, input.occupantId))
@@ -1279,7 +1325,10 @@ tools.push({
           chargePerBed: o.chargePerBed ?? 0,
           company: o.company ?? "",
           chargeSourceCustomer: o.chargeSourceCustomer ?? "",
-          status: targetBedId ? "Active" : "Pending",
+          // canonical occupant status is Active | Former — Pending is not
+          // recognised by the normalizer and would silently coerce to Active.
+          status: "Active",
+          moveInDate: new Date().toISOString().slice(0, 10),
         });
         if (targetBedId) {
           await tx

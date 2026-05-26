@@ -15,6 +15,14 @@ import {
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
 import { anthropicToolDefs, TOOL_BY_NAME, impliedCustomerIdForWrite } from "./tools";
+import {
+  buildUndoPlan,
+  captureSnapshot,
+  executeUndoPlan,
+  extractResultId,
+  isToolReversible,
+  type UndoPlan,
+} from "./undo";
 
 const router: IRouter = Router();
 
@@ -763,13 +771,24 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       }
     }
     try {
+      // Snapshot the target row BEFORE we mutate so update_* / delete_*
+      // can be reversed by replaying the snapshot. Creates need no
+      // snapshot (the new id is enough to reverse).
+      const snapshot = await captureSnapshot(proposal.toolName, finalInput);
       const result = await def.execute(finalInput);
+      const undoPlan = buildUndoPlan(
+        proposal.toolName,
+        finalInput,
+        result,
+        snapshot,
+      );
+      const resultId = extractResultId(proposal.toolName, finalInput, result);
       await db
         .update(assistantProposalsTable)
         .set({
           status: "approved",
           resolvedAt: new Date(),
-          payload: { ...wrapped, input: finalInput },
+          payload: { ...wrapped, input: finalInput, undoPlan, resultId },
           result: result as Record<string, unknown>,
         })
         .where(eq(assistantProposalsTable.id, proposalId));
@@ -778,7 +797,13 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
         tool_use_id: proposal.toolUseId,
         content: JSON.stringify(result).slice(0, 50_000),
       };
-      sseSend(res, "proposal_resolved", { id: proposalId, status: "approved", result });
+      sseSend(res, "proposal_resolved", {
+        id: proposalId,
+        status: "approved",
+        result,
+        resultId,
+        reversible: Boolean(undoPlan),
+      });
     } catch (err: any) {
       const message = err?.message ?? String(err);
       await db
@@ -817,4 +842,123 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
   res.end();
 });
 
+// ── POST /assistant/proposals/:id/undo ─ reverse an approved write ──
+router.post("/assistant/proposals/:id/undo", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const proposalId = req.params.id;
+  const [proposal] = await db
+    .select()
+    .from(assistantProposalsTable)
+    .where(eq(assistantProposalsTable.id, proposalId));
+  if (!proposal) {
+    res.status(404).json({ error: "Proposal not found" });
+    return;
+  }
+  const [conv] = await db
+    .select()
+    .from(assistantConversationsTable)
+    .where(
+      and(
+        eq(assistantConversationsTable.id, proposal.conversationId),
+        eq(assistantConversationsTable.userId, userId),
+      ),
+    );
+  if (!conv) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (proposal.status !== "approved") {
+    res.status(409).json({ error: `Cannot undo a ${proposal.status} change` });
+    return;
+  }
+  const payload = (proposal.payload ?? {}) as {
+    undoPlan?: UndoPlan | null;
+    resultId?: string | null;
+  };
+  const plan = payload.undoPlan;
+  if (!plan) {
+    res.status(400).json({ error: "This change is not reversible" });
+    return;
+  }
+  // Refuse undo if a more recent approved change exists on the same
+  // entity row — undoing an older edit on top of a newer one would
+  // silently clobber the operator's later work. They have to undo the
+  // newer changes first (the UI exposes Undo only on the most recent
+  // approved change for this reason; this is a defense-in-depth check).
+  const subsequent = await db
+    .select()
+    .from(assistantProposalsTable)
+    .where(eq(assistantProposalsTable.conversationId, proposal.conversationId))
+    .orderBy(asc(assistantProposalsTable.createdAt));
+  for (const p of subsequent) {
+    if (p.id === proposal.id) continue;
+    if (p.status !== "approved") continue;
+    if (new Date(p.createdAt) <= new Date(proposal.createdAt)) continue;
+    const pp = (p.payload ?? {}) as { resultId?: string | null; undoPlan?: UndoPlan | null };
+    if (pp.resultId && pp.resultId === payload.resultId) {
+      res.status(409).json({
+        error:
+          "A more recent change targets the same record — undo that one first.",
+      });
+      return;
+    }
+  }
+  try {
+    await executeUndoPlan(plan);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Undo failed" });
+    return;
+  }
+  const [updated] = await db
+    .update(assistantProposalsTable)
+    .set({
+      status: "undone",
+      resolvedAt: new Date(),
+    })
+    .where(eq(assistantProposalsTable.id, proposalId))
+    .returning();
+  res.json({ proposal: updated });
+});
+
+// ── GET /assistant/changelog ─ every approved/undone write across all convos ──
+router.get("/assistant/changelog", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const convs = await db
+    .select()
+    .from(assistantConversationsTable)
+    .where(eq(assistantConversationsTable.userId, userId));
+  if (convs.length === 0) {
+    res.json({ entries: [] });
+    return;
+  }
+  const convById = new Map(convs.map((c) => [c.id, c]));
+  const allProps = await db
+    .select()
+    .from(assistantProposalsTable)
+    .orderBy(desc(assistantProposalsTable.resolvedAt));
+  const entries = allProps
+    .filter(
+      (p) =>
+        convById.has(p.conversationId) &&
+        (p.status === "approved" || p.status === "undone"),
+    )
+    .map((p) => {
+      const payload = (p.payload ?? {}) as { undoPlan?: unknown; resultId?: string };
+      return {
+        id: p.id,
+        conversationId: p.conversationId,
+        conversationTitle: convById.get(p.conversationId)?.title ?? "(untitled)",
+        toolName: p.toolName,
+        summary: p.summary,
+        status: p.status,
+        resultId: payload.resultId ?? null,
+        reversible: Boolean(payload.undoPlan),
+        createdAt: p.createdAt,
+        resolvedAt: p.resolvedAt,
+      };
+    });
+  res.json({ entries });
+});
+
 export default router;
+

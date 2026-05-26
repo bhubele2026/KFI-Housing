@@ -15,8 +15,13 @@ export interface PendingProposal {
   tool: string;
   summary: string;
   input: Record<string, unknown>;
-  status: "pending" | "approved" | "rejected" | "failed";
+  status: "pending" | "approved" | "rejected" | "failed" | "undone";
   error?: string;
+  /** id of the created/updated/deleted record, when known. */
+  resultId?: string | null;
+  /** whether this proposal can still be reversed via /undo. */
+  reversible?: boolean;
+  createdAt?: string;
 }
 
 interface InternalState {
@@ -146,9 +151,8 @@ export function useAssistant() {
             role: m.role === "user" ? "user" : "assistant",
             text: m.content,
           }));
-        const proposals: PendingProposal[] = ((data.proposals ?? []) as any[])
-          .filter((p) => p.status === "pending")
-          .map((p) => ({
+        const proposals: PendingProposal[] = ((data.proposals ?? []) as any[]).map(
+          (p) => ({
             id: p.id,
             tool: p.toolName ?? p.tool,
             summary: p.summary,
@@ -157,8 +161,12 @@ export function useAssistant() {
             // either shape so old conversations still hydrate.
             input: (p.payload?.input ?? p.input ?? {}) as Record<string, unknown>,
             status: p.status,
-            error: p.error,
-          }));
+            error: typeof p.result?.error === "string" ? p.result.error : undefined,
+            resultId: (p.payload?.resultId ?? null) as string | null,
+            reversible: Boolean(p.payload?.undoPlan),
+            createdAt: p.createdAt,
+          }),
+        );
         setState((s) => ({ ...s, messages: msgs, proposals }));
       } catch {
         /* offline / network — leave persisted id, will retry next mount */
@@ -265,7 +273,19 @@ export function useAssistant() {
             ...s,
             proposals: s.proposals.map((p) =>
               p.id === payload.id
-                ? { ...p, status: payload.status, error: payload.error }
+                ? {
+                    ...p,
+                    status: payload.status,
+                    error: payload.error,
+                    resultId:
+                      typeof payload.resultId === "string"
+                        ? payload.resultId
+                        : p.resultId,
+                    reversible:
+                      typeof payload.reversible === "boolean"
+                        ? payload.reversible
+                        : p.reversible,
+                  }
                 : p,
             ),
           }));
@@ -369,10 +389,50 @@ export function useAssistant() {
     [consumeStream],
   );
 
+  const undoProposal = useCallback(
+    async (proposalId: string) => {
+      setState((s) => ({ ...s, busy: true, error: null }));
+      try {
+        const r = await fetch(`${apiBase()}/proposals/${proposalId}/undo`, {
+          method: "POST",
+          headers: { "X-Assistant-Context": contextHeader() },
+          credentials: "include",
+        });
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          setState((s) => ({
+            ...s,
+            busy: false,
+            error: body?.error ?? `Undo failed (HTTP ${r.status})`,
+          }));
+          return;
+        }
+        setState((s) => ({
+          ...s,
+          busy: false,
+          proposals: s.proposals.map((p) =>
+            p.id === proposalId
+              ? { ...p, status: "undone", reversible: false }
+              : p,
+          ),
+        }));
+        invalidateData();
+      } catch (err: any) {
+        setState((s) => ({
+          ...s,
+          busy: false,
+          error: err?.message ?? "Undo failed",
+        }));
+      }
+    },
+    [contextHeader, invalidateData],
+  );
+
   return {
     ...state,
     send,
     respondToProposal,
+    undoProposal,
     reset,
   };
 }

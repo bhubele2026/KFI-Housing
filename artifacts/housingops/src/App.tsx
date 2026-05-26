@@ -50,6 +50,7 @@ const Utilities = lazy(() => import("@/pages/utilities"));
 const Finance = lazy(() => import("@/pages/finance"));
 const InsuranceCertificates = lazy(() => import("@/pages/insurance-certificates"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
+const AssistantChangelog = lazy(() => import("@/pages/assistant-changelog"));
 const TransportStub = lazy(() => import("@/pages/transport-stub"));
 
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
@@ -147,6 +148,7 @@ function AppRoutes() {
         <Route path="/finance" component={Finance} />
         <Route path="/insurance" component={InsuranceCertificates} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/assistant/changelog" component={AssistantChangelog} />
         <Route path="/transport/vehicles">
           <TransportStub titleKey="nav.transport.vehicles" />
         </Route>

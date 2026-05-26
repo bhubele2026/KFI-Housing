@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Bot, Send, X, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bot, Send, X, Trash2, Undo2 } from "lucide-react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAssistant, type PendingProposal } from "./use-assistant";
@@ -7,8 +8,27 @@ import { useAssistant, type PendingProposal } from "./use-assistant";
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const { messages, proposals, busy, error, send, respondToProposal, reset } =
-    useAssistant();
+  const {
+    messages,
+    proposals,
+    busy,
+    error,
+    send,
+    respondToProposal,
+    undoProposal,
+    reset,
+  } = useAssistant();
+  // Only the *most recent* approved & reversible change can be undone
+  // from the bubble — older approved changes might have been built on
+  // top of by newer edits, so we hide the Undo button to keep the
+  // interaction safe and intentional.
+  const undoableId = useMemo(() => {
+    for (let i = proposals.length - 1; i >= 0; i--) {
+      const p = proposals[i];
+      if (p.status === "approved" && p.reversible) return p.id;
+    }
+    return null;
+  }, [proposals]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,11 +128,14 @@ export function AssistantBubble() {
                 />
               ))}
 
-            {proposals
-              .filter((p) => p.status !== "pending")
-              .map((p) => (
-                <ResolvedProposalLine key={`r-${p.id}`} proposal={p} />
-              ))}
+            {proposals.some((p) => p.status !== "pending") && (
+              <ChangesList
+                proposals={proposals.filter((p) => p.status !== "pending")}
+                undoableId={undoableId}
+                onUndo={undoProposal}
+                disabled={busy}
+              />
+            )}
 
             {error && (
               <div
@@ -242,31 +265,105 @@ function ProposalCard({
   );
 }
 
-function ResolvedProposalLine({ proposal }: { proposal: PendingProposal }) {
-  const label =
-    proposal.status === "approved"
-      ? "Done"
-      : proposal.status === "rejected"
-        ? "Cancelled"
-        : "Failed";
-  const color =
-    proposal.status === "approved"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : proposal.status === "failed"
-        ? "text-destructive"
-        : "text-muted-foreground";
+function statusLabel(status: PendingProposal["status"]): string {
+  switch (status) {
+    case "approved":
+      return "Done";
+    case "rejected":
+      return "Cancelled";
+    case "failed":
+      return "Failed";
+    case "undone":
+      return "Undone";
+    default:
+      return status;
+  }
+}
+
+function statusColor(status: PendingProposal["status"]): string {
+  switch (status) {
+    case "approved":
+      return "text-emerald-600 dark:text-emerald-400";
+    case "failed":
+      return "text-destructive";
+    case "undone":
+      return "text-amber-600 dark:text-amber-400";
+    default:
+      return "text-muted-foreground";
+  }
+}
+
+function ChangesList({
+  proposals,
+  undoableId,
+  onUndo,
+  disabled,
+}: {
+  proposals: PendingProposal[];
+  undoableId: string | null;
+  onUndo: (id: string) => void;
+  disabled: boolean;
+}) {
   return (
     <div
-      className="flex items-start gap-2 text-xs"
-      data-testid={`proposal-resolved-${proposal.id}`}
+      data-testid="assistant-changes-list"
+      className="rounded-md border border-border bg-muted/30 p-2 space-y-1.5"
     >
-      <span className={`font-medium ${color}`}>{label}:</span>
-      <span className="text-muted-foreground">{proposal.summary}</span>
-      {proposal.error && (
-        <span className="text-destructive truncate" title={proposal.error}>
-          — {proposal.error}
-        </span>
-      )}
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Changes ({proposals.length})
+        </div>
+        <Link
+          href="/assistant/changelog"
+          className="text-[11px] text-primary hover:underline"
+          data-testid="link-assistant-changelog"
+        >
+          View all
+        </Link>
+      </div>
+      {proposals.map((p) => (
+        <div
+          key={`r-${p.id}`}
+          className="flex items-start gap-2 text-xs"
+          data-testid={`proposal-resolved-${p.id}`}
+          data-proposal-status={p.status}
+        >
+          <span className={`font-medium ${statusColor(p.status)}`}>
+            {statusLabel(p.status)}:
+          </span>
+          <span className="flex-1 text-muted-foreground">
+            {p.summary}
+            {p.resultId && (
+              <code
+                className="ml-1 rounded bg-background/60 px-1 py-0.5 text-[10px]"
+                data-testid={`proposal-result-id-${p.id}`}
+              >
+                {p.resultId}
+              </code>
+            )}
+            {p.error && (
+              <span className="text-destructive" title={p.error}>
+                {" "}
+                — {p.error}
+              </span>
+            )}
+          </span>
+          {p.id === undoableId && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => onUndo(p.id)}
+              disabled={disabled}
+              className="h-6 px-2 text-[11px]"
+              data-testid={`button-proposal-undo-${p.id}`}
+            >
+              <Undo2 className="h-3 w-3 mr-1" />
+              Undo
+            </Button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

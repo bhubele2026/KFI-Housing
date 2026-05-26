@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCustomerScope } from "@/context/customer-scope";
+import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 
 export interface AssistantMessage {
   id: string;
@@ -148,7 +148,7 @@ export function useAssistant() {
   const contextHeader = useCallback((): string => {
     const focus = parsePageFocus(location);
     return JSON.stringify({
-      customerId: customerId ?? "ALL",
+      customerId: customerId === ALL_CUSTOMERS ? "ALL" : customerId,
       page: location,
       focus, // { entityType, entityId } | null
     });

@@ -89,7 +89,7 @@ interface AssistantCtx {
   focusCustomerId: string | null;
 }
 
-function parseAssistantContext(req: Request): AssistantCtx {
+export function parseAssistantContext(req: Request): AssistantCtx {
   const userId = getUserId(req);
   const raw = req.headers["x-assistant-context"];
   const empty: AssistantCtx = {
@@ -116,7 +116,8 @@ function parseAssistantContext(req: Request): AssistantCtx {
     }
     return {
       customerScopeId:
-        typeof parsed?.customerId === "string" && parsed.customerId !== "ALL"
+        typeof parsed?.customerId === "string" &&
+        parsed.customerId.toLowerCase() !== "all"
           ? parsed.customerId
           : null,
       pageContext: typeof parsed?.page === "string" ? parsed.page : null,

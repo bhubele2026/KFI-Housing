@@ -539,11 +539,25 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
     };
     sseSend(res, "proposal_resolved", { id: proposalId, status: "rejected" });
   } else {
-    const finalInput = { ...wrappedInput, ...(edits ?? {}) };
+    // Allowlist edits to keys declared in the tool's input_schema —
+    // every tool schema is built with additionalProperties:false, so
+    // anything else is by-definition not a valid field and could only
+    // be an attempt to smuggle ownership-changing data (e.g. a stray
+    // customerId on update_room) past the executor's permissive
+    // Object.entries(rest) handling. Unknown keys are dropped.
+    const schemaProps =
+      ((def.input_schema as any)?.properties as Record<string, unknown>) ?? {};
+    const allowedKeys = new Set(Object.keys(schemaProps));
+    const sanitizedEdits: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(edits ?? {})) {
+      if (allowedKeys.has(k)) sanitizedEdits[k] = v;
+    }
+    const finalInput = { ...wrappedInput, ...sanitizedEdits };
     // Re-run the customer-scope guard on the FINAL input (after any
-    // operator edits), not just the originally-proposed input. Without
-    // this an operator with a scope active could approve a write whose
-    // edits silently retarget another customer's records.
+    // operator edits). If edits changed a parent id
+    // (propertyId/buildingId/roomId/...), impliedCustomerIdForWrite
+    // resolves ownership from the NEW target graph and fails closed
+    // when it would cross the active customer scope.
     const ctx = parseAssistantContext(req);
     if (ctx.customerScopeId) {
       const implied = await impliedCustomerIdForWrite(proposal.toolName, finalInput);

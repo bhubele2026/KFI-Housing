@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { getListPayrollDeductionsQueryKey } from "@workspace/api-client-react";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData } from "@/context/data-store";
 
@@ -135,8 +136,13 @@ function parsePageFocus(
 function resolveFocusCustomerId(
   focus: { entityType: string; entityId: string } | null,
   data: ReturnType<typeof useData>,
+  queryClient: QueryClient,
 ): string | null {
   if (!focus) return null;
+  const customerIdViaProperty = (propertyId: string | undefined | null) =>
+    propertyId
+      ? data.properties.find((p) => p.id === propertyId)?.customerId ?? null
+      : null;
   switch (focus.entityType) {
     case "customer":
       return data.customers.find((c) => c.id === focus.entityId)?.id ?? null;
@@ -147,9 +153,7 @@ function resolveFocusCustomerId(
     case "building": {
       const b = data.buildings.find((x) => x.id === focus.entityId);
       if (!b) return null;
-      return (
-        data.properties.find((p) => p.id === b.propertyId)?.customerId ?? null
-      );
+      return customerIdViaProperty(b.propertyId);
     }
     case "lease": {
       const l = data.leases.find((x) => x.id === focus.entityId);
@@ -158,16 +162,56 @@ function resolveFocusCustomerId(
       // property's customer the way LEASE_RESPONSIBLE_CUSTOMER does on the
       // server.
       if (l.customerId) return l.customerId;
-      return (
-        data.properties.find((p) => p.id === l.propertyId)?.customerId ?? null
-      );
+      return customerIdViaProperty(l.propertyId);
     }
     case "occupant": {
       const o = data.occupants.find((x) => x.id === focus.entityId);
-      if (!o || !o.propertyId) return null;
-      return (
-        data.properties.find((p) => p.id === o.propertyId)?.customerId ?? null
-      );
+      if (!o) return null;
+      return customerIdViaProperty(o.propertyId);
+    }
+    case "room": {
+      const r = data.rooms.find((x) => x.id === focus.entityId);
+      if (!r) return null;
+      return customerIdViaProperty(r.propertyId);
+    }
+    case "bed": {
+      const b = data.beds.find((x) => x.id === focus.entityId);
+      if (!b) return null;
+      return customerIdViaProperty(b.propertyId);
+    }
+    case "utility": {
+      const u = data.utilities.find((x) => x.id === focus.entityId);
+      if (!u) return null;
+      return customerIdViaProperty(u.propertyId);
+    }
+    case "insurance": {
+      const c = data.insuranceCertificates.find((x) => x.id === focus.entityId);
+      if (!c) return null;
+      return customerIdViaProperty(c.propertyId);
+    }
+    case "payroll": {
+      // Payroll deductions aren't held in the data-store snapshot, so we
+      // read whatever the React Query cache already has from existing
+      // payroll list calls (e.g. the dashboard / occupants page). If
+      // nothing has been fetched yet we fall back to null and the badge
+      // simply doesn't render — the server-side resolver will still
+      // enforce the scope on the actual request.
+      const caches = queryClient.getQueriesData<unknown>({
+        queryKey: getListPayrollDeductionsQueryKey().slice(0, 1),
+      });
+      for (const [, rows] of caches) {
+        if (!Array.isArray(rows)) continue;
+        for (const row of rows as Array<{
+          id?: string;
+          customerId?: string | null;
+          propertyId?: string | null;
+        }>) {
+          if (row?.id === focus.entityId) {
+            return row.customerId || customerIdViaProperty(row.propertyId);
+          }
+        }
+      }
+      return null;
     }
     default:
       return null;
@@ -195,12 +239,12 @@ export function useAssistant() {
   const pageFocusCustomer = useMemo<{ id: string; name: string } | null>(() => {
     if (customerId !== ALL_CUSTOMERS) return null;
     const focus = parsePageFocus(location);
-    const cid = resolveFocusCustomerId(focus, data);
+    const cid = resolveFocusCustomerId(focus, data, queryClient);
     if (!cid) return null;
     const c = data.customers.find((x) => x.id === cid);
     if (!c) return null;
     return { id: c.id, name: c.name || c.id };
-  }, [customerId, location, data]);
+  }, [customerId, location, data, queryClient]);
 
   // Build the X-Assistant-Context header injected on every request so the
   // server-side system prompt knows what page the operator is looking at

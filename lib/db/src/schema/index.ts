@@ -18,3 +18,6 @@ export * from "./payroll-deductions";
 export * from "./bed-weekly-rates";
 export * from "./app-users";
 export * from "./monthly-snapshots";
+export * from "./assistant-conversations";
+export * from "./assistant-messages";
+export * from "./assistant-proposals";

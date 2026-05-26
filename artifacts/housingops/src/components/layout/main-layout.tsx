@@ -4,6 +4,7 @@ import { Sidebar } from "./sidebar";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
 import { Link, Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AssistantBubble } from "@/components/assistant/assistant-bubble";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -158,6 +159,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
+      <AssistantBubble />
     </div>
   );
 }

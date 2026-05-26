@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, ilike, ne, or } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
 import {
   db,
   customersTable,
@@ -13,6 +13,16 @@ import {
   insuranceCertificatesTable,
   payrollDeductionsTable,
 } from "@workspace/db";
+import {
+  normalizePropertyRow,
+  normalizeBuildingRow,
+  normalizeRoomRow,
+  normalizeBedRow,
+  normalizeOccupantRow,
+  normalizeLeaseRow,
+  normalizeUtilityRow,
+} from "../../lib/db-row-normalizers";
+import { callRouteOrThrow } from "./dispatch";
 
 export type ToolKind = "read" | "write";
 
@@ -330,24 +340,30 @@ tools.push({
   ),
   summarize: (i) => `Create property "${i.name}" for customer ${i.customerId}`,
   execute: async (input) => {
+    // Apply the same boundary normaliser the POST /api/properties route
+    // uses (Task #646) so address coercion, paymentMethod sanitisation
+    // and friends fire for assistant-initiated creates too. The route
+    // can't be called directly here because its `CreatePropertyBody`
+    // schema requires a long list of fields (ratings, furnishings,
+    // landlord fields, …) the tool intentionally doesn't expose to the
+    // model; we still apply the normaliser to match the route's write
+    // contract.
     const id = newId("p");
-    const [row] = await db
-      .insert(propertiesTable)
-      .values({
-        id,
-        customerId: input.customerId,
-        name: input.name,
-        address: input.address ?? "",
-        city: input.city ?? "",
-        state: input.state ?? "",
-        zip: input.zip ?? "",
-        totalBeds: input.totalBeds ?? 0,
-        monthlyRent: input.monthlyRent ?? 0,
-        status: input.status ?? "Active",
-        propertyType: input.propertyType ?? null,
-        notes: input.notes ?? "",
-      })
-      .returning();
+    const values = normalizePropertyRow({
+      id,
+      customerId: input.customerId,
+      name: input.name,
+      address: input.address ?? "",
+      city: input.city ?? "",
+      state: input.state ?? "",
+      zip: input.zip ?? "",
+      totalBeds: input.totalBeds ?? 0,
+      monthlyRent: input.monthlyRent ?? 0,
+      status: input.status ?? "Active",
+      propertyType: input.propertyType ?? null,
+      notes: input.notes ?? "",
+    });
+    const [row] = await db.insert(propertiesTable).values(values).returning();
     return { property: row };
   },
 });
@@ -379,15 +395,20 @@ tools.push({
   summarize: (i) => `Update property ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db
-      .update(propertiesTable)
-      .set(update)
-      .where(eq(propertiesTable.id, id))
-      .returning();
-    if (!row) throw new Error(`Property ${id} not found`);
-    return { property: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/properties/:id (Task #646) so the
+    // server-side geocode-on-address-change pathway, the
+    // `normalizePropertyRow` boundary coercion and the
+    // `UpdatePropertyBody` enum/shape gates fire for assistant writes
+    // too — previously this tool wrote straight to the DB and skipped
+    // every one of them.
+    const property = await callRouteOrThrow(
+      "PATCH",
+      `/properties/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { property };
   },
 });
 
@@ -429,20 +450,19 @@ tools.push({
   ),
   summarize: (i) => `Create building "${i.name}" under property ${i.propertyId}`,
   execute: async (input) => {
+    // Mirror the POST /api/buildings normaliser (Task #646).
     const id = newId("bld");
-    const [row] = await db
-      .insert(buildingsTable)
-      .values({
-        id,
-        propertyId: input.propertyId,
-        name: input.name,
-        address: input.address ?? "",
-        city: input.city ?? "",
-        state: input.state ?? "",
-        zip: input.zip ?? "",
-        notes: input.notes ?? "",
-      })
-      .returning();
+    const values = normalizeBuildingRow({
+      id,
+      propertyId: input.propertyId,
+      name: input.name,
+      address: input.address ?? "",
+      city: input.city ?? "",
+      state: input.state ?? "",
+      zip: input.zip ?? "",
+      notes: input.notes ?? "",
+    });
+    const [row] = await db.insert(buildingsTable).values(values).returning();
     return { building: row };
   },
 });
@@ -458,11 +478,17 @@ tools.push({
   summarize: (i) => `Update building ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(buildingsTable).set(update).where(eq(buildingsTable.id, id)).returning();
-    if (!row) throw new Error(`Building ${id} not found`);
-    return { building: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/buildings/:id (Task #646) so the
+    // UpdateBuildingBody Zod gates + normalizeBuildingRow fire for
+    // assistant writes too.
+    const building = await callRouteOrThrow(
+      "PATCH",
+      `/buildings/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { building };
   },
 });
 
@@ -474,33 +500,14 @@ tools.push({
   input_schema: obj({ id: Str }, ["id"]),
   summarize: (i) => `Delete building ${i.id}`,
   execute: async (input) => {
-    const [target] = await db
-      .select()
-      .from(buildingsTable)
-      .where(eq(buildingsTable.id, input.id));
-    if (!target) return { ok: true };
-    const linkedRooms = await db
-      .select({ id: roomsTable.id })
-      .from(roomsTable)
-      .where(eq(roomsTable.buildingId, input.id))
-      .limit(1);
-    if (linkedRooms.length > 0) {
-      throw new Error("Cannot delete a building that still has rooms.");
-    }
-    const siblings = await db
-      .select({ id: buildingsTable.id })
-      .from(buildingsTable)
-      .where(
-        and(
-          eq(buildingsTable.propertyId, target.propertyId),
-          ne(buildingsTable.id, target.id),
-        ),
-      )
-      .limit(1);
-    if (siblings.length === 0) {
-      throw new Error("Cannot delete the only remaining building on a property.");
-    }
-    await db.delete(buildingsTable).where(eq(buildingsTable.id, input.id));
+    // Route through DELETE /api/buildings/:id (Task #646) so the
+    // has-rooms and last-building-on-property guards fire — these used
+    // to be duplicated here and could drift away from the route's
+    // wording over time.
+    await callRouteOrThrow(
+      "DELETE",
+      `/buildings/${encodeURIComponent(input.id)}`,
+    );
     return { ok: true };
   },
 });
@@ -523,19 +530,18 @@ tools.push({
   ),
   summarize: (i) => `Create room "${i.name}" in property ${i.propertyId}`,
   execute: async (input) => {
+    // Mirror the POST /api/rooms normaliser (Task #646).
     const id = newId("r");
-    const [row] = await db
-      .insert(roomsTable)
-      .values({
-        id,
-        propertyId: input.propertyId,
-        buildingId: input.buildingId ?? "",
-        name: input.name,
-        sqft: input.sqft ?? 0,
-        bathrooms: input.bathrooms ?? 0,
-        monthlyRent: input.monthlyRent ?? 0,
-      })
-      .returning();
+    const values = normalizeRoomRow({
+      id,
+      propertyId: input.propertyId,
+      buildingId: input.buildingId ?? "",
+      name: input.name,
+      sqft: input.sqft ?? 0,
+      bathrooms: input.bathrooms ?? 0,
+      monthlyRent: input.monthlyRent ?? 0,
+    });
+    const [row] = await db.insert(roomsTable).values(values).returning();
     return { room: row };
   },
 });
@@ -551,11 +557,15 @@ tools.push({
   summarize: (i) => `Update room ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(roomsTable).set(update).where(eq(roomsTable.id, id)).returning();
-    if (!row) throw new Error(`Room ${id} not found`);
-    return { room: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/rooms/:id (Task #646).
+    const room = await callRouteOrThrow(
+      "PATCH",
+      `/rooms/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { room };
   },
 });
 
@@ -567,17 +577,12 @@ tools.push({
   input_schema: obj({ id: Str }, ["id"]),
   summarize: (i) => `Delete room ${i.id}`,
   execute: async (input) => {
-    await db.transaction(async (tx) => {
-      const linked = await tx
-        .select({ id: bedsTable.id })
-        .from(bedsTable)
-        .where(eq(bedsTable.roomId, input.id))
-        .limit(1);
-      if (linked.length > 0) {
-        throw new Error("Cannot delete a room that still has beds.");
-      }
-      await tx.delete(roomsTable).where(eq(roomsTable.id, input.id));
-    });
+    // Route through DELETE /api/rooms/:id (Task #646) so the
+    // has-beds guard fires consistently with the HTTP route.
+    await callRouteOrThrow(
+      "DELETE",
+      `/rooms/${encodeURIComponent(input.id)}`,
+    );
     return { ok: true };
   },
 });
@@ -599,17 +604,17 @@ tools.push({
       const existing = await db.select().from(bedsTable).where(eq(bedsTable.roomId, input.roomId));
       bedNumber = (existing.reduce((m, b) => Math.max(m, b.bedNumber ?? 0), 0) || 0) + 1;
     }
-    const [row] = await db
-      .insert(bedsTable)
-      .values({
-        id,
-        propertyId: input.propertyId,
-        roomId: input.roomId,
-        bedNumber,
-        status: "Vacant",
-        cleaningStatus: "ready",
-      })
-      .returning();
+    // Mirror the POST /api/beds normaliser (Task #646).
+    const values = normalizeBedRow({
+      id,
+      propertyId: input.propertyId,
+      roomId: input.roomId,
+      bedNumber,
+      status: "Vacant",
+      cleaningStatus: "ready",
+      occupantId: null,
+    });
+    const [row] = await db.insert(bedsTable).values(values).returning();
     return { bed: row };
   },
 });
@@ -625,11 +630,19 @@ tools.push({
   summarize: (i) => `Update bed ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(bedsTable).set(update).where(eq(bedsTable.id, id)).returning();
-    if (!row) throw new Error(`Bed ${id} not found`);
-    return { bed: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/beds/:id (Task #646) so the cleaning
+    // workflow guard (#500) fires — refuses to flip a non-"ready" bed
+    // to Occupied / attach an occupant, and auto-sets needs_cleaning on
+    // vacate. Previously this tool went straight to db.update and
+    // skipped the whole workflow.
+    const bed = await callRouteOrThrow(
+      "PATCH",
+      `/beds/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { bed };
   },
 });
 
@@ -640,10 +653,17 @@ tools.push({
   input_schema: obj({ id: Str }, ["id"]),
   summarize: (i) => `Delete bed ${i.id}`,
   execute: async (input) => {
+    // The DELETE /api/beds/:id route doesn't refuse occupied beds (it
+    // would leave a dangling occupant.bedId), so we keep the assistant-
+    // side occupied check here and then route through for the actual
+    // delete so future route-level guards apply automatically.
     const [bed] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.id));
     if (!bed) throw new Error(`Bed ${input.id} not found`);
     if (bed.occupantId) throw new Error(`Bed ${input.id} is occupied — unassign first`);
-    await db.delete(bedsTable).where(eq(bedsTable.id, input.id));
+    await callRouteOrThrow(
+      "DELETE",
+      `/beds/${encodeURIComponent(input.id)}`,
+    );
     return { ok: true };
   },
 });
@@ -677,24 +697,31 @@ tools.push({
       typeof input.moveInDate === "string" && input.moveInDate.length > 0
         ? input.moveInDate
         : new Date().toISOString().slice(0, 10);
-    const [row] = await db
-      .insert(occupantsTable)
-      .values({
-        id,
-        name: input.name,
-        email: input.email ?? "",
-        phone: input.phone ?? "",
-        moveInDate,
-        chargePerBed: input.chargePerBed ?? 0,
-        billingFrequency: input.billingFrequency ?? "Monthly",
-        employeeId: input.employeeId ?? "",
-        company: input.company ?? "",
-        shift: input.shift ?? null,
-        // canonical status is Active | Former — the normalizer coerces
-        // anything else to Active.
-        status: "Active",
-      })
-      .returning();
+    // Mirror the POST /api/occupants normaliser + chargeSource defaults
+    // (Task #646). The route's `CreateOccupantBody` requires `bedId` /
+    // `propertyId` / `moveOutDate` keys we don't expose to the model, so
+    // we apply the normaliser in-process rather than dispatching through
+    // the route — the cleaning-workflow guard on bedId isn't relevant
+    // here because this tool always creates an unplaced occupant.
+    const values = normalizeOccupantRow({
+      id,
+      name: input.name,
+      email: input.email ?? "",
+      phone: input.phone ?? "",
+      moveInDate,
+      chargePerBed: input.chargePerBed ?? 0,
+      billingFrequency: input.billingFrequency ?? "Monthly",
+      employeeId: input.employeeId ?? "",
+      company: input.company ?? "",
+      shift: input.shift ?? null,
+      chargeSource: "",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
+      // canonical status is Active | Former — the normalizer coerces
+      // anything else to Active.
+      status: "Active",
+    });
+    const [row] = await db.insert(occupantsTable).values(values).returning();
     return { occupant: row };
   },
 });
@@ -725,11 +752,20 @@ tools.push({
   summarize: (i) => `Update occupant ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(occupantsTable).set(update).where(eq(occupantsTable.id, id)).returning();
-    if (!row) throw new Error(`Occupant ${id} not found`);
-    return { occupant: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/occupants/:id (Task #646) so the full
+    // chain runs for assistant writes too: cleaning workflow guard on
+    // bedId transfers (#500), automatic prior-bed turnover, lead-tenant
+    // demotion when isLead flips on, chargeSource preservation (#330)
+    // when chargePerBed/billingFrequency change, and the move-to-Former
+    // bed detach. Direct db.update used to bypass every one of these.
+    const occupant = await callRouteOrThrow(
+      "PATCH",
+      `/occupants/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { occupant };
   },
 });
 
@@ -740,16 +776,14 @@ tools.push({
   input_schema: obj({ id: Str }, ["id"]),
   summarize: (i) => `Delete occupant ${i.id}`,
   execute: async (input) => {
-    await db.transaction(async (tx) => {
-      const [occ] = await tx.select().from(occupantsTable).where(eq(occupantsTable.id, input.id));
-      if (occ?.bedId) {
-        await tx
-          .update(bedsTable)
-          .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
-          .where(eq(bedsTable.id, occ.bedId));
-      }
-      await tx.delete(occupantsTable).where(eq(occupantsTable.id, input.id));
-    });
+    // Route through DELETE /api/occupants/:id (Task #646) so the bed
+    // cleanup pass (clear occupantId + flip to Vacant + needs_cleaning,
+    // task #500) is the single source of truth — previously this tool
+    // duplicated that logic in a local transaction.
+    await callRouteOrThrow(
+      "DELETE",
+      `/occupants/${encodeURIComponent(input.id)}`,
+    );
     return { ok: true };
   },
 });
@@ -761,39 +795,29 @@ tools.push({
   input_schema: obj({ occupantId: Str, bedId: Str }, ["occupantId", "bedId"]),
   summarize: (i) => `Assign occupant ${i.occupantId} to bed ${i.bedId}`,
   execute: async (input) => {
-    return db.transaction(async (tx) => {
-      const [bed] = await tx.select().from(bedsTable).where(eq(bedsTable.id, input.bedId));
-      if (!bed) throw new Error(`Bed ${input.bedId} not found`);
-      if (bed.occupantId && bed.occupantId !== input.occupantId) {
-        throw new Error(`Bed ${input.bedId} already occupied by ${bed.occupantId}`);
-      }
-      // Mirror the cleaning-workflow guard from PATCH /api/beds/:id:
-      // refuse to place an occupant on a bed that's not yet "ready".
-      if (bed.cleaningStatus !== "ready" && bed.occupantId !== input.occupantId) {
-        throw new Error(
-          `Bed ${input.bedId} is not ready for a new occupant (cleaningStatus=${bed.cleaningStatus}). Finish the cleaning workflow first.`,
-        );
-      }
-      const [occ] = await tx.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
-      if (!occ) throw new Error(`Occupant ${input.occupantId} not found`);
-      if (occ.bedId && occ.bedId !== input.bedId) {
-        await tx
-          .update(bedsTable)
-          .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
-          .where(eq(bedsTable.id, occ.bedId));
-      }
-      const [updatedBed] = await tx
-        .update(bedsTable)
-        .set({ occupantId: input.occupantId, status: "Occupied", cleaningStatus: "occupied" })
-        .where(eq(bedsTable.id, input.bedId))
-        .returning();
-      const [updatedOcc] = await tx
-        .update(occupantsTable)
-        .set({ bedId: input.bedId, propertyId: bed.propertyId, status: "Active" })
-        .where(eq(occupantsTable.id, input.occupantId))
-        .returning();
-      return { bed: updatedBed, occupant: updatedOcc };
-    });
+    // Look up the bed's propertyId so we can mirror the route's
+    // expectation that occupant.propertyId follows the bed.
+    const [bed] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.bedId));
+    if (!bed) throw new Error(`Bed ${input.bedId} not found`);
+    // Step 1: PATCH /api/occupants/:id with the new bedId — this fires
+    // the route's cleaning-workflow guard (refuses non-"ready" beds),
+    // the "already occupied by someone else" guard, and the prior-bed
+    // automatic turnover. (Task #646 / #500.)
+    const occupant = await callRouteOrThrow(
+      "PATCH",
+      `/occupants/${encodeURIComponent(input.occupantId)}`,
+      { bedId: input.bedId, propertyId: bed.propertyId, status: "Active" },
+    );
+    // Step 2: PATCH /api/beds/:id to mark the bed Occupied and stamp
+    // occupantId — same call the UI's "place occupant" action makes.
+    // The bed's cleaning guard re-validates "ready" so the workflow
+    // can't be bypassed even if step 1 raced.
+    const updatedBed = await callRouteOrThrow(
+      "PATCH",
+      `/beds/${encodeURIComponent(input.bedId)}`,
+      { occupantId: input.occupantId, status: "Occupied", cleaningStatus: "occupied" },
+    );
+    return { bed: updatedBed, occupant };
   },
 });
 
@@ -804,37 +828,23 @@ tools.push({
   input_schema: obj({ occupantId: Str, newBedId: Str }, ["occupantId", "newBedId"]),
   summarize: (i) => `Move occupant ${i.occupantId} to bed ${i.newBedId}`,
   execute: async (input) => {
-    return db.transaction(async (tx) => {
-      const [occ] = await tx.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
-      if (!occ) throw new Error(`Occupant ${input.occupantId} not found`);
-      const [newBed] = await tx.select().from(bedsTable).where(eq(bedsTable.id, input.newBedId));
-      if (!newBed) throw new Error(`Bed ${input.newBedId} not found`);
-      if (newBed.occupantId && newBed.occupantId !== input.occupantId) {
-        throw new Error(`Target bed ${input.newBedId} already occupied`);
-      }
-      if (newBed.cleaningStatus !== "ready" && newBed.occupantId !== input.occupantId) {
-        throw new Error(
-          `Target bed ${input.newBedId} is not ready (cleaningStatus=${newBed.cleaningStatus}). Finish the cleaning workflow first.`,
-        );
-      }
-      if (occ.bedId && occ.bedId !== input.newBedId) {
-        await tx
-          .update(bedsTable)
-          .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
-          .where(eq(bedsTable.id, occ.bedId));
-      }
-      const [updatedBed] = await tx
-        .update(bedsTable)
-        .set({ occupantId: input.occupantId, status: "Occupied", cleaningStatus: "occupied" })
-        .where(eq(bedsTable.id, input.newBedId))
-        .returning();
-      const [updatedOcc] = await tx
-        .update(occupantsTable)
-        .set({ bedId: input.newBedId, propertyId: newBed.propertyId })
-        .where(eq(occupantsTable.id, input.occupantId))
-        .returning();
-      return { bed: updatedBed, occupant: updatedOcc };
-    });
+    // Route through PATCH /api/occupants + PATCH /api/beds (Task #646)
+    // — same dispatch chain as assign_occupant_to_bed. The occupants
+    // route handles prior-bed turnover automatically when bedId
+    // changes, and the beds route re-enforces the cleaning workflow.
+    const [newBed] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.newBedId));
+    if (!newBed) throw new Error(`Bed ${input.newBedId} not found`);
+    const occupant = await callRouteOrThrow(
+      "PATCH",
+      `/occupants/${encodeURIComponent(input.occupantId)}`,
+      { bedId: input.newBedId, propertyId: newBed.propertyId },
+    );
+    const updatedBed = await callRouteOrThrow(
+      "PATCH",
+      `/beds/${encodeURIComponent(input.newBedId)}`,
+      { occupantId: input.occupantId, status: "Occupied", cleaningStatus: "occupied" },
+    );
+    return { bed: updatedBed, occupant };
   },
 });
 
@@ -845,28 +855,20 @@ tools.push({
   input_schema: obj({ occupantId: Str, moveOutDate: StrOpt }, ["occupantId"]),
   summarize: (i) => `Unassign occupant ${i.occupantId}`,
   execute: async (input) => {
-    return db.transaction(async (tx) => {
-      const [occ] = await tx.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
-      if (!occ) throw new Error(`Occupant ${input.occupantId} not found`);
-      if (occ.bedId) {
-        await tx
-          .update(bedsTable)
-          .set({ occupantId: null, status: "Vacant", cleaningStatus: "needs_cleaning" })
-          .where(eq(bedsTable.id, occ.bedId));
-      }
-      const [updatedOcc] = await tx
-        .update(occupantsTable)
-        .set({
-          bedId: null,
-          // canonical occupant status is Active | Former (mirrors the
-          // normalizer in src/lib/db-row-normalizers.ts)
-          status: "Former",
-          moveOutDate: input.moveOutDate ?? new Date().toISOString().slice(0, 10),
-        })
-        .where(eq(occupantsTable.id, input.occupantId))
-        .returning();
-      return { occupant: updatedOcc };
-    });
+    // Route through PATCH /api/occupants/:id (Task #646). The route
+    // sees bedId moving to null while the occupant currently has a bed
+    // and runs the move-to-Former cleanup pass on the old bed (Vacant
+    // + needs_cleaning) plus the normalizer.
+    const updatedOcc = await callRouteOrThrow(
+      "PATCH",
+      `/occupants/${encodeURIComponent(input.occupantId)}`,
+      {
+        bedId: null,
+        status: "Former",
+        moveOutDate: input.moveOutDate ?? new Date().toISOString().slice(0, 10),
+      },
+    );
+    return { occupant: updatedOcc };
   },
 });
 
@@ -892,23 +894,23 @@ tools.push({
   ),
   summarize: (i) => `Create lease on property ${i.propertyId}`,
   execute: async (input) => {
+    // Mirror the POST /api/leases normaliser (Task #646) — derives
+    // status from dates, coerces paymentMethod, etc.
     const id = newId("l");
-    const [row] = await db
-      .insert(leasesTable)
-      .values({
-        id,
-        propertyId: input.propertyId,
-        startDate: input.startDate ?? "",
-        endDate: input.endDate ?? "",
-        monthlyRent: input.monthlyRent ?? 0,
-        securityDeposit: input.securityDeposit ?? 0,
-        status: input.status ?? "Active",
-        notes: input.notes ?? "",
-        vendor: input.vendor ?? "",
-        unit: input.unit ?? "",
-        buildingId: input.buildingId ?? null,
-      })
-      .returning();
+    const values = normalizeLeaseRow({
+      id,
+      propertyId: input.propertyId,
+      startDate: input.startDate ?? "",
+      endDate: input.endDate ?? "",
+      monthlyRent: input.monthlyRent ?? 0,
+      securityDeposit: input.securityDeposit ?? 0,
+      status: input.status ?? "Active",
+      notes: input.notes ?? "",
+      vendor: input.vendor ?? "",
+      unit: input.unit ?? "",
+      buildingId: input.buildingId ?? null,
+    });
+    const [row] = await db.insert(leasesTable).values(values).returning();
     return { lease: row };
   },
 });
@@ -934,11 +936,17 @@ tools.push({
   summarize: (i) => `Update lease ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(leasesTable).set(update).where(eq(leasesTable.id, id)).returning();
-    if (!row) throw new Error(`Lease ${id} not found`);
-    return { lease: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/leases/:id (Task #646) so the status
+    // derivation from dates + paymentMethod coercion in
+    // normalizeLeaseRow fire for assistant writes too.
+    const lease = await callRouteOrThrow(
+      "PATCH",
+      `/leases/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { lease };
   },
 });
 
@@ -965,19 +973,18 @@ tools.push({
   ),
   summarize: (i) => `Create ${i.type} utility for property ${i.propertyId}`,
   execute: async (input) => {
+    // Mirror the POST /api/utilities normaliser (Task #646).
     const id = newId("u");
-    const [row] = await db
-      .insert(utilitiesTable)
-      .values({
-        id,
-        propertyId: input.propertyId,
-        type: input.type,
-        company: input.company ?? "",
-        monthlyCost: input.monthlyCost ?? 0,
-        accountNumber: input.accountNumber ?? "",
-        notes: input.notes ?? "",
-      })
-      .returning();
+    const values = normalizeUtilityRow({
+      id,
+      propertyId: input.propertyId,
+      type: input.type,
+      company: input.company ?? "",
+      monthlyCost: input.monthlyCost ?? 0,
+      accountNumber: input.accountNumber ?? "",
+      notes: input.notes ?? "",
+    });
+    const [row] = await db.insert(utilitiesTable).values(values).returning();
     return { utility: row };
   },
 });
@@ -993,11 +1000,15 @@ tools.push({
   summarize: (i) => `Update utility ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db.update(utilitiesTable).set(update).where(eq(utilitiesTable.id, id)).returning();
-    if (!row) throw new Error(`Utility ${id} not found`);
-    return { utility: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/utilities/:id (Task #646).
+    const utility = await callRouteOrThrow(
+      "PATCH",
+      `/utilities/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { utility };
   },
 });
 
@@ -1033,6 +1044,11 @@ tools.push({
   ),
   summarize: (i) => `Create insurance certificate for property ${i.propertyId}`,
   execute: async (input) => {
+    // The insurance-certificates route doesn't have a dedicated row
+    // normaliser (just CreateInsuranceCertificateBody Zod parsing on
+    // POST), so we insert the same flat shape the route would. Keep
+    // the field list aligned with that schema so any future normaliser
+    // added route-side gets picked up by mirroring the same call.
     const id = newId("ic");
     const [row] = await db
       .insert(insuranceCertificatesTable)
@@ -1071,15 +1087,15 @@ tools.push({
   summarize: (i) => `Update insurance certificate ${i.id}`,
   execute: async (input) => {
     const { id, ...rest } = input;
-    const update: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) update[k] = v;
-    const [row] = await db
-      .update(insuranceCertificatesTable)
-      .set(update)
-      .where(eq(insuranceCertificatesTable.id, id))
-      .returning();
-    if (!row) throw new Error(`Insurance certificate ${id} not found`);
-    return { insuranceCertificate: row };
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) if (v !== null && v !== undefined) body[k] = v;
+    // Route through PATCH /api/insurance-certificates/:id (Task #646).
+    const insuranceCertificate = await callRouteOrThrow(
+      "PATCH",
+      `/insurance-certificates/${encodeURIComponent(id)}`,
+      body,
+    );
+    return { insuranceCertificate };
   },
 });
 
@@ -1257,51 +1273,65 @@ tools.push({
     return `Create property "${i.property?.name}" with ${buildings.length} building(s), ${rooms} room(s), ${beds} bed(s)`;
   },
   execute: async (input) => {
+    // Composite tool stays inside one transaction (so the model gets
+    // all-or-nothing on the layout), but every insert now goes through
+    // the same normalisers the route handlers use (Task #646) so the
+    // rows match what POST /api/properties|/buildings|/rooms|/beds
+    // would have produced.
     return db.transaction(async (tx) => {
       const pid = newId("p");
       const p = input.property ?? {};
-      await tx.insert(propertiesTable).values({
-        id: pid,
-        name: p.name,
-        address: p.address ?? "",
-        city: p.city ?? "",
-        state: p.state ?? "",
-        zip: p.zip ?? "",
-        customerId: p.customerId ?? "",
-        status: p.status ?? "Active",
-      });
+      await tx.insert(propertiesTable).values(
+        normalizePropertyRow({
+          id: pid,
+          name: p.name,
+          address: p.address ?? "",
+          city: p.city ?? "",
+          state: p.state ?? "",
+          zip: p.zip ?? "",
+          customerId: p.customerId ?? "",
+          status: p.status ?? "Active",
+        }),
+      );
       const createdBuildings: any[] = [];
       const createdRooms: any[] = [];
       const createdBeds: any[] = [];
       for (const b of (input.buildings ?? []) as any[]) {
         const bid = newId("bld");
-        await tx.insert(buildingsTable).values({
-          id: bid,
-          propertyId: pid,
-          name: b.name,
-          address: b.address ?? "",
-        });
+        await tx.insert(buildingsTable).values(
+          normalizeBuildingRow({
+            id: bid,
+            propertyId: pid,
+            name: b.name,
+            address: b.address ?? "",
+          }),
+        );
         createdBuildings.push({ id: bid, name: b.name });
         for (const r of (b.rooms ?? []) as any[]) {
           const rid = newId("r");
-          await tx.insert(roomsTable).values({
-            id: rid,
-            buildingId: bid,
-            propertyId: pid,
-            name: r.name,
-            monthlyRent: r.monthlyRent ?? 0,
-          });
+          await tx.insert(roomsTable).values(
+            normalizeRoomRow({
+              id: rid,
+              buildingId: bid,
+              propertyId: pid,
+              name: r.name,
+              monthlyRent: r.monthlyRent ?? 0,
+            }),
+          );
           createdRooms.push({ id: rid, name: r.name, buildingId: bid });
           for (const bedDef of (r.beds ?? []) as any[]) {
             const bedId = newId("bed");
-            await tx.insert(bedsTable).values({
-              id: bedId,
-              roomId: rid,
-              propertyId: pid,
-              bedNumber: bedDef.bedNumber,
-              status: "Vacant",
-              cleaningStatus: "ready",
-            });
+            await tx.insert(bedsTable).values(
+              normalizeBedRow({
+                id: bedId,
+                roomId: rid,
+                propertyId: pid,
+                bedNumber: bedDef.bedNumber,
+                status: "Vacant",
+                cleaningStatus: "ready",
+                occupantId: null,
+              }),
+            );
             createdBeds.push({ id: bedId, bedNumber: bedDef.bedNumber, roomId: rid });
           }
         }
@@ -1344,6 +1374,10 @@ tools.push({
   execute: async (input) => {
     const list = (input.occupants ?? []) as any[];
     const bedIds = (input.assignToBedIds ?? []) as Array<string | null>;
+    // Composite tool stays inside one transaction so the whole bulk
+    // create is all-or-nothing, but the cleaning-workflow guard and
+    // the occupant/bed normalisers from the route handlers fire on
+    // every row (Task #646 / #500).
     return db.transaction(async (tx) => {
       const created: any[] = [];
       for (let i = 0; i < list.length; i++) {
@@ -1362,23 +1396,33 @@ tools.push({
           }
           propertyId = bed.propertyId;
         }
-        await tx.insert(occupantsTable).values({
-          id: oid,
-          name: o.name,
-          propertyId,
-          bedId: targetBedId,
-          chargePerBed: o.chargePerBed ?? 0,
-          company: o.company ?? "",
-          chargeSourceCustomer: o.chargeSourceCustomer ?? "",
-          // canonical occupant status is Active | Former — Pending is not
-          // recognised by the normalizer and would silently coerce to Active.
-          status: "Active",
-          moveInDate: new Date().toISOString().slice(0, 10),
-        });
+        await tx.insert(occupantsTable).values(
+          normalizeOccupantRow({
+            id: oid,
+            name: o.name,
+            propertyId,
+            bedId: targetBedId,
+            chargePerBed: o.chargePerBed ?? 0,
+            company: o.company ?? "",
+            chargeSource: "",
+            chargeSourceCustomer: o.chargeSourceCustomer ?? "",
+            chargeSourcePersonId: "",
+            // canonical occupant status is Active | Former — Pending is not
+            // recognised by the normalizer and would silently coerce to Active.
+            status: "Active",
+            moveInDate: new Date().toISOString().slice(0, 10),
+          }),
+        );
         if (targetBedId) {
           await tx
             .update(bedsTable)
-            .set({ occupantId: oid, status: "Occupied", cleaningStatus: "occupied" })
+            .set(
+              normalizeBedRow({
+                occupantId: oid,
+                status: "Occupied",
+                cleaningStatus: "occupied",
+              }),
+            )
             .where(eq(bedsTable.id, targetBedId));
         }
         created.push({ id: oid, name: o.name, bedId: targetBedId });

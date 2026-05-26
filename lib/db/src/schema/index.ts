@@ -21,3 +21,4 @@ export * from "./monthly-snapshots";
 export * from "./assistant-conversations";
 export * from "./assistant-messages";
 export * from "./assistant-proposals";
+export * from "./assistant-uploads";

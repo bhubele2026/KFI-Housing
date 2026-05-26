@@ -1,4 +1,5 @@
-import { Router, type IRouter, type Request, type Response } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import multer, { MulterError } from "multer";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
 import {
@@ -6,6 +7,7 @@ import {
   assistantConversationsTable,
   assistantMessagesTable,
   assistantProposalsTable,
+  assistantUploadsTable,
   type AssistantMessageRow,
   propertiesTable,
   buildingsTable,
@@ -31,7 +33,9 @@ const MAX_TURNS = 8;
 
 const SYSTEM_PROMPT_BASE = `You are the HousingOps assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
 
-You have read-only and write tools. READ tools (list_*, get_*, find_*) execute immediately. WRITE tools (create_*, update_*, delete_*, assign_*, move_*, unassign_*, bulk_*) are PROPOSALS — the user must confirm each one before it executes.
+You have read-only and write tools. READ tools (list_*, get_*, find_*, extract_*) execute immediately. WRITE tools (create_*, update_*, delete_*, assign_*, move_*, unassign_*, bulk_*, import_*, log_*, record_*) are PROPOSALS — the user must confirm each one before it executes.
+
+When the user attaches a file (master lease workbook, payroll deduction export, lease PDF) the system will tell you the uploadId in the user's message. Pass that uploadId straight into the matching tool (import_master_leases, import_payroll_deductions, extract_lease_pdf). Don't ask the user to repeat it.
 
 Guidelines:
 - When the user names something by label ("Penda", "Schuette", "Sarah Jones"), first call find_property_by_name or find_occupant_by_name to resolve the id. Never invent ids.
@@ -57,12 +61,15 @@ interface AssistantCtx {
   customerScopeId: string | null;
   pageContext: string | null;
   focus: PageFocus | null;
+  /** Authenticated operator — required by tools that read user-owned data (e.g. uploads). */
+  userId: string;
 }
 
 function parseAssistantContext(req: Request): AssistantCtx {
+  const userId = getUserId(req);
   const raw = req.headers["x-assistant-context"];
   if (typeof raw !== "string" || !raw)
-    return { customerScopeId: null, pageContext: null, focus: null };
+    return { customerScopeId: null, pageContext: null, focus: null, userId };
   try {
     const parsed = JSON.parse(raw);
     let focus: PageFocus | null = null;
@@ -83,9 +90,10 @@ function parseAssistantContext(req: Request): AssistantCtx {
           : null,
       pageContext: typeof parsed?.page === "string" ? parsed.page : null,
       focus,
+      userId,
     };
   } catch {
-    return { customerScopeId: null, pageContext: null, focus: null };
+    return { customerScopeId: null, pageContext: null, focus: null, userId };
   }
 }
 
@@ -269,6 +277,83 @@ function sseSend(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
+
+// ── File uploads (assistant attachments) ─────────────────────
+// Operators attach spreadsheets / PDFs in the assistant panel before
+// invoking an import_* / extract_lease_pdf tool (Task #647). We
+// persist the bytes server-side so the eventual proposal confirm flow
+// can re-read them without trusting the client to re-upload, and so
+// the panel survives page reloads.
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const uploadMw = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
+});
+
+function uploadSingle(req: Request, res: Response, next: NextFunction): void {
+  uploadMw.single("file")(req, res, (err) => {
+    if (!err) return next();
+    if (err instanceof MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          error: `File is too large. Maximum size is ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} MB.`,
+        });
+        return;
+      }
+      res.status(400).json({ error: `Upload rejected: ${err.message}` });
+      return;
+    }
+    next(err);
+  });
+}
+
+router.post("/assistant/uploads", uploadSingle, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ error: "Missing 'file' field in multipart upload." });
+    return;
+  }
+  // Only accept a conversationId the caller actually owns — otherwise
+  // a malicious client could associate uploads with someone else's
+  // conversation row. Unknown / unauthorized ids are silently dropped
+  // to null (the upload still belongs to its uploader via userId).
+  let conversationId: string | null = null;
+  const rawConv =
+    typeof req.body?.conversationId === "string" ? req.body.conversationId : "";
+  if (rawConv) {
+    const [conv] = await db
+      .select({ id: assistantConversationsTable.id })
+      .from(assistantConversationsTable)
+      .where(
+        and(
+          eq(assistantConversationsTable.id, rawConv),
+          eq(assistantConversationsTable.userId, userId),
+        ),
+      );
+    if (!conv) {
+      res.status(403).json({ error: "Conversation does not belong to caller." });
+      return;
+    }
+    conversationId = conv.id;
+  }
+  const id = newId("u");
+  await db.insert(assistantUploadsTable).values({
+    id,
+    conversationId,
+    userId,
+    filename: file.originalname ?? "upload",
+    mime: file.mimetype ?? "application/octet-stream",
+    sizeBytes: file.size,
+    content: file.buffer,
+  });
+  res.status(201).json({
+    uploadId: id,
+    filename: file.originalname ?? "upload",
+    mime: file.mimetype ?? "application/octet-stream",
+    sizeBytes: file.size,
+  });
+});
 
 // ── Conversations ────────────────────────────────────────────
 
@@ -487,7 +572,7 @@ async function runLoop(
           summary: def.summarize(tu.input ?? {}),
         });
         try {
-          const result = await def.execute(tu.input ?? {});
+          const result = await def.execute(tu.input ?? {}, { userId: ctx.userId });
           toolResults.push({
             type: "tool_result",
             tool_use_id: tu.id,
@@ -531,6 +616,20 @@ async function runLoop(
         }
         // First write — record proposal, capture prior results, then continue
         // the loop to mark all remaining tool_uses as deferred.
+        // If the tool exposes a `preview` (Task #647), run it now so the
+        // proposal card can show "what will change" before the operator
+        // confirms. Preview failures are surfaced as a soft error on the
+        // proposal but don't block it — the operator can still confirm
+        // (the execute may still succeed) or cancel.
+        let previewData: unknown = null;
+        let previewError: string | null = null;
+        if (def.preview) {
+          try {
+            previewData = await def.preview(tu.input ?? {}, { userId: ctx.userId });
+          } catch (err: any) {
+            previewError = err?.message ?? String(err);
+          }
+        }
         const proposalId = newId("ap");
         const priorResults = [...toolResults];
         await db.insert(assistantProposalsTable).values({
@@ -543,6 +642,8 @@ async function runLoop(
             input: tu.input ?? {},
             priorResults,
             deferredToolUseIds: [] as string[],
+            preview: previewData,
+            previewError,
           },
           status: "pending",
         });
@@ -551,6 +652,8 @@ async function runLoop(
           tool: tu.name,
           summary: def.summarize(tu.input ?? {}),
           input: tu.input ?? {},
+          preview: previewData,
+          previewError,
         });
         pausedProposalId = proposalId;
         writeIndex = i;
@@ -573,6 +676,7 @@ async function runLoop(
         .update(assistantProposalsTable)
         .set({
           payload: {
+            ...(propRow?.payload ?? {}),
             input: wrapped.input ?? {},
             priorResults: wrapped.priorResults ?? [],
             deferredToolUseIds: deferredIds,
@@ -775,7 +879,7 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       // can be reversed by replaying the snapshot. Creates need no
       // snapshot (the new id is enough to reverse).
       const snapshot = await captureSnapshot(proposal.toolName, finalInput);
-      const result = await def.execute(finalInput);
+      const result = await def.execute(finalInput, { userId });
       const undoPlan = buildUndoPlan(
         proposal.toolName,
         finalInput,

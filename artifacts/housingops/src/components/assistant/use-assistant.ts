@@ -22,6 +22,18 @@ export interface PendingProposal {
   /** whether this proposal can still be reversed via /undo. */
   reversible?: boolean;
   createdAt?: string;
+  /** "What will change" preview computed server-side (Task #647). */
+  preview?: unknown;
+  /** Set when the preview helper itself threw. */
+  previewError?: string | null;
+}
+
+export interface AssistantAttachment {
+  uploadId: string;
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+}
 }
 
 interface InternalState {
@@ -165,6 +177,8 @@ export function useAssistant() {
             resultId: (p.payload?.resultId ?? null) as string | null,
             reversible: Boolean(p.payload?.undoPlan),
             createdAt: p.createdAt,
+            preview: p.payload?.preview,
+            previewError: p.payload?.previewError ?? null,
           }),
         );
         setState((s) => ({ ...s, messages: msgs, proposals }));
@@ -264,6 +278,8 @@ export function useAssistant() {
                 summary: payload.summary,
                 input: payload.input,
                 status: "pending",
+                preview: payload.preview,
+                previewError: payload.previewError ?? null,
               },
             ],
           }));
@@ -343,8 +359,22 @@ export function useAssistant() {
   );
 
   const send = useCallback(
-    async (text: string) => {
-      const userMsg: AssistantMessage = { id: localId("u"), role: "user", text };
+    async (text: string, attachments: AssistantAttachment[] = []) => {
+      const annotations = attachments
+        .map(
+          (a) =>
+            `[Attached file: filename="${a.filename}", uploadId="${a.uploadId}", mime="${a.mime}", sizeBytes=${a.sizeBytes}]`,
+        )
+        .join("\n");
+      const displayText = attachments.length
+        ? `${text}\n\n${attachments.map((a) => `📎 ${a.filename}`).join("\n")}`
+        : text;
+      const wireText = annotations ? `${text}\n\n${annotations}` : text;
+      const userMsg: AssistantMessage = {
+        id: localId("u"),
+        role: "user",
+        text: displayText,
+      };
       const assistantMsg: AssistantMessage = {
         id: localId("a"),
         role: "assistant",
@@ -359,11 +389,30 @@ export function useAssistant() {
       }));
       await consumeStream(
         `${apiBase()}/chat`,
-        { message: text, conversationId: state.conversationId },
+        { message: wireText, conversationId: state.conversationId },
         assistantMsg.id,
       );
     },
     [consumeStream, state.conversationId],
+  );
+
+  const uploadFile = useCallback(
+    async (file: File): Promise<AssistantAttachment> => {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (state.conversationId) fd.append("conversationId", state.conversationId);
+      const r = await fetch(`${apiBase()}/uploads`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!r.ok) {
+        const txt = await r.text().catch(() => "");
+        throw new Error(txt || `HTTP ${r.status}`);
+      }
+      return (await r.json()) as AssistantAttachment;
+    },
+    [state.conversationId],
   );
 
   const respondToProposal = useCallback(
@@ -434,5 +483,6 @@ export function useAssistant() {
     respondToProposal,
     undoProposal,
     reset,
+    uploadFile,
   };
 }

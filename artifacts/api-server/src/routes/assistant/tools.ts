@@ -12,6 +12,10 @@ import {
   utilitiesTable,
   insuranceCertificatesTable,
   payrollDeductionsTable,
+  propertyViolationsTable,
+  projectedMoveInsTable,
+  roomNightLogsTable,
+  assistantUploadsTable,
 } from "@workspace/db";
 import {
   normalizePropertyRow,
@@ -23,8 +27,30 @@ import {
   normalizeUtilityRow,
 } from "../../lib/db-row-normalizers";
 import { callRouteOrThrow } from "./dispatch";
+import { importMasterLeases, readMasterWorkbookFromBuffer } from "../../lib/import-master-leases";
+import { seedHousingDeductions } from "../../lib/seed-housing-deductions";
+import { parseDeductionsWorkbook } from "../payroll-import-deductions";
+import {
+  extractLeaseFromText,
+  extractLeaseFromPdfBuffer,
+  rankPropertyCandidates,
+} from "../../lib/lease-pdf-import";
+import { isSaturdayDate } from "../../lib/pay-week";
+import { logger } from "../../lib/logger";
+import { PDFParse } from "pdf-parse";
 
 export type ToolKind = "read" | "write";
+
+/**
+ * Per-invocation context passed into every tool's preview/execute.
+ * Currently carries the authenticated operator's userId so any tool
+ * that reads user-owned data (e.g. uploaded files) can enforce an
+ * ownership check at the point of read, not just at the point of
+ * upload (defense against IDOR on `assistant_uploads.id`).
+ */
+export interface ToolCtx {
+  userId: string;
+}
 
 export interface ToolDef {
   name: string;
@@ -32,7 +58,53 @@ export interface ToolDef {
   description: string;
   input_schema: Record<string, unknown>;
   summarize: (input: any) => string;
-  execute: (input: any) => Promise<unknown>;
+  /**
+   * Optional "what will change" preview for write tools. Runs BEFORE
+   * the operator is shown the proposal card so they see the
+   * before/after of the proposed change in plain English (row counts,
+   * matched/unmatched, dollar totals, etc.). Must be side-effect free.
+   */
+  preview?: (input: any, ctx: ToolCtx) => Promise<unknown>;
+  execute: (input: any, ctx: ToolCtx) => Promise<unknown>;
+}
+
+async function loadUploadBytes(
+  uploadId: string,
+  ctx: ToolCtx,
+): Promise<{
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+  content: Buffer;
+}> {
+  if (!uploadId || typeof uploadId !== "string") {
+    throw new Error("uploadId is required");
+  }
+  if (!ctx?.userId) {
+    // Defense-in-depth: every code path that reaches a tool should
+    // have already resolved a userId. Refuse rather than fall back to
+    // an unscoped lookup.
+    throw new Error("Upload access requires an authenticated user");
+  }
+  const [row] = await db
+    .select()
+    .from(assistantUploadsTable)
+    .where(
+      and(
+        eq(assistantUploadsTable.id, uploadId),
+        eq(assistantUploadsTable.userId, ctx.userId),
+      ),
+    );
+  if (!row) throw new Error(`Upload ${uploadId} not found`);
+  const content = Buffer.isBuffer(row.content)
+    ? row.content
+    : Buffer.from(row.content as unknown as Uint8Array);
+  return {
+    filename: row.filename,
+    mime: row.mime,
+    sizeBytes: row.sizeBytes,
+    content,
+  };
 }
 
 const Str = { type: "string" } as const;
@@ -1432,6 +1504,422 @@ tools.push({
   },
 });
 
+// ───────────────────────────── File-upload + import tools (Task #647) ──
+
+tools.push({
+  name: "import_master_leases",
+  kind: "write",
+  description:
+    "Import customers/properties/leases from an uploaded master spreadsheet (.xlsx). The user must first attach the workbook in the assistant panel; pass its uploadId here. Reads existing data and upserts — safe to re-run. The preview shows how many rows will be created vs. updated before you confirm.",
+  input_schema: obj({ uploadId: Str }, ["uploadId"]),
+  summarize: () => "Import master lease workbook",
+  preview: async (input, ctx) => {
+    const upload = await loadUploadBytes(input.uploadId, ctx);
+    const rows = readMasterWorkbookFromBuffer(upload.content);
+    return {
+      filename: upload.filename,
+      sizeBytes: upload.sizeBytes,
+      detectedRows: rows.length,
+      note:
+        "The import will upsert customers, properties, and leases keyed by their canonical ids. Existing rows will be updated in place; missing ones will be created.",
+    };
+  },
+  execute: async (input, ctx) => {
+    const upload = await loadUploadBytes(input.uploadId, ctx);
+    const rows = readMasterWorkbookFromBuffer(upload.content);
+    const summary = await importMasterLeases(rows, { logger });
+    return {
+      filename: upload.filename,
+      customersCreated: summary.customersCreated,
+      customersUpdated: summary.customersUpdated,
+      propertiesCreated: summary.propertiesCreated,
+      propertiesUpdated: summary.propertiesUpdated,
+      leasesCreated: summary.leasesCreated,
+      leasesUpdated: summary.leasesUpdated,
+      leasesSkipped: summary.leasesSkipped,
+      rowsNeedingReviewCount: summary.rowsNeedingReview.length,
+      rowsWithFixupsCount: summary.rowsWithFixups.length,
+    };
+  },
+});
+
+tools.push({
+  name: "import_payroll_deductions",
+  kind: "write",
+  description:
+    "Import weekly housing payroll deductions from an uploaded .xlsx export. The user must first attach the workbook in the assistant panel; pass its uploadId. `payWeekEndDate` MUST be the Saturday YYYY-MM-DD ending the pay week. The preview shows how many rows parsed and their total dollar amount before you confirm.",
+  input_schema: obj(
+    { uploadId: Str, payWeekEndDate: Str },
+    ["uploadId", "payWeekEndDate"],
+  ),
+  summarize: (i) =>
+    `Import payroll deductions for week ending ${i.payWeekEndDate}`,
+  preview: async (input, ctx) => {
+    if (!isSaturdayDate(input.payWeekEndDate)) {
+      throw new Error(
+        "payWeekEndDate must be a Saturday in YYYY-MM-DD format.",
+      );
+    }
+    const upload = await loadUploadBytes(input.uploadId, ctx);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const XLSX = require("xlsx") as typeof import("xlsx");
+    const wb = XLSX.read(upload.content, { type: "buffer" });
+    const sheetName = wb.SheetNames[0];
+    const sheetRows: string[][] = sheetName
+      ? (
+          XLSX.utils.sheet_to_json(wb.Sheets[sheetName]!, {
+            header: 1,
+            raw: false,
+            defval: "",
+          }) as unknown[][]
+        ).map((r) => r.map((c) => (c == null ? "" : String(c))))
+      : [];
+    const parsed = parseDeductionsWorkbook(sheetRows);
+    const total = parsed.rows.reduce((acc, r) => acc + r.weekly, 0);
+    return {
+      filename: upload.filename,
+      payWeekEndDate: input.payWeekEndDate,
+      parsedRows: parsed.rows.length,
+      skippedRows: parsed.skipped,
+      totalWeeklyAmount: Math.round(total * 100) / 100,
+      note:
+        "Each parsed row will be matched to an occupant by employeeId (preferred) or name+customer, then snapshotted into payroll_deductions for the supplied week. Re-importing the same week is idempotent.",
+    };
+  },
+  execute: async (input, ctx) => {
+    if (!isSaturdayDate(input.payWeekEndDate)) {
+      throw new Error(
+        "payWeekEndDate must be a Saturday in YYYY-MM-DD format.",
+      );
+    }
+    const upload = await loadUploadBytes(input.uploadId, ctx);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const XLSX = require("xlsx") as typeof import("xlsx");
+    const wb = XLSX.read(upload.content, { type: "buffer" });
+    const sheetName = wb.SheetNames[0];
+    const sheetRows: string[][] = sheetName
+      ? (
+          XLSX.utils.sheet_to_json(wb.Sheets[sheetName]!, {
+            header: 1,
+            raw: false,
+            defval: "",
+          }) as unknown[][]
+        ).map((r) => r.map((c) => (c == null ? "" : String(c))))
+      : [];
+    const parsed = parseDeductionsWorkbook(sheetRows);
+    if (parsed.rows.length === 0) {
+      throw new Error(
+        "No deduction rows found. Expected columns: Customer, Person, Person Id, Adjustment.",
+      );
+    }
+    const result = await seedHousingDeductions({
+      logger,
+      rows: parsed.rows,
+      payWeekEndDate: input.payWeekEndDate,
+              reclaimOverridden: false,
+    });
+    return {
+      filename: upload.filename,
+      payWeekEndDate: result.payWeekEndDate,
+      deductionsImported: result.snapshotsWritten,
+      totalAmount: result.snapshotsTotalAmount,
+      matched: result.matched,
+      unmatchedCount: result.unmatched.length,
+      lowConfidenceCount: result.lowConfidenceMatches.length,
+      skippedRows: parsed.skipped,
+    };
+  },
+});
+
+tools.push({
+  name: "extract_lease_pdf",
+  kind: "read",
+  description:
+    "Read an uploaded lease PDF and return the extracted lease fields plus the top property-match candidates. Use this to help the user review a lease before creating it. The user must first attach the PDF in the assistant panel; pass its uploadId. This is read-only — it does NOT create a lease row.",
+  input_schema: obj({ uploadId: Str }, ["uploadId"]),
+  summarize: () => "Extract fields from lease PDF",
+  execute: async (input, ctx) => {
+    const upload = await loadUploadBytes(input.uploadId, ctx);
+    const lc = (upload.mime || "").toLowerCase();
+    const lcName = (upload.filename || "").toLowerCase();
+    if (lc !== "application/pdf" && !lcName.endsWith(".pdf")) {
+      throw new Error(`Only PDF uploads are supported (got "${upload.mime}").`);
+    }
+    let text = "";
+    try {
+      const parser = new PDFParse({ data: new Uint8Array(upload.content) });
+      const parsed = await parser.getText();
+      text = (parsed.text ?? "").trim();
+      await parser.destroy?.();
+    } catch (err) {
+      logger.warn({ err }, "pdf-parse failed; falling back to OCR");
+    }
+    const needsOcr = text.length < 50;
+    const extractResult = needsOcr
+      ? await extractLeaseFromPdfBuffer(upload.content)
+      : await extractLeaseFromText(text);
+    const { extracted, fixups } = extractResult;
+    const [properties, customers] = await Promise.all([
+      db.select().from(propertiesTable),
+      db.select().from(customersTable),
+    ]);
+    const candidates = rankPropertyCandidates(extracted, properties, customers);
+    const topMatch = candidates[0] && candidates[0].score >= 0.6 ? candidates[0] : null;
+    return {
+      filename: upload.filename,
+      usedOcr: needsOcr,
+      extracted,
+      topMatch,
+      candidates: candidates.slice(0, 5),
+      fixups,
+    };
+  },
+});
+
+tools.push({
+  name: "log_room_nights",
+  kind: "write",
+  description:
+    "Create one or more room-night log entries against hotel-rate (room-night) leases. Each entry needs leaseId, month (YYYY-MM), and roomNights. The preview lists the rows that will be inserted before you confirm.",
+  input_schema: obj(
+    {
+      entries: {
+        type: "array",
+        minItems: 1,
+        items: obj(
+          {
+            leaseId: Str,
+            month: { type: "string", pattern: "^\\d{4}-\\d{2}$" },
+            roomNights: Num,
+            notes: StrOpt,
+          },
+          ["leaseId", "month", "roomNights"],
+        ),
+      },
+    },
+    ["entries"],
+  ),
+  summarize: (i) =>
+    `Log ${Array.isArray(i.entries) ? i.entries.length : 0} room-night entr${
+      Array.isArray(i.entries) && i.entries.length === 1 ? "y" : "ies"
+    }`,
+  preview: async (input) => {
+    const entries = Array.isArray(input.entries) ? input.entries : [];
+    const totalNights = entries.reduce(
+      (acc: number, e: any) => acc + (Number(e?.roomNights) || 0),
+      0,
+    );
+    return {
+      entries: entries.map((e: any) => ({
+        leaseId: e.leaseId,
+        month: e.month,
+        roomNights: e.roomNights,
+        notes: e.notes ?? "",
+      })),
+      totalRowsToInsert: entries.length,
+      totalRoomNights: totalNights,
+    };
+  },
+  execute: async (input) => {
+    const entries = Array.isArray(input.entries) ? input.entries : [];
+    if (entries.length === 0) throw new Error("entries is required");
+    const inserted: Array<{ id: string; leaseId: string; month: string; roomNights: number }> = [];
+    await db.transaction(async (tx) => {
+      for (const e of entries) {
+        if (!e?.leaseId || typeof e.leaseId !== "string") {
+          throw new Error("Each entry requires leaseId");
+        }
+        if (!/^\d{4}-\d{2}$/.test(String(e.month ?? ""))) {
+          throw new Error(`Invalid month "${e.month}" — expected YYYY-MM`);
+        }
+        const id = newId("rnl");
+        const [row] = await tx
+          .insert(roomNightLogsTable)
+          .values({
+            id,
+            leaseId: e.leaseId,
+            month: e.month,
+            roomNights: Number(e.roomNights) || 0,
+            notes: typeof e.notes === "string" ? e.notes : "",
+          })
+          .returning();
+        inserted.push({
+          id: row.id,
+          leaseId: row.leaseId,
+          month: row.month,
+          roomNights: row.roomNights,
+        });
+      }
+    });
+    return { inserted, count: inserted.length };
+  },
+});
+
+tools.push({
+  name: "record_property_violation",
+  kind: "write",
+  description:
+    "Record a rule violation against a property (smoking / parking / noise / police / maintenance / cleanliness / other). occurredOn must be YYYY-MM-DD. The preview shows the property name and previously-logged violation count before you confirm.",
+  input_schema: obj(
+    {
+      propertyId: Str,
+      occurredOn: Str,
+      category: {
+        type: "string",
+        enum: [
+          "smoking",
+          "parking",
+          "noise",
+          "police",
+          "maintenance",
+          "cleanliness",
+          "other",
+        ],
+      },
+      occupantId: StrOpt,
+      occupantName: StrOpt,
+      details: StrOpt,
+      notes: StrOpt,
+      createdBy: StrOpt,
+    },
+    ["propertyId", "occurredOn", "category"],
+  ),
+  summarize: (i) =>
+    `Log ${i.category} violation at property ${i.propertyId} on ${i.occurredOn}`,
+  preview: async (input) => {
+    const [property] = await db
+      .select({ id: propertiesTable.id, name: propertiesTable.name })
+      .from(propertiesTable)
+      .where(eq(propertiesTable.id, input.propertyId));
+    if (!property) throw new Error(`Property ${input.propertyId} not found`);
+    const existing = await db
+      .select({ id: propertyViolationsTable.id })
+      .from(propertyViolationsTable)
+      .where(eq(propertyViolationsTable.propertyId, input.propertyId));
+    return {
+      property: { id: property.id, name: property.name },
+      existingViolationCount: existing.length,
+      newViolation: {
+        category: input.category,
+        occurredOn: input.occurredOn,
+        occupantName: input.occupantName ?? "",
+        details: input.details ?? "",
+        notes: input.notes ?? "",
+      },
+    };
+  },
+  execute: async (input) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.occurredOn))) {
+      throw new Error("occurredOn must be YYYY-MM-DD");
+    }
+    const [property] = await db
+      .select({ id: propertiesTable.id })
+      .from(propertiesTable)
+      .where(eq(propertiesTable.id, input.propertyId));
+    if (!property) throw new Error(`Property ${input.propertyId} not found`);
+    const id = newId("pv");
+    const [row] = await db
+      .insert(propertyViolationsTable)
+      .values({
+        id,
+        propertyId: input.propertyId,
+        occupantId:
+          typeof input.occupantId === "string" && input.occupantId
+            ? input.occupantId
+            : null,
+        occupantName: typeof input.occupantName === "string" ? input.occupantName : "",
+        category: input.category,
+        details: typeof input.details === "string" ? input.details : "",
+        notes: typeof input.notes === "string" ? input.notes : "",
+        occurredOn: input.occurredOn,
+        createdBy: typeof input.createdBy === "string" ? input.createdBy : "",
+      })
+      .returning();
+    return { violation: row };
+  },
+});
+
+tools.push({
+  name: "create_projected_move_in",
+  kind: "write",
+  description:
+    "Record an upcoming (planned) move-in for a property. Useful for advance-planning a future arrival before the bed assignment is finalised. projectedMoveInDate must be YYYY-MM-DD. bedId is optional. The preview shows existing planned move-ins for the same property so you can spot duplicates.",
+  input_schema: obj(
+    {
+      propertyId: Str,
+      personName: Str,
+      projectedMoveInDate: Str,
+      bedId: StrOpt,
+      notes: StrOpt,
+    },
+    ["propertyId", "personName", "projectedMoveInDate"],
+  ),
+  summarize: (i) =>
+    `Plan move-in for ${i.personName} at property ${i.propertyId} on ${i.projectedMoveInDate}`,
+  preview: async (input) => {
+    const [property] = await db
+      .select({ id: propertiesTable.id, name: propertiesTable.name })
+      .from(propertiesTable)
+      .where(eq(propertiesTable.id, input.propertyId));
+    if (!property) throw new Error(`Property ${input.propertyId} not found`);
+    const existing = await db
+      .select({
+        personName: projectedMoveInsTable.personName,
+        projectedMoveInDate: projectedMoveInsTable.projectedMoveInDate,
+      })
+      .from(projectedMoveInsTable)
+      .where(eq(projectedMoveInsTable.propertyId, input.propertyId));
+    return {
+      property: { id: property.id, name: property.name },
+      existingPlanned: existing,
+      newEntry: {
+        personName: input.personName,
+        projectedMoveInDate: input.projectedMoveInDate,
+        bedId: input.bedId ?? null,
+        notes: input.notes ?? "",
+      },
+    };
+  },
+  execute: async (input) => {
+    if (!String(input.personName ?? "").trim()) {
+      throw new Error("personName cannot be empty");
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(input.projectedMoveInDate))) {
+      throw new Error("projectedMoveInDate must be YYYY-MM-DD");
+    }
+    const [property] = await db
+      .select({ id: propertiesTable.id })
+      .from(propertiesTable)
+      .where(eq(propertiesTable.id, input.propertyId));
+    if (!property) throw new Error(`Property ${input.propertyId} not found`);
+    if (typeof input.bedId === "string" && input.bedId) {
+      const [bed] = await db
+        .select({ propertyId: bedsTable.propertyId })
+        .from(bedsTable)
+        .where(eq(bedsTable.id, input.bedId));
+      if (!bed) throw new Error(`Bed ${input.bedId} not found`);
+      if (bed.propertyId !== input.propertyId) {
+        throw new Error(
+          `Bed ${input.bedId} does not belong to property ${input.propertyId}`,
+        );
+      }
+    }
+    const id = newId("pmi");
+    const [row] = await db
+      .insert(projectedMoveInsTable)
+      .values({
+        id,
+        propertyId: input.propertyId,
+        personName: input.personName,
+        projectedMoveInDate: input.projectedMoveInDate,
+        bedId: typeof input.bedId === "string" && input.bedId ? input.bedId : null,
+        notes: typeof input.notes === "string" ? input.notes : "",
+      })
+      .returning();
+    return { projectedMoveIn: row };
+  },
+});
+
 export const TOOLS: ReadonlyArray<ToolDef> = tools;
 
 // Maps each write tool to the table its `id` parameter (or other named
@@ -1574,6 +2062,34 @@ export async function impliedCustomerIdForWrite(
     return (input?.property?.customerId as string) || null;
   }
   try {
+    // Batch write tools whose ownership lives inside a nested array of
+    // entries. We resolve the customerId for every nested target id and
+    // only return a non-null value when ALL entries resolve to the
+    // SAME customer — otherwise we fall through to null so the caller
+    // fails closed under an active scope (refuses to bridge customers).
+    if (toolName === "log_room_nights") {
+      const entries = Array.isArray(input?.entries) ? input.entries : [];
+      if (entries.length === 0) return null;
+      const seen = new Set<string>();
+      for (const e of entries) {
+        const lid = typeof e?.leaseId === "string" ? e.leaseId : "";
+        if (!lid) return null;
+        const cid = await customerIdForRow("lease", lid);
+        if (!cid) return null;
+        seen.add(cid);
+        if (seen.size > 1) return null;
+      }
+      return seen.size === 1 ? [...seen][0]! : null;
+    }
+    // Imports + extract_lease_pdf operate against an uploaded file and
+    // intentionally touch records across many customers. Refuse them
+    // under an active customer scope rather than silently bridging.
+    if (
+      toolName === "import_master_leases" ||
+      toolName === "import_payroll_deductions"
+    ) {
+      return null;
+    }
     // 1) Tool-name driven id → table lookup (covers all destructive +
     //    update tools by their canonical `id` argument).
     const resolver = SCOPE_RESOLVERS[toolName];

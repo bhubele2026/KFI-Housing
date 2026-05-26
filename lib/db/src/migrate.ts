@@ -11,6 +11,7 @@ import { createPayrollDeductionsTableIfNeeded } from "./migrations/create-payrol
 import { createBedWeeklyRatesTableIfNeeded } from "./migrations/create-bed-weekly-rates-table";
 import { createAppUsersTablesIfNeeded } from "./migrations/create-app-users-tables";
 import { createMonthlySnapshotsTableIfNeeded } from "./migrations/create-monthly-snapshots-table";
+import { createAssistantUploadsTableIfNeeded } from "./migrations/create-assistant-uploads-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -89,6 +90,12 @@ export async function pushSchemaIfNeeded(
   // month" action has a destination on the very first request after a
   // rollout. Idempotent — no-op once the table exists.
   await createMonthlySnapshotsTableIfNeeded(pool, log);
+
+  // Provision `assistant_uploads` (Task #647) BEFORE drizzle's
+  // pushSchema so the assistant's file-upload proposal flow has a
+  // destination on the very first request after a rollout. Idempotent
+  // — no-op once the table exists.
+  await createAssistantUploadsTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

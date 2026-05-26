@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Send, X, Trash2, Undo2 } from "lucide-react";
+import { Bot, Send, X, Trash2, Undo2, Paperclip } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useAssistant, type PendingProposal } from "./use-assistant";
+import {
+  useAssistant,
+  type PendingProposal,
+  type AssistantAttachment,
+} from "./use-assistant";
 
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const {
     messages,
     proposals,
@@ -17,6 +24,7 @@ export function AssistantBubble() {
     respondToProposal,
     undoProposal,
     reset,
+    uploadFile,
   } = useAssistant();
   // Only the *most recent* approved & reversible change can be undone
   // from the bubble — older approved changes might have been built on
@@ -30,6 +38,7 @@ export function AssistantBubble() {
     return null;
   }, [proposals]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && scrollRef.current) {
@@ -39,9 +48,38 @@ export function AssistantBubble() {
 
   const handleSubmit = () => {
     const t = input.trim();
-    if (!t || busy) return;
+    if ((!t && attachments.length === 0) || busy) return;
+    const text = t || "(see attached file)";
+    const toSend = attachments;
     setInput("");
-    void send(t);
+    setAttachments([]);
+    setUploadError(null);
+    void send(text, toSend);
+  };
+
+  const handlePickFile = () => {
+    setUploadError(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const att = await uploadFile(file);
+      setAttachments((prev) => [...prev, att]);
+    } catch (err: any) {
+      setUploadError(err?.message ?? "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeAttachment = (uploadId: string) => {
+    setAttachments((prev) => prev.filter((a) => a.uploadId !== uploadId));
   };
 
   return (
@@ -147,8 +185,59 @@ export function AssistantBubble() {
             )}
           </div>
 
-          <footer className="border-t border-border p-2">
+          <footer className="border-t border-border p-2 space-y-1.5">
+            {attachments.length > 0 && (
+              <div
+                className="flex flex-wrap gap-1.5"
+                data-testid="assistant-attachments"
+              >
+                {attachments.map((a) => (
+                  <span
+                    key={a.uploadId}
+                    className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-[11px]"
+                    data-testid={`attachment-chip-${a.uploadId}`}
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    <span className="max-w-[180px] truncate">{a.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachment(a.uploadId)}
+                      className="ml-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={`Remove ${a.filename}`}
+                      data-testid={`attachment-remove-${a.uploadId}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {uploadError && (
+              <div className="text-[11px] text-destructive" data-testid="assistant-upload-error">
+                {uploadError}
+              </div>
+            )}
             <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileChange}
+                className="hidden"
+                data-testid="input-assistant-file"
+                accept=".xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handlePickFile}
+                disabled={busy || uploading}
+                aria-label="Attach file"
+                title="Attach file (.xlsx, .pdf)"
+                data-testid="button-assistant-attach"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -158,16 +247,20 @@ export function AssistantBubble() {
                     handleSubmit();
                   }
                 }}
-                placeholder="Ask or instruct… (Shift+Enter for newline)"
+                placeholder={
+                  uploading
+                    ? "Uploading…"
+                    : "Ask or instruct… (Shift+Enter for newline)"
+                }
                 rows={2}
-                disabled={busy}
+                disabled={busy || uploading}
                 className="resize-none text-sm min-h-[40px]"
                 data-testid="input-assistant-message"
               />
               <Button
                 type="button"
                 onClick={handleSubmit}
-                disabled={busy || !input.trim()}
+                disabled={busy || uploading || (!input.trim() && attachments.length === 0)}
                 size="icon"
                 aria-label="Send message"
                 data-testid="button-assistant-send"
@@ -233,6 +326,23 @@ function ProposalCard({
         {isDestructive ? "Destructive change — confirm:" : "Pending change — confirm:"}
       </div>
       <div className="text-sm">{proposal.summary}</div>
+      {proposal.preview !== undefined && proposal.preview !== null && (
+        <div
+          className="rounded border border-border bg-background/60 p-1.5 text-[11px] space-y-1"
+          data-testid={`proposal-preview-${proposal.id}`}
+        >
+          <div className="font-medium text-muted-foreground">What will change:</div>
+          <PreviewBlock data={proposal.preview} />
+        </div>
+      )}
+      {proposal.previewError && (
+        <div
+          className="rounded border border-amber-300/60 bg-amber-50 px-1.5 py-1 text-[11px] text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200"
+          data-testid={`proposal-preview-error-${proposal.id}`}
+        >
+          Preview unavailable: {proposal.previewError}
+        </div>
+      )}
       <details className="text-xs">
         <summary className="cursor-pointer text-muted-foreground">Details</summary>
         <pre className="mt-1 overflow-x-auto rounded bg-background/60 p-1.5 text-[11px]">
@@ -291,6 +401,39 @@ function statusColor(status: PendingProposal["status"]): string {
     default:
       return "text-muted-foreground";
   }
+}
+
+function PreviewBlock({ data }: { data: unknown }) {
+  if (data === null || data === undefined) return null;
+  if (typeof data !== "object") {
+    return <div>{String(data)}</div>;
+  }
+  if (Array.isArray(data)) {
+    return (
+      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    );
+  }
+  const entries = Object.entries(data as Record<string, unknown>);
+  return (
+    <ul className="space-y-0.5">
+      {entries.map(([k, v]) => (
+        <li key={k} className="flex gap-1.5">
+          <span className="text-muted-foreground">{k}:</span>
+          <span className="break-words">
+            {typeof v === "object" && v !== null ? (
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px]">
+                {JSON.stringify(v, null, 2)}
+              </pre>
+            ) : (
+              String(v)
+            )}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function ChangesList({

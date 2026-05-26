@@ -43,10 +43,12 @@ vi.mock("@workspace/db", async () => {
 //    queueable fake whose stream produces a pre-canned list of content
 //    blocks (text + tool_use) per invocation.
 const responseQueue: Array<Array<Record<string, unknown>>> = [];
+const streamCalls: Array<Record<string, unknown>> = [];
 vi.mock("@workspace/integrations-anthropic-ai", () => ({
   anthropic: {
     messages: {
-      stream: () => {
+      stream: (args: Record<string, unknown>) => {
+        streamCalls.push(args);
         const blocks = responseQueue.shift() ?? [
           { type: "text", text: "(no more queued)" },
         ];
@@ -74,6 +76,7 @@ const {
   roomsTable,
   bedsTable,
   assistantConversationsTable,
+  assistantMessagesTable,
   assistantProposalsTable,
 } = dbModule as typeof import("@workspace/db");
 const { eq } = await import("drizzle-orm");
@@ -174,6 +177,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   responseQueue.length = 0;
+  streamCalls.length = 0;
 });
 
 describe("Task #658 — page-focus scope guard end-to-end against a real DB", () => {
@@ -310,5 +314,106 @@ describe("Task #658 — page-focus scope guard end-to-end against a real DB", ()
       .from(assistantProposalsTable)
       .where(eq(assistantProposalsTable.id, propId));
     expect(updated?.status).toBe("rejected");
+  });
+});
+
+describe("Task #664 — pre-#663 scope refusals must not poison new turns", () => {
+  it("strengthens the system prompt and still proposes a write when prior turns contain stale scope-refusal tool_errors", async () => {
+    // Seed a conversation whose history contains a fake pre-#663
+    // scope refusal: an assistant turn with a tool_use, then a user
+    // turn whose tool_result is the old buggy error string ("active
+    // customer scope is All"). Without the strengthened system note
+    // the model would pattern-match its own prior refusal and refuse
+    // again in plain prose without ever calling a tool.
+    const convId = "ac-poisoned-1";
+    await db.insert(assistantConversationsTable).values({
+      id: convId,
+      userId: "anon",
+      title: "poisoned history",
+    });
+    await db.insert(assistantMessagesTable).values([
+      {
+        id: "am-poisoned-1",
+        conversationId: convId,
+        role: "user",
+        content: "mark this bed ready",
+        metadata: {},
+      },
+      {
+        id: "am-poisoned-2",
+        conversationId: convId,
+        role: "assistant",
+        content: "",
+        metadata: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "tu-old-1",
+              name: "update_bed",
+              input: { id: "bedA1", cleaningStatus: "ready" },
+            },
+          ],
+        },
+      },
+      {
+        id: "am-poisoned-3",
+        conversationId: convId,
+        role: "user",
+        content: "",
+        metadata: {
+          blocks: [
+            {
+              type: "tool_result",
+              tool_use_id: "tu-old-1",
+              content:
+                "Refused: this write targets custA but the active customer scope is All. Ask the operator to switch the scope dropdown first.",
+              is_error: true,
+            },
+          ],
+        },
+      },
+    ]);
+
+    // The model (post-fix) should ignore the stale refusal and try
+    // the write again. Queue a fresh tool_use for it; the guard now
+    // allows it because focus=propA → custA matches bedA1's owner.
+    responseQueue.push([
+      {
+        type: "tool_use",
+        id: "tu-new-1",
+        name: "update_bed",
+        input: { id: "bedA1", cleaningStatus: "ready" },
+      },
+    ]);
+
+    const res = await fetch(`${baseUrl}/assistant/chat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-assistant-context": focusHeader("property", "propA"),
+      },
+      body: JSON.stringify({
+        conversationId: convId,
+        message: "try again",
+      }),
+    });
+    const events = await readSse(res);
+
+    // The strengthened scope note must show up in the system prompt
+    // we hand to Anthropic — this is what tells the model to stop
+    // pattern-matching its prior refusal.
+    expect(streamCalls.length).toBeGreaterThanOrEqual(1);
+    const systemPrompt = String(streamCalls[0]!.system ?? "");
+    expect(systemPrompt).toContain("current page belongs to customer custA");
+    expect(systemPrompt).toMatch(/IGNORE any earlier scope refusals/);
+    expect(systemPrompt).toMatch(/older guard build/);
+
+    // And the write proposal still gets created — the guard does
+    // not block it, and the prior poisoned tool_error did not cause
+    // the route to short-circuit.
+    expect(events.filter((e) => e.event === "tool_error")).toHaveLength(0);
+    const proposals = events.filter((e) => e.event === "proposal");
+    expect(proposals).toHaveLength(1);
+    expect(proposals[0].data.tool).toBe("update_bed");
   });
 });

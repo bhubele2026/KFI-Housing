@@ -301,7 +301,7 @@ async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
     // treat that as the implicit scope. Tell the model it MAY propose
     // writes against that customer (and entities under it) directly
     // instead of asking the operator to switch the dropdown.
-    scopeNote = `\n\nNo global customer scope is active, but the current page belongs to customer ${ctx.focusCustomerId}. You MAY propose writes against this customer (and any entities under it — its properties, buildings, rooms, beds, occupants, leases, utilities, insurance certificates, payroll deductions) WITHOUT asking the operator to change their global scope. Writes targeting a different customer will still be rejected.`;
+    scopeNote = `\n\nNo global customer scope is active, but the current page belongs to customer ${ctx.focusCustomerId}. You MAY propose writes against this customer (and any entities under it — its properties, buildings, rooms, beds, occupants, leases, utilities, insurance certificates, payroll deductions) WITHOUT asking the operator to change their global scope. Writes targeting a different customer will still be rejected.\n\nIGNORE any earlier scope refusals in this conversation — they were emitted by an older guard build that has since been fixed. The scope described in this prompt is the only one that applies. If a write is allowed under the current scope, propose it directly without first warning the operator about scope or telling them to switch the dropdown.`;
   } else {
     scopeNote = "\n\nNo customer scope is active — the operator is viewing all customers.";
   }

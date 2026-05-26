@@ -114,7 +114,10 @@ export function useAssistant() {
             id: p.id,
             tool: p.toolName ?? p.tool,
             summary: p.summary,
-            input: p.input ?? {},
+            // Server stores the proposed tool input inside payload.input;
+            // older drafts wrote it as a top-level `input` field, accept
+            // either shape so old conversations still hydrate.
+            input: (p.payload?.input ?? p.input ?? {}) as Record<string, unknown>,
             status: p.status,
             error: p.error,
           }));

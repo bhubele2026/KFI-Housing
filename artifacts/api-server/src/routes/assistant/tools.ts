@@ -198,13 +198,41 @@ tools.push({
 tools.push({
   name: "list_leases",
   kind: "read",
-  description: "List leases. Optional filter by propertyId.",
-  input_schema: obj({ propertyId: StrOpt }),
-  summarize: (i) => `Listing leases${i.propertyId ? ` for ${i.propertyId}` : ""}`,
+  description:
+    "List leases. Optional filters: propertyId, customerId (resolves via property), and expiringWithinDays (returns only leases whose endDate is between today and today+N).",
+  input_schema: obj({
+    propertyId: StrOpt,
+    customerId: StrOpt,
+    expiringWithinDays: NumOpt,
+  }),
+  summarize: (i) =>
+    `Listing leases${i.expiringWithinDays ? ` expiring within ${i.expiringWithinDays}d` : ""}${i.customerId ? ` for customer ${i.customerId}` : ""}${i.propertyId ? ` for property ${i.propertyId}` : ""}`,
   execute: async (input) => {
-    const rows = input.propertyId
+    // Resolve customerId → set of propertyIds so we can filter leases.
+    let propertyIdSet: Set<string> | null = null;
+    if (input.customerId) {
+      const props = await db
+        .select({ id: propertiesTable.id })
+        .from(propertiesTable)
+        .where(eq(propertiesTable.customerId, input.customerId));
+      propertyIdSet = new Set(props.map((p) => p.id));
+    }
+    let rows = input.propertyId
       ? await db.select().from(leasesTable).where(eq(leasesTable.propertyId, input.propertyId))
       : await db.select().from(leasesTable);
+    if (propertyIdSet) {
+      rows = rows.filter((l) => propertyIdSet!.has(l.propertyId));
+    }
+    if (typeof input.expiringWithinDays === "number" && input.expiringWithinDays >= 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      const horizon = new Date(Date.now() + input.expiringWithinDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+      rows = rows.filter((l) => {
+        const end = (l as any).endDate as string | undefined;
+        return typeof end === "string" && end >= today && end <= horizon;
+      });
+    }
     return { leases: rows };
   },
 });
@@ -243,16 +271,33 @@ tools.push({
 tools.push({
   name: "list_payroll_deductions",
   kind: "read",
-  description: "List payroll housing deductions. Optional filter by occupantId or propertyId.",
-  input_schema: obj({ occupantId: StrOpt, propertyId: StrOpt }),
-  summarize: (i) => `Listing payroll deductions`,
+  description:
+    "List payroll housing deductions. Optional filters: occupantId, propertyId, customerId, payWeekEndDate (exact YYYY-MM-DD week), and unmatched=true to return only rows whose occupantId does not match any current occupant (the 'unmatched payroll for <customer>' workflow).",
+  input_schema: obj({
+    occupantId: StrOpt,
+    propertyId: StrOpt,
+    customerId: StrOpt,
+    payWeekEndDate: StrOpt,
+    unmatched: BoolOpt,
+  }),
+  summarize: (i) =>
+    `Listing payroll deductions${i.unmatched ? " (unmatched only)" : ""}${i.customerId ? ` for customer ${i.customerId}` : ""}${i.payWeekEndDate ? ` week ${i.payWeekEndDate}` : ""}`,
   execute: async (input) => {
     const conds = [] as any[];
     if (input.occupantId) conds.push(eq(payrollDeductionsTable.occupantId, input.occupantId));
     if (input.propertyId) conds.push(eq(payrollDeductionsTable.propertyId, input.propertyId));
-    const rows = conds.length
+    if (input.customerId) conds.push(eq(payrollDeductionsTable.customerId, input.customerId));
+    if (input.payWeekEndDate)
+      conds.push(eq(payrollDeductionsTable.payWeekEndDate, input.payWeekEndDate));
+    let rows = conds.length
       ? await db.select().from(payrollDeductionsTable).where(and(...conds))
       : await db.select().from(payrollDeductionsTable).limit(200);
+    if (input.unmatched) {
+      const occIds = new Set(
+        (await db.select({ id: occupantsTable.id }).from(occupantsTable)).map((o) => o.id),
+      );
+      rows = rows.filter((r) => !r.occupantId || !occIds.has(r.occupantId));
+    }
     return { payrollDeductions: rows };
   },
 });

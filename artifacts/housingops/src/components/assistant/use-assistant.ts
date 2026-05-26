@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCustomerScope } from "@/context/customer-scope";
 
@@ -67,7 +67,7 @@ export function useAssistant() {
   });
   const queryClient = useQueryClient();
   const abortRef = useRef<AbortController | null>(null);
-  const location = useLocation();
+  const [location] = useLocation();
   const { customerId } = useCustomerScope();
 
   // Build the X-Assistant-Context header injected on every request so the
@@ -76,9 +76,9 @@ export function useAssistant() {
   const contextHeader = useCallback((): string => {
     return JSON.stringify({
       customerId: customerId ?? "ALL",
-      page: location.pathname,
+      page: location,
     });
-  }, [customerId, location.pathname]);
+  }, [customerId, location]);
 
   // Bootstrap: if we have a persisted conversationId, hydrate messages +
   // pending proposals from the server so the panel survives refresh.

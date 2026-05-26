@@ -1345,9 +1345,135 @@ tools.push({
 
 export const TOOLS: ReadonlyArray<ToolDef> = tools;
 
-// Returns the customerId implied by a write tool's input, if any — used
-// by the assistant runtime to enforce the active customer scope so the
-// assistant can't accidentally bridge across customers.
+// Maps each write tool to the table its `id` parameter (or other named
+// id) lives in, so the scope guard can authoritatively walk back to a
+// customerId. Keep this in sync when adding new write tools.
+const SCOPE_RESOLVERS: Record<
+  string,
+  { idField: string; table: "property" | "building" | "room" | "bed" | "occupant" | "lease" | "utility" | "insurance" | "payroll" }
+> = {
+  // Properties
+  update_property: { idField: "id", table: "property" },
+  delete_property: { idField: "id", table: "property" },
+  // Buildings
+  update_building: { idField: "id", table: "building" },
+  delete_building: { idField: "id", table: "building" },
+  // Rooms
+  update_room: { idField: "id", table: "room" },
+  delete_room: { idField: "id", table: "room" },
+  // Beds
+  update_bed: { idField: "id", table: "bed" },
+  delete_bed: { idField: "id", table: "bed" },
+  // Occupants
+  update_occupant: { idField: "id", table: "occupant" },
+  delete_occupant: { idField: "id", table: "occupant" },
+  // Leases
+  update_lease: { idField: "id", table: "lease" },
+  delete_lease: { idField: "id", table: "lease" },
+  // Utilities
+  update_utility: { idField: "id", table: "utility" },
+  delete_utility: { idField: "id", table: "utility" },
+  // Insurance certificates
+  update_insurance_certificate: { idField: "id", table: "insurance" },
+  delete_insurance_certificate: { idField: "id", table: "insurance" },
+  // Payroll deductions
+  delete_payroll_deduction: { idField: "id", table: "payroll" },
+};
+
+async function customerIdViaProperty(propertyId: string | null | undefined): Promise<string | null> {
+  if (!propertyId) return null;
+  const [p] = await db
+    .select({ customerId: propertiesTable.customerId })
+    .from(propertiesTable)
+    .where(eq(propertiesTable.id, propertyId));
+  return p?.customerId ?? null;
+}
+
+async function customerIdForRow(
+  table: "property" | "building" | "room" | "bed" | "occupant" | "lease" | "utility" | "insurance" | "payroll",
+  id: string,
+): Promise<string | null> {
+  switch (table) {
+    case "property": {
+      const [p] = await db
+        .select({ customerId: propertiesTable.customerId })
+        .from(propertiesTable)
+        .where(eq(propertiesTable.id, id));
+      return p?.customerId ?? null;
+    }
+    case "building": {
+      const [b] = await db
+        .select({ propertyId: buildingsTable.propertyId })
+        .from(buildingsTable)
+        .where(eq(buildingsTable.id, id));
+      return customerIdViaProperty(b?.propertyId);
+    }
+    case "room": {
+      const [r] = await db
+        .select({ propertyId: roomsTable.propertyId })
+        .from(roomsTable)
+        .where(eq(roomsTable.id, id));
+      return customerIdViaProperty(r?.propertyId);
+    }
+    case "bed": {
+      const [b] = await db
+        .select({ propertyId: bedsTable.propertyId })
+        .from(bedsTable)
+        .where(eq(bedsTable.id, id));
+      return customerIdViaProperty(b?.propertyId);
+    }
+    case "occupant": {
+      const [o] = await db
+        .select({ propertyId: occupantsTable.propertyId })
+        .from(occupantsTable)
+        .where(eq(occupantsTable.id, id));
+      return customerIdViaProperty(o?.propertyId);
+    }
+    case "lease": {
+      const [l] = await db
+        .select({ propertyId: leasesTable.propertyId })
+        .from(leasesTable)
+        .where(eq(leasesTable.id, id));
+      return customerIdViaProperty(l?.propertyId);
+    }
+    case "utility": {
+      const [u] = await db
+        .select({ propertyId: utilitiesTable.propertyId })
+        .from(utilitiesTable)
+        .where(eq(utilitiesTable.id, id));
+      return customerIdViaProperty(u?.propertyId);
+    }
+    case "insurance": {
+      const [c] = await db
+        .select({ propertyId: insuranceCertificatesTable.propertyId })
+        .from(insuranceCertificatesTable)
+        .where(eq(insuranceCertificatesTable.id, id));
+      return customerIdViaProperty(c?.propertyId);
+    }
+    case "payroll": {
+      const [d] = await db
+        .select({ customerId: payrollDeductionsTable.customerId, propertyId: payrollDeductionsTable.propertyId })
+        .from(payrollDeductionsTable)
+        .where(eq(payrollDeductionsTable.id, id));
+      return d?.customerId || customerIdViaProperty(d?.propertyId);
+    }
+  }
+}
+
+/**
+ * Returns the customerId implied by a write tool's input. Used by the
+ * assistant runtime to enforce the active customer scope so the
+ * assistant can't accidentally bridge across customers under a scoped
+ * session.
+ *
+ * Contract: returns the resolved customerId, or `null` if ownership
+ * could not be proven. The caller MUST treat `null` under an active
+ * scope as a "fail closed" — refuse the write — for any tool listed in
+ * SCOPE_RESOLVERS or in the parent-id branches below. The only writes
+ * that legitimately resolve to `null` are pure "create top-level" tools
+ * with no customerId on the input (`create_customer` etc., not present
+ * in the current registry).
+ */
 export async function impliedCustomerIdForWrite(
   toolName: string,
   input: any,
@@ -1358,29 +1484,39 @@ export async function impliedCustomerIdForWrite(
   if (toolName === "create_property_with_layout") {
     return (input?.property?.customerId as string) || null;
   }
-  // Resolve via parent for tools that reference a propertyId / bedId / etc.
   try {
+    // 1) Tool-name driven id → table lookup (covers all destructive +
+    //    update tools by their canonical `id` argument).
+    const resolver = SCOPE_RESOLVERS[toolName];
+    if (resolver) {
+      const idValue = input?.[resolver.idField];
+      if (typeof idValue === "string" && idValue) {
+        return await customerIdForRow(resolver.table, idValue);
+      }
+    }
+    // 2) Named-parent-id fallback for create_* tools that point at a
+    //    parent record by an explicit field (e.g. create_lease has
+    //    propertyId, create_bed has roomId, etc.).
     if (typeof input?.propertyId === "string") {
-      const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, input.propertyId));
-      return p?.customerId ?? null;
+      return await customerIdViaProperty(input.propertyId);
+    }
+    if (typeof input?.buildingId === "string") {
+      return await customerIdForRow("building", input.buildingId);
+    }
+    if (typeof input?.roomId === "string") {
+      return await customerIdForRow("room", input.roomId);
     }
     if (typeof input?.bedId === "string") {
-      const [b] = await db.select().from(bedsTable).where(eq(bedsTable.id, input.bedId));
-      if (b?.propertyId) {
-        const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, b.propertyId));
-        return p?.customerId ?? null;
-      }
+      return await customerIdForRow("bed", input.bedId);
     }
     if (typeof input?.occupantId === "string") {
-      const [o] = await db.select().from(occupantsTable).where(eq(occupantsTable.id, input.occupantId));
-      if (o?.propertyId) {
-        const [p] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, o.propertyId));
-        return p?.customerId ?? null;
-      }
-      return null;
+      return await customerIdForRow("occupant", input.occupantId);
+    }
+    if (typeof input?.leaseId === "string") {
+      return await customerIdForRow("lease", input.leaseId);
     }
   } catch {
-    /* ignore — guard is best-effort, not authoritative */
+    /* fall through to null — caller treats as fail-closed under scope */
   }
   return null;
 }

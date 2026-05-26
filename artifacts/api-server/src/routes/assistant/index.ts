@@ -340,8 +340,15 @@ async function runLoop(
         // switch scope, per the system prompt).
         if (ctx.customerScopeId) {
           const implied = await impliedCustomerIdForWrite(tu.name, tu.input ?? {});
-          if (implied && implied !== ctx.customerScopeId) {
-            const errMsg = `Refused: this change targets customer ${implied} but the active scope is ${ctx.customerScopeId}. Ask the operator to switch the customer scope first.`;
+          // Fail closed: if we couldn't prove ownership for a write under
+          // an active customer scope, refuse rather than silently allowing
+          // the mutation. The only legitimate `null` cases are top-level
+          // "create_customer"-style tools, which aren't in this registry.
+          if (implied === null || implied !== ctx.customerScopeId) {
+            const errMsg =
+              implied === null
+                ? `Refused: could not prove which customer this change belongs to under the active scope ${ctx.customerScopeId}. Resolve the target record first (e.g. find_property_by_name) or have the operator clear the customer scope.`
+                : `Refused: this change targets customer ${implied} but the active scope is ${ctx.customerScopeId}. Ask the operator to switch the customer scope first.`;
             toolResults.push({
               type: "tool_result",
               tool_use_id: tu.id,

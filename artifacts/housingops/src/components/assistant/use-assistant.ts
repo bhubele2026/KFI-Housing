@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { getListPayrollDeductionsQueryKey } from "@workspace/api-client-react";
+import {
+  getListBedsQueryKey,
+  getListBuildingsQueryKey,
+  getListCustomersQueryKey,
+  getListInsuranceCertificatesQueryKey,
+  getListLeasesQueryKey,
+  getListOccupantsQueryKey,
+  getListPayrollDeductionsQueryKey,
+  getListPropertiesQueryKey,
+  getListProjectedMoveInsQueryKey,
+  getListPropertyViolationsQueryKey,
+  getListRoomNightLogsQueryKey,
+  getListRoomsQueryKey,
+  getListUtilitiesQueryKey,
+} from "@workspace/api-client-react";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData } from "@/context/data-store";
 
@@ -339,10 +353,113 @@ export function useAssistant() {
     }
   }, [state.conversationId]);
 
-  const invalidateData = useCallback(() => {
-    // Refetch every list query so the rest of the app reflects the change.
-    queryClient.invalidateQueries();
-  }, [queryClient]);
+  // Map each write tool to the list query keys whose cached results it
+  // could have changed (Task #668). Invalidating only the affected keys
+  // keeps the rest of the app from refetching everything on every
+  // proposal, which used to thrash the dashboard. Tools not listed —
+  // and any tool we don't recognise — fall back to a full invalidation
+  // so we never silently leave stale data on screen.
+  const invalidateData = useCallback(
+    (toolName?: string | null) => {
+      const map: Record<string, Array<() => readonly unknown[]>> = {
+        // Properties
+        create_property: [getListPropertiesQueryKey],
+        update_property: [getListPropertiesQueryKey],
+        delete_property: [
+          getListPropertiesQueryKey,
+          getListBuildingsQueryKey,
+          getListRoomsQueryKey,
+          getListBedsQueryKey,
+          getListOccupantsQueryKey,
+          getListLeasesQueryKey,
+          getListUtilitiesQueryKey,
+          getListInsuranceCertificatesQueryKey,
+        ],
+        // Buildings
+        create_building: [getListBuildingsQueryKey],
+        update_building: [getListBuildingsQueryKey],
+        delete_building: [getListBuildingsQueryKey, getListRoomsQueryKey],
+        // Rooms
+        create_room: [getListRoomsQueryKey],
+        update_room: [getListRoomsQueryKey],
+        delete_room: [getListRoomsQueryKey, getListBedsQueryKey],
+        // Beds
+        create_bed: [getListBedsQueryKey],
+        update_bed: [getListBedsQueryKey, getListOccupantsQueryKey],
+        delete_bed: [getListBedsQueryKey, getListOccupantsQueryKey],
+        bulk_create_beds: [getListBedsQueryKey],
+        bulk_update_beds: [getListBedsQueryKey, getListOccupantsQueryKey],
+        // Occupants
+        create_occupant: [getListOccupantsQueryKey, getListBedsQueryKey],
+        update_occupant: [getListOccupantsQueryKey],
+        delete_occupant: [getListOccupantsQueryKey, getListBedsQueryKey],
+        assign_occupant_to_bed: [getListOccupantsQueryKey, getListBedsQueryKey],
+        move_occupant_to_bed: [getListOccupantsQueryKey, getListBedsQueryKey],
+        unassign_occupant: [getListOccupantsQueryKey, getListBedsQueryKey],
+        bulk_create_occupants: [getListOccupantsQueryKey, getListBedsQueryKey],
+        // Leases
+        create_lease: [getListLeasesQueryKey],
+        update_lease: [getListLeasesQueryKey],
+        delete_lease: [getListLeasesQueryKey],
+        bulk_update_leases: [getListLeasesQueryKey],
+        // Utilities
+        create_utility: [getListUtilitiesQueryKey],
+        update_utility: [getListUtilitiesQueryKey],
+        delete_utility: [getListUtilitiesQueryKey],
+        // Insurance
+        create_insurance_certificate: [getListInsuranceCertificatesQueryKey],
+        update_insurance_certificate: [getListInsuranceCertificatesQueryKey],
+        delete_insurance_certificate: [getListInsuranceCertificatesQueryKey],
+        // Payroll
+        create_payroll_deduction: [getListPayrollDeductionsQueryKey],
+        update_payroll_deduction: [getListPayrollDeductionsQueryKey],
+        delete_payroll_deduction: [getListPayrollDeductionsQueryKey],
+        // Customers
+        create_customer: [getListCustomersQueryKey],
+        update_customer: [getListCustomersQueryKey],
+        delete_customer: [getListCustomersQueryKey],
+        // Composite — touches everything under a new property
+        create_property_with_layout: [
+          getListPropertiesQueryKey,
+          getListBuildingsQueryKey,
+          getListRoomsQueryKey,
+          getListBedsQueryKey,
+        ],
+        // Room-night logging (property-scoped helper — pass a
+        // placeholder id and slice to the prefix so we invalidate every
+        // property's cached list, not just one).
+        log_room_nights: [getListRoomNightLogsQueryKey],
+        // Property-scoped lists: invalidate by prefix so every
+        // property's cached results are dropped.
+        record_property_violation: [
+          () => getListPropertyViolationsQueryKey("").slice(0, 1),
+        ],
+        create_projected_move_in: [
+          () => getListProjectedMoveInsQueryKey("").slice(0, 1),
+        ],
+        // Importers touch many tables at once.
+        import_master_leases: [getListLeasesQueryKey],
+        import_payroll_deductions: [
+          getListPayrollDeductionsQueryKey,
+          getListOccupantsQueryKey,
+        ],
+        // extract_lease_pdf only stages a draft for the next proposal —
+        // no list cache is touched until the operator approves a
+        // follow-up create_lease, which has its own mapping above.
+      };
+      const keys = toolName ? map[toolName] : undefined;
+      if (!keys) {
+        // Unknown / composite / undo path — be safe and refetch all
+        // list queries.
+        queryClient.invalidateQueries();
+        return;
+      }
+      for (const getKey of keys) {
+        queryClient.invalidateQueries({ queryKey: getKey() });
+      }
+    },
+    [queryClient],
+  );
 
   /** Stream an SSE response and dispatch events into local state. */
   const consumeStream = useCallback(
@@ -393,7 +510,34 @@ export function useAssistant() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
-      let needRefetch = false;
+      const approvedTools: string[] = [];
+
+      // 60-second stall watchdog (Task #668). If we go a full minute
+      // without any chunk from the server (including SSE keepalive
+      // comments emitted by `withSseKeepalive`), assume the
+      // connection is wedged and abort so the operator gets a clear
+      // error instead of a spinner that never resolves. Cleared in
+      // the read-loop `finally`.
+      let lastChunkAt = Date.now();
+      const stallTimer = setInterval(() => {
+        if (Date.now() - lastChunkAt > 60_000) {
+          clearInterval(stallTimer);
+          try {
+            controller.abort();
+          } catch {
+            /* already aborted */
+          }
+          setState((s) => ({
+            ...s,
+            busy: false,
+            error:
+              "Assistant stream stalled (no response for 60s). Please try again.",
+            messages: s.messages.map((m) =>
+              m.id === assistantMessageId ? { ...m, pending: false } : m,
+            ),
+          }));
+        }
+      }, 5_000);
 
       const handle = (event: string, payload: any) => {
         if (event === "conversation") {
@@ -423,7 +567,12 @@ export function useAssistant() {
             ],
           }));
         } else if (event === "proposal_resolved") {
-          if (payload.status === "approved") needRefetch = true;
+          if (payload.status === "approved" && typeof payload.tool === "string") {
+            approvedTools.push(payload.tool);
+          } else if (payload.status === "approved") {
+            // Server didn't tag the tool — fall back to a full invalidate.
+            approvedTools.push("");
+          }
           setState((s) => ({
             ...s,
             proposals: s.proposals.map((p) =>
@@ -461,28 +610,33 @@ export function useAssistant() {
         }
       };
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buf.indexOf("\n\n")) >= 0) {
-          const raw = buf.slice(0, idx);
-          buf = buf.slice(idx + 2);
-          if (!raw.trim()) continue;
-          let event = "message";
-          let data = "";
-          for (const line of raw.split("\n")) {
-            if (line.startsWith("event:")) event = line.slice(6).trim();
-            else if (line.startsWith("data:")) data += line.slice(5).trim();
-          }
-          if (!data) continue;
-          try {
-            handle(event, JSON.parse(data));
-          } catch {
-            /* ignore malformed */
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          lastChunkAt = Date.now();
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            const raw = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            if (!raw.trim()) continue;
+            let event = "message";
+            let data = "";
+            for (const line of raw.split("\n")) {
+              if (line.startsWith("event:")) event = line.slice(6).trim();
+              else if (line.startsWith("data:")) data += line.slice(5).trim();
+            }
+            if (!data) continue;
+            try {
+              handle(event, JSON.parse(data));
+            } catch {
+              /* ignore malformed */
+            }
           }
         }
+      } finally {
+        clearInterval(stallTimer);
       }
       // Stream closed without "done" event — flush.
       setState((s) => ({
@@ -492,7 +646,16 @@ export function useAssistant() {
           m.id === assistantMessageId ? { ...m, pending: false } : m,
         ),
       }));
-      if (needRefetch) invalidateData();
+      // Invalidate only the lists each approved tool actually touched.
+      // An empty string in `approvedTools` means the server didn't tag
+      // the tool, so fall through to a full invalidate for safety.
+      if (approvedTools.length > 0) {
+        if (approvedTools.includes("")) {
+          invalidateData(null);
+        } else {
+          for (const tool of approvedTools) invalidateData(tool);
+        }
+      }
     },
     [contextHeader, invalidateData],
   );
@@ -604,7 +767,7 @@ export function useAssistant() {
               : p,
           ),
         }));
-        invalidateData();
+        invalidateData(null);
       } catch (err: any) {
         setState((s) => ({
           ...s,

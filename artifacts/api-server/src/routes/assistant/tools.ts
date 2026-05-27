@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import {
   db,
   customersTable,
@@ -1500,6 +1500,300 @@ tools.push({
         created.push({ id: oid, name: o.name, bedId: targetBedId });
       }
       return { occupants: created };
+    });
+  },
+});
+
+// Bulk lease + bed tools (Task #668). Each tool runs every row through
+// the matching HTTP route via callRouteOrThrow so per-row normalisers
+// and guards (lease status derivation, bed cleaning-workflow, etc.)
+// still fire. One Confirm card runs them sequentially so the operator
+// is not asked to approve N separate proposals for one logical batch;
+// the first row that throws aborts the rest (caller will see a
+// tool_error and can retry the remainder).
+tools.push({
+  name: "bulk_update_leases",
+  kind: "write",
+  description:
+    "Update multiple leases in one proposal. Each entry must include `id`; only the fields you pass are changed (omit a field to leave it alone). Use this for 'set monthly rent on these 5 leases to $1200' instead of N separate update_lease proposals.",
+  input_schema: obj(
+    {
+      entries: {
+        type: "array",
+        minItems: 1,
+        items: obj(
+          {
+            id: Str,
+            startDate: StrOpt,
+            endDate: StrOpt,
+            monthlyRent: NumOpt,
+            securityDeposit: NumOpt,
+            status: StrOpt,
+            unit: StrOpt,
+            notes: StrOpt,
+            vendor: StrOpt,
+          },
+          ["id"],
+        ),
+      },
+    },
+    ["entries"],
+  ),
+  summarize: (i) => `Update ${(i.entries ?? []).length} leases`,
+  preview: async (input) => {
+    const entries = ((input.entries ?? []) as any[]).filter(
+      (e) => e && typeof e.id === "string",
+    );
+    const ids = entries.map((e) => e.id as string);
+    const existing = ids.length
+      ? await db.select().from(leasesTable).where(inArray(leasesTable.id, ids))
+      : [];
+    const byId = new Map(existing.map((r) => [r.id, r]));
+    const changes = entries.map((e) => {
+      const { id, ...rest } = e;
+      const after: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rest)) {
+        if (v !== null && v !== undefined) after[k] = v;
+      }
+      return { id, before: byId.get(id) ?? null, after };
+    });
+    return { count: entries.length, changes };
+  },
+  execute: async (input) => {
+    const entries = ((input.entries ?? []) as any[]).filter(
+      (e) => e && typeof e.id === "string",
+    );
+    if (entries.length === 0) throw new Error("bulk_update_leases: entries is empty");
+    // All-or-nothing: wrap every row in one transaction so a mid-batch
+    // failure rolls the whole batch back. We inline the same
+    // normalizeLeaseRow defence-in-depth pass that PATCH /api/leases/:id
+    // applies (Task #373) instead of dispatching through the HTTP route
+    // because the route uses the top-level `db` and can't share the
+    // transaction handle.
+    return db.transaction(async (tx) => {
+      const updated: any[] = [];
+      for (const e of entries) {
+        const { id, ...rest } = e;
+        const body: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(rest)) {
+          if (v !== null && v !== undefined) body[k] = v;
+        }
+        const normalized = normalizeLeaseRow(body);
+        const [row] = await tx
+          .update(leasesTable)
+          .set(normalized)
+          .where(eq(leasesTable.id, id))
+          .returning();
+        if (!row) throw new Error(`Lease ${id} not found`);
+        updated.push(row);
+      }
+      return { leases: updated, count: updated.length };
+    });
+  },
+});
+
+tools.push({
+  name: "bulk_create_beds",
+  kind: "write",
+  description:
+    "Create multiple beds in a single room in one proposal. Use for 'add 6 beds to room R' instead of N create_bed proposals. bedNumber auto-increments from the highest existing number in the room unless you supply one per entry.",
+  input_schema: obj(
+    {
+      propertyId: Str,
+      roomId: Str,
+      beds: {
+        type: "array",
+        minItems: 1,
+        items: obj({ bedNumber: NumOpt }, []),
+      },
+    },
+    ["propertyId", "roomId", "beds"],
+  ),
+  summarize: (i) =>
+    `Create ${(i.beds ?? []).length} beds in room ${i.roomId}`,
+  preview: async (input) => {
+    const beds = (input.beds ?? []) as any[];
+    const existing = await db
+      .select({ bedNumber: bedsTable.bedNumber })
+      .from(bedsTable)
+      .where(eq(bedsTable.roomId, input.roomId));
+    const maxExisting = existing.reduce(
+      (m, r) => Math.max(m, r.bedNumber ?? 0),
+      0,
+    );
+    let next = maxExisting + 1;
+    const planned = beds.map((b) => ({
+      bedNumber:
+        typeof b?.bedNumber === "number" && b.bedNumber > 0
+          ? b.bedNumber
+          : next++,
+    }));
+    return {
+      propertyId: input.propertyId,
+      roomId: input.roomId,
+      count: beds.length,
+      existingBedCount: existing.length,
+      planned,
+    };
+  },
+  execute: async (input) => {
+    const beds = (input.beds ?? []) as any[];
+    if (beds.length === 0) throw new Error("bulk_create_beds: beds is empty");
+    return db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ bedNumber: bedsTable.bedNumber })
+        .from(bedsTable)
+        .where(eq(bedsTable.roomId, input.roomId));
+      let next =
+        existing.reduce((m, r) => Math.max(m, r.bedNumber ?? 0), 0) + 1;
+      const created: any[] = [];
+      for (const b of beds) {
+        const bedNumber =
+          typeof b?.bedNumber === "number" && b.bedNumber > 0
+            ? b.bedNumber
+            : next++;
+        const id = newId("bed");
+        const values = normalizeBedRow({
+          id,
+          propertyId: input.propertyId,
+          roomId: input.roomId,
+          bedNumber,
+          status: "Vacant",
+          cleaningStatus: "ready",
+          occupantId: null,
+        });
+        const [row] = await tx.insert(bedsTable).values(values).returning();
+        created.push(row);
+      }
+      return { beds: created, count: created.length };
+    });
+  },
+});
+
+tools.push({
+  name: "bulk_update_beds",
+  kind: "write",
+  description:
+    "Update multiple beds in one proposal (bedNumber / cleaningStatus / roomId). Each entry needs `id`; only provided fields are changed. Use for batch cleaning-status flips ('mark these 4 beds needs_cleaning') instead of N update_bed proposals. Routes each row through PATCH /api/beds/:id so the cleaning-workflow guard still fires.",
+  input_schema: obj(
+    {
+      entries: {
+        type: "array",
+        minItems: 1,
+        items: obj(
+          {
+            id: Str,
+            bedNumber: NumOpt,
+            cleaningStatus: StrOpt,
+            roomId: StrOpt,
+          },
+          ["id"],
+        ),
+      },
+    },
+    ["entries"],
+  ),
+  summarize: (i) => `Update ${(i.entries ?? []).length} beds`,
+  preview: async (input) => {
+    const entries = ((input.entries ?? []) as any[]).filter(
+      (e) => e && typeof e.id === "string",
+    );
+    const ids = entries.map((e) => e.id as string);
+    const existing = ids.length
+      ? await db.select().from(bedsTable).where(inArray(bedsTable.id, ids))
+      : [];
+    const byId = new Map(existing.map((r) => [r.id, r]));
+    const changes = entries.map((e) => {
+      const { id, ...rest } = e;
+      const after: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rest)) {
+        if (v !== null && v !== undefined) after[k] = v;
+      }
+      return { id, before: byId.get(id) ?? null, after };
+    });
+    return { count: entries.length, changes };
+  },
+  execute: async (input) => {
+    const entries = ((input.entries ?? []) as any[]).filter(
+      (e) => e && typeof e.id === "string",
+    );
+    if (entries.length === 0) throw new Error("bulk_update_beds: entries is empty");
+    // Atomic batch (Task #668): mirror the PATCH /api/beds/:id
+    // cleaning-workflow guard (Task #500) inline so we can run every
+    // row in a single transaction. Any rejected row throws and rolls
+    // back the whole batch — operator sees a tool_error and can retry
+    // the remainder. The schema for this tool deliberately excludes
+    // `status` / `occupantId` (placement goes through
+    // assign_occupant_to_bed), so the wantsOccupy/wantsVacate path
+    // can't actually fire from a model-driven call — we still keep the
+    // logic in case the schema is loosened later.
+    return db.transaction(async (tx) => {
+      const updated: any[] = [];
+      for (const e of entries) {
+        const { id, ...rest } = e;
+        const updates: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(rest)) {
+          if (v !== null && v !== undefined) updates[k] = v;
+        }
+        const wantsOccupy =
+          updates.status === "Occupied" ||
+          (typeof updates.occupantId === "string" &&
+            (updates.occupantId as string).length > 0);
+        if (wantsOccupy) {
+          const [existing] = await tx
+            .select({
+              cleaningStatus: bedsTable.cleaningStatus,
+              status: bedsTable.status,
+              occupantId: bedsTable.occupantId,
+            })
+            .from(bedsTable)
+            .where(eq(bedsTable.id, id));
+          if (!existing) throw new Error(`Bed ${id} not found`);
+          const incomingOccupant =
+            typeof updates.occupantId === "string" &&
+            (updates.occupantId as string).length > 0
+              ? (updates.occupantId as string)
+              : null;
+          const isNoOp =
+            existing.status === "Occupied" &&
+            incomingOccupant !== null &&
+            existing.occupantId === incomingOccupant;
+          if (!isNoOp) {
+            if (
+              existing.status === "Occupied" &&
+              incomingOccupant !== null &&
+              existing.occupantId !== incomingOccupant
+            ) {
+              throw new Error(
+                `Bed ${id} is currently occupied by another occupant — vacate it first.`,
+              );
+            }
+            if (existing.cleaningStatus !== "ready") {
+              throw new Error(
+                `Bed ${id} is not ready for a new occupant — finish the cleaning workflow first.`,
+              );
+            }
+          }
+        }
+        const wantsVacate =
+          updates.status === "Vacant" ||
+          (Object.prototype.hasOwnProperty.call(updates, "occupantId") &&
+            updates.occupantId === null);
+        if (
+          wantsVacate &&
+          !Object.prototype.hasOwnProperty.call(updates, "cleaningStatus")
+        ) {
+          updates.cleaningStatus = "needs_cleaning";
+        }
+        const [row] = await tx
+          .update(bedsTable)
+          .set(normalizeBedRow(updates))
+          .where(eq(bedsTable.id, id))
+          .returning();
+        if (!row) throw new Error(`Bed ${id} not found`);
+        updated.push(row);
+      }
+      return { beds: updated, count: updated.length };
     });
   },
 });

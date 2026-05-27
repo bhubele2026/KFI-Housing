@@ -405,8 +405,15 @@ describe("Task #664 — pre-#663 scope refusals must not poison new turns", () =
     expect(streamCalls.length).toBeGreaterThanOrEqual(1);
     const systemPrompt = String(streamCalls[0]!.system ?? "");
     expect(systemPrompt).toContain("current page belongs to customer custA");
-    expect(systemPrompt).toMatch(/IGNORE any earlier scope refusals/);
-    expect(systemPrompt).toMatch(/older guard build/);
+    expect(systemPrompt).toMatch(
+      /You MAY propose writes against this customer/,
+    );
+    // The old "IGNORE any earlier scope refusals … older guard build"
+    // sentence was removed in Task #668 — it was confusing the model
+    // into treating every page-focus message as a retry of a prior
+    // refusal. The scope note above is now the only directive.
+    expect(systemPrompt).not.toMatch(/IGNORE any earlier scope refusals/);
+    expect(systemPrompt).not.toMatch(/older guard build/);
 
     // And the write proposal still gets created — the guard does
     // not block it, and the prior poisoned tool_error did not cause

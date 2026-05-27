@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   db,
   propertiesTable,
@@ -56,7 +56,9 @@ const ENTITIES: Record<Entity, EntityInfo> = {
 type Reversibility =
   | { kind: "createDelete"; entity: Entity }
   | { kind: "updateRestore"; entity: Entity }
-  | { kind: "deleteRestore"; entity: Entity };
+  | { kind: "deleteRestore"; entity: Entity }
+  | { kind: "bulkUpdateRestore"; entity: Entity }
+  | { kind: "bulkCreateDelete"; entity: Entity };
 
 const TOOL_REVERSIBILITY: Record<string, Reversibility> = {
   // Creates — undo deletes the row by id from result.
@@ -91,14 +93,31 @@ const TOOL_REVERSIBILITY: Record<string, Reversibility> = {
   delete_utility: { kind: "deleteRestore", entity: "utility" },
   delete_insurance_certificate: { kind: "deleteRestore", entity: "insurance" },
   delete_payroll_deduction: { kind: "deleteRestore", entity: "payroll" },
+
+  // Bulk write tools (Task #668). Snapshot every targeted row before
+  // the batch runs; undo restores each one or deletes the freshly-
+  // created ids.
+  bulk_update_leases: { kind: "bulkUpdateRestore", entity: "lease" },
+  bulk_update_beds: { kind: "bulkUpdateRestore", entity: "bed" },
+  bulk_create_beds: { kind: "bulkCreateDelete", entity: "bed" },
 };
 
 export interface UndoPlan {
-  kind: "deleteById" | "restoreRow" | "reinsertRow";
+  kind:
+    | "deleteById"
+    | "restoreRow"
+    | "reinsertRow"
+    | "bulkRestoreRows"
+    | "bulkDeleteByIds";
   entity: Entity;
-  id: string;
-  /** For restoreRow / reinsertRow, the full row snapshot to write back. */
+  /** Single-row plans use `id`. */
+  id?: string;
+  /** Single-row plans use `row`. */
   row?: Record<string, unknown>;
+  /** bulkRestoreRows uses `rows`. */
+  rows?: Array<Record<string, unknown>>;
+  /** bulkDeleteByIds uses `ids`. */
+  ids?: string[];
 }
 
 export function isToolReversible(toolName: string): boolean {
@@ -117,7 +136,25 @@ export async function captureSnapshot(
 ): Promise<Record<string, unknown> | null> {
   const meta = TOOL_REVERSIBILITY[toolName];
   if (!meta) return null;
-  if (meta.kind === "createDelete") return null;
+  if (meta.kind === "createDelete" || meta.kind === "bulkCreateDelete") {
+    return null;
+  }
+  if (meta.kind === "bulkUpdateRestore") {
+    const entries = Array.isArray(input.entries)
+      ? (input.entries as Array<Record<string, unknown>>)
+      : [];
+    const ids = entries
+      .map((e) => (typeof e?.id === "string" ? e.id : null))
+      .filter((x): x is string => x !== null && x.length > 0);
+    if (ids.length === 0) return null;
+    const info = ENTITIES[meta.entity];
+    const rows = await db
+      .select()
+      .from(info.table)
+      .where(inArray(info.table.id, ids));
+    // Wrap in an object so captureSnapshot's return type stays uniform.
+    return { __bulkRows: rows } as Record<string, unknown>;
+  }
   const id = typeof input.id === "string" ? input.id : null;
   if (!id) return null;
   const info = ENTITIES[meta.entity];
@@ -155,6 +192,25 @@ export function buildUndoPlan(
       row: snapshot,
     };
   }
+  if (meta.kind === "bulkUpdateRestore") {
+    const rows = (snapshot?.__bulkRows as Array<Record<string, unknown>>) ?? [];
+    if (rows.length === 0) return null;
+    return { kind: "bulkRestoreRows", entity: meta.entity, rows };
+  }
+  if (meta.kind === "bulkCreateDelete") {
+    const info = ENTITIES[meta.entity];
+    const createdList = (result as any)?.[`${info.resultKey}s`];
+    const rows: Array<Record<string, unknown>> = Array.isArray(createdList)
+      ? (createdList as Array<Record<string, unknown>>)
+      : Array.isArray((result as any)?.beds)
+        ? ((result as any).beds as Array<Record<string, unknown>>)
+        : [];
+    const ids = rows
+      .map((r) => (typeof r?.id === "string" ? (r.id as string) : null))
+      .filter((x): x is string => x !== null && x.length > 0);
+    if (ids.length === 0) return null;
+    return { kind: "bulkDeleteByIds", entity: meta.entity, ids };
+  }
   // deleteRestore
   if (!snapshot || typeof snapshot.id !== "string") return null;
   return {
@@ -181,6 +237,14 @@ export function extractResultId(
     const row = (result as any)?.[info.resultKey];
     if (row && typeof row.id === "string") return row.id;
   }
+  // Bulk tools touch many rows; no single result id makes sense — the
+  // changelog/Undo button uses the undo plan's row list instead.
+  if (
+    meta?.kind === "bulkUpdateRestore" ||
+    meta?.kind === "bulkCreateDelete"
+  ) {
+    return null;
+  }
   if (typeof input.id === "string") return input.id;
   return null;
 }
@@ -192,7 +256,32 @@ export function extractResultId(
  */
 export async function executeUndoPlan(plan: UndoPlan): Promise<void> {
   const info = ENTITIES[plan.entity];
+  if (plan.kind === "bulkDeleteByIds") {
+    const ids = plan.ids ?? [];
+    if (ids.length === 0) return;
+    await db.delete(info.table).where(inArray(info.table.id, ids));
+    return;
+  }
+  if (plan.kind === "bulkRestoreRows") {
+    const rows = plan.rows ?? [];
+    for (const row of rows) {
+      const id = typeof row.id === "string" ? row.id : null;
+      if (!id) continue;
+      const { id: _id, ...rest } = row;
+      const [existing] = await db
+        .select({ id: info.table.id })
+        .from(info.table)
+        .where(eq(info.table.id, id));
+      if (!existing) {
+        await db.insert(info.table).values(row as any);
+      } else {
+        await db.update(info.table).set(rest).where(eq(info.table.id, id));
+      }
+    }
+    return;
+  }
   if (plan.kind === "deleteById") {
+    if (!plan.id) throw new Error("Undo plan missing id");
     // Reverse a create. If the row is already gone (operator deleted
     // it manually) the undo is a no-op rather than an error — the
     // end state matches what undo wanted to achieve.
@@ -218,6 +307,7 @@ export async function executeUndoPlan(plan: UndoPlan): Promise<void> {
   }
   // reinsertRow — reverse a delete.
   if (!plan.row) throw new Error("Undo plan missing snapshot row");
+  if (!plan.id) throw new Error("Undo plan missing id");
   const [existing] = await db
     .select({ id: info.table.id })
     .from(info.table)

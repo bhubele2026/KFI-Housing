@@ -13,6 +13,11 @@ import {
   buildingsTable,
   leasesTable,
   occupantsTable,
+  roomsTable,
+  bedsTable,
+  utilitiesTable,
+  insuranceCertificatesTable,
+  payrollDeductionsTable,
 } from "@workspace/db";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
@@ -36,7 +41,9 @@ import {
 const router: IRouter = Router();
 
 const MODEL = "claude-sonnet-4-5";
-const MAX_TURNS = 8;
+// Raised from 8 → 20 in Task #668 so multi-step write flows (look up by
+// name → batch update) don't hit the cap before the model can finish.
+const MAX_TURNS = 20;
 
 const SYSTEM_PROMPT_BASE = `You are the HousingOps assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
 
@@ -51,6 +58,9 @@ Guidelines:
 - After a write tool runs (the system will tell you the result), summarize what changed in 1–2 short sentences.
 - For multi-step setup ("create a property with 2 buildings, 8 rooms each, $750/week beds"), prefer the composite tool create_property_with_layout — one Confirm card runs everything atomically.
 - For batch occupant creation, prefer bulk_create_occupants.
+- For batch lease edits ("set monthly rent on these 5 leases to $X"), prefer bulk_update_leases — one Confirm card edits them all instead of N separate proposals.
+- For multi-bed creates ("add 6 beds to room R"), prefer bulk_create_beds.
+- For batch bed-status flips ("mark these 4 beds needs_cleaning"), prefer bulk_update_beds.
 - If a required field is missing, ASK the user instead of guessing.
 - Keep replies short and operational. No fluff.
 
@@ -215,13 +225,84 @@ async function summarizeFocus(focus: PageFocus): Promise<string | null> {
       if (!row) return null;
       return `occupant ${row.id} ("${row.name}", property ${row.propertyId}, status ${row.status})`;
     }
-    default: {
-      // Other focus types (room/bed/utility/insurance/payroll) are
-      // accepted by parseAssistantContext for scope resolution but
-      // don't have a one-line summary today; the model still gets the
-      // raw id via the focusNote fallback below.
-      return null;
+    case "room": {
+      const [row] = await db
+        .select({
+          id: roomsTable.id,
+          name: roomsTable.name,
+          propertyId: roomsTable.propertyId,
+          buildingId: roomsTable.buildingId,
+        })
+        .from(roomsTable)
+        .where(eq(roomsTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `room ${row.id} ("${row.name}", property ${row.propertyId}${row.buildingId ? `, building ${row.buildingId}` : ""})`;
     }
+    case "bed": {
+      const [row] = await db
+        .select({
+          id: bedsTable.id,
+          bedNumber: bedsTable.bedNumber,
+          roomId: bedsTable.roomId,
+          propertyId: bedsTable.propertyId,
+          status: bedsTable.status,
+          cleaningStatus: bedsTable.cleaningStatus,
+          occupantId: bedsTable.occupantId,
+        })
+        .from(bedsTable)
+        .where(eq(bedsTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `bed ${row.id} (#${row.bedNumber}, room ${row.roomId}, property ${row.propertyId}, status ${row.status}/${row.cleaningStatus}${row.occupantId ? `, occupant ${row.occupantId}` : ""})`;
+    }
+    case "utility": {
+      const [row] = await db
+        .select({
+          id: utilitiesTable.id,
+          type: utilitiesTable.type,
+          company: utilitiesTable.company,
+          propertyId: utilitiesTable.propertyId,
+        })
+        .from(utilitiesTable)
+        .where(eq(utilitiesTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `utility ${row.id} (${row.type}${row.company ? ` — ${row.company}` : ""}, property ${row.propertyId})`;
+    }
+    case "insurance": {
+      const [row] = await db
+        .select({
+          id: insuranceCertificatesTable.id,
+          carrier: insuranceCertificatesTable.carrier,
+          policyNumber: insuranceCertificatesTable.policyNumber,
+          propertyId: insuranceCertificatesTable.propertyId,
+          coverageEnd: insuranceCertificatesTable.coverageEnd,
+        })
+        .from(insuranceCertificatesTable)
+        .where(eq(insuranceCertificatesTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `insurance certificate ${row.id} (carrier ${row.carrier || "?"}, policy ${row.policyNumber || "?"}, property ${row.propertyId}, ends ${row.coverageEnd || "?"})`;
+    }
+    case "payroll": {
+      const [row] = await db
+        .select({
+          id: payrollDeductionsTable.id,
+          occupantId: payrollDeductionsTable.occupantId,
+          customerId: payrollDeductionsTable.customerId,
+          propertyId: payrollDeductionsTable.propertyId,
+          payWeekEndDate: payrollDeductionsTable.payWeekEndDate,
+          weeklyAmount: payrollDeductionsTable.weeklyAmount,
+        })
+        .from(payrollDeductionsTable)
+        .where(eq(payrollDeductionsTable.id, focus.entityId))
+        .limit(1);
+      if (!row) return null;
+      return `payroll deduction ${row.id} (occupant ${row.occupantId}, customer ${row.customerId || "?"}, property ${row.propertyId || "?"}, week ending ${row.payWeekEndDate}, $${row.weeklyAmount})`;
+    }
+    default:
+      return null;
   }
 }
 
@@ -301,7 +382,7 @@ async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
     // treat that as the implicit scope. Tell the model it MAY propose
     // writes against that customer (and entities under it) directly
     // instead of asking the operator to switch the dropdown.
-    scopeNote = `\n\nNo global customer scope is active, but the current page belongs to customer ${ctx.focusCustomerId}. You MAY propose writes against this customer (and any entities under it — its properties, buildings, rooms, beds, occupants, leases, utilities, insurance certificates, payroll deductions) WITHOUT asking the operator to change their global scope. Writes targeting a different customer will still be rejected.\n\nIGNORE any earlier scope refusals in this conversation — they were emitted by an older guard build that has since been fixed. The scope described in this prompt is the only one that applies. If a write is allowed under the current scope, propose it directly without first warning the operator about scope or telling them to switch the dropdown.`;
+    scopeNote = `\n\nNo global customer scope is active, but the current page belongs to customer ${ctx.focusCustomerId}. You MAY propose writes against this customer (and any entities under it — its properties, buildings, rooms, beds, occupants, leases, utilities, insurance certificates, payroll deductions) WITHOUT asking the operator to change their global scope. Writes targeting a different customer will still be rejected.`;
   } else {
     scopeNote = "\n\nNo customer scope is active — the operator is viewing all customers.";
   }
@@ -329,6 +410,22 @@ function newId(prefix: string): string {
   return `${prefix}-${randomUUID().slice(0, 8)}`;
 }
 
+/**
+ * Produce the bracketed "[Current state — …]" line we prepend to every
+ * persisted user message (Task #668). Keeping the same single-line
+ * format makes the freshest page context always sit at the top of the
+ * most recent user turn, so the model never has to guess what "this
+ * property" refers to in a long conversation.
+ */
+function formatCurrentStateLine(ctx: AssistantCtx): string {
+  const page = ctx.pageContext ?? "?";
+  const scope = ctx.customerScopeId ?? "ALL";
+  const focus = ctx.focus
+    ? `${ctx.focus.entityType}:${ctx.focus.entityId}`
+    : "none";
+  return `[Current state — page=${page}, scope=${scope}, focus=${focus}]`;
+}
+
 function getUserId(req: Request): string {
   const auth = (req as any).auth;
   return auth?.userId ?? "anon";
@@ -346,6 +443,31 @@ function sseInit(res: Response): void {
 function sseSend(res: Response, event: string, data: unknown): void {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+/**
+ * Run `fn` while writing an SSE comment (`: keepalive\n\n`) every
+ * 15 s so intermediate proxies (and the client-side stall watchdog,
+ * Task #668) don't kill a long-running tool execution that hasn't
+ * produced output yet. The interval is cleared in `finally` so a
+ * thrown error doesn't leak a timer.
+ */
+async function withSseKeepalive<T>(
+  res: Response,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const timer = setInterval(() => {
+    try {
+      res.write(": keepalive\n\n");
+    } catch {
+      /* socket already closed */
+    }
+  }, 15_000);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
 }
 
 // ── File uploads (assistant attachments) ─────────────────────
@@ -708,7 +830,9 @@ async function runLoop(
           summary: def.summarize(tu.input ?? {}),
         });
         try {
-          const result = await def.execute(tu.input ?? {}, { userId: ctx.userId });
+          const result = await withSseKeepalive(res, () =>
+            def.execute(tu.input ?? {}, { userId: ctx.userId }),
+          );
           toolResults.push({
             type: "tool_result",
             tool_use_id: tu.id,
@@ -760,7 +884,9 @@ async function runLoop(
         let previewError: string | null = null;
         if (def.preview) {
           try {
-            previewData = await def.preview(tu.input ?? {}, { userId: ctx.userId });
+            previewData = await withSseKeepalive(res, () =>
+              def.preview!(tu.input ?? {}, { userId: ctx.userId }),
+            );
           } catch (err: any) {
             previewError = err?.message ?? String(err);
           }
@@ -825,6 +951,14 @@ async function runLoop(
     // Persist tool_result block as a user-role message for next turn.
     await persistMessage(conversationId, "user", "", { blocks: toolResults });
   }
+  // Hit the per-conversation turn cap without converging on a stop /
+  // proposal. Surface a visible error before "done" so the client can
+  // show the operator why the chat just ended instead of silently
+  // hanging mid-flow.
+  sseSend(res, "error", {
+    message:
+      "Hit max turns — the request was too complex to finish in one chat. Break it into smaller steps, or use a bulk_* tool to batch a repetitive change into one proposal.",
+  });
   sseSend(res, "done", { reason: "max_turns" });
 }
 
@@ -895,6 +1029,7 @@ async function autoCancelPendingProposals(
     if (res) {
       sseSend(res, "proposal_resolved", {
         id: p.id,
+        tool: p.toolName,
         status: "rejected",
         error: errMsg,
       });
@@ -983,7 +1118,17 @@ router.post("/assistant/chat", async (req, res): Promise<void> => {
   // operator intent and keeps history balanced.
   await autoCancelPendingProposals(conversationId, res, "new_user_message");
 
-  await persistMessage(conversationId, "user", body.message);
+  // Prepend a single bracketed "[Current state — page=…, scope=…,
+  // focus=…]" line to the persisted user message (Task #668) so each
+  // user turn carries the freshest page context as the most recent
+  // thing in the model's view. Without this the model occasionally
+  // resolves "this property" against an older turn's stale page.
+  const stateLine = formatCurrentStateLine(ctx);
+  await persistMessage(
+    conversationId,
+    "user",
+    `${stateLine}\n${body.message}`,
+  );
 
   req.on("close", () => {
     /* client disconnected */
@@ -1063,7 +1208,11 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       content: "User declined this action.",
       is_error: true,
     };
-    sseSend(res, "proposal_resolved", { id: proposalId, status: "rejected" });
+    sseSend(res, "proposal_resolved", {
+      id: proposalId,
+      tool: proposal.toolName,
+      status: "rejected",
+    });
   } else {
     // Allowlist edits to keys declared in the tool's input_schema —
     // every tool schema is built with additionalProperties:false, so
@@ -1104,6 +1253,7 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
           .where(eq(assistantProposalsTable.id, proposalId));
         sseSend(res, "proposal_resolved", {
           id: proposalId,
+          tool: proposal.toolName,
           status: "rejected",
           error: errMsg,
         });
@@ -1137,7 +1287,9 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       // can be reversed by replaying the snapshot. Creates need no
       // snapshot (the new id is enough to reverse).
       const snapshot = await captureSnapshot(proposal.toolName, finalInput);
-      const result = await def.execute(finalInput, { userId });
+      const result = await withSseKeepalive(res, () =>
+        def.execute(finalInput, { userId }),
+      );
       const undoPlan = buildUndoPlan(
         proposal.toolName,
         finalInput,
@@ -1161,6 +1313,7 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       };
       sseSend(res, "proposal_resolved", {
         id: proposalId,
+        tool: proposal.toolName,
         status: "approved",
         result,
         resultId,
@@ -1182,7 +1335,12 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
         content: `Error: ${message}`,
         is_error: true,
       };
-      sseSend(res, "proposal_resolved", { id: proposalId, status: "failed", error: message });
+      sseSend(res, "proposal_resolved", {
+        id: proposalId,
+        tool: proposal.toolName,
+        status: "failed",
+        error: message,
+      });
     }
   }
 

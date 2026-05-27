@@ -1,0 +1,238 @@
+Fix the in-app HousingOps assistant. It has six concrete problems. Address them
+in the order below. The relevant files are:
+
+  artifacts/api-server/src/routes/assistant/index.ts
+  artifacts/api-server/src/routes/assistant/tools.ts
+  artifacts/api-server/src/routes/assistant/undo.ts
+  artifacts/housingops/src/components/assistant/use-assistant.ts
+
+Do NOT change the proposal/confirm protocol or the SSE event shapes — the
+client depends on them. Read each file before editing; don't guess at schemas.
+
+────────────────────────────────────────────────────────────────────────
+FIX 1 — Add bulk write tools so batch edits don't require N confirms
+────────────────────────────────────────────────────────────────────────
+
+Today the run loop in index.ts pauses on the FIRST write tool_use and marks
+every subsequent tool_use as "deferred" with an is_error tool_result. So
+"update rent on these 10 leases" requires 10 separate confirms and usually
+exhausts MAX_TURNS before finishing. The pattern for fixing this already
+exists in tools.ts: bulk_create_occupants and create_property_with_layout
+run many writes inside a single transaction behind one proposal card.
+
+Add three new write tools in tools.ts using the SAME pattern (transaction,
+route-through callRouteOrThrow where the single-row version does, return
+the array of updated rows):
+
+  1. bulk_update_leases
+     - input: { updates: Array<{ id, startDate?, endDate?, monthlyRent?,
+                                  securityDeposit?, status?, unit?, notes?,
+                                  vendor? }> }
+     - Required: id on each entry. Every other field is optional and is only
+       applied if present (null/undefined are skipped — match the
+       single-row update_lease's filter logic).
+     - Implement preview() that returns { changes: [{ id, before, after }] }
+       by selecting the current rows first. The proposal card already
+       renders preview data.
+     - Execute inside db.transaction; for each entry call
+       callRouteOrThrow("PATCH", `/leases/${id}`, body) so the normalizer
+       and status-derivation fire (same as update_lease today).
+
+  2. bulk_create_beds
+     - input: { propertyId, roomId, count, startingBedNumber? }
+     - Create N beds in one transaction. If startingBedNumber is omitted,
+       continue from the room's current max(bedNumber) + 1.
+     - Match the single-row create_bed's normalizeBedRow call.
+
+  3. bulk_update_beds
+     - input: { updates: Array<{ id, bedNumber?, cleaningStatus?, roomId? }> }
+     - Same shape as bulk_update_leases, routed through
+       PATCH /api/beds/:id so the cleaning-workflow guard fires.
+
+Update undo.ts so all three new tools are reversible:
+  - For bulk_update_leases / bulk_update_beds: snapshot all targeted rows
+    BEFORE the write (extend captureSnapshot to handle the bulk_update_*
+    case by selecting all rows where id IN (...input.updates.map(u=>u.id)))
+    and buildUndoPlan emits a replay-snapshot plan (one PATCH per row to
+    restore prior values). Look at how update_lease/update_bed are handled
+    today and generalize to arrays.
+  - For bulk_create_beds: undo deletes the created bed ids returned from
+    execute (same shape as create_bed's undo today).
+  - extractResultId should return null for the bulk tools (no single
+    canonical id — undo is on the proposal, not a row).
+
+Update the system prompt in index.ts (SYSTEM_PROMPT_BASE) to direct the
+model toward these tools. Add to the Guidelines block:
+
+  - For batch lease edits (rent changes, end-date pushes, bulk status
+    flips), use bulk_update_leases. Do NOT emit one update_lease per row.
+  - For adding multiple beds to a room, use bulk_create_beds.
+  - For batch bed updates (cleaning status sweeps, renumbering), use
+    bulk_update_beds.
+
+────────────────────────────────────────────────────────────────────────
+FIX 2 — Raise MAX_TURNS and surface the cap as a visible error
+────────────────────────────────────────────────────────────────────────
+
+In index.ts:
+  - Change `const MAX_TURNS = 8;` to `const MAX_TURNS = 20;`
+  - At the bottom of runLoop where it currently emits
+    `sseSend(res, "done", { reason: "max_turns" })`, ALSO emit an error
+    event so the UI displays something the operator can act on:
+      sseSend(res, "error", {
+        message: "Hit max turns — the request was too complex. Break it into
+                  smaller steps or use a bulk_* tool."
+      });
+    Then keep the existing done event.
+
+────────────────────────────────────────────────────────────────────────
+FIX 3 — Complete summarizeFocus for all entity types
+────────────────────────────────────────────────────────────────────────
+
+summarizeFocus in index.ts only handles 5 of 10 focus entity types
+(property, building, customer, lease, occupant). On /beds/:id,
+/rooms/:id, /utilities/:id, /insurance/:id, /payroll/:id pages the model
+gets a focus id with NO description — which is why the assistant "thinks
+it's on the wrong page".
+
+Add cases for room, bed, utility, insurance, and payroll. Each follows the
+existing pattern: select id + display fields + parent id, return null if
+the row doesn't exist, otherwise return a one-line string. Use the table
+imports already at the top of index.ts (add bedsTable, roomsTable,
+utilitiesTable, insuranceCertificatesTable, payrollDeductionsTable from
+@workspace/db — verify exact export names from db package).
+
+────────────────────────────────────────────────────────────────────────
+FIX 4 — Stop stale page references in conversation history
+────────────────────────────────────────────────────────────────────────
+
+Each request injects the current page into the system prompt, but prior
+assistant/user turns in conversation history still contain references to
+older pages the operator has since navigated away from. The system prompt
+is one block; conversation history dominates in long threads.
+
+In index.ts, in the POST /assistant/chat handler, before persisting the
+user message, prepend a state line:
+
+  const stateLine =
+    `[Current state — page=${ctx.pageContext ?? "n/a"}, ` +
+    `scope=${ctx.customerScopeId ?? "all"}, ` +
+    `focus=${ctx.focus ? `${ctx.focus.entityType}/${ctx.focus.entityId}` : "none"}]`;
+  await persistMessage(conversationId, "user", `${stateLine}\n\n${body.message}`);
+
+This makes the freshest page context the most recent thing in the model's
+view, not buried in the system prompt.
+
+Also delete the brittle band-aid in buildSystemPrompt — the line that says
+"IGNORE any earlier scope refusals in this conversation — they were
+emitted by an older guard build that has since been fixed." The scope
+guard is the source of truth; telling the model to ignore its own context
+is a smell. Remove that sentence from the scopeNote string entirely.
+
+────────────────────────────────────────────────────────────────────────
+FIX 5 — Targeted query invalidation on the client
+────────────────────────────────────────────────────────────────────────
+
+In artifacts/housingops/src/components/assistant/use-assistant.ts,
+invalidateData currently calls queryClient.invalidateQueries() with no
+key, which refetches EVERY query in the app on every approved write.
+
+Two changes:
+
+  (a) Server: in index.ts's confirm handler, the proposal_resolved SSE
+      event for approved writes already has access to proposal.toolName.
+      Include it in the payload:
+        sseSend(res, "proposal_resolved", {
+          id: proposalId,
+          status: "approved",
+          tool: proposal.toolName,   // ADD THIS
+          result, resultId,
+          reversible: Boolean(undoPlan),
+        });
+
+  (b) Client: replace the blanket invalidateData call inside the
+      proposal_resolved branch of consumeStream with a tool-keyed
+      invalidation. Map each write tool to the relevant query keys:
+
+        const INVALIDATE_KEYS: Record<string, string[][]> = {
+          create_lease: [["leases"]],
+          update_lease: [["leases"]],
+          delete_lease: [["leases"]],
+          bulk_update_leases: [["leases"]],
+          create_bed: [["beds"], ["rooms"]],
+          update_bed: [["beds"]],
+          delete_bed: [["beds"]],
+          bulk_create_beds: [["beds"], ["rooms"]],
+          bulk_update_beds: [["beds"]],
+          create_property: [["properties"]],
+          update_property: [["properties"]],
+          delete_property: [["properties"]],
+          create_property_with_layout: [["properties"], ["buildings"], ["rooms"], ["beds"]],
+          create_building: [["buildings"]],
+          update_building: [["buildings"]],
+          delete_building: [["buildings"]],
+          create_room: [["rooms"]],
+          update_room: [["rooms"]],
+          delete_room: [["rooms"]],
+          create_occupant: [["occupants"], ["beds"]],
+          update_occupant: [["occupants"]],
+          delete_occupant: [["occupants"]],
+          bulk_create_occupants: [["occupants"], ["beds"]],
+          assign_occupant_to_bed: [["occupants"], ["beds"]],
+          move_occupant_to_bed: [["occupants"], ["beds"]],
+          unassign_occupant: [["occupants"], ["beds"]],
+          create_lease: [["leases"]],
+          // …extend for utilities, insurance, payroll, room_nights,
+          //    violations, projected_move_ins, imports
+        };
+
+      VERIFY THE KEY NAMES against the actual query keys used in the
+      react-query setup — open the data-store / api-client-react package
+      and use the exported query-key helpers (e.g.
+      getListLeasesQueryKey()) rather than hand-typed strings. Falling
+      back to a full invalidate if the tool name isn't mapped is fine.
+
+────────────────────────────────────────────────────────────────────────
+FIX 6 — Stall timeout on the SSE stream client
+────────────────────────────────────────────────────────────────────────
+
+In use-assistant.ts's consumeStream, the read loop has no timeout. If a
+chunk stalls the busy flag never clears.
+
+Add a 60s stall watchdog:
+
+  let lastChunkAt = Date.now();
+  const stallTimer = setInterval(() => {
+    if (Date.now() - lastChunkAt > 60_000) {
+      controller.abort();
+      clearInterval(stallTimer);
+    }
+  }, 5_000);
+
+Update lastChunkAt = Date.now() inside the while(true) loop on every
+non-empty chunk. Clear stallTimer in a finally block at the end of
+consumeStream so it doesn't leak.
+
+Also on the server, in runLoop's outer for-loop, send a keepalive comment
+every 15s during long tool execution. Easiest: wrap each def.execute(...)
+call in a setInterval that writes `res.write(": keepalive\n\n")` until
+the await resolves. Clear the interval in finally.
+
+────────────────────────────────────────────────────────────────────────
+TESTING
+────────────────────────────────────────────────────────────────────────
+
+After each fix, verify in the deployed app:
+  1. "Update rent on these 5 leases to $X" → one proposal card listing
+     all 5 changes, one confirm, one transaction.
+  2. Navigate to a /beds/:id page and ask "what's the cleaning status
+     here?" → the bot uses the focused bed without re-asking.
+  3. Navigate from /leases to /properties/:id mid-conversation and ask
+     "what about this property?" → it follows the new page, not the old.
+  4. Approve a write → only the relevant tables refetch (check Network
+     tab; should not see /api/properties, /api/customers etc fire on a
+     bed update).
+  5. Disconnect network during a long stream → busy state clears within
+     ~60s with a visible error.
+
+Do not skip step 1. That's the regression test for the main complaint.

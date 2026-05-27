@@ -9,6 +9,7 @@ import {
   type AssistantAttachment,
 } from "./use-assistant";
 import { useAssistantChips, type PageChip } from "./use-assistant-chips";
+import { renderPreview } from "./proposal-preview";
 
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
@@ -401,7 +402,7 @@ function ProposalCard({
           data-testid={`proposal-preview-${proposal.id}`}
         >
           <div className="font-medium text-muted-foreground">What will change:</div>
-          <PreviewBlock data={proposal.preview} />
+          {renderPreview(proposal.tool, proposal.preview)}
         </div>
       )}
       {proposal.previewError && (
@@ -470,39 +471,6 @@ function statusColor(status: PendingProposal["status"]): string {
     default:
       return "text-muted-foreground";
   }
-}
-
-function PreviewBlock({ data }: { data: unknown }) {
-  if (data === null || data === undefined) return null;
-  if (typeof data !== "object") {
-    return <div>{String(data)}</div>;
-  }
-  if (Array.isArray(data)) {
-    return (
-      <pre className="overflow-x-auto whitespace-pre-wrap break-words">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    );
-  }
-  const entries = Object.entries(data as Record<string, unknown>);
-  return (
-    <ul className="space-y-0.5">
-      {entries.map(([k, v]) => (
-        <li key={k} className="flex gap-1.5">
-          <span className="text-muted-foreground">{k}:</span>
-          <span className="break-words">
-            {typeof v === "object" && v !== null ? (
-              <pre className="overflow-x-auto whitespace-pre-wrap break-words text-[11px]">
-                {JSON.stringify(v, null, 2)}
-              </pre>
-            ) : (
-              String(v)
-            )}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function ChangesList({

@@ -111,7 +111,7 @@ function storeConversationId(id: string | null): void {
  * Placeholder ids ("new") are skipped so create routes don't emit a
  * bogus focus header.
  */
-function parsePageFocus(
+export function parsePageFocus(
   loc: string,
 ): { entityType: string; entityId: string } | null {
   const path = loc.split("?")[0]!.replace(/\/$/, "");

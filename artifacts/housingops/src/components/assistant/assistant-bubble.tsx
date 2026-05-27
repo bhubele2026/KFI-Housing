@@ -8,6 +8,7 @@ import {
   type PendingProposal,
   type AssistantAttachment,
 } from "./use-assistant";
+import { useAssistantChips, type PageChip } from "./use-assistant-chips";
 
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
@@ -15,6 +16,11 @@ export function AssistantBubble() {
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // After tapping a chip we hide the chip row for the rest of this
+  // turn so the operator doesn't see stale chips next to their own
+  // freshly-sent message. The flag is cleared automatically once the
+  // assistant turn finishes (busy flips false).
+  const [chipsSuppressedForTurn, setChipsSuppressedForTurn] = useState(false);
   const {
     messages,
     proposals,
@@ -27,6 +33,13 @@ export function AssistantBubble() {
     uploadFile,
     pageFocusCustomer,
   } = useAssistant();
+  const hasPendingProposal = proposals.some((p) => p.status === "pending");
+  const chipsQuery = useAssistantChips({
+    enabled: open && !busy && !hasPendingProposal,
+  });
+  useEffect(() => {
+    if (!busy) setChipsSuppressedForTurn(false);
+  }, [busy]);
   // Only the *most recent* approved & reversible change can be undone
   // from the bubble — older approved changes might have been built on
   // top of by newer edits, so we hide the Undo button to keep the
@@ -57,6 +70,25 @@ export function AssistantBubble() {
     setUploadError(null);
     void send(text, toSend);
   };
+
+  const handleChipTap = (chip: PageChip) => {
+    if (busy || uploading) return;
+    setInput("");
+    setChipsSuppressedForTurn(true);
+    void send(chip.prompt, attachments);
+    setAttachments([]);
+  };
+
+  // Render the chip row only when: bubble is open, no in-flight turn,
+  // no pending proposal awaiting confirm, not suppressed for this turn,
+  // and the query has actually returned data (no-flash gating).
+  const showChips =
+    open &&
+    !busy &&
+    !hasPendingProposal &&
+    !chipsSuppressedForTurn &&
+    chipsQuery.isSuccess &&
+    (chipsQuery.data?.chips.length ?? 0) > 0;
 
   const handlePickFile = () => {
     setUploadError(null);
@@ -230,6 +262,28 @@ export function AssistantBubble() {
             {uploadError && (
               <div className="text-[11px] text-destructive" data-testid="assistant-upload-error">
                 {uploadError}
+              </div>
+            )}
+            {showChips && (
+              <div
+                className="flex gap-1.5 overflow-x-auto flex-wrap"
+                data-testid="assistant-page-chips"
+              >
+                {chipsQuery.data!.chips.map((chip) => (
+                  <Button
+                    key={chip.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleChipTap(chip)}
+                    disabled={busy || uploading}
+                    className="h-7 px-2.5 text-[11px] font-normal max-w-[28ch] truncate"
+                    title={chip.prompt}
+                    data-testid={`assistant-chip-${chip.label}`}
+                  >
+                    {chip.label}
+                  </Button>
+                ))}
               </div>
             )}
             <div className="flex items-end gap-2">

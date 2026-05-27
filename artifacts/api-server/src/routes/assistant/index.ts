@@ -311,61 +311,84 @@ async function summarizeFocus(focus: PageFocus): Promise<string | null> {
 }
 
 /**
+ * One tappable suggestion surfaced above the chat input. `label` is the
+ * short button text (≤ ~28ch); `prompt` is the full natural-language
+ * sentence that gets sent to the assistant when the chip is tapped.
+ */
+export interface PageChip {
+  label: string;
+  prompt: string;
+}
+
+/**
  * Per-page "common asks" — these aren't commands the model executes;
  * they're hints so suggestions ("what next?") match what the operator
- * usually does on this page. Keep these tight and operational.
+ * usually does on this page. Returned as structured chips so the web
+ * client can render them as tappable buttons above the chat input;
+ * `pageSuggestions` then flattens the same list into the COMMON ASKS
+ * block of the system prompt. Keep these tight and operational, and
+ * cap each page at 4 chips so the row never wraps to a third line.
  */
-function pageSuggestions(ctx: AssistantCtx): string {
+export function pageChipsFor(ctx: AssistantCtx): PageChip[] {
   const path = ctx.pageContext?.split("?")[0] ?? "";
-  const lines: string[] = [];
+  let chips: PageChip[] = [];
   if (ctx.focus?.entityType === "property") {
-    lines.push(
-      "- list rooms / beds / occupants for this property",
-      "- show leases expiring soon for this property",
-      "- add a building, or add rooms with beds to an existing building",
-      "- find an unassigned bed and assign an occupant",
-    );
+    chips = [
+      { label: "Expiring leases here", prompt: "Show the leases expiring soon for this property." },
+      { label: "Vacant beds", prompt: "List the vacant beds at this property." },
+      { label: "Add a building", prompt: "Add a new building to this property." },
+      { label: "Assign an occupant", prompt: "Find an unassigned bed at this property and help me assign an occupant to it." },
+    ];
   } else if (ctx.focus?.entityType === "building") {
-    lines.push(
-      "- list rooms in this building",
-      "- add a room (with beds at a weekly rate)",
-      "- mark a room or bed needs_cleaning / ready",
-    );
+    chips = [
+      { label: "Rooms in this building", prompt: "List the rooms in this building." },
+      { label: "Add a room", prompt: "Add a new room (with beds) to this building." },
+      { label: "Mark cleaning status", prompt: "Help me mark a room or bed here as needs_cleaning or ready." },
+    ];
   } else if (ctx.focus?.entityType === "lease") {
-    lines.push(
-      "- update lease end date or status",
-      "- snooze / unsnooze this lease's expiry alert",
-      "- show the property's other leases",
-    );
+    chips = [
+      { label: "Extend by 6 months", prompt: "Extend this lease by 6 months." },
+      { label: "Other leases here", prompt: "Show the property's other leases." },
+      { label: "Snooze expiry alert", prompt: "Snooze the expiry alert on this lease." },
+    ];
   } else if (ctx.focus?.entityType === "occupant") {
-    lines.push(
-      "- move this occupant to another bed (cleaning-ready required)",
-      "- unassign (mark Former) — confirms before running",
-      "- check this occupant's recent payroll deductions",
-    );
+    chips = [
+      { label: "Recent deductions", prompt: "Show this occupant's recent payroll deductions." },
+      { label: "Move to another bed", prompt: "Move this occupant to another bed (must be cleaning-ready)." },
+      { label: "Mark as Former", prompt: "Unassign this occupant and mark them as Former." },
+    ];
   } else if (ctx.focus?.entityType === "customer") {
-    lines.push(
-      "- list this customer's properties",
-      "- find unmatched payroll for this customer (list_payroll_deductions unmatched=true)",
-      "- list leases expiring in the next 30 days for this customer",
-    );
+    chips = [
+      { label: "This customer's properties", prompt: "List this customer's properties." },
+      { label: "Unmatched payroll", prompt: "Find unmatched payroll deductions for this customer." },
+      { label: "Expiring in 30 days", prompt: "List leases expiring in the next 30 days for this customer." },
+    ];
   } else if (path === "/leases" || path === "/leases/snoozed") {
-    lines.push(
-      "- show leases expiring in the next 30/60/90 days (list_leases expiringWithinDays=N)",
-      "- filter by customer (list_leases customerId=...)",
-    );
+    chips = [
+      { label: "Expiring in 30 days", prompt: "Show leases expiring in the next 30 days." },
+      { label: "Expiring in 60 days", prompt: "Show leases expiring in the next 60 days." },
+      { label: "Filter by customer", prompt: "Help me filter leases by customer." },
+    ];
   } else if (path === "/dashboard") {
-    lines.push(
-      "- 'what needs attention today?' — pull expiring leases + unmatched payroll for the active customer",
-      "- jump to a property by name (find_property_by_name)",
-    );
+    chips = [
+      { label: "What needs attention?", prompt: "What needs attention today? Pull expiring leases and unmatched payroll for the active customer." },
+      { label: "Find unmatched payroll", prompt: "Find unmatched payroll deductions across the active customer." },
+      { label: "Jump to a property", prompt: "Help me jump to a property by name." },
+    ];
   } else if (path === "/occupants") {
-    lines.push(
-      "- find an occupant by name",
-      "- bulk create occupants for a property",
-    );
+    chips = [
+      { label: "Find an occupant", prompt: "Help me find an occupant by name." },
+      { label: "Bulk add occupants", prompt: "Help me bulk-create occupants for a property." },
+    ];
   }
-  return lines.length ? `\n\nCOMMON ASKS ON THIS PAGE:\n${lines.join("\n")}` : "";
+  return chips.slice(0, 4);
+}
+
+function pageSuggestions(ctx: AssistantCtx): string {
+  const chips = pageChipsFor(ctx);
+  if (!chips.length) return "";
+  const lines = chips.map((c) => `- ${c.prompt}`);
+  return `\n\nCOMMON ASKS ON THIS PAGE:\n${lines.join("\n")}`;
 }
 
 async function buildSystemPrompt(ctx: AssistantCtx): Promise<string> {
@@ -549,6 +572,16 @@ router.post("/assistant/uploads", uploadSingle, async (req, res): Promise<void> 
     mime: file.mimetype ?? "application/octet-stream",
     sizeBytes: file.size,
   });
+});
+
+// ── Page chips (Task #670) ───────────────────────────────────
+// Used by the web client to render 2-4 tappable suggestion chips above
+// the chat input. The same `X-Assistant-Context` header the chat route
+// reads is parsed here, so chips swap as the operator navigates without
+// any extra signalling.
+router.get("/assistant/page-chips", (req, res): void => {
+  const ctx = parseAssistantContext(req);
+  res.json({ chips: pageChipsFor(ctx) });
 });
 
 // ── Conversations ────────────────────────────────────────────

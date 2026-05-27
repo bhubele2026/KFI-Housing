@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Send, X, Trash2, Undo2, Paperclip } from "lucide-react";
+import { Bot, Send, X, Trash2, Undo2, Paperclip, BellOff, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,14 @@ import {
 } from "./use-assistant";
 import { useAssistantChips, type PageChip } from "./use-assistant-chips";
 import { renderPreview } from "./proposal-preview";
+import {
+  useAssistantNudges,
+  useDismissNudge,
+  useSnoozeNudge,
+  useNudgeCtaTap,
+  type AssistantNudge,
+  type SnoozePreset,
+} from "./use-assistant-nudges";
 
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
@@ -38,6 +46,12 @@ export function AssistantBubble() {
   const chipsQuery = useAssistantChips({
     enabled: open && !busy && !hasPendingProposal,
   });
+  const nudgesQuery = useAssistantNudges();
+  const dismissNudge = useDismissNudge();
+  const snoozeNudge = useSnoozeNudge();
+  const nudgeCtaTap = useNudgeCtaTap();
+  const nudges = nudgesQuery.data?.nudges ?? [];
+  const activeNudgeCount = nudges.length;
   useEffect(() => {
     if (!busy) setChipsSuppressedForTurn(false);
   }, [busy]);
@@ -127,6 +141,15 @@ export function AssistantBubble() {
           className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
         >
           <Bot className="h-5 w-5" />
+          {activeNudgeCount > 0 && (
+            <span
+              data-testid="assistant-nudge-badge"
+              data-count={activeNudgeCount}
+              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold flex items-center justify-center shadow"
+            >
+              {activeNudgeCount > 9 ? "9+" : activeNudgeCount}
+            </span>
+          )}
         </button>
       )}
 
@@ -202,6 +225,39 @@ export function AssistantBubble() {
             {messages.map((m) => (
               <MessageBubble key={m.id} role={m.role} text={m.text} pending={m.pending} />
             ))}
+
+            {nudges.length > 0 && (
+              <div
+                className="space-y-1.5"
+                data-testid="assistant-nudges"
+                data-count={nudges.length}
+              >
+                {nudges.map((n) => (
+                  <NudgeCard
+                    key={n.id}
+                    nudge={n}
+                    onAct={(prompt) => {
+                      // Spec requires the card to disappear after the
+                      // CTA fires: log a CTA tap for telemetry, then
+                      // dismiss the row so it doesn't linger above
+                      // the response. Both calls are best-effort —
+                      // the prompt always goes regardless of either
+                      // network result.
+                      nudgeCtaTap.mutate(n);
+                      dismissNudge.mutate(n);
+                      setChipsSuppressedForTurn(true);
+                      void send(prompt, attachments);
+                      setAttachments([]);
+                    }}
+                    onDismiss={() => dismissNudge.mutate(n)}
+                    onSnooze={(until) =>
+                      snoozeNudge.mutate({ nudge: n, until })
+                    }
+                    disabled={busy}
+                  />
+                ))}
+              </div>
+            )}
 
             {proposals
               .filter((p) => p.status === "pending")
@@ -342,6 +398,125 @@ export function AssistantBubble() {
         </div>
       )}
     </>
+  );
+}
+
+function NudgeCard({
+  nudge,
+  onAct,
+  onDismiss,
+  onSnooze,
+  disabled,
+}: {
+  nudge: AssistantNudge;
+  onAct: (prompt: string) => void;
+  onDismiss: () => void;
+  onSnooze: (until: SnoozePreset) => void;
+  disabled: boolean;
+}) {
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const severityClasses =
+    nudge.severity === "critical"
+      ? "border-destructive/40 bg-destructive/5"
+      : nudge.severity === "warn"
+        ? "border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30"
+        : "border-sky-300 bg-sky-50 dark:border-sky-700/60 dark:bg-sky-950/30";
+  const dotClasses =
+    nudge.severity === "critical"
+      ? "bg-destructive"
+      : nudge.severity === "warn"
+        ? "bg-amber-500"
+        : "bg-sky-500";
+  return (
+    <div
+      className={`rounded-lg border p-2.5 space-y-1.5 ${severityClasses}`}
+      data-testid={`assistant-nudge-${nudge.ruleKey}`}
+      data-nudge-source={nudge.source}
+      data-nudge-severity={nudge.severity}
+    >
+      <div className="flex items-start gap-2">
+        <span
+          className={`mt-1 h-2 w-2 shrink-0 rounded-full ${dotClasses}`}
+          aria-hidden
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium">{nudge.title}</div>
+          {nudge.body && (
+            <div className="text-xs text-muted-foreground whitespace-pre-wrap">
+              {nudge.body}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+        {nudge.ctaPrompt && nudge.ctaLabel && (
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            className="h-7 px-2.5 text-[11px]"
+            onClick={() => onAct(nudge.ctaPrompt!)}
+            disabled={disabled}
+            data-testid={`button-nudge-act-${nudge.ruleKey}`}
+          >
+            {nudge.ctaLabel}
+          </Button>
+        )}
+        <div className="relative">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-[11px] text-muted-foreground"
+            onClick={() => setSnoozeOpen((v) => !v)}
+            title="Snooze this reminder"
+            data-testid={`button-nudge-snooze-${nudge.ruleKey}`}
+          >
+            <Clock className="h-3 w-3 mr-1" />
+            Snooze
+          </Button>
+          {snoozeOpen && (
+            <div
+              className="absolute z-10 left-0 top-full mt-1 rounded-md border bg-popover shadow-md py-1 min-w-[100px]"
+              role="menu"
+              data-testid={`menu-nudge-snooze-${nudge.ruleKey}`}
+              onMouseLeave={() => setSnoozeOpen(false)}
+            >
+              {([
+                { label: "1 day", value: "1d" as const },
+                { label: "3 days", value: "3d" as const },
+                { label: "1 week", value: "1w" as const },
+              ]).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className="block w-full text-left px-2.5 py-1 text-[11px] hover:bg-accent"
+                  onClick={() => {
+                    setSnoozeOpen(false);
+                    onSnooze(opt.value);
+                  }}
+                  data-testid={`button-nudge-snooze-${opt.value}-${nudge.ruleKey}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-[11px] text-muted-foreground"
+          onClick={onDismiss}
+          title="Dismiss"
+          data-testid={`button-nudge-dismiss-${nudge.ruleKey}`}
+        >
+          <BellOff className="h-3 w-3 mr-1" />
+          Dismiss
+        </Button>
+      </div>
+    </div>
   );
 }
 

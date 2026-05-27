@@ -1,4 +1,5 @@
-import { pgTable, text, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const bedsTable = pgTable("beds", {
   id: text("id").primaryKey(),
@@ -7,6 +8,14 @@ export const bedsTable = pgTable("beds", {
   roomId: text("room_id").notNull().default(""),
   status: text("status").notNull().default("Vacant"),
   occupantId: text("occupant_id"),
+  // Last-write timestamp. Backfilled to now() on column add so the
+  // assistant scanner's "needs_cleaning >7 days" check has a baseline
+  // (existing dirty beds will become stale 7 days after the migration,
+  // which matches the rule's intent for new findings). Set by the API
+  // boundary on every bed mutation.
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
   // Cleaning workflow status (task #500). Values:
   //   "occupied"       — bed is currently occupied (mirrors status="Occupied").
   //   "needs_cleaning" — occupant just moved out, room turnover not started.

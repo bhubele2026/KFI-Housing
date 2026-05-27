@@ -1,13 +1,14 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import multer, { MulterError } from "multer";
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import {
   db,
   assistantConversationsTable,
   assistantMessagesTable,
   assistantProposalsTable,
   assistantUploadsTable,
+  assistantNudgesTable,
   type AssistantMessageRow,
   propertiesTable,
   buildingsTable,
@@ -19,6 +20,11 @@ import {
   insuranceCertificatesTable,
   payrollDeductionsTable,
 } from "@workspace/db";
+import { emitNudge } from "../../lib/assistant-nudges";
+import { runAssistantScan } from "../../jobs/assistant-scanner";
+import { parseScannerRecipientUserIds } from "../../lib/assistant-nudges";
+import { mostRecentSaturday } from "../../lib/pay-week";
+import { logger as serverLogger } from "../../lib/logger";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
 import {
@@ -1420,6 +1426,24 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
         resultId,
         reversible: Boolean(undoPlan),
       });
+      // Event-style nudges (Task #671 Phase 3) — raised inline after a
+      // successful import_* so the operator sees a persistent summary
+      // card with anchors back into the data the import just touched.
+      // Best-effort: a logging failure here must never undo the
+      // successful write, so we swallow and log.
+      try {
+        await maybeEmitImportNudge({
+          toolName: proposal.toolName,
+          userId,
+          proposalId,
+          result: result as Record<string, unknown>,
+        });
+      } catch (err) {
+        serverLogger.warn(
+          { err, proposalId, tool: proposal.toolName },
+          "assistant-nudges: post-import emitNudge failed",
+        );
+      }
     } catch (err: any) {
       const message = err?.message ?? String(err);
       await db
@@ -1610,6 +1634,621 @@ router.get("/assistant/changelog", async (req, res): Promise<void> => {
     });
   res.json({ entries });
 });
+
+// ─────────────────────────────────────────── Nudges (Task #671) ──
+
+interface ComputedNudgePayload {
+  ruleKey: string;
+  source?: "page" | "event" | "scanner";
+  severity?: "info" | "warn" | "critical";
+  title?: string;
+  body?: string;
+  ctaLabel?: string | null;
+  ctaPrompt?: string | null;
+  pagePattern?: string | null;
+  anchorType?: string | null;
+  anchorId?: string | null;
+  customerId?: string | null;
+}
+
+function rowToNudgeDTO(row: typeof assistantNudgesTable.$inferSelect) {
+  return {
+    id: row.id,
+    ruleKey: row.ruleKey,
+    source: row.source,
+    severity: row.severity,
+    title: row.title,
+    body: row.body,
+    ctaLabel: row.ctaLabel,
+    ctaPrompt: row.ctaPrompt,
+    pagePattern: row.pagePattern,
+    anchorType: row.anchorType,
+    anchorId: row.anchorId,
+    customerId: row.customerId,
+    relatedProposalId: row.relatedProposalId,
+    createdAt: row.createdAt,
+    snoozedUntil: row.snoozedUntil,
+  };
+}
+
+/**
+ * GET /assistant/nudges — returns active nudges for the calling user,
+ * filtered by the operator's effective scope (customer dropdown +
+ * page focus), plus the on-the-fly computed page-context nudges that
+ * haven't been materialised yet. Computed nudges carry id
+ * `computed-<ruleKey>` and round-trip their full payload to
+ * dismiss/snooze so the materialiser can insert the matching row.
+ */
+router.get("/assistant/nudges", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const ctx = await resolveFocusCustomer(parseAssistantContext(req));
+  const effectiveCustomer = ctx.customerScopeId ?? ctx.focusCustomerId;
+  const now = new Date();
+  // IMPORTANT: query ALL of the user's rows (including dismissed and
+  // snoozed) so we can use them to suppress already-resolved computed
+  // nudges from reappearing. The display filter below then narrows
+  // to only the active rows. Without this, a dismissed computed nudge
+  // would keep reappearing on every navigation because its
+  // materialised row had dismissedAt set and was excluded from the
+  // dedup set — exactly the regression flagged in code review.
+  const allRows = await db
+    .select()
+    .from(assistantNudgesTable)
+    .where(eq(assistantNudgesTable.userId, userId))
+    .orderBy(desc(assistantNudgesTable.createdAt));
+  const visible = allRows.filter((r) => {
+    if (r.dismissedAt) return false;
+    if (r.snoozedUntil && new Date(r.snoozedUntil).getTime() > now.getTime()) {
+      return false;
+    }
+    if (effectiveCustomer && r.customerId && r.customerId !== effectiveCustomer) {
+      return false;
+    }
+    if (ctx.pageContext && r.pagePattern) {
+      if (!ctx.pageContext.includes(r.pagePattern)) return false;
+    }
+    return true;
+  });
+  const persisted = visible.map(rowToNudgeDTO);
+  const computed = await computePageContextNudges(ctx, allRows);
+  res.json({ nudges: [...computed, ...persisted] });
+});
+
+/**
+ * POST /assistant/nudges/:id/dismiss — marks the row dismissed, or for
+ * `computed-*` ids materialises the row first (using the client's
+ * supplied payload) and then dismisses it. Body shape for computed:
+ *   { computed: { ruleKey, source, severity, title, body, ... } }
+ */
+router.post(
+  "/assistant/nudges/:id/dismiss",
+  async (req, res): Promise<void> => {
+    const userId = getUserId(req);
+    const id = req.params.id;
+    const computed = (req.body as { computed?: ComputedNudgePayload })
+      ?.computed;
+    let ruleKey = "";
+    let source: string = "persisted";
+    if (id.startsWith("computed-")) {
+      source = "computed";
+      ruleKey = computed?.ruleKey ?? "";
+      await materializeComputedNudge(userId, computed, { dismissed: true });
+    } else {
+      const [row] = await db
+        .select({ ruleKey: assistantNudgesTable.ruleKey })
+        .from(assistantNudgesTable)
+        .where(
+          and(
+            eq(assistantNudgesTable.id, id),
+            eq(assistantNudgesTable.userId, userId),
+          ),
+        )
+        .limit(1);
+      ruleKey = row?.ruleKey ?? "";
+      await db
+        .update(assistantNudgesTable)
+        .set({ dismissedAt: new Date() })
+        .where(
+          and(
+            eq(assistantNudgesTable.id, id),
+            eq(assistantNudgesTable.userId, userId),
+          ),
+        );
+    }
+    serverLogger.info(
+      { event: "assistant_nudge.dismiss", userId, id, ruleKey, source },
+      "assistant-nudges: dismiss",
+    );
+    res.json({ ok: true, dismissed: true });
+  },
+);
+
+/**
+ * POST /assistant/nudges/:id/snooze — snooze until a parsed deadline.
+ * Body accepts either:
+ *   { until: "1d" | "3d" | "1w" }      — shorthand presets
+ *   { until: "2026-05-30T12:00:00Z" }  — ISO timestamp
+ *   { hours: number }                  — legacy fallback (back-compat)
+ * Plus the same optional `computed` payload as dismiss for un-
+ * materialised page nudges.
+ */
+router.post(
+  "/assistant/nudges/:id/snooze",
+  async (req, res): Promise<void> => {
+    const userId = getUserId(req);
+    const id = req.params.id;
+    const body = req.body as {
+      until?: string;
+      hours?: number;
+      computed?: ComputedNudgePayload;
+    };
+    const until = parseSnoozeUntil(body);
+    if (!until) {
+      res.status(400).json({
+        error:
+          "Invalid snooze deadline. Use until: '1d' | '3d' | '1w' or an ISO timestamp.",
+      });
+      return;
+    }
+    let ruleKey = "";
+    let source: string = "persisted";
+    if (id.startsWith("computed-")) {
+      source = "computed";
+      ruleKey = body?.computed?.ruleKey ?? "";
+      await materializeComputedNudge(userId, body?.computed, {
+        snoozedUntil: until,
+      });
+    } else {
+      const [row] = await db
+        .select({ ruleKey: assistantNudgesTable.ruleKey })
+        .from(assistantNudgesTable)
+        .where(
+          and(
+            eq(assistantNudgesTable.id, id),
+            eq(assistantNudgesTable.userId, userId),
+          ),
+        )
+        .limit(1);
+      ruleKey = row?.ruleKey ?? "";
+      await db
+        .update(assistantNudgesTable)
+        .set({ snoozedUntil: until })
+        .where(
+          and(
+            eq(assistantNudgesTable.id, id),
+            eq(assistantNudgesTable.userId, userId),
+          ),
+        );
+    }
+    serverLogger.info(
+      {
+        event: "assistant_nudge.snooze",
+        userId,
+        id,
+        ruleKey,
+        source,
+        snoozedUntil: until.toISOString(),
+      },
+      "assistant-nudges: snooze",
+    );
+    res.json({ ok: true, snoozedUntil: until });
+  },
+);
+
+/**
+ * POST /assistant/nudges/:id/cta — telemetry-only endpoint logged when
+ * the operator clicks a nudge's CTA. The client also issues a
+ * dismiss after the CTA fires so the card disappears immediately,
+ * but we log the tap separately so we can measure which rules drive
+ * actual workflow rather than just being closed. Body:
+ *   { ruleKey?: string, ctaPrompt?: string }
+ * (ruleKey is needed for `computed-*` ids since they don't exist
+ * in the DB yet.)
+ */
+router.post(
+  "/assistant/nudges/:id/cta",
+  async (req, res): Promise<void> => {
+    const userId = getUserId(req);
+    const id = req.params.id;
+    const body = req.body as { ruleKey?: string; ctaPrompt?: string };
+    let ruleKey = body?.ruleKey ?? "";
+    if (!ruleKey && !id.startsWith("computed-")) {
+      const [row] = await db
+        .select({ ruleKey: assistantNudgesTable.ruleKey })
+        .from(assistantNudgesTable)
+        .where(
+          and(
+            eq(assistantNudgesTable.id, id),
+            eq(assistantNudgesTable.userId, userId),
+          ),
+        )
+        .limit(1);
+      ruleKey = row?.ruleKey ?? "";
+    }
+    serverLogger.info(
+      {
+        event: "assistant_nudge.cta_tap",
+        userId,
+        id,
+        ruleKey,
+        ctaPrompt: body?.ctaPrompt ?? null,
+      },
+      "assistant-nudges: cta_tap",
+    );
+    res.json({ ok: true });
+  },
+);
+
+function parseSnoozeUntil(body: {
+  until?: string;
+  hours?: number;
+}): Date | null {
+  if (body?.until) {
+    const u = String(body.until).trim();
+    const preset = SNOOZE_PRESETS[u as keyof typeof SNOOZE_PRESETS];
+    if (preset) return new Date(Date.now() + preset);
+    const iso = new Date(u);
+    if (!Number.isNaN(iso.getTime()) && iso.getTime() > Date.now()) return iso;
+    return null;
+  }
+  if (typeof body?.hours === "number" && body.hours > 0) {
+    const hours = Math.max(1, Math.min(720, body.hours));
+    return new Date(Date.now() + hours * 3_600_000);
+  }
+  return new Date(Date.now() + SNOOZE_PRESETS["1d"]);
+}
+
+const SNOOZE_PRESETS = {
+  "1d": 24 * 3_600_000,
+  "3d": 3 * 24 * 3_600_000,
+  "1w": 7 * 24 * 3_600_000,
+} as const;
+
+/**
+ * POST /assistant/scanner/run — dev-only trigger that runs the
+ * background scanner immediately, bypassing the per-check spacing
+ * guard. Disabled in production so we don't expose a way to fan out
+ * thousands of nudges on demand. Use `?force=1` to override per-check
+ * spacing.
+ */
+router.post("/assistant/scanner/run", async (req, res): Promise<void> => {
+  if (process.env["NODE_ENV"] === "production") {
+    res.status(404).json({ error: "Not available in production" });
+    return;
+  }
+  const result = await runAssistantScan({
+    logger: serverLogger,
+    recipientUserIds: parseScannerRecipientUserIds(process.env),
+    force: String(req.query["force"] ?? "") === "1",
+  });
+  res.json(result);
+});
+
+async function materializeComputedNudge(
+  userId: string,
+  computed: ComputedNudgePayload | undefined,
+  resolution: { dismissed?: boolean; snoozedUntil?: Date },
+): Promise<void> {
+  if (!computed?.ruleKey || !computed?.title) {
+    // Nothing to materialise — without a stable rule key we can't
+    // dedup, so we silently no-op rather than write a junk row.
+    return;
+  }
+  await emitNudge({
+    userId,
+    ruleKey: computed.ruleKey,
+    source: computed.source ?? "page",
+    severity: computed.severity ?? "info",
+    title: computed.title,
+    body: computed.body ?? "",
+    customerId: computed.customerId ?? null,
+    ctaLabel: computed.ctaLabel ?? null,
+    ctaPrompt: computed.ctaPrompt ?? null,
+    pagePattern: computed.pagePattern ?? null,
+    anchorType: computed.anchorType ?? null,
+    anchorId: computed.anchorId ?? null,
+  });
+  await db
+    .update(assistantNudgesTable)
+    .set({
+      dismissedAt: resolution.dismissed ? new Date() : undefined,
+      snoozedUntil: resolution.snoozedUntil ?? undefined,
+    })
+    .where(
+      and(
+        eq(assistantNudgesTable.userId, userId),
+        eq(assistantNudgesTable.ruleKey, computed.ruleKey),
+      ),
+    );
+}
+
+/**
+ * Build the page-context computed nudges for the current request
+ * (Task #671 Phase 3). These do NOT live in the DB until the operator
+ * dismisses or snoozes them — they're recomputed every fetch so they
+ * always reflect the latest state. We pass in the already-fetched
+ * persisted rows so we can suppress a computed nudge whose ruleKey is
+ * already materialised (otherwise the operator would see two cards
+ * for the same finding).
+ */
+async function computePageContextNudges(
+  ctx: AssistantCtx,
+  persisted: (typeof assistantNudgesTable.$inferSelect)[],
+): Promise<any[]> {
+  const existing = new Set(persisted.map((r) => r.ruleKey));
+  const out: any[] = [];
+  const push = (n: ComputedNudgePayload & { title: string }): void => {
+    if (existing.has(n.ruleKey)) return;
+    out.push({
+      id: `computed-${n.ruleKey}`,
+      ruleKey: n.ruleKey,
+      source: "page",
+      severity: n.severity ?? "info",
+      title: n.title,
+      body: n.body ?? "",
+      ctaLabel: n.ctaLabel ?? null,
+      ctaPrompt: n.ctaPrompt ?? null,
+      pagePattern: n.pagePattern ?? null,
+      anchorType: n.anchorType ?? null,
+      anchorId: n.anchorId ?? null,
+      customerId: n.customerId ?? null,
+      relatedProposalId: null,
+      createdAt: new Date(),
+      snoozedUntil: null,
+      computed: true,
+    });
+  };
+  const focus = ctx.focus;
+  const today = new Date();
+  const in14 = new Date(today);
+  in14.setDate(in14.getDate() + 14);
+  const in30 = new Date(today);
+  in30.setDate(in30.getDate() + 30);
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  try {
+    if (focus?.entityType === "property") {
+      const pid = focus.entityId;
+      const expiring = await db
+        .select({ id: leasesTable.id, endDate: leasesTable.endDate })
+        .from(leasesTable)
+        .where(
+          and(
+            eq(leasesTable.propertyId, pid),
+            eq(leasesTable.status, "Active"),
+            sql`${leasesTable.endDate} <> ''`,
+            sql`${leasesTable.endDate} >= ${ymd(today)}`,
+            sql`${leasesTable.endDate} <= ${ymd(in14)}`,
+          ),
+        );
+      for (const l of expiring) {
+        push({
+          ruleKey: `page:property:${pid}:lease-expiring-14:${l.id}`,
+          title: `Lease ${l.id} on this property ends ${l.endDate}`,
+          body: `Within 14 days. Decide renewal or notice now.`,
+          severity: "warn",
+          pagePattern: `/properties/${pid}`,
+          anchorType: "lease",
+          anchorId: l.id,
+          ctaLabel: "Open lease",
+          ctaPrompt: `Show me lease ${l.id} and renewal options.`,
+        });
+      }
+      const dirty = await db
+        .select({ id: bedsTable.id, bedNumber: bedsTable.bedNumber })
+        .from(bedsTable)
+        .where(
+          and(
+            eq(bedsTable.propertyId, pid),
+            eq(bedsTable.cleaningStatus, "needs_cleaning"),
+          ),
+        );
+      if (dirty.length > 0) {
+        push({
+          ruleKey: `page:property:${pid}:needs-cleaning-beds`,
+          title: `${dirty.length} bed${dirty.length === 1 ? "" : "s"} need cleaning at this property`,
+          body: `Bed${dirty.length === 1 ? "" : "s"} ${dirty
+            .map((b) => `#${b.bedNumber}`)
+            .slice(0, 6)
+            .join(", ")} pending turnover.`,
+          severity: "info",
+          pagePattern: `/properties/${pid}`,
+          anchorType: "property",
+          anchorId: pid,
+          ctaLabel: "Show beds",
+          ctaPrompt: `List the needs_cleaning beds at property ${pid}.`,
+        });
+      }
+    } else if (focus?.entityType === "lease") {
+      const [lease] = await db
+        .select()
+        .from(leasesTable)
+        .where(eq(leasesTable.id, focus.entityId))
+        .limit(1);
+      if (
+        lease &&
+        lease.status === "Active" &&
+        lease.endDate &&
+        lease.endDate >= ymd(today) &&
+        lease.endDate <= ymd(in30)
+      ) {
+        push({
+          ruleKey: `page:lease:${lease.id}:expiring-30`,
+          title: `This lease ends ${lease.endDate}`,
+          body: `Within 30 days. Confirm renewal terms or schedule notice.`,
+          severity: "warn",
+          pagePattern: `/leases/${lease.id}`,
+          anchorType: "lease",
+          anchorId: lease.id,
+          ctaLabel: "Suggest renewal",
+          ctaPrompt: `Help me prepare a renewal for lease ${lease.id}.`,
+        });
+      }
+    } else if (focus?.entityType === "occupant") {
+      const week = mostRecentSaturday(today);
+      const [occ] = await db
+        .select()
+        .from(occupantsTable)
+        .where(eq(occupantsTable.id, focus.entityId))
+        .limit(1);
+      if (occ && occ.status === "Active" && (occ.chargePerBed ?? 0) > 0) {
+        const ded = await db
+          .select({ id: payrollDeductionsTable.id })
+          .from(payrollDeductionsTable)
+          .where(
+            and(
+              eq(payrollDeductionsTable.occupantId, occ.id),
+              eq(payrollDeductionsTable.payWeekEndDate, week),
+            ),
+          )
+          .limit(1);
+        if (ded.length === 0) {
+          push({
+            ruleKey: `page:occupant:${occ.id}:missing-payroll:${week}`,
+            title: `No payroll deduction for ${occ.name || occ.id} (week of ${week})`,
+            body: `Active occupant has a charge but no payroll snapshot for the most recent pay week.`,
+            severity: "info",
+            pagePattern: `/occupants/${occ.id}`,
+            anchorType: "occupant",
+            anchorId: occ.id,
+            ctaLabel: "Open payroll",
+            ctaPrompt: `Show me payroll deductions for occupant ${occ.id} for week ${week}.`,
+          });
+        }
+      }
+    }
+
+    // Dashboard nudges — no focus, page path is "/" or "/dashboard".
+    if (
+      !focus &&
+      ctx.pageContext &&
+      (ctx.pageContext === "/" || ctx.pageContext.startsWith("/dashboard"))
+    ) {
+      const week = mostRecentSaturday(today);
+      const orphan = await db.execute(sql`
+        SELECT COUNT(*)::int AS c FROM payroll_deductions
+        WHERE pay_week_end_date = ${week} AND (occupant_id = '' OR occupant_id IS NULL)
+      `);
+      const orphanRows =
+        (orphan as unknown as { rows: any[] }).rows ?? (orphan as any);
+      const orphanCount = Number(orphanRows?.[0]?.c ?? 0);
+      if (orphanCount > 0) {
+        push({
+          ruleKey: `page:dashboard:unmatched-payroll:${week}`,
+          title: `${orphanCount} unmatched payroll row${orphanCount === 1 ? "" : "s"} for week of ${week}`,
+          body: `These rows imported without matching an occupant. Resolve them so the customer ledger balances.`,
+          severity: "warn",
+          pagePattern: "/",
+          anchorType: "payroll",
+          anchorId: week,
+          ctaLabel: "Open payroll",
+          ctaPrompt: `Show me unmatched payroll rows for the week of ${week}.`,
+        });
+      }
+      const emptyLeases = await db.execute(sql`
+        SELECT COUNT(*)::int AS c FROM leases l
+        WHERE l.status = 'Active'
+          AND NOT EXISTS (
+            SELECT 1 FROM occupants o WHERE o.property_id = l.property_id AND o.status = 'Active'
+          )
+      `);
+      const emptyRows =
+        (emptyLeases as unknown as { rows: any[] }).rows ?? (emptyLeases as any);
+      const emptyCount = Number(emptyRows?.[0]?.c ?? 0);
+      if (emptyCount > 0) {
+        push({
+          ruleKey: `page:dashboard:leases-without-occupants`,
+          title: `${emptyCount} active lease${emptyCount === 1 ? "" : "s"} with no occupants`,
+          body: `Confirm assignments or end these leases.`,
+          severity: "warn",
+          pagePattern: "/",
+          anchorType: null,
+          anchorId: null,
+          ctaLabel: "List leases",
+          ctaPrompt: `List active leases that have no active occupants.`,
+        });
+      }
+    }
+  } catch (err) {
+    serverLogger.warn(
+      { err },
+      "assistant-nudges: computePageContextNudges failed",
+    );
+  }
+  return out;
+}
+
+/**
+ * Event-style nudges raised after the proposal-confirm route
+ * successfully executes import_master_leases / import_payroll_deductions
+ * (Task #671 Phase 3). The body summarises what changed; the CTA
+ * walks the operator to a follow-up prompt the assistant already
+ * knows how to answer.
+ */
+async function maybeEmitImportNudge(args: {
+  toolName: string;
+  userId: string;
+  proposalId: string;
+  result: Record<string, unknown>;
+}): Promise<void> {
+  const { toolName, userId, proposalId, result } = args;
+  if (toolName === "import_master_leases") {
+    const created =
+      Number(result["customersCreated"] ?? 0) +
+      Number(result["propertiesCreated"] ?? 0) +
+      Number(result["leasesCreated"] ?? 0);
+    const updated =
+      Number(result["customersUpdated"] ?? 0) +
+      Number(result["propertiesUpdated"] ?? 0) +
+      Number(result["leasesUpdated"] ?? 0);
+    const review = Number(result["rowsNeedingReviewCount"] ?? 0);
+    const filename = String(result["filename"] ?? "master workbook");
+    await emitNudge({
+      userId,
+      ruleKey: `import-master-leases:${proposalId}`,
+      source: "event",
+      severity: review > 0 ? "warn" : "info",
+      title: `Imported ${filename}`,
+      body: `Created ${created}, updated ${updated}${review > 0 ? `, ${review} rows need review.` : "."}`,
+      ctaLabel: review > 0 ? "Review flagged rows" : "Show summary",
+      ctaPrompt:
+        review > 0
+          ? "Show me the master-lease import rows that need review."
+          : "Summarise the latest master-lease import.",
+      pagePattern: null,
+      anchorType: "proposal",
+      anchorId: proposalId,
+      relatedProposalId: proposalId,
+    });
+  } else if (toolName === "import_payroll_deductions") {
+    const imported = Number(result["deductionsImported"] ?? 0);
+    const unmatched = Number(result["unmatchedCount"] ?? 0);
+    const lowConf = Number(result["lowConfidenceCount"] ?? 0);
+    const week = String(result["payWeekEndDate"] ?? "");
+    const total = Number(result["totalAmount"] ?? 0);
+    await emitNudge({
+      userId,
+      ruleKey: `import-payroll-deductions:${proposalId}`,
+      source: "event",
+      severity: unmatched > 0 || lowConf > 0 ? "warn" : "info",
+      title: `Imported payroll for week of ${week}`,
+      body: `${imported} deductions totalling $${total.toFixed(2)}${
+        unmatched > 0 ? `, ${unmatched} unmatched` : ""
+      }${lowConf > 0 ? `, ${lowConf} low-confidence matches` : ""}.`,
+      ctaLabel:
+        unmatched > 0 || lowConf > 0 ? "Resolve unmatched" : "Open finance",
+      ctaPrompt:
+        unmatched > 0 || lowConf > 0
+          ? `Show unmatched payroll rows from the ${week} import.`
+          : `Show the finance summary for the week of ${week}.`,
+      pagePattern: null,
+      anchorType: "proposal",
+      anchorId: proposalId,
+      relatedProposalId: proposalId,
+    });
+  }
+}
 
 export default router;
 

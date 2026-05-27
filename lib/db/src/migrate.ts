@@ -12,6 +12,7 @@ import { createBedWeeklyRatesTableIfNeeded } from "./migrations/create-bed-weekl
 import { createAppUsersTablesIfNeeded } from "./migrations/create-app-users-tables";
 import { createMonthlySnapshotsTableIfNeeded } from "./migrations/create-monthly-snapshots-table";
 import { createAssistantUploadsTableIfNeeded } from "./migrations/create-assistant-uploads-table";
+import { createAssistantNudgesTablesIfNeeded } from "./migrations/create-assistant-nudges-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -96,6 +97,12 @@ export async function pushSchemaIfNeeded(
   // destination on the very first request after a rollout. Idempotent
   // — no-op once the table exists.
   await createAssistantUploadsTableIfNeeded(pool, log);
+
+  // Provision `assistant_nudges` + `assistant_scanner_runs` (Task #671)
+  // BEFORE drizzle's pushSchema so the assistant's nudge endpoints and
+  // background scanner have their destinations on the very first
+  // request after the rollout. Idempotent — no-op once both exist.
+  await createAssistantNudgesTablesIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

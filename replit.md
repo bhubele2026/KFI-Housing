@@ -88,3 +88,21 @@ curl -X POST -H "Content-Type: application/json" \
 ### Out of scope
 
 No point-in-time recovery between snapshots (we keep discrete dumps, not continuous WAL), no cross-region replication, and prior already-lost `attached_assets/` content from earlier republishes can't be recovered — only data from this change forward is protected.
+
+## HousingOps Assistant (Task #671)
+
+### Nudges
+
+The assistant chat surface renders **nudges** — short, dismissable cards that surface above the message stream when something needs attention. Three sources:
+
+1. **Event** (`source: "event"`) — emitted from the proposal-confirm path after a successful `import_master_leases` / `import_payroll_deductions` so the operator gets a persistent summary with a "Review flagged rows" CTA.
+2. **Page** (`source: "page"`) — computed on every `/assistant/nudges` fetch from the page focus (property / lease / occupant) plus dashboard scans. These are NOT stored until the operator dismisses or snoozes them, at which point they materialise into the `assistant_nudges` table so the dismissal sticks.
+3. **Scanner** (`source: "scanner"`) — produced by the background `runAssistantScan` job. Runs 30 minutes after a 5-minute warm-up; each rule is per-check deduped via the `assistant_scanner_runs` table (25-minute spacing). Findings only attribute to users listed in `ASSISTANT_SCANNER_RECIPIENT_USER_IDS`.
+
+### Required env vars
+
+- `ASSISTANT_SCANNER_RECIPIENT_USER_IDS` *(api-server)* — comma or whitespace-separated list of `app_users.id` values that should receive scanner-produced nudges. When unset/empty the scheduler still ticks but logs `assistant-scanner: no recipients configured, skipping` and does not emit. Set this once we have at least one operator. There is no per-customer routing yet (no users-for-customer model), so every recipient sees every finding — this is intentional for v1 and will be revisited when that schema lands.
+
+### Dev override
+
+`POST /api/assistant/scanner/run` (with optional `?force=1`) immediately runs the scanner, bypassing per-check spacing. Disabled when `NODE_ENV=production`.

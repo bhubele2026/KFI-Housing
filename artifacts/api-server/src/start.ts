@@ -13,6 +13,7 @@ import {
   readInsuranceExpiryConfig,
   startInsuranceExpiryScheduler,
 } from "./lib/insurance-expiry-scheduler";
+import { startAssistantScannerScheduler } from "./jobs/assistant-scanner";
 import { prewarmThumbnails } from "./routes/attached-assets";
 import { startMasterFileWatcher } from "./lib/master-file-watcher";
 import type {
@@ -656,6 +657,15 @@ export async function start(deps: StartDeps): Promise<void> {
     startMasterFileWatcher({
       reimport: deps.importDefaultMasterLeasesIfMissing,
       logger: deps.logger,
+    });
+    // Background nudge scanner (Task #671 Phase 4). Wakes every
+    // 30 minutes after a 5-minute warm-up and walks the six checks
+    // defined in jobs/assistant-scanner.ts. No-op when
+    // ASSISTANT_SCANNER_RECIPIENT_USER_IDS is unset (the scheduler
+    // logs an info line so it's clear in workflow logs).
+    startAssistantScannerScheduler({
+      logger: deps.logger,
+      env: deps.env,
     });
   } catch (err) {
     deps.logger.error({ err }, "Error listening on port");

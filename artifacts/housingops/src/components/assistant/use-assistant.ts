@@ -656,6 +656,12 @@ export function useAssistant() {
         } else {
           for (const tool of approvedTools) invalidateData(tool);
         }
+        // Task #671 Phase 3 — a successful write may have produced an
+        // event nudge (import_master_leases / import_payroll_deductions)
+        // and almost certainly invalidates one or more page-context
+        // computed nudges, so refresh the nudges query on every
+        // approved proposal regardless of which tool fired.
+        void queryClient.invalidateQueries({ queryKey: ["assistant-nudges"] });
       }
     },
     [contextHeader, invalidateData],

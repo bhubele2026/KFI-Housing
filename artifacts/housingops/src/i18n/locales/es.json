@@ -179,6 +179,14 @@
         "occupied": "{{count}} ocupadas",
         "vacant": "{{count}} disponibles"
       },
+      "dormantProperties": {
+        "title": "Propiedades sin actividad en {{days}} días",
+        "description": "Sin ediciones directas, sin contratos, ocupantes, camas, habitaciones, edificios, servicios, costos, certificados, infracciones, ingresos proyectados ni deducciones de nómina en la ventana. Confirma que la propiedad sigue en servicio o archívala.",
+        "empty": "Todas las propiedades tienen actividad reciente — no hay inactivas.",
+        "lastTouched": "Última actividad {{when}}",
+        "review": "Revisar",
+        "count": "{{count}} inactivas"
+      },
       "topProperties": {
         "title": "Mejores propiedades por calificación",
         "sortBy": "Ordenar por",

@@ -268,6 +268,12 @@ export const ImportDataBody = zod.object({
         .describe(
           "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
         ),
+      updatedAt: zod.coerce
+        .date()
+        .optional()
+        .describe(
+          "Last-touched timestamp (Task #676). Maintained by DB\ntriggers: a BEFORE UPDATE trigger on `properties` itself,\nand AFTER INSERT\/UPDATE\/DELETE triggers on every child\ntable that carries a `property_id` (leases, occupants,\nbeds, rooms, buildings, utilities, other-costs, insurance\ncertificates, property violations, projected move-ins,\npayroll deductions). The assistant scanner's \"dormant\nproperty\" check and the dashboard's dormant-property card\nboth read this column directly. Server-managed — clients\nshould treat it as read-only and may omit it on write.\n",
+        ),
       buildings: zod
         .array(
           zod.object({
@@ -931,6 +937,12 @@ export const ListPropertiesResponseItem = zod.object({
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
     ),
+  updatedAt: zod.coerce
+    .date()
+    .optional()
+    .describe(
+      "Last-touched timestamp (Task #676). Maintained by DB\ntriggers: a BEFORE UPDATE trigger on `properties` itself,\nand AFTER INSERT\/UPDATE\/DELETE triggers on every child\ntable that carries a `property_id` (leases, occupants,\nbeds, rooms, buildings, utilities, other-costs, insurance\ncertificates, property violations, projected move-ins,\npayroll deductions). The assistant scanner's \"dormant\nproperty\" check and the dashboard's dormant-property card\nboth read this column directly. Server-managed — clients\nshould treat it as read-only and may omit it on write.\n",
+    ),
   buildings: zod
     .array(
       zod.object({
@@ -1092,6 +1104,12 @@ export const CreatePropertyBody = zod.object({
     .nullish()
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
+    ),
+  updatedAt: zod.coerce
+    .date()
+    .optional()
+    .describe(
+      "Last-touched timestamp (Task #676). Maintained by DB\ntriggers: a BEFORE UPDATE trigger on `properties` itself,\nand AFTER INSERT\/UPDATE\/DELETE triggers on every child\ntable that carries a `property_id` (leases, occupants,\nbeds, rooms, buildings, utilities, other-costs, insurance\ncertificates, property violations, projected move-ins,\npayroll deductions). The assistant scanner's \"dormant\nproperty\" check and the dashboard's dormant-property card\nboth read this column directly. Server-managed — clients\nshould treat it as read-only and may omit it on write.\n",
     ),
   buildings: zod
     .array(
@@ -1411,6 +1429,12 @@ export const UpdatePropertyResponse = zod.object({
     .nullish()
     .describe(
       "Physical property classification (task #501). Nullable —\nexisting properties created before this field existed\ndefault to `null`, and the UI hides the type badge when\nno value is set. Operators pick from a fixed list of\nthree options.\n",
+    ),
+  updatedAt: zod.coerce
+    .date()
+    .optional()
+    .describe(
+      "Last-touched timestamp (Task #676). Maintained by DB\ntriggers: a BEFORE UPDATE trigger on `properties` itself,\nand AFTER INSERT\/UPDATE\/DELETE triggers on every child\ntable that carries a `property_id` (leases, occupants,\nbeds, rooms, buildings, utilities, other-costs, insurance\ncertificates, property violations, projected move-ins,\npayroll deductions). The assistant scanner's \"dormant\nproperty\" check and the dashboard's dormant-property card\nboth read this column directly. Server-managed — clients\nshould treat it as read-only and may omit it on write.\n",
     ),
   buildings: zod
     .array(

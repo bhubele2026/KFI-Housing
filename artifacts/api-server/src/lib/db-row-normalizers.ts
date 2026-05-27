@@ -233,6 +233,14 @@ export function normalizePropertyRow<
     recordFixup(fixups, "propertyType", row.propertyType, after);
     out.propertyType = after;
   }
+  // `updated_at` is server-managed (Task #676) — DB triggers bump it
+  // on any property or child-row write, so a client value would just
+  // be overwritten. Strip it from the payload so an Insert doesn't
+  // pin the column to a stale timestamp and an Update doesn't
+  // short-circuit the BEFORE UPDATE trigger.
+  if ("updatedAt" in out) {
+    delete (out as Record<string, unknown>).updatedAt;
+  }
   return out as T;
 }
 

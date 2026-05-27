@@ -384,40 +384,29 @@ async function runOccupantsWithoutLeasesCheck(
   return { found: list.length, emitted };
 }
 
-// Check 6: properties with no active leases, no active occupants, AND
-// no related-row activity in the last 30 days. The properties table
-// doesn't carry its own updated_at yet (see follow-up task), so we
-// derive last-activity from the most-recent occupant.createdAt and
-// the latest lease.endDate on the property. A property with no
-// activity on either signal in >30 days is treated as dormant. This
-// matches the spec's ">30d idle" threshold without requiring a
-// schema-wide updatedAt rollout.
+// Check 6: properties that haven't been touched in 30+ days. Task
+// #676 added `properties.updated_at`, maintained by DB triggers that
+// bump the column on any direct property write and on any
+// INSERT/UPDATE/DELETE against a child row (lease, occupant, bed,
+// room, building, utility, other-cost, insurance certificate,
+// violation, projected move-in, payroll deduction). That makes
+// "last activity" a single column read instead of a NOT EXISTS sweep
+// across half the schema, and lets the dashboard surface the same
+// list using the same signal.
 async function runDormantPropertiesCheck(
   recipients: string[],
   now: Date,
 ): Promise<{ found: number; emitted: number }> {
-  const cutoffYmd = ymd(addDays(now, -30));
   const cutoffIso = new Date(now.getTime() - 30 * 24 * 3_600_000).toISOString();
   const rows = await db.execute(sql`
     SELECT p.id, p.name, p.customer_id
     FROM properties p
-    WHERE NOT EXISTS (
+    WHERE p.updated_at < ${cutoffIso}::timestamptz
+      AND NOT EXISTS (
             SELECT 1 FROM leases l WHERE l.property_id = p.id AND l.status = 'Active'
           )
       AND NOT EXISTS (
             SELECT 1 FROM occupants o WHERE o.property_id = p.id AND o.status = 'Active'
-          )
-      AND NOT EXISTS (
-            SELECT 1 FROM occupants o2
-            WHERE o2.property_id = p.id
-              AND o2.created_at IS NOT NULL
-              AND o2.created_at > ${cutoffIso}::timestamptz
-          )
-      AND NOT EXISTS (
-            SELECT 1 FROM leases l2
-            WHERE l2.property_id = p.id
-              AND l2.end_date <> ''
-              AND l2.end_date > ${cutoffYmd}
           )
     LIMIT 500
   `);

@@ -14,6 +14,7 @@ import { createMonthlySnapshotsTableIfNeeded } from "./migrations/create-monthly
 import { createAssistantUploadsTableIfNeeded } from "./migrations/create-assistant-uploads-table";
 import { createAssistantNudgesTablesIfNeeded } from "./migrations/create-assistant-nudges-table";
 import { addBedNeedsCleaningSinceIfNeeded } from "./migrations/add-bed-needs-cleaning-since";
+import { addPropertyUpdatedAtIfNeeded } from "./migrations/add-property-updated-at";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -112,6 +113,13 @@ export async function pushSchemaIfNeeded(
   // list have a sensible starting age. Idempotent — no-op once the
   // column exists.
   await addBedNeedsCleaningSinceIfNeeded(pool, log);
+
+  // Add `properties.updated_at` and the activity-bump triggers
+  // (Task #676) BEFORE drizzle's pushSchema so the schema diff
+  // afterwards is empty. Triggers on child tables that haven't been
+  // provisioned yet are silently skipped — pushSchema will create
+  // them on first boot and the next migrate run picks them up.
+  await addPropertyUpdatedAtIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

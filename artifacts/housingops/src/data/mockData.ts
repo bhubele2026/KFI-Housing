@@ -165,6 +165,13 @@ export const PropertySchema = z.object({
   // dropdown; off-list values are coerced to `null` at the API
   // boundary by `normalizePropertyRow`.
   propertyType: z.enum(["Town house", "Apartment", "Motel"]).nullable().optional(),
+  // Server-managed last-touched timestamp (Task #676). Bumped by DB
+  // triggers on any property or child-row write; the dashboard's
+  // "Dormant properties" card reads this to surface rows that haven't
+  // seen activity in 30+ days. Optional/nullable so legacy fixtures
+  // and older API payloads (without the column) keep parsing — call
+  // sites treat missing as "no signal".
+  updatedAt: z.string().nullable().optional(),
 });
 export type Property = z.infer<typeof PropertySchema>;
 export const PROPERTY_TYPE_OPTIONS = [

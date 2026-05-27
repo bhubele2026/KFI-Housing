@@ -2917,6 +2917,97 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {(() => {
+          // Dormant-property card (Task #676). Reads the server-managed
+          // `properties.updatedAt` (bumped by DB triggers on any
+          // property or child-row write) and surfaces rows that
+          // haven't been touched in `DORMANT_DAYS` days. Hidden when
+          // every property has been touched recently. Respects the
+          // current customer scope so a scoped operator only sees
+          // their own dormant rows.
+          const DORMANT_DAYS = 30;
+          const cutoffMs = Date.now() - DORMANT_DAYS * 86_400_000;
+          const dormant = scopedProperties
+            .map((p) => {
+              const raw = p.updatedAt ?? null;
+              if (!raw) return null;
+              const ts = Date.parse(raw);
+              if (!Number.isFinite(ts) || ts >= cutoffMs) return null;
+              return { property: p, ts };
+            })
+            .filter((x): x is { property: Property; ts: number } => x !== null)
+            .sort((a, b) => a.ts - b.ts)
+            .slice(0, 10);
+          if (dormant.length === 0) return null;
+          return (
+            <Card data-testid="card-dormant-properties">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <BellOff className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle>
+                    {t("pages.dashboard.dormantProperties.title", { days: DORMANT_DAYS })}
+                  </CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("pages.dashboard.dormantProperties.description")}
+                </p>
+                <p
+                  className="text-xs text-muted-foreground mt-1"
+                  data-testid="text-dormant-properties-count"
+                >
+                  {t("pages.dashboard.dormantProperties.count", { count: dormant.length })}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y">
+                  {dormant.map(({ property, ts }) => {
+                    let whenLabel = new Date(ts).toLocaleDateString();
+                    try {
+                      whenLabel = formatRelativeTime(t, ts);
+                    } catch {
+                      // fall back to absolute date
+                    }
+                    return (
+                      <li
+                        key={property.id}
+                        className="flex items-center justify-between py-2 text-sm"
+                        data-testid={`dormant-property-${property.id}`}
+                      >
+                        <div className="flex flex-col">
+                          <Link
+                            href={`/properties/${property.id}`}
+                            className="font-medium text-primary hover:underline"
+                            data-testid={`link-dormant-property-${property.id}`}
+                          >
+                            {property.name || property.id}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            {t("pages.dashboard.dormantProperties.lastTouched", { when: whenLabel })}
+                          </span>
+                        </div>
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                        >
+                          <Link
+                            href={`/properties/${property.id}`}
+                            data-testid={`button-review-dormant-${property.id}`}
+                          >
+                            {t("pages.dashboard.dormantProperties.review")}
+                            <ArrowRight className="h-3 w-3 ml-1" />
+                          </Link>
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         <Card data-testid="card-top-properties">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">

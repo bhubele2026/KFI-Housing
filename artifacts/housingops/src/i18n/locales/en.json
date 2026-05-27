@@ -179,6 +179,14 @@
         "occupied": "{{count}} Occupied",
         "vacant": "{{count}} Vacant"
       },
+      "dormantProperties": {
+        "title": "Properties not touched in {{days}} days",
+        "description": "No direct edits, no leases, occupants, beds, rooms, buildings, utilities, costs, certificates, violations, projected move-ins or payroll deductions touched in the window. Confirm the property is still in service or archive it.",
+        "empty": "Every property has been touched recently — nothing dormant.",
+        "lastTouched": "Last activity {{when}}",
+        "review": "Review",
+        "count": "{{count}} dormant"
+      },
       "topProperties": {
         "title": "Top Properties by Rating",
         "sortBy": "Sort by",

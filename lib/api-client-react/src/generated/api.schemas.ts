@@ -362,6 +362,18 @@ no value is set. Operators pick from a fixed list of
 three options.
  */
   propertyType?: PropertyPropertyType;
+  /** Last-touched timestamp (Task #676). Maintained by DB
+triggers: a BEFORE UPDATE trigger on `properties` itself,
+and AFTER INSERT/UPDATE/DELETE triggers on every child
+table that carries a `property_id` (leases, occupants,
+beds, rooms, buildings, utilities, other-costs, insurance
+certificates, property violations, projected move-ins,
+payroll deductions). The assistant scanner's "dormant
+property" check and the dashboard's dormant-property card
+both read this column directly. Server-managed — clients
+should treat it as read-only and may omit it on write.
+ */
+  updatedAt?: string;
   /** Buildings under this property (Task #570). Always present
 on responses (back-fill creates one default building per
 property). Optional on write so older clients keep

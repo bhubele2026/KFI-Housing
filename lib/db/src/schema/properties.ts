@@ -1,4 +1,5 @@
-import { pgTable, text, integer, doublePrecision, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, doublePrecision, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Per-property subjective ratings, 0–5 whole-star scale. 0 = not rated. */
 export interface PropertyRatings {
@@ -90,6 +91,21 @@ export const propertiesTable = pgTable("properties", {
   // backfill it lazily — the UI hides the badge when null/blank
   // rather than guessing a default.
   propertyType: text("property_type"),
+  // Last-touched timestamp (Task #676). Maintained by DB triggers
+  // installed in `migrations/add-property-updated-at.ts`:
+  //   - BEFORE UPDATE on `properties` itself sets `updated_at = now()`.
+  //   - AFTER INSERT/UPDATE/DELETE on each child table that carries a
+  //     `property_id` bumps the parent's `updated_at` via a trigger
+  //     function, so any write to a lease / occupant / bed / room /
+  //     building / utility / other-cost / insurance certificate /
+  //     property violation / projected move-in / payroll deduction
+  //     for the property counts as activity.
+  // The assistant scanner's "dormant property" check (Task #671) now
+  // reads this column directly instead of inferring activity from
+  // child rows; the dashboard surfaces the resulting list.
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

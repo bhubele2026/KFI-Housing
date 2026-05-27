@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Link, useLocation } from "wouter";
@@ -73,6 +73,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/occupants", labelKey: "nav.occupants", icon: Users },
   { kind: "leaf", href: "/utilities", labelKey: "nav.utilities", icon: Zap },
   { kind: "leaf", href: "/finance", labelKey: "nav.finance", icon: DollarSign },
+  { kind: "leaf", href: "/reconciliation", labelKey: "nav.reconciliation", icon: Receipt },
   { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
 ];
 
@@ -226,6 +227,15 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
 
   const [isResetting, setIsResetting] = useState(false);
   const [isDemoResetting, setIsDemoResetting] = useState(false);
+  // Gate the Reconciliation nav entry behind a connected QBO account.
+  const [qboConnected, setQboConnected] = useState<boolean>(false);
+  useEffect(() => {
+    const baseUrl = import.meta.env.BASE_URL ?? "/";
+    fetch(`${baseUrl}api/qbo/status`)
+      .then((r) => (r.ok ? r.json() : { connected: false }))
+      .then((j: { connected?: boolean }) => setQboConnected(!!j.connected))
+      .catch(() => setQboConnected(false));
+  }, []);
   // Refs back the in-flight guards so two synchronous double-clicks both
   // see the locked state — `useState` updates would batch and let the
   // second click sneak through with the stale `false` value.
@@ -491,6 +501,18 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     }
     return init;
   });
+  // Filter out QBO-gated entries (currently /reconciliation) until the
+  // workspace has a connected QuickBooks account. Operators without QBO
+  // shouldn't see a nav link to a page that would just show an empty grid.
+  const navEntries = useMemo<NavEntry[]>(() => {
+    if (qboConnected) return NAV_ENTRIES;
+    return NAV_ENTRIES.map((e) => {
+      if (e.kind === "group") {
+        return { ...e, children: e.children.filter((c) => c.href !== "/reconciliation") };
+      }
+      return e;
+    });
+  }, [qboConnected]);
   const setGroupOpen = (
     updater: (prev: Record<string, boolean>) => Record<string, boolean>,
   ) => {
@@ -742,7 +764,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
         )}
       >
         {collapsed
-          ? NAV_ENTRIES.map((entry) => {
+          ? navEntries.map((entry) => {
               if (entry.kind === "leaf") {
                 return renderLeaf(entry, { indented: false });
               }
@@ -789,7 +811,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 </Tooltip>
               );
             })
-          : NAV_ENTRIES.map((entry) => {
+          : navEntries.map((entry) => {
               if (entry.kind === "leaf") {
                 return renderLeaf(entry, { indented: false });
               }

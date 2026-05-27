@@ -31,6 +31,8 @@ import digestRecipientsRouter from "./digest-recipients";
 import storageRouter from "./storage";
 import teamRouter from "./team";
 import assistantRouter from "./assistant";
+import qboRouter from "./qbo";
+import reconciliationRouter from "./reconciliation";
 
 const router: IRouter = Router();
 
@@ -65,6 +67,8 @@ router.use(attachedAssetsRouter);
 router.use(leaseDigestRouter);
 router.use(digestRecipientsRouter);
 router.use(teamRouter);
+router.use(qboRouter);
+router.use(reconciliationRouter);
 router.use(assistantRouter);
 
 export default router;

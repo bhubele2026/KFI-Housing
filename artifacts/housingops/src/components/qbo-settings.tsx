@@ -1,0 +1,250 @@
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+
+interface QboStatus {
+  connected: boolean;
+  realmId?: string;
+  companyName?: string | null;
+  environment?: "sandbox" | "production";
+  connectedAt?: string;
+  lastSyncAt?: string | null;
+  lastSyncError?: string | null;
+}
+
+interface AccountClassification {
+  id: string;
+  accountId: string;
+  accountName: string;
+  classification: "rent" | "utility" | "other";
+}
+
+function apiBase(): string {
+  return import.meta.env.BASE_URL ?? "/";
+}
+
+export function QboSettings() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<QboStatus | null>(null);
+  const [classifications, setClassifications] = useState<AccountClassification[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const refresh = async () => {
+    try {
+      const sRes = await fetch(`${apiBase()}api/qbo/status`);
+      const sBody = (await sRes.json()) as QboStatus;
+      setStatus(sBody);
+      if (sBody.connected) {
+        const cRes = await fetch(`${apiBase()}api/qbo/account-classifications`);
+        if (cRes.ok) {
+          setClassifications((await cRes.json()) as AccountClassification[]);
+        }
+      } else {
+        setClassifications([]);
+      }
+    } catch (err) {
+      toast({
+        title: "Failed to load QuickBooks status",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const handleConnect = () => {
+    window.location.href = `${apiBase()}api/qbo/connect/start`;
+  };
+  const handleDisconnect = async () => {
+    setBusy("disconnect");
+    try {
+      const res = await fetch(`${apiBase()}api/qbo/disconnect`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "QuickBooks disconnected" });
+      await refresh();
+    } catch (err) {
+      toast({
+        title: "Disconnect failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const handleSync = async () => {
+    setBusy("sync");
+    try {
+      const res = await fetch(`${apiBase()}api/qbo/sync`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        upserted?: number;
+      };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      toast({
+        title: "Sync complete",
+        description: `${body.upserted ?? 0} transactions updated.`,
+      });
+      await refresh();
+    } catch (err) {
+      toast({
+        title: "Sync failed",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const updateClassification = async (
+    id: string,
+    classification: "rent" | "utility" | "other",
+  ) => {
+    setClassifications((rows) =>
+      rows.map((r) => (r.id === id ? { ...r, classification } : r)),
+    );
+    try {
+      const res = await fetch(
+        `${apiBase()}api/qbo/account-classifications/${id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ classification }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      toast({
+        title: "Failed to update classification",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+      await refresh();
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>QuickBooks Online</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!status ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : !status.connected ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Connect a QuickBooks Online company to mirror invoices, bills, and
+              payments into HousingOps and reconcile them against expected rent
+              and utility costs.
+            </p>
+            <Button onClick={handleConnect} data-testid="qbo-connect">
+              Connect QuickBooks
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="text-sm">
+              <div>
+                Connected to <strong>{status.companyName ?? status.realmId}</strong>{" "}
+                ({status.environment})
+              </div>
+              {status.lastSyncAt ? (
+                <div className="text-muted-foreground">
+                  Last sync: {new Date(status.lastSyncAt).toLocaleString()}
+                </div>
+              ) : null}
+              {status.lastSyncError ? (
+                <div className="text-destructive">{status.lastSyncError}</div>
+              ) : null}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSync}
+                disabled={busy !== null}
+                data-testid="qbo-sync"
+              >
+                {busy === "sync" ? "Syncing…" : "Sync now"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleDisconnect}
+                disabled={busy !== null}
+                data-testid="qbo-disconnect"
+              >
+                Disconnect
+              </Button>
+            </div>
+            {classifications.length > 0 ? (
+              <div className="pt-4">
+                <h4 className="text-sm font-semibold mb-2">
+                  Account classifications
+                </h4>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Choose how each QuickBooks income / expense account maps to
+                  rent or utilities for reconciliation.
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Account</TableHead>
+                      <TableHead className="w-40">Classification</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {classifications.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>{c.accountName}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={c.classification}
+                            onValueChange={(v) =>
+                              void updateClassification(
+                                c.id,
+                                v as "rent" | "utility" | "other",
+                              )
+                            }
+                          >
+                            <SelectTrigger data-testid={`qbo-class-${c.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="rent">Rent</SelectItem>
+                              <SelectItem value="utility">Utility</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

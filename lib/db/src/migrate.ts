@@ -16,6 +16,7 @@ import { createAssistantNudgesTablesIfNeeded } from "./migrations/create-assista
 import { addBedNeedsCleaningSinceIfNeeded } from "./migrations/add-bed-needs-cleaning-since";
 import { addPropertyUpdatedAtIfNeeded } from "./migrations/add-property-updated-at";
 import { dropAssistantExportsContentIfNeeded } from "./migrations/drop-assistant-exports-content";
+import { createQboTablesIfNeeded } from "./migrations/create-qbo-tables";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -128,6 +129,12 @@ export async function pushSchemaIfNeeded(
   // loss and refuse to apply). Legacy transient rows are discarded —
   // there is no object in storage to back them with.
   await dropAssistantExportsContentIfNeeded(pool, log);
+
+  // Task #689: provision the four QBO sync tables and the
+  // `customers.qbo_customer_id` column BEFORE drizzle's pushSchema so
+  // a deployed environment picks them up at boot without waiting for
+  // a separate push. Idempotent — no-op once everything exists.
+  await createQboTablesIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

@@ -24,3 +24,7 @@ export * from "./assistant-proposals";
 export * from "./assistant-uploads";
 export * from "./assistant-exports";
 export * from "./assistant-nudges";
+export * from "./qbo-connections";
+export * from "./qbo-transactions";
+export * from "./qbo-account-classifications";
+export * from "./qbo-mapping-overrides";

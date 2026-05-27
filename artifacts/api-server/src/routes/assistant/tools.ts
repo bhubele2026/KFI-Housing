@@ -2604,6 +2604,12 @@ export function evaluateWriteScope(
 import { allExportTools } from "./export-tools";
 for (const t of allExportTools) tools.push(t);
 
+// QBO reconciliation tools (Task #689). Read-only — list mirrored QBO
+// transactions, summarise per-property reconciliation, look up a
+// specific bill by memo, export the reconciliation grid as .xlsx.
+import { qboAssistantTools } from "./qbo-tools";
+for (const t of qboAssistantTools) tools.push(t);
+
 export const TOOL_BY_NAME: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));
 
 export function anthropicToolDefs(): Array<{

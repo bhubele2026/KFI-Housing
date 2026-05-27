@@ -14,6 +14,7 @@ import {
   startInsuranceExpiryScheduler,
 } from "./lib/insurance-expiry-scheduler";
 import { startAssistantScannerScheduler } from "./jobs/assistant-scanner";
+import { startQboSyncScheduler } from "./lib/qbo-sync-scheduler";
 import { startAssistantExportsCleanupScheduler } from "./lib/assistant-exports-cleanup-scheduler";
 import { deleteAssistantExportObject } from "./lib/assistant-exports-storage";
 import { db, assistantExportsTable } from "@workspace/db";
@@ -670,6 +671,14 @@ export async function start(deps: StartDeps): Promise<void> {
     startAssistantScannerScheduler({
       logger: deps.logger,
       env: deps.env,
+    });
+    // Task #689: hourly QuickBooks Online incremental sync.
+    // No-op when QBO_CLIENT_ID / QBO_CLIENT_SECRET / QBO_REDIRECT_URI
+    // aren't set — the scheduler logs an info line so the disabled
+    // state is visible in workflow logs.
+    startQboSyncScheduler({
+      env: deps.env,
+      logger: deps.logger,
     });
     // Task #681 / Task #684: prune expired assistant_exports rows
     // hourly AND delete the underlying object-storage blobs so neither

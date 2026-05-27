@@ -48,6 +48,7 @@ const Occupants = lazy(() => import("@/pages/occupants"));
 const OccupantDetail = lazy(() => import("@/pages/occupant-detail"));
 const Utilities = lazy(() => import("@/pages/utilities"));
 const Finance = lazy(() => import("@/pages/finance"));
+const Reconciliation = lazy(() => import("@/pages/reconciliation"));
 const InsuranceCertificates = lazy(() => import("@/pages/insurance-certificates"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
 const AssistantChangelog = lazy(() => import("@/pages/assistant-changelog"));
@@ -146,6 +147,7 @@ function AppRoutes() {
         <Route path="/occupants/:id" component={OccupantDetail} />
         <Route path="/utilities" component={Utilities} />
         <Route path="/finance" component={Finance} />
+        <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/insurance" component={InsuranceCertificates} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/assistant/changelog" component={AssistantChangelog} />

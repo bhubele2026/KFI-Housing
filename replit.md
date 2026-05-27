@@ -89,6 +89,40 @@ curl -X POST -H "Content-Type: application/json" \
 
 No point-in-time recovery between snapshots (we keep discrete dumps, not continuous WAL), no cross-region replication, and prior already-lost `attached_assets/` content from earlier republishes can't be recovered — only data from this change forward is protected.
 
+## QuickBooks Online sync (Task #689)
+
+HousingOps mirrors QuickBooks invoices, bills, payments and bill-payments
+so operators can reconcile per-property rent + utility costs against what
+QBO actually invoiced and got paid.
+
+Setup (operator):
+1. Set the four secrets — `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`,
+   `QBO_ENV` (`sandbox` | `production`), `QBO_REDIRECT_URI` (must match
+   the Intuit app redirect; e.g. `${REPLIT_DEV_DOMAIN}/api/qbo/connect/callback`).
+2. Go to Settings → QuickBooks → Connect QuickBooks.
+3. Sync runs hourly (`startQboSyncScheduler` in `start.ts`) using CDC
+   (Change Data Capture) after the initial full pull.
+
+Wired surfaces:
+- API routes — `routes/qbo.ts` (status / connect / callback / disconnect /
+  sync / account-classifications) and `routes/reconciliation.ts` (per-
+  property rollup + unmapped tray + override write-back).
+- Assistant tools — `routes/assistant/qbo-tools.ts`
+  (`list_qbo_transactions`, `reconciliation_summary`,
+  `find_qbo_transaction_by_memo`, `export_reconciliation`).
+- UI — `pages/reconciliation.tsx` (sidebar nav, month picker, totals row,
+  sync button) and `components/qbo-settings.tsx` (connect / disconnect /
+  account classification table).
+- Mapping engine — `lib/qbo-mapping.ts` (pure functions, unit-tested).
+- Tables — `qbo_connections`, `qbo_transactions`,
+  `qbo_account_classifications`, `qbo_mapping_overrides`, plus
+  `customers.qbo_customer_id` (idempotent migration in
+  `lib/db/src/migrations/create-qbo-tables.ts`).
+
+When `QBO_CLIENT_ID` etc are unset the scheduler logs an info line and
+no-ops; everything else (settings tab, reconciliation page) still
+renders but shows a "Connect QuickBooks" prompt.
+
 ## HousingOps Assistant (Task #671)
 
 ### Nudges

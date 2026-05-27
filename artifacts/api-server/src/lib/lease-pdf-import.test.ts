@@ -67,6 +67,9 @@ function makeCustomer(overrides: Partial<CustomerRow> = {}): CustomerRow {
     notes: "",
     state: "",
     noHousingReason: null,
+    customShifts: [],
+    isInactive: false,
+    qboCustomerId: null,
     ...overrides,
   };
 }

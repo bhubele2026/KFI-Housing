@@ -34,6 +34,12 @@ export const customersTable = pgTable("customers", {
   // a no-housing reason can stay active if the operator wants them
   // visible at the top.
   isInactive: boolean("is_inactive").notNull().default(false),
+  // QuickBooks Online customer id (Task #689). Populated during the
+  // QBO Customer sync so invoices/payments referencing the QBO
+  // customer can be matched to the HousingOps customer without
+  // fuzzy-matching on every sync. Nullable: legacy rows + customers
+  // never seen in QBO leave this empty.
+  qboCustomerId: text("qbo_customer_id"),
 });
 
 export type CustomerRow = typeof customersTable.$inferSelect;

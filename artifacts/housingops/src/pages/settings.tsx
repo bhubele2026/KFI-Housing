@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mail, Trash2, Plus, Loader2, Users } from "lucide-react";
+import { Mail, Trash2, Plus, Loader2, Users, Link2 } from "lucide-react";
+import { QboSettings } from "@/components/qbo-settings";
 import { useToast } from "@/hooks/use-toast";
 import {
   useListDigestRecipients,
@@ -241,12 +242,19 @@ export default function Settings() {
               <Mail className="h-4 w-4 mr-2" />
               Email digest
             </TabsTrigger>
+            <TabsTrigger value="quickbooks" data-testid="settings-tab-quickbooks">
+              <Link2 className="h-4 w-4 mr-2" />
+              QuickBooks
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="team" className="mt-4">
             <TeamSettings />
           </TabsContent>
           <TabsContent value="digest" className="mt-4">
             <DigestRecipientsSection />
+          </TabsContent>
+          <TabsContent value="quickbooks" className="mt-4">
+            <QboSettings />
           </TabsContent>
         </Tabs>
       </div>

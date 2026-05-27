@@ -410,6 +410,7 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                             key={bed.id}
                             bed={{ id: bed.id, propertyId }}
                             onAssign={onAssignOccupant}
+                            onDeleteBed={onDeleteBed}
                             trigger={tileButton}
                           />
                         ) : (
@@ -3665,6 +3666,7 @@ export default function PropertyDetail() {
                                                     addOccupant(occ);
                                                     updateBed(b.id, { status: "Occupied", occupantId: occ.id });
                                                   }}
+                                                  onDeleteBed={deleteBed}
                                                 />
                                               ) : (
                                                 <div

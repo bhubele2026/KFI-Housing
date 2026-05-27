@@ -1624,7 +1624,8 @@
       "phone": "Phone",
       "phonePlaceholder": "555-000-0000",
       "cancel": "Cancel",
-      "submit": "Assign"
+      "submit": "Assign",
+      "deleteBed": "Delete bed"
     },
     "renewLease": {
       "title": "Renew lease",

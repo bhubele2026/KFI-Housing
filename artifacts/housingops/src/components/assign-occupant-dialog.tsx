@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -78,6 +79,14 @@ export interface AssignOccupantDialogProps {
    * the changed fields so the data-store/API patch is minimal.
    */
   onUpdate?: (id: string, patch: Partial<Occupant>) => void;
+  /**
+   * Optional destructive action that removes the fixed bed itself. When
+   * provided AND we're in assign-mode with a `bed` prop AND the bed is
+   * not currently occupied, the dialog footer shows a "Delete bed"
+   * button (gated by a confirm step). Closes the dialog on confirm.
+   * Ignored in edit-mode — operators delete an occupant separately.
+   */
+  onDeleteBed?: (bedId: string) => void;
   /** Custom trigger. Defaults to the small italic "Assign occupant" link. */
   trigger?: ReactNode;
   /**
@@ -173,6 +182,7 @@ export function AssignOccupantDialog({
   occupant,
   onAssign,
   onUpdate,
+  onDeleteBed,
   trigger,
   testIdSuffix,
   open: openProp,
@@ -681,19 +691,63 @@ export function AssignOccupantDialog({
               </Label>
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              {t("dialogs.assignOccupant.cancel")}
-            </Button>
-            <Button
-              onClick={submit}
-              disabled={!canSubmit}
-              data-testid={`button-assign-submit${tidSuffix}`}
-            >
-              {isEdit
-                ? t("dialogs.assignOccupant.save", { defaultValue: "Save" })
-                : t("dialogs.assignOccupant.submit")}
-            </Button>
+          <div className="flex justify-between items-center gap-2 pt-1">
+            <div>
+              {!isEdit && fixedBed && onDeleteBed ? (() => {
+                // Look up the bed by id rather than trusting the prop —
+                // an occupied bed should never be deletable from here
+                // (matches the gate on the property-detail bed table).
+                const bedRow = beds.find((b) => b.id === fixedBed.id);
+                const isOccupied = bedRow?.status === "Occupied";
+                const bedNumber = bedRow?.bedNumber ?? "";
+                const property = properties.find((p) => p.id === fixedBed.propertyId);
+                const propLabel = property ? shortPropertyName(property.name) : "";
+                return (
+                  <ConfirmDeleteButton
+                    title={t("pages.beds.deleteBedTitle", { number: bedNumber })}
+                    description={t("pages.beds.deleteBedDescription", { property: propLabel })}
+                    confirmLabel={t("pages.beds.deleteBedConfirm")}
+                    onConfirm={() => {
+                      onDeleteBed(fixedBed.id);
+                      setOpen(false);
+                    }}
+                    testId={`dialog-confirm-delete-bed-from-assign${tidSuffix}`}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isOccupied}
+                        title={
+                          isOccupied
+                            ? t("pages.beds.deleteBedOccupiedTitle")
+                            : t("pages.beds.deleteBedAria", { number: bedNumber })
+                        }
+                        className="text-muted-foreground hover:text-destructive gap-1.5"
+                        data-testid={`button-delete-bed-from-assign${tidSuffix}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {t("dialogs.assignOccupant.deleteBed")}
+                      </Button>
+                    }
+                  />
+                );
+              })() : null}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                {t("dialogs.assignOccupant.cancel")}
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={!canSubmit}
+                data-testid={`button-assign-submit${tidSuffix}`}
+              >
+                {isEdit
+                  ? t("dialogs.assignOccupant.save", { defaultValue: "Save" })
+                  : t("dialogs.assignOccupant.submit")}
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

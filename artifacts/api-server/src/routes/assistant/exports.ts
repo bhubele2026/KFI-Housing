@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { db, assistantExportsTable } from "@workspace/db";
 
 /**
@@ -14,6 +14,53 @@ function getUserId(req: Request): string {
 }
 
 const router: IRouter = Router();
+
+/**
+ * Task #683 — list the current operator's non-expired exports so the
+ * assistant panel can show a "Recent exports" tray. If an operator
+ * scrolls away or refreshes mid-generation, the inline chip is hard to
+ * find again — but the file still lives on the server for 24h. This
+ * route gives the panel a stable way to re-surface those downloads
+ * without re-running the export tool.
+ *
+ * Expired rows are filtered out server-side so the client never has to
+ * second-guess the 24h TTL; the existing hourly cleanup scheduler
+ * permanently removes them shortly after they expire.
+ */
+router.get("/assistant/exports", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: assistantExportsTable.id,
+      filename: assistantExportsTable.filename,
+      format: assistantExportsTable.format,
+      rowCount: assistantExportsTable.rowCount,
+      sizeBytes: assistantExportsTable.sizeBytes,
+      createdAt: assistantExportsTable.createdAt,
+      expiresAt: assistantExportsTable.expiresAt,
+    })
+    .from(assistantExportsTable)
+    .where(
+      and(
+        eq(assistantExportsTable.userId, userId),
+        gt(assistantExportsTable.expiresAt, now),
+      ),
+    )
+    .orderBy(desc(assistantExportsTable.createdAt));
+  res.json({
+    exports: rows.map((r) => ({
+      id: r.id,
+      filename: r.filename,
+      format: r.format,
+      rowCount: r.rowCount,
+      sizeBytes: r.sizeBytes,
+      createdAt: r.createdAt.toISOString(),
+      expiresAt: r.expiresAt.toISOString(),
+      downloadUrl: `/api/assistant/exports/${r.id}/download`,
+    })),
+  });
+});
 
 /**
  * Stream an assistant-generated export file back to the operator who

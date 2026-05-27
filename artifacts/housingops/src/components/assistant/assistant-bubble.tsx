@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Send, X, Trash2, Undo2, Paperclip, BellOff, Clock, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Bot, Send, X, Trash2, Undo2, Paperclip, BellOff, Clock, Download, FileSpreadsheet, FileText, History } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +19,7 @@ import {
   type AssistantNudge,
   type SnoozePreset,
 } from "./use-assistant-nudges";
+import { useRecentExports, type RecentExport } from "./use-recent-exports";
 
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
@@ -31,6 +32,10 @@ export function AssistantBubble() {
   // freshly-sent message. The flag is cleared automatically once the
   // assistant turn finishes (busy flips false).
   const [chipsSuppressedForTurn, setChipsSuppressedForTurn] = useState(false);
+  // Task #683 — collapsible "Recent exports" tray in the header.
+  // Fetched lazily (only while the bubble is open AND the tray is
+  // expanded) so we never poll the endpoint in the background.
+  const [recentExportsOpen, setRecentExportsOpen] = useState(false);
   const {
     messages,
     proposals,
@@ -50,6 +55,10 @@ export function AssistantBubble() {
     enabled: open && !busy && !hasPendingProposal,
   });
   const nudgesQuery = useAssistantNudges();
+  const recentExportsQuery = useRecentExports({
+    enabled: open && recentExportsOpen,
+  });
+  const recentExports = recentExportsQuery.data?.exports ?? [];
   const dismissNudge = useDismissNudge();
   const snoozeNudge = useSnoozeNudge();
   const nudgeCtaTap = useNudgeCtaTap();
@@ -185,6 +194,18 @@ export function AssistantBubble() {
                 type="button"
                 variant="ghost"
                 size="icon"
+                onClick={() => setRecentExportsOpen((v) => !v)}
+                aria-label="Recent exports"
+                aria-expanded={recentExportsOpen}
+                data-testid="button-assistant-recent-exports"
+                title="Recent exports (last 24h)"
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
                 onClick={reset}
                 aria-label="Start new conversation"
                 data-testid="button-assistant-reset"
@@ -204,6 +225,20 @@ export function AssistantBubble() {
               </Button>
             </div>
           </header>
+
+          {recentExportsOpen && (
+            <RecentExportsTray
+              loading={recentExportsQuery.isLoading}
+              error={
+                recentExportsQuery.isError
+                  ? (recentExportsQuery.error as Error)?.message ??
+                    "Couldn't load recent exports."
+                  : null
+              }
+              items={recentExports}
+              onClose={() => setRecentExportsOpen(false)}
+            />
+          )}
 
           <div
             ref={scrollRef}
@@ -630,6 +665,91 @@ function ExportChipCard({
         <Download className="h-3 w-3 mr-1" />
         {downloading ? "…" : "Download"}
       </Button>
+    </div>
+  );
+}
+
+function RecentExportsTray({
+  loading,
+  error,
+  items,
+  onClose,
+}: {
+  loading: boolean;
+  error: string | null;
+  items: RecentExport[];
+  onClose: () => void;
+}) {
+  return (
+    <div
+      data-testid="assistant-recent-exports-tray"
+      data-count={items.length}
+      className="border-b border-border bg-muted/30 px-3 py-2 space-y-1.5 max-h-48 overflow-y-auto"
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Recent exports (last 24h)
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-5"
+          onClick={onClose}
+          aria-label="Close recent exports"
+          data-testid="button-assistant-recent-exports-close"
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+      {loading && (
+        <div
+          className="text-[11px] text-muted-foreground"
+          data-testid="assistant-recent-exports-loading"
+        >
+          Loading…
+        </div>
+      )}
+      {error && (
+        <div
+          className="text-[11px] text-destructive"
+          data-testid="assistant-recent-exports-error"
+        >
+          {error}
+        </div>
+      )}
+      {!loading && !error && items.length === 0 && (
+        <div
+          className="text-[11px] text-muted-foreground italic"
+          data-testid="assistant-recent-exports-empty"
+        >
+          No exports yet. Ask me to export a list and a download will
+          appear here.
+        </div>
+      )}
+      {items.map((e) => {
+        const Icon = e.format === "pdf" ? FileText : FileSpreadsheet;
+        return (
+          <a
+            key={e.id}
+            href={e.downloadUrl}
+            download={e.filename}
+            className="flex items-center gap-2 rounded border border-border bg-background/80 px-2 py-1.5 hover:bg-accent"
+            data-testid={`recent-export-${e.id}`}
+            data-export-format={e.format}
+          >
+            <Icon className="h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium truncate">{e.filename}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {e.rowCount.toLocaleString()} rows · {formatBytes(e.sizeBytes)} ·{" "}
+                {(e.format || "").toUpperCase()}
+              </div>
+            </div>
+            <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          </a>
+        );
+      })}
     </div>
   );
 }

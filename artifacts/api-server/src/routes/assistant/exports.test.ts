@@ -73,6 +73,66 @@ async function seedExport(overrides: Partial<typeof assistantExportsTable.$infer
   return id;
 }
 
+describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
+  it("returns the current user's non-expired exports, newest first", async () => {
+    currentUser = "user-A";
+    // Wipe prior rows so ordering assertions are deterministic across files.
+    await db.delete(assistantExportsTable);
+    const oldId = await seedExport({
+      id: "ax-old",
+      createdAt: new Date(Date.now() - 60_000),
+      expiresAt: new Date(Date.now() + 30_000),
+      filename: "older.xlsx",
+    });
+    const newId = await seedExport({
+      id: "ax-new",
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      filename: "newer.xlsx",
+    });
+    const res = await fetch(`${baseUrl}/assistant/exports`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { exports: Array<{ id: string; downloadUrl: string }> };
+    expect(body.exports.map((e) => e.id)).toEqual([newId, oldId]);
+    expect(body.exports[0].downloadUrl).toBe(
+      `/api/assistant/exports/${newId}/download`,
+    );
+  });
+
+  it("filters out expired rows server-side", async () => {
+    currentUser = "user-A";
+    await db.delete(assistantExportsTable);
+    const liveId = await seedExport({ id: "ax-live" });
+    await seedExport({
+      id: "ax-expired",
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    const res = await fetch(`${baseUrl}/assistant/exports`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { exports: Array<{ id: string }> };
+    expect(body.exports.map((e) => e.id)).toEqual([liveId]);
+  });
+
+  it("scopes results to the calling user", async () => {
+    currentUser = "user-A";
+    await db.delete(assistantExportsTable);
+    const mine = await seedExport({ id: "ax-mine", userId: "user-A" });
+    await seedExport({ id: "ax-theirs", userId: "user-B" });
+    const res = await fetch(`${baseUrl}/assistant/exports`);
+    const body = (await res.json()) as { exports: Array<{ id: string }> };
+    expect(body.exports.map((e) => e.id)).toEqual([mine]);
+  });
+
+  it("returns an empty list when the user has no live exports", async () => {
+    currentUser = "user-A";
+    await db.delete(assistantExportsTable);
+    const res = await fetch(`${baseUrl}/assistant/exports`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { exports: unknown[] };
+    expect(body.exports).toEqual([]);
+  });
+});
+
 describe("GET /assistant/exports/:id/download", () => {
   it("streams the bytea content with correct headers when the owner downloads", async () => {
     currentUser = "user-A";

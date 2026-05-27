@@ -75,53 +75,15 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-          if (
-            id.includes("/recharts/") ||
-            id.includes("/victory-vendor/") ||
-            id.includes("/d3-") ||
-            id.includes("/d3/")
-          ) {
-            return "charts";
-          }
-          if (id.includes("/@radix-ui/")) return "radix";
-          if (id.includes("/framer-motion/") || id.includes("/motion-")) {
-            return "motion";
-          }
-          if (
-            id.includes("/lucide-react/") ||
-            id.includes("/react-icons/")
-          ) {
-            return "icons";
-          }
-          if (
-            id.includes("/react-hook-form/") ||
-            id.includes("/@hookform/")
-          ) {
-            return "forms";
-          }
-          if (
-            id.includes("/date-fns/") ||
-            id.includes("/react-day-picker/")
-          ) {
-            return "dates";
-          }
-          if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("/scheduler/") ||
-            id.includes("/react-is/")
-          ) {
-            return "react";
-          }
-          if (id.includes("/@tanstack/")) return "query";
-          return undefined;
-        },
-      },
-    },
+    // NOTE: do NOT re-introduce a custom `rollupOptions.output.manualChunks`
+    // splitter here without verifying the production build in a real
+    // browser. A previous splitter (commit 7c42efb) put recharts/d3 in a
+    // `charts` chunk and react/react-dom/scheduler/react-is in a `react`
+    // chunk; that created a Temporal Dead Zone cycle between the two
+    // chunks ("ReferenceError: Cannot access 'A' before initialization"
+    // out of charts-*.js) that rendered the entire app as a blank white
+    // page in production while leaving dev untouched. Vite's default
+    // chunking is fine — leave it alone.
   },
   server: {
     port,

@@ -35,6 +35,7 @@ import {
   evaluateWriteScope,
   type FocusEntityType,
 } from "./tools";
+import exportsRouter from "./exports";
 import {
   buildUndoPlan,
   captureSnapshot,
@@ -46,6 +47,11 @@ import {
 } from "./undo";
 
 const router: IRouter = Router();
+
+// Task #681 — download endpoint for assistant-generated exports.
+// Mounted at the top so the auth middleware applied to the assistant
+// router (in routes/index.ts) covers it without further wiring.
+router.use(exportsRouter);
 
 const MODEL = "claude-sonnet-4-5";
 // Raised from 8 → 20 in Task #668 so multi-step write flows (look up by
@@ -73,6 +79,8 @@ Guidelines:
 - The verbs "add" / "create" / "new" ALWAYS map to a create_* (or bulk_create_*) tool — never to update_*. "Change" / "set" / "rename" / "update" map to update_*. If you're unsure which the user meant, ASK rather than guessing.
 - If the user states a count ("add three utilities") but lists fewer items, ASK which they meant. Do not invent the missing items, do not substitute an update_*, and do not silently proceed with only the items that were listed.
 - Keep replies short and operational. No fluff.
+- The operator can export any list-style data to Excel (.xlsx with live formulas) or PDF via export_leases / export_occupants / export_beds / export_properties / export_payroll_deductions / export_utilities / export_insurance_certificates / export_room_nights. These are READ tools — they execute immediately (no confirm card) and return a download chip the operator clicks. When the operator says "export", "download", "give me a spreadsheet/PDF", "send me this in a file" — reach for the matching export_* tool. Don't suggest copy/paste or offer a CSV-in-chat — the export tool IS the answer.
+- Default the export format to "xlsx" unless the operator asks for "PDF" explicitly. Apply the same filters they'd ask about — e.g. "export the active leases at Burnett Hinckley" → resolve via find_property_by_name, then call export_leases with that propertyId and status="Active".
 
 Naming conventions:
 - Bed labels typically combine building code + room number + bed letter (e.g. "MG-04B" = building MG, room 04, bed B).
@@ -932,7 +940,10 @@ async function runLoop(
         });
         try {
           const result = await withSseKeepalive(res, () =>
-            def.execute(tu.input ?? {}, { userId: ctx.userId }),
+            def.execute(tu.input ?? {}, {
+              userId: ctx.userId,
+              conversationId,
+            }),
           );
           toolResults.push({
             type: "tool_result",
@@ -940,6 +951,30 @@ async function runLoop(
             content: JSON.stringify(result).slice(0, 50_000),
           });
           sseSend(res, "tool_result", { tool: tu.name, ok: true });
+          // Task #681: export_* tools persist a file row and return
+          // its id; surface that to the client as a download chip
+          // event distinct from the generic tool_result.
+          if (tu.name.startsWith("export_")) {
+            const r = result as
+              | {
+                  exportId?: string;
+                  filename?: string;
+                  format?: string;
+                  rowCount?: number;
+                  sizeBytes?: number;
+                }
+              | null;
+            if (r && typeof r.exportId === "string") {
+              sseSend(res, "export_ready", {
+                exportId: r.exportId,
+                filename: r.filename,
+                format: r.format,
+                rowCount: r.rowCount,
+                sizeBytes: r.sizeBytes,
+                downloadUrl: `/api/assistant/exports/${r.exportId}/download`,
+              });
+            }
+          }
         } catch (err: any) {
           toolResults.push({
             type: "tool_result",
@@ -1389,7 +1424,10 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
       // snapshot (the new id is enough to reverse).
       const snapshot = await captureSnapshot(proposal.toolName, finalInput);
       const result = await withSseKeepalive(res, () =>
-        def.execute(finalInput, { userId }),
+        def.execute(finalInput, {
+          userId,
+          conversationId: proposal.conversationId,
+        }),
       );
       const undoPlan = buildUndoPlan(
         proposal.toolName,

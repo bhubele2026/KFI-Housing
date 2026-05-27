@@ -50,6 +50,13 @@ export type ToolKind = "read" | "write";
  */
 export interface ToolCtx {
   userId: string;
+  /**
+   * Active conversation id, when the tool runs inside a chat turn.
+   * Plumbed through so `export_*` tools can stamp the
+   * `assistant_exports` row with the conversation that produced it
+   * (Task #681). Null for out-of-band / job-triggered calls.
+   */
+  conversationId?: string | null;
 }
 
 export interface ToolDef {
@@ -2588,6 +2595,14 @@ export function evaluateWriteScope(
   }
   return { ok: true };
 }
+
+// ─────────────────────────────── EXPORT tools (Task #681) ────────
+// Read-only tools that build an xlsx/pdf, persist it to
+// assistant_exports, and return a metadata chip the client can render
+// as a download card. Defined in a sibling file purely to keep this
+// already-2600-line file from growing further.
+import { allExportTools } from "./export-tools";
+for (const t of allExportTools) tools.push(t);
 
 export const TOOL_BY_NAME: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));
 

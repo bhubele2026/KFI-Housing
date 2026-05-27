@@ -51,10 +51,34 @@ export interface AssistantAttachment {
   sizeBytes: number;
 }
 
+/**
+ * One assistant-generated download chip (Task #681). Emitted by the
+ * server's `export_ready` SSE event after an `export_*` tool runs,
+ * rendered in the chat stream as a click-to-download card.
+ */
+export interface ExportChip {
+  id: string;
+  filename: string;
+  format: "xlsx" | "pdf";
+  rowCount: number;
+  sizeBytes: number;
+  downloadUrl: string;
+  /**
+   * Id of the assistant message that was streaming when this export
+   * was produced. Renderer uses this to interleave the download card
+   * at the point in the conversation where it was generated rather
+   * than grouping all exports at the bottom of the panel.
+   */
+  afterMessageId?: string;
+  /** Local-only — set when the operator clicks Download so the card can dim. */
+  downloadedAt?: number;
+}
+
 interface InternalState {
   messages: AssistantMessage[];
   conversationId: string | null;
   proposals: PendingProposal[];
+  exports: ExportChip[];
   busy: boolean;
   error: string | null;
 }
@@ -237,6 +261,7 @@ export function useAssistant() {
     messages: [],
     conversationId: loadStoredConversationId(),
     proposals: [],
+    exports: [],
     busy: false,
     error: null,
   });
@@ -339,7 +364,7 @@ export function useAssistant() {
     abortRef.current = null;
     const prior = state.conversationId;
     storeConversationId(null);
-    setState({ messages: [], conversationId: null, proposals: [], busy: false, error: null });
+    setState({ messages: [], conversationId: null, proposals: [], exports: [], busy: false, error: null });
     // Best-effort: tell the server to auto-cancel any pending
     // proposals on the abandoned conversation so re-hydrating it
     // later won't trip Anthropic's "tool_use without tool_result"
@@ -596,6 +621,34 @@ export function useAssistant() {
           }));
         } else if (event === "tool_result") {
           // read tool — no-op for UI
+        } else if (event === "export_ready") {
+          // Task #681: an export_* tool finished and persisted a file.
+          // Insert a download chip in the chat stream at the position
+          // it was produced — tagged with the assistant message that
+          // was streaming so the renderer can interleave it. SSE can
+          // replay on reconnect, so we dedupe by exportId.
+          const fmt =
+            payload.format === "pdf" || payload.format === "xlsx"
+              ? payload.format
+              : "xlsx";
+          setState((s) => {
+            if (s.exports.some((e) => e.id === payload.exportId)) return s;
+            return {
+              ...s,
+              exports: [
+                ...s.exports,
+                {
+                  id: payload.exportId,
+                  filename: payload.filename ?? "export",
+                  format: fmt,
+                  rowCount: Number(payload.rowCount) || 0,
+                  sizeBytes: Number(payload.sizeBytes) || 0,
+                  downloadUrl: payload.downloadUrl,
+                  afterMessageId: assistantMessageId,
+                },
+              ],
+            };
+          });
         } else if (event === "tool_error") {
           setState((s) => ({ ...s, error: payload.message }));
         } else if (event === "error") {
@@ -786,6 +839,17 @@ export function useAssistant() {
     [contextHeader, invalidateData],
   );
 
+  // Task #681 — mark a chip as downloaded so the UI can dim it.
+  // Purely client-side state; the server doesn't track downloads.
+  const markExportDownloaded = useCallback((exportId: string) => {
+    setState((s) => ({
+      ...s,
+      exports: s.exports.map((e) =>
+        e.id === exportId ? { ...e, downloadedAt: Date.now() } : e,
+      ),
+    }));
+  }, []);
+
   return {
     ...state,
     send,
@@ -794,5 +858,6 @@ export function useAssistant() {
     reset,
     uploadFile,
     pageFocusCustomer,
+    markExportDownloaded,
   };
 }

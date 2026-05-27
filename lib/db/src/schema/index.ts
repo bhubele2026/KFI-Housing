@@ -22,4 +22,5 @@ export * from "./assistant-conversations";
 export * from "./assistant-messages";
 export * from "./assistant-proposals";
 export * from "./assistant-uploads";
+export * from "./assistant-exports";
 export * from "./assistant-nudges";

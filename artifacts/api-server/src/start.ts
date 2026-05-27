@@ -14,6 +14,9 @@ import {
   startInsuranceExpiryScheduler,
 } from "./lib/insurance-expiry-scheduler";
 import { startAssistantScannerScheduler } from "./jobs/assistant-scanner";
+import { startAssistantExportsCleanupScheduler } from "./lib/assistant-exports-cleanup-scheduler";
+import { db, assistantExportsTable } from "@workspace/db";
+import { lt } from "drizzle-orm";
 import { prewarmThumbnails } from "./routes/attached-assets";
 import { startMasterFileWatcher } from "./lib/master-file-watcher";
 import type {
@@ -666,6 +669,19 @@ export async function start(deps: StartDeps): Promise<void> {
     startAssistantScannerScheduler({
       logger: deps.logger,
       env: deps.env,
+    });
+    // Task #681: prune expired assistant_exports rows hourly so the
+    // bytea column never grows unbounded. 24h-old rows are unreachable
+    // by the download route anyway (it 410s), so deletion is safe.
+    startAssistantExportsCleanupScheduler({
+      logger: deps.logger,
+      deleteExpired: async () => {
+        const deleted = await db
+          .delete(assistantExportsTable)
+          .where(lt(assistantExportsTable.expiresAt, new Date()))
+          .returning({ id: assistantExportsTable.id });
+        return deleted.length;
+      },
     });
   } catch (err) {
     deps.logger.error({ err }, "Error listening on port");

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Send, X, Trash2, Undo2, Paperclip, BellOff, Clock } from "lucide-react";
+import { Bot, Send, X, Trash2, Undo2, Paperclip, BellOff, Clock, Download, FileSpreadsheet, FileText } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,6 +7,7 @@ import {
   useAssistant,
   type PendingProposal,
   type AssistantAttachment,
+  type ExportChip,
 } from "./use-assistant";
 import { useAssistantChips, type PageChip } from "./use-assistant-chips";
 import { renderPreview } from "./proposal-preview";
@@ -33,6 +34,7 @@ export function AssistantBubble() {
   const {
     messages,
     proposals,
+    exports,
     busy,
     error,
     send,
@@ -41,6 +43,7 @@ export function AssistantBubble() {
     reset,
     uploadFile,
     pageFocusCustomer,
+    markExportDownloaded,
   } = useAssistant();
   const hasPendingProposal = proposals.some((p) => p.status === "pending");
   const chipsQuery = useAssistantChips({
@@ -222,9 +225,44 @@ export function AssistantBubble() {
               </div>
             )}
 
-            {messages.map((m) => (
-              <MessageBubble key={m.id} role={m.role} text={m.text} pending={m.pending} />
-            ))}
+            {messages.map((m) => {
+              // Task #681: render any export chips produced while THIS
+              // assistant message was streaming directly underneath it,
+              // so the download card appears at the point in the
+              // conversation where it was generated.
+              const chipsForMsg = exports.filter(
+                (e) => e.afterMessageId === m.id,
+              );
+              return (
+                <div key={m.id} className="space-y-3">
+                  <MessageBubble role={m.role} text={m.text} pending={m.pending} />
+                  {chipsForMsg.map((e) => (
+                    <ExportChipCard
+                      key={e.id}
+                      chip={e}
+                      onDownloaded={() => markExportDownloaded(e.id)}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+
+            {/* Orphan chips (no parent message — e.g. hydrated after
+                reload before the chip's parent message arrived) render
+                at the tail so they're never lost. */}
+            {exports
+              .filter(
+                (e) =>
+                  !e.afterMessageId ||
+                  !messages.some((m) => m.id === e.afterMessageId),
+              )
+              .map((e) => (
+                <ExportChipCard
+                  key={e.id}
+                  chip={e}
+                  onDownloaded={() => markExportDownloaded(e.id)}
+                />
+              ))}
 
             {nudges.length > 0 && (
               <div
@@ -516,6 +554,82 @@ function NudgeCard({
           Dismiss
         </Button>
       </div>
+    </div>
+  );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ExportChipCard({
+  chip,
+  onDownloaded,
+}: {
+  chip: ExportChip;
+  onDownloaded: () => void;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const handleDownload = async () => {
+    setDownloading(true);
+    setErr(null);
+    try {
+      const r = await fetch(chip.downloadUrl, { credentials: "include" });
+      if (!r.ok) {
+        if (r.status === 410)
+          throw new Error("This export has expired. Re-run the export to download it again.");
+        throw new Error(`Download failed (HTTP ${r.status})`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = chip.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onDownloaded();
+    } catch (e: any) {
+      setErr(e?.message ?? "Download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
+  const Icon = chip.format === "pdf" ? FileText : FileSpreadsheet;
+  const dimmed = chip.downloadedAt ? "opacity-60" : "";
+  return (
+    <div
+      className={`rounded-lg border border-border bg-background/80 p-2.5 flex items-center gap-2 ${dimmed}`}
+      data-testid={`export-chip-${chip.id}`}
+      data-export-format={chip.format}
+    >
+      <Icon className="h-5 w-5 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">{chip.filename}</div>
+        <div className="text-[11px] text-muted-foreground">
+          {chip.rowCount.toLocaleString()} rows · {formatBytes(chip.sizeBytes)} ·{" "}
+          {chip.format.toUpperCase()}
+        </div>
+        {err && (
+          <div className="text-[11px] text-destructive mt-0.5">{err}</div>
+        )}
+      </div>
+      <Button
+        type="button"
+        size="sm"
+        variant="default"
+        className="h-7 px-2.5 text-[11px] shrink-0"
+        onClick={handleDownload}
+        disabled={downloading}
+        data-testid={`export-chip-download-${chip.id}`}
+      >
+        <Download className="h-3 w-3 mr-1" />
+        {downloading ? "…" : "Download"}
+      </Button>
     </div>
   );
 }

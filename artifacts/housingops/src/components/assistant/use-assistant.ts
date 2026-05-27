@@ -323,9 +323,21 @@ export function useAssistant() {
   const reset = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    const prior = state.conversationId;
     storeConversationId(null);
     setState({ messages: [], conversationId: null, proposals: [], busy: false, error: null });
-  }, []);
+    // Best-effort: tell the server to auto-cancel any pending
+    // proposals on the abandoned conversation so re-hydrating it
+    // later won't trip Anthropic's "tool_use without tool_result"
+    // 400. Failures are ignored — the runLoop healer is the real
+    // safety net.
+    if (prior) {
+      fetch(`${apiBase()}/conversations/${prior}/pending`, {
+        method: "DELETE",
+        credentials: "include",
+      }).catch(() => {});
+    }
+  }, [state.conversationId]);
 
   const invalidateData = useCallback(() => {
     // Refetch every list query so the rest of the app reflects the change.

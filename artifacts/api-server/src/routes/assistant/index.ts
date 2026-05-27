@@ -512,6 +512,72 @@ function buildAnthropicMessages(
   return out;
 }
 
+/**
+ * Anthropic rejects the entire request if any assistant `tool_use`
+ * block is not followed by a matching `tool_result` in the next user
+ * message. The conversation can end up in that state when the
+ * proposal/confirm flow is interrupted (operator types a new prompt
+ * while a proposal is pending, the route crashes between persisting
+ * the assistant turn and persisting the combined tool_result, etc.).
+ *
+ * This helper walks the message list and, for every orphan
+ * `tool_use` id, splices in a synthetic `tool_result` block so the
+ * next API call is structurally valid. The synthetic content is
+ * marked `is_error: true` and explains the result is missing — the
+ * model treats it as "this tool call didn't produce anything; do
+ * something else." Pure function — no I/O, easy to unit-test.
+ */
+export function healToolUseBalance(
+  messages: Array<{ role: "user" | "assistant"; content: any }>,
+): Array<{ role: "user" | "assistant"; content: any }> {
+  const out: Array<{ role: "user" | "assistant"; content: any }> = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    out.push(msg);
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue;
+    const toolUseIds: string[] = [];
+    for (const block of msg.content) {
+      if (block && block.type === "tool_use" && typeof block.id === "string") {
+        toolUseIds.push(block.id);
+      }
+    }
+    if (toolUseIds.length === 0) continue;
+    const next = messages[i + 1];
+    const nextIsToolResultUser =
+      !!next && next.role === "user" && Array.isArray(next.content);
+    const resolved = new Set<string>();
+    if (nextIsToolResultUser) {
+      for (const b of next!.content as any[]) {
+        if (b && b.type === "tool_result" && typeof b.tool_use_id === "string") {
+          resolved.add(b.tool_use_id);
+        }
+      }
+    }
+    const missing = toolUseIds.filter((id) => !resolved.has(id));
+    if (missing.length === 0) continue;
+    const synthetic = missing.map((id) => ({
+      type: "tool_result" as const,
+      tool_use_id: id,
+      content: "Skipped — no result was recorded for this tool call.",
+      is_error: true,
+    }));
+    if (nextIsToolResultUser) {
+      // Replace the next message with a copy that has the synthetic
+      // tool_result blocks appended, then push it and skip past it.
+      out.push({
+        role: "user",
+        content: [...(next!.content as any[]), ...synthetic],
+      });
+      i += 1;
+    } else {
+      // No following user message — insert a synthetic one between
+      // this assistant turn and whatever comes next.
+      out.push({ role: "user", content: synthetic });
+    }
+  }
+  return out;
+}
+
 async function loadMessages(conversationId: string): Promise<AssistantMessageRow[]> {
   return db
     .select()
@@ -552,7 +618,7 @@ async function runLoop(
   const systemPrompt = await buildSystemPrompt(ctx);
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const rows = await loadMessages(conversationId);
-    const messages = buildAnthropicMessages(rows);
+    const messages = healToolUseBalance(buildAnthropicMessages(rows));
     if (messages.length === 0) {
       sseSend(res, "done", { reason: "empty" });
       return;
@@ -762,6 +828,113 @@ async function runLoop(
   sseSend(res, "done", { reason: "max_turns" });
 }
 
+/**
+ * Mark every pending proposal on `conversationId` as rejected and
+ * persist a balanced `tool_result` user-message for each one, so the
+ * conversation's assistant turn that emitted those tool_use blocks
+ * stays structurally valid for Anthropic. Emits one SSE
+ * `proposal_resolved` per cancelled proposal so the UI updates
+ * pending cards to "Cancelled" in real time.
+ *
+ * `reason` is folded into the result error string so we can tell at
+ * a glance whether the cancel came from a new user message
+ * (`new_user_message`) or the trash-button cleanup endpoint
+ * (`conversation_reset`). The healToolUseBalance pass in runLoop
+ * picks up any prior read tool_uses we don't replay here.
+ */
+async function autoCancelPendingProposals(
+  conversationId: string,
+  res: Response | null,
+  reason: "new_user_message" | "conversation_reset",
+): Promise<number> {
+  const pendings = await db
+    .select()
+    .from(assistantProposalsTable)
+    .where(
+      and(
+        eq(assistantProposalsTable.conversationId, conversationId),
+        eq(assistantProposalsTable.status, "pending"),
+      ),
+    )
+    .orderBy(asc(assistantProposalsTable.createdAt));
+  if (pendings.length === 0) return 0;
+  const errMsg =
+    reason === "new_user_message"
+      ? "Superseded by a new user message"
+      : "Superseded by conversation reset";
+  for (const p of pendings) {
+    await db
+      .update(assistantProposalsTable)
+      .set({
+        status: "rejected",
+        result: { error: errMsg },
+        updatedAt: new Date(),
+      })
+      .where(eq(assistantProposalsTable.id, p.id));
+    // Build a balanced user-message: a tool_result for the proposal's
+    // own tool_use id plus one for every deferred tool_use the model
+    // emitted alongside it. Any prior read tool_uses that aren't
+    // covered here will be patched up by healToolUseBalance on the
+    // next runLoop iteration.
+    const payload = (p.payload ?? {}) as Record<string, unknown>;
+    const deferredIds = Array.isArray(payload.deferredToolUseIds)
+      ? (payload.deferredToolUseIds as string[])
+      : [];
+    const ids = [p.toolUseId, ...deferredIds].filter(
+      (v): v is string => typeof v === "string" && v.length > 0,
+    );
+    const blocks = ids.map((id) => ({
+      type: "tool_result" as const,
+      tool_use_id: id,
+      content: errMsg,
+      is_error: true,
+    }));
+    if (blocks.length > 0) {
+      await persistMessage(conversationId, "user", "", { blocks });
+    }
+    if (res) {
+      sseSend(res, "proposal_resolved", {
+        id: p.id,
+        status: "rejected",
+        error: errMsg,
+      });
+    }
+  }
+  return pendings.length;
+}
+
+// ── DELETE /assistant/conversations/:id/pending ──
+// Best-effort endpoint the web client fires when the operator hits
+// the trash / "new conversation" button. It auto-cancels any pending
+// proposals on the conversation so re-hydrating that conversation
+// later (or any future view of it) doesn't trip the Anthropic
+// missing-tool_result 400. Returns the count of cancelled proposals.
+router.delete(
+  "/assistant/conversations/:id/pending",
+  async (req, res): Promise<void> => {
+    const userId = getUserId(req);
+    const [conv] = await db
+      .select()
+      .from(assistantConversationsTable)
+      .where(
+        and(
+          eq(assistantConversationsTable.id, req.params.id),
+          eq(assistantConversationsTable.userId, userId),
+        ),
+      );
+    if (!conv) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    const cancelled = await autoCancelPendingProposals(
+      conv.id,
+      null,
+      "conversation_reset",
+    );
+    res.json({ cancelled });
+  },
+);
+
 // ── POST /assistant/chat ─ start or continue a conversation ──
 router.post("/assistant/chat", async (req, res): Promise<void> => {
   const userId = getUserId(req);
@@ -799,6 +972,16 @@ router.post("/assistant/chat", async (req, res): Promise<void> => {
 
   sseInit(res);
   sseSend(res, "conversation", { id: conversationId });
+
+  // Auto-cancel any pending proposals on this conversation BEFORE we
+  // persist the new user message. If we didn't, the next runLoop call
+  // would ship an assistant turn whose tool_use blocks have no
+  // matching tool_result (the proposal's combined tool_result never
+  // gets written until confirm/reject runs) followed by a plain
+  // user-text message → Anthropic 400. Treating a fresh prompt as
+  // "operator changed their mind about the pending proposal" matches
+  // operator intent and keeps history balanced.
+  await autoCancelPendingProposals(conversationId, res, "new_user_message");
 
   await persistMessage(conversationId, "user", body.message);
 

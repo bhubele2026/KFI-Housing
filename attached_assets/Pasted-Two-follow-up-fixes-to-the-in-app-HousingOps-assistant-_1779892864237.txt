@@ -1,0 +1,227 @@
+Two follow-up fixes to the in-app HousingOps assistant, on top of ticket #668.
+
+Files touched:
+  artifacts/api-server/src/routes/assistant/index.ts
+  artifacts/api-server/src/routes/assistant/tools.ts
+  artifacts/api-server/src/routes/assistant/undo.ts
+
+Read each file before editing. Do NOT change the proposal/confirm protocol or
+the SSE event shapes — the client depends on them.
+
+────────────────────────────────────────────────────────────────────────
+FIX A — Handle Anthropic overloaded_error gracefully
+────────────────────────────────────────────────────────────────────────
+
+When the Anthropic API returns a 529 / overloaded_error mid-stream, the
+current catch block in runLoop (index.ts around lines 646-651) forwards
+the raw error body to the SSE "error" event, which the client renders as
+the literal JSON blob:
+
+  {"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"}}
+
+Replace that behavior with: (1) auto-retry the failed turn up to 3 times
+with exponential backoff before surfacing anything to the user, (2) emit
+a short inline "retrying" text delta so the operator sees progress, and
+(3) if all retries fail, surface a friendly error message instead of the
+raw JSON.
+
+Implementation in runLoop:
+
+  - Declare `let overloadedRetries = 0;` outside the for-loop (one budget
+    per request, not per turn).
+  - In the catch block of the anthropic.messages.stream call, detect
+    overload via ANY of these signals (Anthropic's SDK has changed the
+    error shape across versions, so check all three):
+      err?.status === 529
+      err?.error?.error?.type === "overloaded_error"
+      /overloaded/i.test(err?.message ?? "")
+  - If overloaded AND overloadedRetries < 3:
+      const delayMs = Math.min(8000, 500 * 2 ** overloadedRetries);
+      overloadedRetries++;
+      sseSend(res, "text", {
+        delta: `\n_(Anthropic is busy — retrying in ${Math.round(delayMs/1000)}s…)_\n`
+      });
+      await new Promise(r => setTimeout(r, delayMs));
+      turn--;  // re-run this turn index, don't burn it
+      continue;
+  - If overloaded but retries exhausted, emit:
+      sseSend(res, "error", {
+        message: "Anthropic's API is temporarily overloaded. Please try again in a moment."
+      });
+      await persistMessage(conversationId, "assistant",
+        "Anthropic's API is temporarily overloaded. Please try again in a moment.");
+      return;
+  - For any non-overload error, keep the existing behavior (forward
+    err?.message, persist as an assistant message, return) BUT do not
+    forward an empty/object string — coerce with String(err) only when
+    err.message is absent.
+
+Add a small unit test for the detection logic — given mocked err objects
+matching each of the three shapes, the helper should return true; given a
+generic Error("network down"), it should return false. Extract the
+detection into a `isOverloadedError(err): boolean` helper at the top of
+index.ts so it's testable in isolation.
+
+DO NOT retry on any other error class. Auth failures, schema validation
+errors, tool-execution errors, and client disconnects must continue to
+fail immediately the way they do today.
+
+────────────────────────────────────────────────────────────────────────
+FIX B — Stop the assistant from picking update_* when the operator said
+"add", and force a clarifying question on count mismatches
+────────────────────────────────────────────────────────────────────────
+
+Symptom: the operator typed "Add three utilities to burnett Hinckly —
+water $50/month, garbage $20/month" and the bot proposed ONE
+update_utility on an existing utility instead of two (or three)
+create_utility proposals. Two root causes — both fixed in this ticket.
+
+Cause 1: the system prompt doesn't disambiguate "add" vs "change".
+Cause 2: there's no bulk_create_utilities tool, so even a correctly-
+routed "add water and garbage" turn would have produced two separate
+proposals, doubling the confirm clicks.
+
+B.1 — System prompt clarifications
+
+In index.ts's SYSTEM_PROMPT_BASE constant, add these two bullets to the
+Guidelines block (after the existing "If a required field is missing,
+ASK the user instead of guessing" bullet):
+
+  - "Add" / "create" / "new" always mean a create_* tool — never an
+    update_* tool. If the operator wants to modify an existing record
+    they will say "change", "update", "fix", or "set". When in doubt,
+    ASK rather than reaching for update_*.
+  - If the operator states a count (e.g. "three utilities", "five beds")
+    but lists fewer items, ASK which items they meant before proposing
+    any write. Do not invent the missing items, do not substitute an
+    update for the missing ones, and do not silently proceed with only
+    the items that were listed.
+
+Keep the existing "Naming conventions" section untouched.
+
+B.2 — Add bulk_create_utilities tool (mirrors bulk_create_beds from #668)
+
+In tools.ts, add a new write tool following the bulk_create_occupants
+pattern exactly:
+
+  name: "bulk_create_utilities"
+  kind: "write"
+  description: "Create multiple utility line items on a property in one
+                transaction. Use this for the 'add water, garbage, and
+                electric to Burnett Hinckley' style of request — one
+                Confirm card runs all of them atomically."
+  input_schema: obj(
+    {
+      propertyId: Str,
+      utilities: {
+        type: "array",
+        items: obj(
+          {
+            type: Str,            // "water", "garbage", "electric", "gas", etc.
+            provider: StrOpt,
+            monthlyAmount: NumOpt,
+            accountNumber: StrOpt,
+            notes: StrOpt,
+          },
+          ["type"],
+        ),
+      },
+    },
+    ["propertyId", "utilities"],
+  )
+  summarize: (i) => `Create ${(i.utilities ?? []).length} utilities on property ${i.propertyId}`
+  preview: async (input) => {
+    // Return { items: [{ type, provider, monthlyAmount }] } so the
+    // proposal card shows the operator exactly what will be created,
+    // including any null monthlyAmount entries flagged so they notice.
+  }
+  execute: async (input) => {
+    return db.transaction(async (tx) => {
+      const created: any[] = [];
+      for (const u of (input.utilities ?? []) as any[]) {
+        // Route through the existing POST /api/utilities handler via
+        // callRouteOrThrow so any normaliser / validation in that route
+        // fires for assistant writes too. Mirror the field set on the
+        // single-row create_utility tool.
+        const row = await callRouteOrThrow("POST", "/utilities", {
+          propertyId: input.propertyId,
+          type: u.type,
+          provider: u.provider ?? "",
+          monthlyAmount: u.monthlyAmount ?? 0,
+          accountNumber: u.accountNumber ?? "",
+          notes: u.notes ?? "",
+        });
+        created.push(row);
+      }
+      return { utilities: created };
+    });
+  }
+
+Verify field names against the existing create_utility tool (around
+tools.ts:1039) — match it exactly. Do not invent fields.
+
+B.3 — Undo support for bulk_create_utilities
+
+In undo.ts:
+  - captureSnapshot returns null for bulk_create_utilities (it's a
+    create, no prior state to snapshot — same as bulk_create_occupants).
+  - buildUndoPlan emits a plan that deletes every utility id returned
+    by execute. The plan shape should match what bulk_create_beds from
+    ticket #668 uses (an array of DELETE operations). Generalize the
+    helper that does this for bulk_create_beds rather than copy-pasting.
+  - extractResultId returns null (undo is on the proposal, not a single
+    row).
+
+Also extend the subsequent-edit safety check from ticket #668 to handle
+bulk_create_utilities — the proposal's payload.affectedIds should include
+every created utility id so a later update on one of them blocks the
+bulk undo with the standard "more recent change targets the same record"
+message.
+
+B.4 — System prompt steers toward bulk_create_utilities
+
+In SYSTEM_PROMPT_BASE add to the same Guidelines block as ticket #668's
+bulk-tool bullets:
+
+  - For adding multiple utilities to the same property in one ask
+    (e.g. "add water and garbage"), use bulk_create_utilities — one
+    confirm runs all of them.
+
+B.5 — Client invalidation map
+
+In artifacts/housingops/src/components/assistant/use-assistant.ts, add
+bulk_create_utilities to the INVALIDATE_KEYS map introduced by ticket
+#668:
+  bulk_create_utilities: [["utilities"]],
+
+(Use the exported getList helper from api-client-react, same as the
+other entries — do not hand-type the key.)
+
+────────────────────────────────────────────────────────────────────────
+TESTING
+────────────────────────────────────────────────────────────────────────
+
+  1. Force an overload: temporarily monkeypatch the anthropic SDK call
+     in a dev branch to throw { status: 529, error: { error: { type:
+     "overloaded_error" }}} on the first call and succeed on the
+     second. Verify the chat shows "(Anthropic is busy — retrying in
+     1s…)" then continues normally. Verify the conversation stays
+     interactive (no stuck busy state).
+  2. Force a 529 four times in a row. Verify the chat shows the
+     friendly message, NOT raw JSON, and that busy clears.
+  3. Ask "add water $50/mo and garbage $20/mo to <property>" — verify
+     one bulk_create_utilities proposal card listing both, one confirm,
+     two rows created in one transaction.
+  4. Ask "add three utilities to <property> — water $50, garbage $20" —
+     verify the bot asks which third utility you meant, instead of
+     proposing anything.
+  5. Ask "change the water utility on <property> to $75/mo" — verify
+     the bot still routes to update_utility (the new prompt language
+     must not block legitimate updates).
+  6. Approve a bulk_create_utilities → undo it → verify all created
+     utilities are deleted in one action. Then approve a
+     bulk_create_utilities, update one of the created utilities, try to
+     undo the bulk — verify the safety check refuses with the standard
+     "more recent change targets the same record" message.
+  7. Existing #668 tests (bulk lease/bed flows, page focus, targeted
+     invalidation, stall watchdog) all still pass.

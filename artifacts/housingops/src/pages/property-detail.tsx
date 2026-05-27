@@ -3390,10 +3390,24 @@ export default function PropertyDetail() {
                                                 cs === "in_progress"
                                                   ? "bg-sky-50 text-sky-700 border-sky-200"
                                                   : "bg-amber-50 text-amber-700 border-amber-200";
+                                              // Waiting age (task #675). Show the bed's
+                                              // needs_cleaning_since age as a "· Nd" suffix so
+                                              // operators see at a glance which beds have been
+                                              // sitting longest. Hidden for in_progress (the
+                                              // turnover has already started).
+                                              let ageLabel = "";
+                                              if (cs === "needs_cleaning" && bed.needsCleaningSince) {
+                                                const ms = Date.now() - new Date(bed.needsCleaningSince).getTime();
+                                                if (ms >= 0) {
+                                                  const hours = Math.floor(ms / 3_600_000);
+                                                  const days = Math.floor(hours / 24);
+                                                  ageLabel = days >= 1 ? ` · ${days}d` : ` · ${Math.max(1, hours)}h`;
+                                                }
+                                              }
                                               const chipLabel =
                                                 cs === "in_progress"
                                                   ? t("pages.propertyDetail.cleaningInProgress")
-                                                  : t("pages.propertyDetail.cleaningNeeds");
+                                                  : `${t("pages.propertyDetail.cleaningNeeds")}${ageLabel}`;
                                               return (
                                                 <div className="flex items-center gap-1">
                                                   <Badge

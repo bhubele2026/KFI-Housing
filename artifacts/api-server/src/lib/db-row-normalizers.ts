@@ -778,6 +778,37 @@ export function normalizeBedRow<
   if (out.status === "Vacant" && out.cleaningStatus === "occupied") {
     out.cleaningStatus = "needs_cleaning";
   }
+  // `needsCleaningSince` bookkeeping (task #675). When this row write
+  // also decides a cleaningStatus, keep the timestamp in lock-step:
+  //   - landing on "needs_cleaning" → stamp now() (unless the caller
+  //     supplied a value explicitly, e.g. a backfill / import)
+  //   - landing on any other state → clear to null
+  // When the row write doesn't touch cleaningStatus (a partial PATCH
+  // that only updates, say, the room) we leave the column alone so the
+  // age keeps accruing.
+  const nextCleaningStatus = out.cleaningStatus as
+    | BedCleaningStatus
+    | undefined;
+  const callerProvidedSince = Object.prototype.hasOwnProperty.call(
+    row,
+    "needsCleaningSince",
+  );
+  if (nextCleaningStatus !== undefined) {
+    if (nextCleaningStatus === "needs_cleaning") {
+      if (!callerProvidedSince || (row as Record<string, unknown>).needsCleaningSince == null) {
+        out.needsCleaningSince = new Date();
+      } else {
+        const raw = (row as Record<string, unknown>).needsCleaningSince;
+        out.needsCleaningSince = raw instanceof Date ? raw : new Date(String(raw));
+      }
+    } else {
+      out.needsCleaningSince = null;
+    }
+  } else if (callerProvidedSince) {
+    const raw = (row as Record<string, unknown>).needsCleaningSince;
+    out.needsCleaningSince =
+      raw == null ? null : raw instanceof Date ? raw : new Date(String(raw));
+  }
   return out as T;
 }
 

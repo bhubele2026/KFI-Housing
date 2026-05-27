@@ -740,6 +740,17 @@ export const BedSchema = z.object({
   // missing values collapse to "ready" for vacant beds and the server
   // re-derives the correct value from `status` on next round-trip.
   cleaningStatus: z.enum(BED_CLEANING_STATUSES).optional(),
+  // When the bed entered `needs_cleaning` (task #675). ISO timestamp
+  // when present, null otherwise. Optional/nullish so legacy bundles
+  // and pre-deploy API responses keep parsing — the server stamps it
+  // automatically on the next round-trip.
+  needsCleaningSince: z
+    .union([z.string(), z.date()])
+    .nullish()
+    .transform((v) =>
+      v == null ? null : v instanceof Date ? v.toISOString() : v,
+    )
+    .optional(),
 });
 export type Bed = z.infer<typeof BedSchema>;
 

@@ -446,6 +446,12 @@ export const ImportDataBody = zod.object({
         .describe(
           'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
         ),
+      needsCleaningSince: zod.coerce
+        .date()
+        .nullish()
+        .describe(
+          "ISO timestamp of when this bed entered `needs_cleaning`\n(task #675). Null whenever the bed is not currently\nwaiting for cleaning. Set\/cleared by the API boundary\non every cleaning-status transition so the assistant\nscanner and the bed list can report an exact waiting\nage instead of approximating from `updated_at`.\n",
+        ),
     }),
   ),
   occupants: zod.array(
@@ -3076,6 +3082,12 @@ export const ListBedsResponseItem = zod.object({
     .describe(
       'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
     ),
+  needsCleaningSince: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO timestamp of when this bed entered `needs_cleaning`\n(task #675). Null whenever the bed is not currently\nwaiting for cleaning. Set\/cleared by the API boundary\non every cleaning-status transition so the assistant\nscanner and the bed list can report an exact waiting\nage instead of approximating from `updated_at`.\n",
+    ),
 });
 export const ListBedsResponse = zod.array(ListBedsResponseItem);
 
@@ -3094,6 +3106,12 @@ export const CreateBedBody = zod.object({
     .optional()
     .describe(
       'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+    ),
+  needsCleaningSince: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO timestamp of when this bed entered `needs_cleaning`\n(task #675). Null whenever the bed is not currently\nwaiting for cleaning. Set\/cleared by the API boundary\non every cleaning-status transition so the assistant\nscanner and the bed list can report an exact waiting\nage instead of approximating from `updated_at`.\n",
     ),
 });
 
@@ -3127,6 +3145,12 @@ export const UpdateBedResponse = zod.object({
     .optional()
     .describe(
       'Cleaning workflow state for this bed (task #500). Set\nautomatically to \"needs_cleaning\" when an occupant moves\nout and advanced by operators. Only \"ready\" beds may\naccept a new placement. Optional in the schema so legacy\npayloads continue to round-trip; the API normaliser\nbackfills \"occupied\" or \"ready\" from `status` when missing.\n',
+    ),
+  needsCleaningSince: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO timestamp of when this bed entered `needs_cleaning`\n(task #675). Null whenever the bed is not currently\nwaiting for cleaning. Set\/cleared by the API boundary\non every cleaning-status transition so the assistant\nscanner and the bed list can report an exact waiting\nage instead of approximating from `updated_at`.\n",
     ),
 });
 

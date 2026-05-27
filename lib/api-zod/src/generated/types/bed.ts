@@ -24,4 +24,15 @@ payloads continue to round-trip; the API normaliser
 backfills "occupied" or "ready" from `status` when missing.
  */
   cleaningStatus?: BedCleaningStatus;
+  /**
+   * ISO timestamp of when this bed entered `needs_cleaning`
+(task #675). Null whenever the bed is not currently
+waiting for cleaning. Set/cleared by the API boundary
+on every cleaning-status transition so the assistant
+scanner and the bed list can report an exact waiting
+age instead of approximating from `updated_at`.
+
+   * @nullable
+   */
+  needsCleaningSince?: Date | null;
 }

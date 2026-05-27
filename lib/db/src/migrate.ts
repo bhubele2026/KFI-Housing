@@ -13,6 +13,7 @@ import { createAppUsersTablesIfNeeded } from "./migrations/create-app-users-tabl
 import { createMonthlySnapshotsTableIfNeeded } from "./migrations/create-monthly-snapshots-table";
 import { createAssistantUploadsTableIfNeeded } from "./migrations/create-assistant-uploads-table";
 import { createAssistantNudgesTablesIfNeeded } from "./migrations/create-assistant-nudges-table";
+import { addBedNeedsCleaningSinceIfNeeded } from "./migrations/add-bed-needs-cleaning-since";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -103,6 +104,14 @@ export async function pushSchemaIfNeeded(
   // background scanner have their destinations on the very first
   // request after the rollout. Idempotent — no-op once both exist.
   await createAssistantNudgesTablesIfNeeded(pool, log);
+
+  // Add the nullable `beds.needs_cleaning_since` column (Task #675)
+  // BEFORE drizzle's pushSchema so deployed environments pick it up at
+  // boot without waiting for a separate push. Back-fills existing
+  // needs_cleaning rows from `updated_at` so the scanner and the bed
+  // list have a sensible starting age. Idempotent — no-op once the
+  // column exists.
+  await addBedNeedsCleaningSinceIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

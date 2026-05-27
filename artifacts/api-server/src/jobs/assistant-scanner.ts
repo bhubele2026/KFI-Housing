@@ -203,13 +203,13 @@ async function runExpiringLeasesCheck(
   return { found: rows.length, emitted };
 }
 
-// Check 2: beds sitting in needs_cleaning for > 7 days. The schema
-// doesn't have a dedicated `needs_cleaning_since` column yet (see the
-// follow-up task), so we use `beds.updated_at` as the fallback:
-// rows whose last write was more than 7 days ago. Bed mutations bump
-// updatedAt at the boundary, so this approximates "stalled in
-// needs_cleaning for >7 days" closely enough for v1. Dedup is per-bed
-// so the nudge persists until the bed leaves needs_cleaning.
+// Check 2: beds sitting in needs_cleaning for > 7 days. Uses the
+// dedicated `needs_cleaning_since` column (task #675) — the API
+// boundary stamps it on the transition into needs_cleaning so we get
+// an exact waiting age. For legacy rows that pre-date the column and
+// somehow still carry NULL despite the back-fill, we fall back to
+// `updated_at` (the previous approximation). Dedup is per-bed so the
+// nudge persists until the bed leaves needs_cleaning.
 async function runStaleNeedsCleaningBedsCheck(
   recipients: string[],
   now: Date,
@@ -220,22 +220,32 @@ async function runStaleNeedsCleaningBedsCheck(
       id: bedsTable.id,
       propertyId: bedsTable.propertyId,
       bedNumber: bedsTable.bedNumber,
+      needsCleaningSince: bedsTable.needsCleaningSince,
+      updatedAt: bedsTable.updatedAt,
     })
     .from(bedsTable)
     .where(
       and(
         eq(bedsTable.cleaningStatus, "needs_cleaning"),
-        lt(bedsTable.updatedAt, cutoff),
+        lt(
+          sql`COALESCE(${bedsTable.needsCleaningSince}, ${bedsTable.updatedAt})`,
+          cutoff,
+        ),
       ),
     );
   let emitted = 0;
   for (const bed of rows) {
+    const since = bed.needsCleaningSince ?? bed.updatedAt;
+    const days = Math.max(
+      1,
+      Math.floor((now.getTime() - new Date(since).getTime()) / 86_400_000),
+    );
     emitted += await emitToAll(recipients, {
       ruleKey: `stale-needs-cleaning-bed:${bed.id}`,
       source: "scanner",
       severity: "info",
-      title: `Bed ${bed.id} needs cleaning`,
-      body: `Bed #${bed.bedNumber} at property ${bed.propertyId} is waiting for turnover.`,
+      title: `Bed ${bed.id} has been waiting ${days} day${days === 1 ? "" : "s"} for cleaning`,
+      body: `Bed #${bed.bedNumber} at property ${bed.propertyId} entered needs_cleaning ${days} day${days === 1 ? "" : "s"} ago.`,
       ctaLabel: "Mark ready",
       ctaPrompt: `Update bed ${bed.id} cleaningStatus to ready.`,
       pagePattern: `/properties/${bed.propertyId}`,

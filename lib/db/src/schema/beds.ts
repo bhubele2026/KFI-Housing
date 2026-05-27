@@ -28,6 +28,15 @@ export const bedsTable = pgTable("beds", {
   // boundary normaliser pairs it with `status` so an occupied row is
   // always reported as "occupied" regardless of what's persisted.
   cleaningStatus: text("cleaning_status").notNull().default("ready"),
+  // When the bed entered the `needs_cleaning` state (task #675). Null
+  // whenever the bed is not currently waiting for cleaning. The API
+  // boundary sets this to now() on the transition into needs_cleaning
+  // and clears it on every transition away, so the assistant scanner
+  // and the bed-list UI can report an exact waiting age instead of
+  // falling back to `updated_at` as an estimate.
+  needsCleaningSince: timestamp("needs_cleaning_since", {
+    withTimezone: true,
+  }),
 });
 
 export type BedRow = typeof bedsTable.$inferSelect;

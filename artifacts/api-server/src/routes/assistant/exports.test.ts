@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import http from "node:http";
+import { Readable } from "node:stream";
 import { AddressInfo } from "node:net";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 
@@ -18,6 +19,26 @@ vi.mock("@workspace/db", async () => {
     ...schema,
   };
 });
+
+// Task #684: the route now streams from object storage via this
+// adapter rather than reading a `bytea` column. Stub the GCS adapter
+// in-memory so the test can drive both happy and missing-object paths
+// without needing the Replit sidecar.
+const fakeObjects = new Map<string, Buffer>();
+const missingKeys = new Set<string>();
+vi.mock("../../lib/assistant-exports-storage", () => ({
+  getAssistantExportObjectStream: async (storageKey: string) => {
+    if (missingKeys.has(storageKey)) {
+      throw new Error("not found");
+    }
+    const buf = fakeObjects.get(storageKey) ?? Buffer.from("hello");
+    return { stream: Readable.from(buf), size: buf.length };
+  },
+  putAssistantExportObject: async () => "/bucket/private/assistant-exports/stub",
+  deleteAssistantExportObject: async () => {},
+  assistantExportStorageKey: (id: string) =>
+    `/bucket/private/assistant-exports/${id}`,
+}));
 
 const dbModule = await import("@workspace/db");
 const { db, assistantExportsTable } = dbModule as typeof import("@workspace/db");
@@ -52,16 +73,22 @@ afterAll(async () => {
   );
 });
 
-async function seedExport(overrides: Partial<typeof assistantExportsTable.$inferInsert> = {}) {
+async function seedExport(
+  overrides: Partial<typeof assistantExportsTable.$inferInsert> = {},
+  bytes: Buffer = Buffer.from("hello"),
+) {
   const id = overrides.id ?? `ax-${Math.random().toString(36).slice(2, 10)}`;
+  const storageKey =
+    overrides.storageKey ?? `/bucket/private/assistant-exports/${id}`;
+  fakeObjects.set(storageKey, bytes);
   await db.insert(assistantExportsTable).values({
     id,
     userId: "user-A",
     conversationId: null,
     filename: "leases-2026-05-27.xlsx",
     mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    sizeBytes: 5,
-    content: Buffer.from("hello"),
+    sizeBytes: bytes.length,
+    storageKey,
     toolName: "export_leases",
     format: "xlsx",
     entityType: "leases",
@@ -70,7 +97,7 @@ async function seedExport(overrides: Partial<typeof assistantExportsTable.$infer
     expiresAt: new Date(Date.now() + 60_000),
     ...overrides,
   });
-  return id;
+  return { id, storageKey };
 }
 
 describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
@@ -134,9 +161,9 @@ describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
 });
 
 describe("GET /assistant/exports/:id/download", () => {
-  it("streams the bytea content with correct headers when the owner downloads", async () => {
+  it("streams the object-storage content with correct headers when the owner downloads", async () => {
     currentUser = "user-A";
-    const id = await seedExport();
+    const { id } = await seedExport();
     const res = await fetch(`${baseUrl}/assistant/exports/${id}/download`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("spreadsheetml");
@@ -156,15 +183,24 @@ describe("GET /assistant/exports/:id/download", () => {
 
   it("returns 404 (not 403) for an export owned by another user — never leaks existence", async () => {
     currentUser = "user-A";
-    const id = await seedExport({ userId: "user-B" });
+    const { id } = await seedExport({ userId: "user-B" });
     const res = await fetch(`${baseUrl}/assistant/exports/${id}/download`);
     expect(res.status).toBe(404);
   });
 
   it("returns 410 when expiresAt is in the past", async () => {
     currentUser = "user-A";
-    const id = await seedExport({ expiresAt: new Date(Date.now() - 1000) });
+    const { id } = await seedExport({ expiresAt: new Date(Date.now() - 1000) });
     const res = await fetch(`${baseUrl}/assistant/exports/${id}/download`);
     expect(res.status).toBe(410);
+  });
+
+  it("returns 410 when the underlying object is missing from storage", async () => {
+    currentUser = "user-A";
+    const { id, storageKey } = await seedExport();
+    missingKeys.add(storageKey);
+    const res = await fetch(`${baseUrl}/assistant/exports/${id}/download`);
+    expect(res.status).toBe(410);
+    missingKeys.delete(storageKey);
   });
 });

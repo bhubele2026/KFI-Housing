@@ -15,6 +15,7 @@ import { createAssistantUploadsTableIfNeeded } from "./migrations/create-assista
 import { createAssistantNudgesTablesIfNeeded } from "./migrations/create-assistant-nudges-table";
 import { addBedNeedsCleaningSinceIfNeeded } from "./migrations/add-bed-needs-cleaning-since";
 import { addPropertyUpdatedAtIfNeeded } from "./migrations/add-property-updated-at";
+import { dropAssistantExportsContentIfNeeded } from "./migrations/drop-assistant-exports-content";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -120,6 +121,13 @@ export async function pushSchemaIfNeeded(
   // provisioned yet are silently skipped — pushSchema will create
   // them on first boot and the next migrate run picks them up.
   await addPropertyUpdatedAtIfNeeded(pool, log);
+
+  // Task #684: drop the legacy `assistant_exports.content` bytea
+  // column and add `storage_key` BEFORE drizzle's pushSchema so the
+  // diff is empty (pushSchema would otherwise flag the drop as data
+  // loss and refuse to apply). Legacy transient rows are discarded —
+  // there is no object in storage to back them with.
+  await dropAssistantExportsContentIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

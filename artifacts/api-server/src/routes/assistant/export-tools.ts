@@ -22,6 +22,7 @@ import {
   type SummarySheet,
 } from "../../lib/xlsx-export";
 import { buildPdfBuffer } from "../../lib/pdf-export";
+import { putAssistantExportObject } from "../../lib/assistant-exports-storage";
 import type { ToolDef, ToolCtx } from "./tools";
 
 const XLSX_MIME =
@@ -125,6 +126,10 @@ async function buildAndPersist(
   const sizeBytes = content.length;
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  // Upload the bytes to object storage BEFORE inserting the metadata
+  // row (Task #684). If the upload fails we throw without writing a
+  // row whose `storage_key` would dangle.
+  const storageKey = await putAssistantExportObject(id, content, mime);
   await db.insert(assistantExportsTable).values({
     id,
     userId: opts.ctx.userId,
@@ -132,7 +137,7 @@ async function buildAndPersist(
     filename,
     mime,
     sizeBytes,
-    content,
+    storageKey,
     toolName: opts.toolName,
     format: opts.format,
     entityType: opts.entityType,

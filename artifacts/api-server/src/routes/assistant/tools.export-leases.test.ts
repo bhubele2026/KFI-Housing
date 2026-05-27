@@ -14,6 +14,24 @@ vi.mock("@workspace/db", async () => {
   };
 });
 
+// Task #684: the export tools now upload bytes to App Storage rather
+// than persisting them on the row. Stub the storage adapter so we can
+// capture the uploaded buffer and assert against it (the live xlsx
+// recalc check below is still THE acceptance criterion).
+const uploaded: { id: string; buf: Buffer; mime: string }[] = [];
+vi.mock("../../lib/assistant-exports-storage", () => ({
+  putAssistantExportObject: async (id: string, buf: Buffer, mime: string) => {
+    uploaded.push({ id, buf, mime });
+    return `/bucket/private/assistant-exports/${id}`;
+  },
+  getAssistantExportObjectStream: async () => {
+    throw new Error("not used in this test");
+  },
+  deleteAssistantExportObject: async () => {},
+  assistantExportStorageKey: (id: string) =>
+    `/bucket/private/assistant-exports/${id}`,
+}));
+
 const dbModule = await import("@workspace/db");
 const {
   db,
@@ -79,7 +97,7 @@ const ctx = {
 } as any;
 
 describe("export_leases tool", () => {
-  it("filters by customerId, persists an assistant_exports row, and returns a download envelope", async () => {
+  it("filters by customerId, uploads bytes to object storage, persists metadata, and returns a download envelope", async () => {
     const result = await exportLeasesTool.execute(
       { format: "xlsx", customerId: "custA" },
       ctx,
@@ -90,8 +108,8 @@ describe("export_leases tool", () => {
     expect(result.filename).toMatch(/^leases-customer-a-\d{4}-\d{2}-\d{2}\.xlsx$/);
     expect(result.exportId).toMatch(/^ax-/);
 
-    // The row must be persisted exactly as returned — the download
-    // route reads back from this table.
+    // The row must be persisted exactly as returned, with the
+    // storage_key pointing at the object the route will stream from.
     const [row] = await db
       .select()
       .from(assistantExportsTable);
@@ -102,17 +120,22 @@ describe("export_leases tool", () => {
     expect(row.entityType).toBe("leases");
     expect(row.rowCount).toBe(2);
     expect(row.sizeBytes).toBe(result.sizeBytes);
+    expect(row.storageKey).toBe(
+      `/bucket/private/assistant-exports/${result.exportId}`,
+    );
     // ~24h TTL (allow a generous window for slow test runs).
     const ttlMs = row.expiresAt.getTime() - row.createdAt.getTime();
     expect(ttlMs).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(ttlMs).toBeLessThan(25 * 60 * 60 * 1000);
 
-    // The persisted bytes must be a real xlsx with the formula columns
-    // intact (the LIVE recalc is THE acceptance criterion for Task #681).
-    const content = Buffer.isBuffer(row.content)
-      ? row.content
-      : Buffer.from(row.content as unknown as Uint8Array);
-    const wb = XLSX.read(content, { type: "buffer", cellFormula: true });
+    // The uploaded bytes must be a real xlsx with the formula columns
+    // intact (the LIVE recalc is THE acceptance criterion for Task
+    // #681; Task #684 just moves where the bytes live).
+    const upload = uploaded.find((u) => u.id === result.exportId);
+    expect(upload).toBeDefined();
+    expect(upload!.mime).toContain("spreadsheetml");
+    expect(upload!.buf.length).toBe(result.sizeBytes);
+    const wb = XLSX.read(upload!.buf, { type: "buffer", cellFormula: true });
     expect(wb.SheetNames).toContain("Data");
     expect(wb.SheetNames).toContain("Totals");
     // Days-to-expiry is column L (12th column, index 11) and must be a formula.

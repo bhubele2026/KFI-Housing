@@ -15,6 +15,7 @@ import {
 } from "./lib/insurance-expiry-scheduler";
 import { startAssistantScannerScheduler } from "./jobs/assistant-scanner";
 import { startAssistantExportsCleanupScheduler } from "./lib/assistant-exports-cleanup-scheduler";
+import { deleteAssistantExportObject } from "./lib/assistant-exports-storage";
 import { db, assistantExportsTable } from "@workspace/db";
 import { lt } from "drizzle-orm";
 import { prewarmThumbnails } from "./routes/attached-assets";
@@ -670,16 +671,32 @@ export async function start(deps: StartDeps): Promise<void> {
       logger: deps.logger,
       env: deps.env,
     });
-    // Task #681: prune expired assistant_exports rows hourly so the
-    // bytea column never grows unbounded. 24h-old rows are unreachable
-    // by the download route anyway (it 410s), so deletion is safe.
+    // Task #681 / Task #684: prune expired assistant_exports rows
+    // hourly AND delete the underlying object-storage blobs so neither
+    // Postgres nor App Storage grows unbounded. 24h-old rows are
+    // unreachable by the download route anyway (it 410s), so deletion
+    // is safe. Object deletes are best-effort — if one fails the row
+    // is already gone and the next tick simply has nothing to delete.
     startAssistantExportsCleanupScheduler({
       logger: deps.logger,
       deleteExpired: async () => {
         const deleted = await db
           .delete(assistantExportsTable)
           .where(lt(assistantExportsTable.expiresAt, new Date()))
-          .returning({ id: assistantExportsTable.id });
+          .returning({
+            id: assistantExportsTable.id,
+            storageKey: assistantExportsTable.storageKey,
+          });
+        await Promise.all(
+          deleted.map((r) =>
+            deleteAssistantExportObject(r.storageKey).catch((err: unknown) => {
+              deps.logger.warn(
+                { err, exportId: r.id, storageKey: r.storageKey },
+                "assistant-exports-cleanup: failed to delete object — will be orphaned",
+              );
+            }),
+          ),
+        );
         return deleted.length;
       },
     });

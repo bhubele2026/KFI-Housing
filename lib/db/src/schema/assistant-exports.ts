@@ -1,11 +1,5 @@
-import { pgTable, text, integer, timestamp, index, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, index } from "drizzle-orm/pg-core";
 import { desc } from "drizzle-orm";
-
-const bytea = customType<{ data: Buffer; default: false }>({
-  dataType() {
-    return "bytea";
-  },
-});
 
 /**
  * Generated exports the assistant produced for the operator (Task #681).
@@ -13,12 +7,18 @@ const bytea = customType<{ data: Buffer; default: false }>({
  * Mirrors `assistant_uploads` but for the OUT direction — when the
  * operator asks the assistant for an Excel or PDF dump of a listable
  * dataset, one of the `export_*` tools generates the file in-memory,
- * persists the bytes here, and returns just the row's id. A download
- * route (`GET /api/assistant/exports/:id/download`) streams the bytes
- * back to the browser when the operator clicks the chip in chat.
+ * uploads the bytes to object storage (App Storage), and persists only
+ * the metadata + storage key here. A download route
+ * (`GET /api/assistant/exports/:id/download`) streams the bytes back
+ * from object storage when the operator clicks the chip in chat.
  *
- * Rows live 24h and are pruned by an hourly cleanup scheduler so the
- * `bytea` column never grows unbounded.
+ * Task #684: the bytes used to live on the row as a `bytea` column,
+ * which bloated the table for large room-night / payroll exports.
+ * Moving the blob to object storage keeps Postgres light; the row is
+ * just an index entry.
+ *
+ * Rows live 24h and are pruned by an hourly cleanup scheduler that
+ * deletes both the row AND the object so neither side grows unbounded.
  */
 export const assistantExportsTable = pgTable(
   "assistant_exports",
@@ -29,7 +29,7 @@ export const assistantExportsTable = pgTable(
     filename: text("filename").notNull(),
     mime: text("mime").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    content: bytea("content").notNull(),
+    storageKey: text("storage_key").notNull(),
     toolName: text("tool_name").notNull(),
     format: text("format").notNull(),
     entityType: text("entity_type").notNull(),

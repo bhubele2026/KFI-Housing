@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { db, assistantExportsTable } from "@workspace/db";
+import { getAssistantExportObjectStream } from "../../lib/assistant-exports-storage";
 
 /**
  * Local copy of the assistant route's `getUserId` helper. We mirror
@@ -67,8 +68,13 @@ router.get("/assistant/exports", async (req, res): Promise<void> => {
  * created it. 404 for a missing row OR a row owned by a different
  * user (avoids leaking the existence of someone else's exportId).
  * 410 once `expiresAt` is past — the hourly cleanup scheduler will
- * delete the row shortly after, but this gives the caller a friendly
- * error in the window before deletion runs.
+ * delete the row + object shortly after, but this gives the caller a
+ * friendly error in the window before deletion runs.
+ *
+ * Task #684: the bytes now live in object storage (App Storage) rather
+ * than a `bytea` column. We stream the GCS read directly to the
+ * response so multi-megabyte room-night / payroll exports never get
+ * buffered in Node's heap.
  */
 router.get(
   "/assistant/exports/:id/download",
@@ -91,17 +97,41 @@ router.get(
       res.status(410).json({ error: "Export expired — please regenerate." });
       return;
     }
-    const content = Buffer.isBuffer(row.content)
-      ? row.content
-      : Buffer.from(row.content as unknown as Uint8Array);
+    let stream: Awaited<ReturnType<typeof getAssistantExportObjectStream>>;
+    try {
+      stream = await getAssistantExportObjectStream(row.storageKey);
+    } catch (err) {
+      (req as any).log?.warn?.(
+        { err, exportId: row.id, storageKey: row.storageKey },
+        "assistant-exports: object missing for export — treating as expired",
+      );
+      res
+        .status(410)
+        .json({ error: "Export expired — please regenerate." });
+      return;
+    }
     res.setHeader("Content-Type", row.mime || "application/octet-stream");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${row.filename.replace(/"/g, "")}"`,
     );
     res.setHeader("Cache-Control", "private, no-store");
-    res.setHeader("Content-Length", String(content.length));
-    res.end(content);
+    res.setHeader(
+      "Content-Length",
+      String(stream.size ?? row.sizeBytes),
+    );
+    stream.stream.on("error", (err) => {
+      (req as any).log?.warn?.(
+        { err, exportId: row.id },
+        "assistant-exports: stream error while serving export",
+      );
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to stream export" });
+      } else {
+        res.destroy(err);
+      }
+    });
+    stream.stream.pipe(res);
   },
 );
 

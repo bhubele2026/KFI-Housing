@@ -1,0 +1,380 @@
+Add comprehensive export to Excel and PDF for the HousingOps assistant.
+Operators should be able to say "export X to Excel" or "give me a PDF of
+Y" for ANY listable data in the app — leases, occupants, beds, properties,
+payroll deductions, utilities, insurance certificates, room-nights — and
+get a downloadable file chip in the chat. Filters that work in the
+matching list_* read tool also work in the export tool.
+
+Files to touch / create:
+  CREATE  artifacts/api-server/src/lib/xlsx-export.ts
+  CREATE  artifacts/api-server/src/lib/pdf-export.ts
+  CREATE  artifacts/api-server/src/routes/assistant/exports.ts
+  MODIFY  artifacts/api-server/src/routes/assistant/tools.ts
+  MODIFY  artifacts/api-server/src/routes/assistant/index.ts
+  MODIFY  artifacts/housingops/src/components/assistant/assistant-bubble.tsx
+  MODIFY  artifacts/housingops/src/components/assistant/use-assistant.ts
+  CREATE  lib/db/src/schema/assistant-exports.ts
+
+Read the existing import code first — readMasterWorkbookFromBuffer and
+parseDeductionsWorkbook in artifacts/api-server/src/lib/. Use the SAME
+xlsx library they use (likely exceljs or xlsx-js). Do NOT add a new xlsx
+dependency. For PDF use pdfkit if it's already in package.json; if not,
+prefer puppeteer-less HTML→PDF via @react-pdf/renderer OR use the existing
+pdf-parse dep's sibling pdf-lib only if no other PDF lib is present. Check
+package.json FIRST and tell me which lib you used.
+
+CRITICAL: Excel files must use LIVE FORMULAS for totals, ratios, deltas,
+percentages — never hardcode computed values. This applies to every
+total row, every monthly/weekly aggregate, every variance column. If a
+cell could conceivably be a formula, make it a formula.
+
+═══════════════════════════════════════════════════════════════════════════
+DATABASE — assistant_exports table
+═══════════════════════════════════════════════════════════════════════════
+
+Drizzle migration. Mirror the pattern of assistant_uploads:
+
+  id           text primary key            -- "ax-xxxxxxxx"
+  userId       text not null
+  conversationId text                       -- null if export was triggered outside chat
+  filename     text not null               -- "leases-burnett-hinckley-2026-05-27.xlsx"
+  mime         text not null
+  sizeBytes    integer not null
+  content      bytea not null
+  toolName     text not null               -- which export tool produced it
+  format       text not null               -- "xlsx" | "pdf"
+  entityType   text not null               -- "lease" | "occupant" | "bed" | etc.
+  rowCount     integer not null
+  filterDesc   text                         -- human-readable filter summary
+  createdAt    timestamptz default now()
+  expiresAt    timestamptz not null        -- createdAt + 24h
+
+  Indexes:
+    (userId, createdAt desc)
+    (expiresAt)
+
+Cleanup job: delete rows where expiresAt < now() every hour. Use the same
+scheduling primitive the rest of the app uses. Do NOT add a new scheduler.
+
+═══════════════════════════════════════════════════════════════════════════
+SHARED EXPORT BUILDERS
+═══════════════════════════════════════════════════════════════════════════
+
+xlsx-export.ts — shared types and one entry function:
+
+  type CellFormat = "text" | "currency" | "date" | "number" | "percent" | "int";
+
+  interface ExportColumn {
+    header: string;
+    key: string;                          // dot-path into the row object
+    width?: number;
+    format?: CellFormat;
+    /** If set, this column emits a per-row formula instead of a value.
+     *  rowIndex is 1-based and refers to the data row (header is row 1
+     *  inside the worker; offset internally). */
+    formula?: (rowIndex: number) => string;
+  }
+
+  interface SummarySheet {
+    label: string;                        // shown in row 1 of summary sheet
+    rows: Array<{
+      label: string;
+      formula: string;                    // e.g. "=SUM(Data!D2:D{lastRow})"
+    }>;
+  }
+
+  export async function buildXlsxBuffer(opts: {
+    title: string;                        // workbook title shown in row 1 of main sheet
+    filterDesc: string;                   // shown in row 2 of main sheet
+    columns: ExportColumn[];
+    rows: Array<Record<string, unknown>>;
+    summary?: SummarySheet;               // optional second sheet with totals
+    freezeHeader?: boolean;               // default true
+  }): Promise<Buffer>
+
+  Implementation requirements:
+    - Row 1: title (merged across columns), bold, larger font
+    - Row 2: filterDesc (italic, gray)
+    - Row 3: empty
+    - Row 4: column headers (bold, bottom border)
+    - Row 5+: data
+    - Apply number format per column based on `format`:
+        currency → "$#,##0.00;[Red]-$#,##0.00"
+        date     → "yyyy-mm-dd"
+        percent  → "0.0%"
+        number   → "#,##0.00"
+        int      → "#,##0"
+    - Autosize columns to fit content (cap at 50 chars wide)
+    - Freeze panes at row 5 if freezeHeader
+    - Apply table styling (banded rows)
+    - Summary sheet, if provided, has its own title row and total rows;
+      formulas reference the data sheet using "Data!" prefix
+    - {lastRow} placeholder in formulas gets replaced with the actual
+      last data row index before write
+
+pdf-export.ts — same data, simpler output:
+
+  export async function buildPdfBuffer(opts: {
+    title: string;
+    filterDesc: string;
+    columns: ExportColumn[];              // formula columns rendered as their computed value in PDF
+    rows: Array<Record<string, unknown>>;
+    summary?: SummarySheet;               // rendered as a totals block at the bottom
+  }): Promise<Buffer>
+
+  Implementation requirements:
+    - Letter, landscape, 0.5in margins
+    - Header on every page: title (left), generation timestamp (right)
+    - Footer on every page: "Page N of M" (centered)
+    - Column headers repeat on each page
+    - Currency / date / percent formatted using the same rules as xlsx
+    - For formula columns in PDF, COMPUTE the value at export time and
+      render the number. PDFs don't recalc.
+    - If rows exceed what fits, wrap to next page; do NOT shrink text
+      below 8pt — instead, if a column would be too narrow, drop the
+      least-important columns and add a note "(N columns omitted — use
+      Excel export for full data)"
+
+═══════════════════════════════════════════════════════════════════════════
+TOOL DEFINITIONS — eight export tools, all read-only
+═══════════════════════════════════════════════════════════════════════════
+
+In tools.ts, add EIGHT new tools, all kind="read" (exports don't mutate
+state — no confirm card needed, just execute). Each tool calls the
+matching list_* logic internally so filters stay consistent.
+
+Common input shape on every export tool:
+
+  format: "xlsx" | "pdf"        (required)
+  filename?: string             (optional override; default auto-generated)
+  ...same filter args as the matching list_* tool...
+
+Common return shape:
+
+  { exportId: string, filename: string, format: string,
+    rowCount: number, sizeBytes: number }
+
+The client renders this return as a download chip (see UI section).
+
+Tools to add:
+
+  1. export_leases
+     description: "Export leases to Excel or PDF. Accepts the same filters
+        as list_leases (customerId, propertyId, status, expiringWithinDays,
+        snoozed). Returns a download chip the operator can click."
+     columns (xlsx):
+       Lease ID | Property | Building | Unit | Start | End | Status |
+       Monthly Rent | Security Deposit | Vendor | Notes | Days to Expiry
+     formula columns:
+       Days to Expiry → =IF(F{r}="", "", F{r}-TODAY())
+       (where F is the End column — index dynamically based on column order)
+     summary sheet (Totals):
+       Total leases           → =COUNTA(Data!A5:A{lastRow})
+       Active leases          → =COUNTIF(Data!G5:G{lastRow},"Active")
+       Expiring next 30d      → =COUNTIFS(Data!L5:L{lastRow},">=0",Data!L5:L{lastRow},"<=30")
+       Monthly rent total     → =SUM(Data!H5:H{lastRow})
+       Avg monthly rent       → =AVERAGE(Data!H5:H{lastRow})
+
+  2. export_occupants
+     filters: customerId, propertyId, status, company
+     columns:
+       Occupant ID | Name | Property | Bed | Company | Status |
+       Move-in Date | Charge/Bed | Charge Source Customer | Notes
+     summary:
+       Total occupants, Active, Former, Total weekly charges (SUM)
+
+  3. export_beds
+     filters: customerId, propertyId, buildingId, roomId, status, cleaningStatus
+     columns:
+       Bed ID | Property | Building | Room | Bed # | Status | Cleaning |
+       Occupant | Monthly Rent (from room)
+     summary:
+       Total beds, Occupied, Vacant, Needs Cleaning, Occupancy %
+       Occupancy % → =COUNTIF(Data!F5:F{lastRow},"Occupied")/COUNTA(Data!A5:A{lastRow})
+
+  4. export_properties
+     filters: customerId, status
+     columns:
+       Property ID | Name | Customer | Address | City | State | Zip |
+       Status | Bed Count | Occupied Beds | Occupancy %
+     formula columns:
+       Occupancy % → =IF(I{r}=0,"",J{r}/I{r})
+     summary:
+       Total properties, Active, Total beds, Occupied beds, Portfolio occupancy %
+
+  5. export_payroll_deductions
+     filters: customerId, propertyId, occupantId, payWeekStart, payWeekEnd,
+              unmatched (boolean)
+     columns:
+       Deduction ID | Pay Week | Occupant | Property | Amount | Matched |
+       Source File | Notes
+     summary:
+       Total rows, Matched, Unmatched, Total $ deducted, Total $ unmatched
+
+  6. export_utilities
+     filters: customerId, propertyId
+     columns:
+       Utility ID | Property | Type | Company | Monthly Cost | Account # | Notes
+     summary:
+       Total utilities, Total monthly cost (SUM), Avg per property
+
+  7. export_insurance_certificates
+     filters: customerId, propertyId, expiringWithinDays
+     columns:
+       Cert ID | Property | Carrier | Policy # | Coverage Start | Coverage End |
+       Days to Expiry
+     formula column: Days to Expiry → =IF(F{r}="","",F{r}-TODAY())
+     summary: Total certs, Expiring next 30d, Expiring next 7d
+
+  8. export_room_nights
+     filters: leaseId, propertyId, month, monthFrom, monthTo
+     columns:
+       Log ID | Lease | Property | Month | Room Nights | Rate | Total
+     formula column: Total → =E{r}*F{r}
+     summary: Total room-nights, Total $ billed (SUM of Total formula)
+
+Naming rule for the file: `<entityType>-<scopeName?>-<YYYY-MM-DD>.<ext>`.
+Example: "leases-burnett-hinckley-2026-05-27.xlsx". If a scope name can't
+be cleanly resolved, fall back to "<entityType>-<YYYY-MM-DD>.<ext>".
+
+Each export tool, after generating the buffer, inserts an
+assistant_exports row with userId from ctx, conversationId from the
+calling route, and the buffer in `content`. Return the metadata, NOT
+the buffer (we never send the bytes back through the model — they
+download via a separate HTTP endpoint).
+
+═══════════════════════════════════════════════════════════════════════════
+DOWNLOAD ENDPOINT (exports.ts)
+═══════════════════════════════════════════════════════════════════════════
+
+New route file. Add ONE endpoint:
+
+  GET /api/assistant/exports/:id/download
+
+  - Validate the export row exists and belongs to req.user.id (same auth
+    middleware as the rest of /api/assistant/*)
+  - Validate not expired (expiresAt > now); if expired, 410 Gone with
+    body { error: "Export expired — please regenerate." }
+  - Set headers:
+      Content-Type: row.mime
+      Content-Disposition: attachment; filename="<row.filename>"
+      Cache-Control: private, no-store
+  - Stream row.content as the body
+
+NO listing endpoint. NO delete endpoint. Exports are ephemeral; the
+cleanup job handles eviction.
+
+═══════════════════════════════════════════════════════════════════════════
+SYSTEM PROMPT UPDATES (index.ts)
+═══════════════════════════════════════════════════════════════════════════
+
+Add to SYSTEM_PROMPT_BASE Guidelines block:
+
+  - The operator can export ANY list-style data to Excel (.xlsx with live
+    formulas) or PDF. Use export_leases / export_occupants / export_beds /
+    export_properties / export_payroll_deductions / export_utilities /
+    export_insurance_certificates / export_room_nights. These are READ
+    tools — they execute immediately without a confirm card and return a
+    download chip the operator clicks.
+  - When the operator says "export", "download", "give me a spreadsheet",
+    "give me a PDF", "I need this in Excel", "send me this in a file" —
+    reach for the matching export_* tool. Do NOT suggest copy/paste, do
+    NOT suggest "ask your developer", do NOT offer to reformat as
+    CSV-in-chat. The export tool IS the answer.
+  - If the operator doesn't specify format, default to xlsx. Confirm
+    format only when ambiguous (e.g. "report" alone could be either).
+  - Apply the same filters they'd ask about. "Export the active leases on
+    Burnett Hinckley" → export_leases with propertyId resolved via
+    find_property_by_name and status="Active".
+
+═══════════════════════════════════════════════════════════════════════════
+CLIENT — render the download chip
+═══════════════════════════════════════════════════════════════════════════
+
+In use-assistant.ts:
+
+  1. Extend the SSE `tool_result` event handler. Currently the client
+     ignores tool_result for reads. For export tools specifically, the
+     server should ALSO send a new SSE event after the tool result:
+
+       sseSend(res, "export_ready", {
+         exportId, filename, format, rowCount, sizeBytes,
+         downloadUrl: `/api/assistant/exports/${exportId}/download`
+       });
+
+     Add this in index.ts's runLoop right after a successful read-tool
+     execute, by checking if the tool name starts with "export_" and the
+     result has an exportId. Don't wedge export-specific logic into the
+     generic tool_result event — keep them separate.
+
+  2. Add `exports: ExportChip[]` to InternalState:
+
+       interface ExportChip {
+         id: string;          // exportId
+         filename: string;
+         format: "xlsx" | "pdf";
+         rowCount: number;
+         sizeBytes: number;
+         downloadUrl: string;
+         downloadedAt?: number;   // local-only, set when user clicks
+       }
+
+  3. Append to exports on the export_ready event.
+
+In assistant-bubble.tsx:
+
+  4. Render each export chip as a card in the message stream, in the
+     position it was generated (alongside the matching assistant turn).
+     Card structure:
+
+       [file icon for xlsx/pdf]  filename
+       N rows · ~size           [Download]
+
+     Clicking Download triggers a same-tab fetch with credentials and
+     saves the blob via a temporary <a download> click — do NOT use
+     window.open(downloadUrl) because that loses the auth cookie on some
+     browsers. Implementation:
+
+       const r = await fetch(chip.downloadUrl, { credentials: "include" });
+       const blob = await r.blob();
+       const url = URL.createObjectURL(blob);
+       const a = document.createElement("a");
+       a.href = url; a.download = chip.filename; a.click();
+       URL.revokeObjectURL(url);
+
+     Mark downloadedAt locally so the chip dims slightly after click
+     (still re-downloadable).
+
+  5. Format size: "12 KB", "1.4 MB". Format rowCount: "127 rows".
+
+═══════════════════════════════════════════════════════════════════════════
+TESTING
+═══════════════════════════════════════════════════════════════════════════
+
+  1. Ask: "Export all active leases on Burnett Hinckley to Excel"
+     → Bot calls find_property_by_name, then export_leases with
+       propertyId + status="Active", returns chip. Click → file
+       downloads. Open in Excel: title row, filter description,
+       formula columns (Days to Expiry computes correctly), summary
+       sheet with working SUM/COUNTIF formulas.
+
+  2. Ask: "Give me a PDF of all vacant beds"
+     → export_beds with status="Vacant", format="pdf". PDF opens, has
+       headers/footers, no column overflow.
+
+  3. Ask: "Download last week's payroll deductions, unmatched only"
+     → export_payroll_deductions with appropriate filters.
+
+  4. Verify formulas: open the leases xlsx, change a Monthly Rent value
+     in row 5 → the summary sheet total updates. THIS IS THE
+     ACCEPTANCE TEST FOR THE LIVE-FORMULA REQUIREMENT. If totals are
+     hardcoded values, the implementation is wrong; fix it.
+
+  5. Wait 24h (or manipulate expiresAt in dev) → download URL returns
+     410 Gone.
+
+  6. Hit the download URL while logged in as a different user → 403/404
+     (not the same user, not their export).
+
+  7. Bot no longer says "copy the data" or "contact your developer" when
+     asked to export anything in the list above.

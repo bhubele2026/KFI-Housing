@@ -1,0 +1,421 @@
+Implement a three-tier proactive assistant system for HousingOps. Build in
+phases — Phase 1 ships independently and adds value immediately; Phases 2-4
+share infrastructure and must be built in order.
+
+Existing context you should read first:
+  artifacts/api-server/src/routes/assistant/index.ts  (especially pageSuggestions at L233)
+  artifacts/api-server/src/routes/assistant/tools.ts
+  artifacts/housingops/src/components/assistant/assistant-bubble.tsx
+  artifacts/housingops/src/components/assistant/use-assistant.ts
+  lib/db/src/schema/  (for existing table patterns)
+  Existing import route handlers (POST /api/imports/leases, /api/imports/payroll-deductions)
+
+Do NOT change the proposal/confirm protocol, SSE event shapes, or the existing
+chat loop in this ticket. Everything here is ADDITIVE.
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 1 — Reactive page chips (lowest risk, ship first)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Surface 2-4 tappable suggestion chips above the chat input that change
+based on the current page. Tapping a chip seeds the input and sends it as if
+the operator typed it. No backend logic changes — the chips just make the
+existing capability discoverable.
+
+Server changes (index.ts):
+
+  1. Refactor the existing `pageSuggestions` function into a pure helper that
+     returns a structured array instead of a newline-joined string:
+
+       interface PageChip {
+         label: string;        // shown on the chip — short, imperative
+         prompt: string;       // what gets sent to the assistant when tapped
+       }
+       function pageChipsFor(ctx: AssistantCtx): PageChip[] { ... }
+
+     Keep the existing string-flattening behavior available for the system
+     prompt (call pageChipsFor, then join into the COMMON ASKS block) — do
+     not break that integration.
+
+  2. Add GET /api/assistant/page-chips that accepts the same X-Assistant-Context
+     header used by /chat and returns { chips: PageChip[] }. Keep the chip
+     count between 2 and 4 per page; if pageChipsFor returns more, truncate.
+
+  3. Example chip mappings to seed (extend the existing pageSuggestions
+     content into this structure):
+
+       Page /dashboard:
+         - { label: "What needs attention?", prompt: "What needs attention today?" }
+         - { label: "Find unmatched payroll", prompt: "Show me unmatched payroll deductions for the current scope" }
+
+       Property focus:
+         - { label: "Expiring leases here", prompt: "Show me leases expiring in the next 30 days on this property" }
+         - { label: "Vacant beds", prompt: "List the vacant beds on this property" }
+         - { label: "Add a building", prompt: "Add a new building to this property" }
+
+       Lease focus:
+         - { label: "Extend by 6 months", prompt: "Push this lease's end date out 6 months" }
+         - { label: "Other leases here", prompt: "Show the other leases on this property" }
+
+       Occupant focus:
+         - { label: "Recent deductions", prompt: "Show this occupant's recent payroll deductions" }
+         - { label: "Move to another bed", prompt: "Move this occupant to a different bed" }
+
+Client changes (assistant-bubble.tsx + use-assistant.ts):
+
+  4. Add a `useAssistantChips()` hook (separate from useAssistant to keep
+     state isolated) that React-Query-fetches /api/assistant/page-chips
+     keyed on the current location + customer scope. The query should be
+     stale-while-revalidate with a 30s staleTime — chips don't change
+     constantly and we don't want a fetch on every keystroke.
+
+  5. In assistant-bubble.tsx, render a horizontal scrollable row of chips
+     directly above the input textarea when the bubble is open AND there are
+     no pending proposals AND the bubble isn't currently busy. Tap = call
+     send(chip.prompt) and clear the chip row for that turn.
+
+  6. Styling: use the existing button variant from /components/ui/button
+     with a "ghost" or "outline" look. Each chip is roughly: icon (optional)
+     + short label, max ~28ch. Wrap on small screens.
+
+  7. Do NOT show chips on a fresh empty conversation BEFORE the bubble is
+     opened — keep them inside the bubble so the global UI stays clean.
+
+Acceptance for Phase 1:
+  - Open the bubble on /properties/<id>; see 2-4 property-relevant chips.
+  - Navigate to /occupants/<id>; chips update within the staleTime.
+  - Tap a chip → input populates and message sends in one click.
+  - Chips disappear during busy state and during a pending proposal.
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 2 — Shared nudge infrastructure (table, API, client renderer)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Build the persistence + delivery substrate that Phases 3 and 4 will
+use. Nothing user-visible yet beyond an empty card slot — this phase is
+plumbing.
+
+Database (new migration):
+
+  1. Create assistant_nudges table:
+
+       id            text primary key
+       userId        text not null      -- scoped per operator
+       customerId    text                -- nullable; null = applies under any scope
+       ruleKey       text not null      -- stable dedup key (see below)
+       source        text not null      -- "import_summary" | "background_scan" | "manual"
+       severity      text not null      -- "info" | "warn" | "alert"
+       title         text not null
+       body          text not null      -- short — 1-2 sentences max
+       ctaLabel      text                -- optional button label
+       ctaPrompt     text                -- if set, tapping CTA seeds the chat
+       pagePattern   text                -- optional regex/glob of pages to show on; null = anywhere
+       anchorType    text                -- "property" | "lease" | "bed" | "occupant" | null
+       anchorId      text                -- the focused entity id, if any
+       relatedProposalId text             -- for after-import summaries; references assistant_proposals.id
+       createdAt     timestamptz default now()
+       dismissedAt   timestamptz
+       snoozedUntil  timestamptz
+
+       Indexes:
+         (userId, dismissedAt, snoozedUntil)   -- active nudges per user
+         (userId, ruleKey) UNIQUE              -- dedup: a scanner can't create the same nudge twice
+         (anchorType, anchorId)                -- for page-context filtering
+
+     ruleKey format: "<source>:<entity>:<variant>" — examples:
+       "expiring_lease:lease-abc123:14d"
+       "stale_cleaning:bed-xyz:7d"
+       "unmatched_payroll:2025-W47"
+       "import_summary:proposal-ap-789"
+
+     The UNIQUE constraint is what prevents the background scanner from
+     creating duplicate nudges on every run.
+
+  2. Add the schema export to lib/db/src/schema and the table to the db
+     barrel export, matching the pattern of the existing tables.
+
+Server API:
+
+  3. GET /api/assistant/nudges
+     Query params: ?page=<currentLocation>&customerId=<scope>
+     Returns { nudges: NudgeRow[] } where the rows are:
+       - userId-scoped to the caller
+       - dismissedAt IS NULL
+       - snoozedUntil IS NULL OR snoozedUntil < now()
+       - customerId IS NULL OR customerId = <scope> (or scope is "all")
+       - pagePattern IS NULL OR matches the current page
+
+     ALSO computes any "page-context" nudges on the fly (no DB writes).
+     Page-context nudges are stateless checks that depend on what the
+     operator is looking at right now — they go through the same response
+     shape but are NOT stored in assistant_nudges. Implement these in this
+     phase but seed only with two examples; Phase 3 adds more:
+
+       On property focus:
+         - If the property has any lease ending in next 14 days → nudge
+       On dashboard:
+         - If there are >0 unmatched payroll rows in latest pay week → nudge
+
+     Computed nudges get a synthetic id prefixed "computed-" and their
+     ruleKey reflects the computation (e.g. "expiring_lease:lease-abc:14d").
+     They cannot be dismissed/snoozed (no row to update) — clicking dismiss
+     converts them into a real assistant_nudges row with dismissedAt set, so
+     the next fetch hides them.
+
+  4. POST /api/assistant/nudges/:id/dismiss   → sets dismissedAt
+     POST /api/assistant/nudges/:id/snooze    → body { until: ISO date or "1d"/"1w" }
+     For computed nudges (id starts with "computed-"), the handler inserts
+     a row with the supplied ruleKey + dismissedAt/snoozedUntil instead.
+
+  5. Helper function emitNudge(opts) that any other route handler can call
+     to create a nudge. Uses ON CONFLICT (userId, ruleKey) DO NOTHING so
+     duplicate calls are idempotent. Returns the row id (or existing id).
+
+Client:
+
+  6. Add useAssistantNudges() hook — React Query, keyed on (page, customerId),
+     staleTime ~30s, refetch on window focus. Same approach as the chips
+     hook in Phase 1.
+
+  7. In assistant-bubble.tsx, render active nudges as soft cards above the
+     existing CHANGES list when the bubble is open. Card structure:
+
+       [severity dot] title (bold)
+       body text
+       [CTA button if ctaPrompt set] [Snooze 1d ▾] [Dismiss ×]
+
+     The CTA button calls send(ctaPrompt) and dismisses the nudge.
+     Snooze has a small dropdown: 1d / 3d / 1w.
+
+  8. When the bubble is CLOSED, show a small numeric badge on the bot icon
+     showing the count of unread (not dismissed, not snoozed) nudges. Cap
+     display at "9+".
+
+Acceptance for Phase 2:
+  - Migration runs cleanly.
+  - Insert a row by hand into assistant_nudges → it appears in the bubble
+    on the matching page → snooze hides it for the chosen duration →
+    dismiss permanently hides it.
+  - Insertion via emitNudge with the same ruleKey twice creates only one row.
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 3 — Event-driven nudges (the real value tier)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: Wire emitNudge into the moments operators are most likely to want
+help — right after imports and on certain page opens.
+
+Server changes (no new files; modify existing handlers):
+
+  1. POST /api/imports/leases handler (master lease workbook import).
+     After the import succeeds AND the assistant proposal is approved,
+     call emitNudge with:
+       ruleKey: `import_summary:${proposalId}`
+       source: "import_summary"
+       severity: "info"
+       title: "Master lease import complete"
+       body: `${created} created, ${updated} updated, ${skipped} skipped${skipped > 0 ? ` — ${reasonsSummary}` : ""}`
+       ctaLabel: skipped > 0 ? "Walk me through the skipped rows" : "Show what changed"
+       ctaPrompt: skipped > 0
+         ? `Walk me through the ${skipped} rows that were skipped in the last master lease import.`
+         : `Summarize what changed in the master lease import I just confirmed.`
+       relatedProposalId: proposalId
+       pagePattern: null   // surface anywhere
+
+     The handler must already know the counts from the import preview/result.
+     If it doesn't, extend the import result shape — DO NOT recompute by
+     re-querying.
+
+  2. POST /api/imports/payroll-deductions handler. Same pattern:
+       ruleKey: `import_payroll_summary:${proposalId}`
+       title: "Payroll deductions import complete"
+       body: `${matched} matched, ${unmatched} unmatched${unmatched > 0 ? ` of ${total} rows` : ""}`
+       ctaLabel: unmatched > 0 ? "Show unmatched rows" : "Summarize what landed"
+       ctaPrompt: unmatched > 0
+         ? `Show me the unmatched payroll deductions from the last import and help me match them.`
+         : `Summarize the payroll deductions import I just confirmed.`
+
+  3. Extend the page-context (on-the-fly) nudge computations from Phase 2
+     to cover:
+
+       On property focus:
+         - Any lease ending in next 14d → "Lease <id> ends <date>"
+         - Any bed with cleaningStatus="needs_cleaning" for >7d (use
+           bed.updatedAt as the clock if no explicit needs_cleaning_since
+           column exists)
+
+       On lease focus:
+         - If endDate < today + 30d AND status="Active" → "Expires in N days"
+
+       On occupant focus:
+         - If status="Active" AND no payroll_deduction in latest Saturday
+           pay week → "Likely missed charge for the week of <date>"
+
+       On dashboard:
+         - Unmatched payroll rows in latest pay week (already in Phase 2)
+         - Properties with active leases but no occupants assigned
+
+     These are query-driven and computed on every GET /assistant/nudges.
+     Keep each check under ~50ms; add an EXPLAIN ANALYZE comment in the
+     code for any check that might scan a large table without an index.
+
+  4. Performance guardrail: the GET /assistant/nudges endpoint must return
+     in under 200ms p95 for an account with 500 properties / 2000 leases.
+     If it doesn't, batch the page-context checks into a single query per
+     anchor type rather than one query per check.
+
+Client:
+
+  5. No new component work in this phase. The Phase 2 card renderer already
+     handles these — they just start showing up.
+
+  6. After a confirmed import proposal, the import_summary nudge should
+     appear without the operator having to navigate. Trigger a refetch
+     of useAssistantNudges in the existing proposal_resolved SSE handler
+     when payload.status === "approved" (queryClient.invalidateQueries on
+     the nudges query key).
+
+Acceptance for Phase 3:
+  - Run a master lease import with at least one skipped row → after
+    confirm, an info card appears in the bubble with the right counts and
+    a working CTA that asks the assistant about the skipped rows.
+  - Navigate to a property with a lease expiring in 10 days → an "expires
+    soon" card appears; tapping its CTA opens a chat about that lease.
+  - Dismiss the lease-expiring card → it does NOT come back when you
+    navigate away and back (the dismiss persisted via the Phase 2 fallback
+    insert).
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 4 — Ambient background scanner
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: A periodic job creates nudges proactively even when the operator
+isn't actively navigating. THE CRITICAL FAILURE MODE HERE IS ALERT FATIGUE.
+Build with deduplication and aggressive snoozing from day one.
+
+Server:
+
+  1. Add a new file artifacts/api-server/src/jobs/assistant-scanner.ts.
+     Exports an async function runAssistantScan() that runs all of the
+     following checks across all customers and all users (the userId on
+     each nudge is determined by who owns the customer — see step 4):
+
+       - Expiring leases at the 30 / 14 / 7-day marks. ONE nudge per lease
+         (use ruleKey "expiring_lease:<leaseId>:30d" etc; if the 30d nudge
+         is already dismissed and the lease now hits 14d, a NEW nudge fires
+         because the ruleKey differs).
+       - Stale needs_cleaning beds (>7d).
+       - Active occupants with no payroll deduction in the most recent
+         Saturday pay week.
+       - Active leases with no occupants assigned (data integrity).
+       - Active occupants with no lease (data integrity).
+       - Properties with no leases and no occupants for >30d (likely
+         dormant — surface for cleanup).
+
+     Each check uses the Phase 2 emitNudge helper. ruleKey choices must be
+     stable across runs so a check finding the same problem twice does NOT
+     create two nudges (the UNIQUE constraint enforces this; the test for
+     this phase explicitly runs the scanner twice and asserts row counts
+     don't double).
+
+  2. Schedule runAssistantScan() to run every 30 minutes. Use whatever
+     scheduling primitive the rest of the app uses (Replit cron, node-cron,
+     etc.) — DO NOT introduce a new scheduling library. If none exists,
+     add a small setInterval-based runner in artifacts/api-server/src/index.ts
+     that fires on a 30-minute cadence after server boot, with a 5-minute
+     initial delay so dev restarts don't slam the DB.
+
+  3. Per-check rate limit: each scanner check is wrapped in:
+
+       if (scannerLastRunOk(checkName) < now() - 25 * 60 * 1000) {
+         await runCheck(...);
+         markScannerRunOk(checkName);
+       }
+
+     Persist last-run timestamps in a small assistant_scanner_runs table
+     (checkName text primary key, lastRunAt timestamptz). This protects
+     against double-scheduling if multiple server instances boot.
+
+  4. Multi-user scoping: the scanner needs to know WHO to attribute each
+     nudge to. Strategy: every nudge gets attributed to the user(s) who
+     have customerScope access to the affected customer. If your auth
+     model doesn't have a clean "users who can access customer X" join
+     yet, defer this and attribute scanner nudges to a configured set of
+     "operator userIds" via an env var (ASSISTANT_SCANNER_RECIPIENT_USER_IDS,
+     comma-separated). Document this clearly — it's an explicit MVP cutout.
+
+Client:
+
+  5. Snooze defaults shown on scanner nudges: 1d / 1w / "Until next change".
+     "Until next change" sets snoozedUntil to NULL but bumps the ruleKey's
+     variant so the same check next run hits the dedup constraint. Implement
+     by adding a separate snoozeUntilChange flag column to assistant_nudges
+     — when true, the next scanner run for the same anchorId skips emit
+     unless the underlying field has changed (compare against a hash of
+     {endDate, status, monthlyRent, ...} stored in payload jsonb).
+
+     Skip this if it adds too much complexity in one ticket — drop back to
+     1d/3d/1w and tell the user we'll add "until next change" in a follow-up.
+
+  6. The Phase 2 badge count includes scanner nudges automatically.
+
+Acceptance for Phase 4:
+  - Run the scanner manually via a dev-only POST /api/assistant/scanner/run.
+    Verify nudges appear for known fixtures (expiring lease, stale cleaning
+    bed, unmatched payroll occupant).
+  - Run the scanner AGAIN with no data changes. Assert no new rows in
+    assistant_nudges — the UNIQUE constraint held.
+  - Snooze a scanner nudge for 1d. Run the scanner again. Nudge does NOT
+    re-appear. After 1d (manipulate the clock in a test), it does.
+  - Dismiss a scanner nudge. Change the underlying field (e.g. extend the
+    expiring lease). Run scanner. A NEW nudge with the new variant ruleKey
+    appears because the underlying state changed.
+
+═══════════════════════════════════════════════════════════════════════════
+PHASE 5 — Daily digest (optional, ship only after Phases 1-4 are stable)
+═══════════════════════════════════════════════════════════════════════════
+
+GOAL: A morning email/Slack summary of unread nudges so operators see the
+day's queue before opening the app.
+
+Skip this phase entirely on the first pass. Document the design but DO NOT
+implement it until Phases 1-4 have been live for at least two weeks and you
+have data on which nudges actually get acted on vs ignored. Alert fatigue
+on email is even less recoverable than alert fatigue inside the app.
+
+When eventually built:
+  - Cron at 8am operator-local time
+  - Query active (not dismissed, not snoozed) nudges per user
+  - Group by severity, then by anchorType
+  - Render as plain HTML email or Slack block message
+  - Each line deep-links into the app (use existing URL patterns —
+    /properties/:id, /leases/:id, etc.)
+  - One-click "snooze all in this digest for 1 day" button
+  - Hard cap: 20 items per digest. If there are more, send the top 20 by
+    severity + recency and add a "12 more in the app" footer.
+
+═══════════════════════════════════════════════════════════════════════════
+GENERAL RULES FOR THIS TICKET
+═══════════════════════════════════════════════════════════════════════════
+
+  - Ship Phase 1 FIRST as its own merge. Operators get value from it
+    immediately and it's low risk.
+  - Phases 2-4 may share a single merge, but the migration and the API
+    must land before any UI that depends on them.
+  - All new endpoints respect the existing X-Assistant-Context customer
+    scope. A nudge created under customer A must not appear when the
+    operator's scope is on customer B.
+  - All new tables follow the existing Drizzle schema conventions (id
+    prefixes, timestamp columns, etc.).
+  - All new endpoints are protected by the same auth middleware as
+    /assistant/chat.
+  - Telemetry: log every nudge creation, dismissal, snooze, and CTA tap to
+    whatever existing event log the app uses (or stub a logger.info call
+    with structured fields if there isn't one). Phase 5 won't be sane to
+    plan without this data.
+  - No new third-party dependencies without justification.
+
+DO NOT ship Phase 4 without Phase 3. The page-context nudges in Phase 3 are
+the user's first taste of proactive behavior and they're cheap and easy to
+trust. If operators ignore the page-context cards, the scanner will spam
+them and they'll lose trust in the whole feature. The order matters.

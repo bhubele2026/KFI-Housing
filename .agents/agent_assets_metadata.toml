@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "_2lUo4od6xpJkCuupBsUV"
+uri = "file://.local/exports/housingops-chatbot.tar.gz"
+type = "unspecified"
+title = "HousingOps chatbot source (6 files)"

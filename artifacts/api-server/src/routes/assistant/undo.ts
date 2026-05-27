@@ -26,25 +26,34 @@ export type Entity =
 interface EntityInfo {
   table: any;
   resultKey: string;
+  /**
+   * Plural key under which bulk_create_* tools return their array of
+   * created rows (e.g. `{ beds: [...] }`, `{ utilities: [...] }`).
+   * Lets bulkCreateDelete look up the created ids without each new
+   * bulk tool needing a copy-pasted special case in buildUndoPlan.
+   */
+  resultListKey: string;
   label: string;
 }
 
 const ENTITIES: Record<Entity, EntityInfo> = {
-  property: { table: propertiesTable, resultKey: "property", label: "property" },
-  building: { table: buildingsTable, resultKey: "building", label: "building" },
-  room: { table: roomsTable, resultKey: "room", label: "room" },
-  bed: { table: bedsTable, resultKey: "bed", label: "bed" },
-  occupant: { table: occupantsTable, resultKey: "occupant", label: "occupant" },
-  lease: { table: leasesTable, resultKey: "lease", label: "lease" },
-  utility: { table: utilitiesTable, resultKey: "utility", label: "utility" },
+  property: { table: propertiesTable, resultKey: "property", resultListKey: "properties", label: "property" },
+  building: { table: buildingsTable, resultKey: "building", resultListKey: "buildings", label: "building" },
+  room: { table: roomsTable, resultKey: "room", resultListKey: "rooms", label: "room" },
+  bed: { table: bedsTable, resultKey: "bed", resultListKey: "beds", label: "bed" },
+  occupant: { table: occupantsTable, resultKey: "occupant", resultListKey: "occupants", label: "occupant" },
+  lease: { table: leasesTable, resultKey: "lease", resultListKey: "leases", label: "lease" },
+  utility: { table: utilitiesTable, resultKey: "utility", resultListKey: "utilities", label: "utility" },
   insurance: {
     table: insuranceCertificatesTable,
     resultKey: "insuranceCertificate",
+    resultListKey: "insuranceCertificates",
     label: "insurance certificate",
   },
   payroll: {
     table: payrollDeductionsTable,
     resultKey: "payrollDeduction",
+    resultListKey: "payrollDeductions",
     label: "payroll deduction",
   },
 };
@@ -100,6 +109,7 @@ const TOOL_REVERSIBILITY: Record<string, Reversibility> = {
   bulk_update_leases: { kind: "bulkUpdateRestore", entity: "lease" },
   bulk_update_beds: { kind: "bulkUpdateRestore", entity: "bed" },
   bulk_create_beds: { kind: "bulkCreateDelete", entity: "bed" },
+  bulk_create_utilities: { kind: "bulkCreateDelete", entity: "utility" },
 };
 
 export interface UndoPlan {
@@ -122,6 +132,29 @@ export interface UndoPlan {
 
 export function isToolReversible(toolName: string): boolean {
   return toolName in TOOL_REVERSIBILITY;
+}
+
+/**
+ * Every row id this proposal touched, derived from its undo plan.
+ * Single-row plans return their one target id; bulk plans return the
+ * full id list. Used by the undo subsequent-edit safety check so a
+ * later update on any one of a bulk_create_*'s rows blocks the whole
+ * batch undo with the standard "more recent change targets the same
+ * record" message.
+ */
+export function extractAffectedIds(plan: UndoPlan | null): string[] {
+  if (!plan) return [];
+  if (plan.kind === "deleteById") return plan.id ? [plan.id] : [];
+  if (plan.kind === "restoreRow" || plan.kind === "reinsertRow") {
+    return plan.id ? [plan.id] : [];
+  }
+  if (plan.kind === "bulkDeleteByIds") return plan.ids ?? [];
+  if (plan.kind === "bulkRestoreRows") {
+    return (plan.rows ?? [])
+      .map((r) => (typeof r?.id === "string" ? (r.id as string) : null))
+      .filter((x): x is string => x !== null && x.length > 0);
+  }
+  return [];
 }
 
 /**
@@ -199,12 +232,10 @@ export function buildUndoPlan(
   }
   if (meta.kind === "bulkCreateDelete") {
     const info = ENTITIES[meta.entity];
-    const createdList = (result as any)?.[`${info.resultKey}s`];
+    const createdList = (result as any)?.[info.resultListKey];
     const rows: Array<Record<string, unknown>> = Array.isArray(createdList)
       ? (createdList as Array<Record<string, unknown>>)
-      : Array.isArray((result as any)?.beds)
-        ? ((result as any).beds as Array<Record<string, unknown>>)
-        : [];
+      : [];
     const ids = rows
       .map((r) => (typeof r?.id === "string" ? (r.id as string) : null))
       .filter((x): x is string => x !== null && x.length > 0);

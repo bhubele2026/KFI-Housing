@@ -406,6 +406,7 @@ export function useAssistant() {
         create_utility: [getListUtilitiesQueryKey],
         update_utility: [getListUtilitiesQueryKey],
         delete_utility: [getListUtilitiesQueryKey],
+        bulk_create_utilities: [getListUtilitiesQueryKey],
         // Insurance
         create_insurance_certificate: [getListInsuranceCertificatesQueryKey],
         update_insurance_certificate: [getListInsuranceCertificatesQueryKey],

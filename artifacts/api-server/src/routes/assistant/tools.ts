@@ -1671,6 +1671,86 @@ tools.push({
 });
 
 tools.push({
+  name: "bulk_create_utilities",
+  kind: "write",
+  description:
+    "Create multiple utility accounts on the same property in one proposal. Use for 'add water $50/mo and garbage $20/mo to <property>' instead of N create_utility proposals. Each item needs `type`; other fields are optional. monthlyCost defaults to 0 — the preview flags any null entries so the operator notices.",
+  input_schema: obj(
+    {
+      propertyId: Str,
+      utilities: {
+        type: "array",
+        minItems: 1,
+        items: obj(
+          {
+            type: Str,
+            company: StrOpt,
+            monthlyCost: NumOpt,
+            accountNumber: StrOpt,
+            notes: StrOpt,
+          },
+          ["type"],
+        ),
+      },
+    },
+    ["propertyId", "utilities"],
+  ),
+  summarize: (i) =>
+    `Create ${(i.utilities ?? []).length} utilities for property ${i.propertyId}`,
+  preview: async (input) => {
+    const utilities = (input.utilities ?? []) as any[];
+    const items = utilities.map((u) => ({
+      type: u?.type ?? null,
+      company: u?.company ?? "",
+      monthlyCost: typeof u?.monthlyCost === "number" ? u.monthlyCost : null,
+      accountNumber: u?.accountNumber ?? "",
+      notes: u?.notes ?? "",
+      // Surface missing monthlyCost so the proposal card can flag it.
+      monthlyCostMissing:
+        u?.monthlyCost === null ||
+        u?.monthlyCost === undefined,
+    }));
+    return {
+      propertyId: input.propertyId,
+      count: utilities.length,
+      items,
+    };
+  },
+  execute: async (input) => {
+    const utilities = (input.utilities ?? []) as any[];
+    if (utilities.length === 0) {
+      throw new Error("bulk_create_utilities: utilities is empty");
+    }
+    // All-or-nothing batch. Mirrors create_utility's insert path
+    // (normalizeUtilityRow boundary coercion from Task #416 / #646) so
+    // off-list `type` values get folded to "Other" and monthlyCost
+    // gets coerced to a number, instead of bypassing the normaliser
+    // and 500-ing the list endpoint later. We use the same tx-scoped
+    // pattern as bulk_create_beds rather than callRouteOrThrow because
+    // the route uses the top-level `db`, which would escape our
+    // transaction.
+    return db.transaction(async (tx) => {
+      const created: any[] = [];
+      for (const u of utilities) {
+        const id = newId("u");
+        const values = normalizeUtilityRow({
+          id,
+          propertyId: input.propertyId,
+          type: u.type,
+          company: u.company ?? "",
+          monthlyCost: typeof u.monthlyCost === "number" ? u.monthlyCost : 0,
+          accountNumber: u.accountNumber ?? "",
+          notes: u.notes ?? "",
+        });
+        const [row] = await tx.insert(utilitiesTable).values(values).returning();
+        created.push(row);
+      }
+      return { utilities: created, count: created.length };
+    });
+  },
+});
+
+tools.push({
   name: "bulk_update_beds",
   kind: "write",
   description:

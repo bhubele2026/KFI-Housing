@@ -33,6 +33,7 @@ import {
   buildUndoPlan,
   captureSnapshot,
   executeUndoPlan,
+  extractAffectedIds,
   extractResultId,
   isToolReversible,
   type UndoPlan,
@@ -61,7 +62,10 @@ Guidelines:
 - For batch lease edits ("set monthly rent on these 5 leases to $X"), prefer bulk_update_leases — one Confirm card edits them all instead of N separate proposals.
 - For multi-bed creates ("add 6 beds to room R"), prefer bulk_create_beds.
 - For batch bed-status flips ("mark these 4 beds needs_cleaning"), prefer bulk_update_beds.
+- For adding multiple utilities to the same property in one ask ("add water $50/mo and garbage $20/mo to <property>"), prefer bulk_create_utilities so one Confirm card runs them all.
 - If a required field is missing, ASK the user instead of guessing.
+- The verbs "add" / "create" / "new" ALWAYS map to a create_* (or bulk_create_*) tool — never to update_*. "Change" / "set" / "rename" / "update" map to update_*. If you're unsure which the user meant, ASK rather than guessing.
+- If the user states a count ("add three utilities") but lists fewer items, ASK which they meant. Do not invent the missing items, do not substitute an update_*, and do not silently proceed with only the items that were listed.
 - Keep replies short and operational. No fluff.
 
 Naming conventions:
@@ -731,6 +735,26 @@ async function persistMessage(
   return row;
 }
 
+/**
+ * Returns true when the error from `anthropic.messages.stream` /
+ * `finalMessage()` looks like Anthropic's transient overload signal
+ * (HTTP 529 / `overloaded_error`). Only this specific shape is
+ * retried — every other failure (auth, schema, tool execution,
+ * client disconnect, generic network) still fails immediately so we
+ * don't silently mask real bugs.
+ */
+export function isOverloadedError(err: any): boolean {
+  if (!err) return false;
+  if (err.status === 529) return true;
+  if (err?.error?.error?.type === "overloaded_error") return true;
+  const msg = typeof err.message === "string" ? err.message : "";
+  return /overloaded/i.test(msg);
+}
+
+const MAX_OVERLOAD_RETRIES = 3;
+const OVERLOAD_FRIENDLY_MESSAGE =
+  "Anthropic's API is temporarily overloaded. Please try again in a moment.";
+
 // ── Core loop: run Anthropic until pause (write proposal) or stop ──
 async function runLoop(
   conversationId: string,
@@ -738,6 +762,11 @@ async function runLoop(
   ctx: AssistantCtx,
 ): Promise<void> {
   const systemPrompt = await buildSystemPrompt(ctx);
+  // Counted across the whole request (NOT reset per turn): if
+  // Anthropic is sustained-overloaded we want to give up after
+  // a bounded number of attempts even if the operator's prompt
+  // happens to need several model turns.
+  let overloadedRetries = 0;
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const rows = await loadMessages(conversationId);
     const messages = healToolUseBalance(buildAnthropicMessages(rows));
@@ -766,7 +795,40 @@ async function runLoop(
 
       finalMessage = await stream.finalMessage();
     } catch (err: any) {
-      const msg = err?.message ?? String(err);
+      if (isOverloadedError(err)) {
+        if (overloadedRetries >= MAX_OVERLOAD_RETRIES) {
+          // Exhausted — surface a friendly final message (not the raw
+          // JSON the SDK threw) and persist it as the assistant turn so
+          // the conversation history shows what happened.
+          console.error("[assistant] overload retries exhausted", err);
+          sseSend(res, "error", { message: OVERLOAD_FRIENDLY_MESSAGE });
+          await persistMessage(
+            conversationId,
+            "assistant",
+            OVERLOAD_FRIENDLY_MESSAGE,
+          );
+          return;
+        }
+        const delayMs = Math.min(8000, 500 * 2 ** overloadedRetries);
+        const secs = Math.max(1, Math.round(delayMs / 1000));
+        // Inline progress hint streamed as a text delta so the chat
+        // bubble shows "retrying" rather than the operator staring at
+        // a frozen panel. We don't persist this delta — once the
+        // retry succeeds the real assistant turn supersedes it.
+        sseSend(res, "text", {
+          delta: `\n_Anthropic is busy — retrying in ${secs}s…_\n`,
+        });
+        await new Promise((r) => setTimeout(r, delayMs));
+        overloadedRetries += 1;
+        turn -= 1; // re-run this turn
+        continue;
+      }
+      // Coerce empty/missing message to String(err) so we never forward
+      // a literal empty string to the client.
+      const msg =
+        typeof err?.message === "string" && err.message.length > 0
+          ? err.message
+          : String(err);
       console.error("[assistant] stream error", err);
       sseSend(res, "error", { message: msg });
       await persistMessage(conversationId, "assistant", `Error: ${msg}`);
@@ -1297,12 +1359,18 @@ router.post("/assistant/confirm", async (req, res): Promise<void> => {
         snapshot,
       );
       const resultId = extractResultId(proposal.toolName, finalInput, result);
+      // affectedIds is the full set of row ids this proposal touched
+      // (single-row tools: [id]; bulk_create_*: every created id;
+      // bulk_update_*: every updated id). The undo subsequent-edit
+      // safety check uses it so a later update on any one of a
+      // bulk_create's rows blocks the whole batch undo.
+      const affectedIds = extractAffectedIds(undoPlan);
       await db
         .update(assistantProposalsTable)
         .set({
           status: "approved",
           resolvedAt: new Date(),
-          payload: { ...wrapped, input: finalInput, undoPlan, resultId },
+          payload: { ...wrapped, input: finalInput, undoPlan, resultId, affectedIds },
           result: result as Record<string, unknown>,
         })
         .where(eq(assistantProposalsTable.id, proposalId));
@@ -1398,6 +1466,7 @@ router.post("/assistant/proposals/:id/undo", async (req, res): Promise<void> => 
   const payload = (proposal.payload ?? {}) as {
     undoPlan?: UndoPlan | null;
     resultId?: string | null;
+    affectedIds?: string[] | null;
   };
   const plan = payload.undoPlan;
   if (!plan) {
@@ -1409,6 +1478,16 @@ router.post("/assistant/proposals/:id/undo", async (req, res): Promise<void> => 
   // silently clobber the operator's later work. They have to undo the
   // newer changes first (the UI exposes Undo only on the most recent
   // approved change for this reason; this is a defense-in-depth check).
+  //
+  // We compare the full set of ids each proposal touched (the new
+  // `affectedIds` array, falling back to `resultId` for proposals
+  // written before that field existed). This way a later
+  // `update_utility` against any one of the rows a
+  // `bulk_create_utilities` created blocks the whole batch undo.
+  const targetIds = new Set<string>([
+    ...((payload.affectedIds ?? []).filter((x) => typeof x === "string") as string[]),
+  ]);
+  if (payload.resultId) targetIds.add(payload.resultId);
   const subsequent = await db
     .select()
     .from(assistantProposalsTable)
@@ -1418,8 +1497,23 @@ router.post("/assistant/proposals/:id/undo", async (req, res): Promise<void> => 
     if (p.id === proposal.id) continue;
     if (p.status !== "approved") continue;
     if (new Date(p.createdAt) <= new Date(proposal.createdAt)) continue;
-    const pp = (p.payload ?? {}) as { resultId?: string | null; undoPlan?: UndoPlan | null };
-    if (pp.resultId && pp.resultId === payload.resultId) {
+    const pp = (p.payload ?? {}) as {
+      resultId?: string | null;
+      affectedIds?: string[] | null;
+      undoPlan?: UndoPlan | null;
+    };
+    const ppIds = new Set<string>([
+      ...((pp.affectedIds ?? []).filter((x) => typeof x === "string") as string[]),
+    ]);
+    if (pp.resultId) ppIds.add(pp.resultId);
+    let overlaps = false;
+    for (const id of ppIds) {
+      if (targetIds.has(id)) {
+        overlaps = true;
+        break;
+      }
+    }
+    if (overlaps) {
       res.status(409).json({
         error:
           "A more recent change targets the same record — undo that one first.",

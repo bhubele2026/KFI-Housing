@@ -74,6 +74,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/utilities", labelKey: "nav.utilities", icon: Zap },
   { kind: "leaf", href: "/finance", labelKey: "nav.finance", icon: DollarSign },
   { kind: "leaf", href: "/reconciliation", labelKey: "nav.reconciliation", icon: Receipt },
+  { kind: "leaf", href: "/qbo/mapping-rules", labelKey: "nav.qboMappingRules", icon: Receipt },
   { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
 ];
 
@@ -508,7 +509,12 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
     if (qboConnected) return NAV_ENTRIES;
     return NAV_ENTRIES.map((e) => {
       if (e.kind === "group") {
-        return { ...e, children: e.children.filter((c) => c.href !== "/reconciliation") };
+        return {
+          ...e,
+          children: e.children.filter(
+            (c) => c.href !== "/reconciliation" && c.href !== "/qbo/mapping-rules",
+          ),
+        };
       }
       return e;
     });

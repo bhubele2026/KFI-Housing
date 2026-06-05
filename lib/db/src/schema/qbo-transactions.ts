@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -55,6 +56,7 @@ export const qboTransactionsTable = pgTable(
       .notNull()
       .default(0),
     manualOverride: boolean("manual_override").notNull().default(false),
+    reclassifiedAt: timestamp("reclassified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
@@ -77,6 +79,21 @@ export const qboTransactionsTable = pgTable(
       table.classification,
       table.txnDate,
     ),
+    realmCustomerOverrideIdx: index(
+      "qbo_transactions_realm_customer_override_idx",
+    ).on(table.realmId, table.qboCustomerId, table.manualOverride),
+    // Task #694: the one-shot reclassifier scans (realmId, qboCustomerId,
+    // memoToken) but only ever touches rows that are still eligible to
+    // be remapped — i.e. rows where the operator hasn't already manually
+    // overridden the property AND that haven't been classified to a
+    // property yet. A partial index keeps the index small (most txns
+    // already have a property) and lets the scan be a true index-only
+    // hit on the hot path.
+    reclassifyHotPathIdx: index("qbo_transactions_reclassify_hot_idx")
+      .on(table.realmId, table.qboCustomerId, table.txnDate)
+      .where(
+        sql`${table.manualOverride} = false AND ${table.propertyId} IS NULL`,
+      ),
   }),
 );
 

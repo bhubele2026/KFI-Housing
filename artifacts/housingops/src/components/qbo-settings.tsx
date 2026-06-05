@@ -1,21 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 
 interface QboStatus {
@@ -28,13 +14,6 @@ interface QboStatus {
   lastSyncError?: string | null;
 }
 
-interface AccountClassification {
-  id: string;
-  accountId: string;
-  accountName: string;
-  classification: "rent" | "utility" | "other";
-}
-
 function apiBase(): string {
   return import.meta.env.BASE_URL ?? "/";
 }
@@ -42,7 +21,6 @@ function apiBase(): string {
 export function QboSettings() {
   const { toast } = useToast();
   const [status, setStatus] = useState<QboStatus | null>(null);
-  const [classifications, setClassifications] = useState<AccountClassification[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -50,14 +28,6 @@ export function QboSettings() {
       const sRes = await fetch(`${apiBase()}api/qbo/status`);
       const sBody = (await sRes.json()) as QboStatus;
       setStatus(sBody);
-      if (sBody.connected) {
-        const cRes = await fetch(`${apiBase()}api/qbo/account-classifications`);
-        if (cRes.ok) {
-          setClassifications((await cRes.json()) as AccountClassification[]);
-        }
-      } else {
-        setClassifications([]);
-      }
     } catch (err) {
       toast({
         title: "Failed to load QuickBooks status",
@@ -117,33 +87,6 @@ export function QboSettings() {
       setBusy(null);
     }
   };
-  const updateClassification = async (
-    id: string,
-    classification: "rent" | "utility" | "other",
-  ) => {
-    setClassifications((rows) =>
-      rows.map((r) => (r.id === id ? { ...r, classification } : r)),
-    );
-    try {
-      const res = await fetch(
-        `${apiBase()}api/qbo/account-classifications/${id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ classification }),
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (err) {
-      toast({
-        title: "Failed to update classification",
-        description: (err as Error).message,
-        variant: "destructive",
-      });
-      await refresh();
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -196,52 +139,17 @@ export function QboSettings() {
                 Disconnect
               </Button>
             </div>
-            {classifications.length > 0 ? (
-              <div className="pt-4">
-                <h4 className="text-sm font-semibold mb-2">
-                  Account classifications
-                </h4>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Choose how each QuickBooks income / expense account maps to
-                  rent or utilities for reconciliation.
-                </p>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Account</TableHead>
-                      <TableHead className="w-40">Classification</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {classifications.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell>{c.accountName}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={c.classification}
-                            onValueChange={(v) =>
-                              void updateClassification(
-                                c.id,
-                                v as "rent" | "utility" | "other",
-                              )
-                            }
-                          >
-                            <SelectTrigger data-testid={`qbo-class-${c.id}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="rent">Rent</SelectItem>
-                              <SelectItem value="utility">Utility</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : null}
+            <div className="pt-4 border-t">
+              <h4 className="text-sm font-semibold mb-1">Mapping rules</h4>
+              <p className="text-xs text-muted-foreground mb-2">
+                Author customer links, memo → property rules, and account
+                classifications that QuickBooks sync uses to attach mirrored
+                transactions to the right HousingOps records.
+              </p>
+              <Button asChild variant="outline" size="sm" data-testid="qbo-open-mapping-rules">
+                <Link href="/qbo/mapping-rules">Open Mapping Rules</Link>
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

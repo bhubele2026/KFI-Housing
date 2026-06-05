@@ -69,6 +69,10 @@ import {
   useUpdateVehicleMaintenance,
   useDeleteVehicleMaintenance,
   getListVehicleMaintenanceQueryKey,
+  useListVehicleInsurance,
+  useCreateVehicleInsurance,
+  useDeleteVehicleInsurance,
+  getListVehicleInsuranceQueryKey,
 } from "@workspace/api-client-react";
 import {
   Truck,
@@ -81,6 +85,7 @@ import {
   Fuel,
   Wrench,
   Download,
+  ShieldCheck,
 } from "lucide-react";
 
 // Sentinel value for the optional dropdowns. Radix Select cannot use an
@@ -204,6 +209,7 @@ export default function Vehicles() {
   const { data: occupants } = useListOccupants();
   const { data: properties } = useListProperties();
   const { data: riders } = useListVehicleRiders();
+  const { data: insurance } = useListVehicleInsurance();
 
   const createMutation = useCreateVehicle();
   const updateMutation = useUpdateVehicle();
@@ -216,6 +222,7 @@ export default function Vehicles() {
   const [ridersVehicleId, setRidersVehicleId] = useState<string | null>(null);
   const [fuelVehicleId, setFuelVehicleId] = useState<string | null>(null);
   const [maintVehicleId, setMaintVehicleId] = useState<string | null>(null);
+  const [insVehicleId, setInsVehicleId] = useState<string | null>(null);
 
   // vehicleId -> number of associates on its static roster.
   const riderCountByVehicle = useMemo(() => {
@@ -231,9 +238,12 @@ export default function Vehicles() {
     const idleOffBase: string[] = [];
     const regSoon: string[] = [];
     const inShop: string[] = [];
+    const insSoon: string[] = [];
+    const labelById = new Map<string, string>();
     for (const v of vehicles ?? []) {
       const vv = v as Record<string, unknown>;
       const label = vehicleLabelOf(vv);
+      labelById.set(String(vv.id), label);
       const loc = String(vv.currentLocationNote ?? "").trim();
       // Available van parked somewhere noted = not in use for a client and
       // sitting off-base. Goal is to bring it back to WI.
@@ -248,12 +258,22 @@ export default function Vehicles() {
         );
       }
     }
-    return { idleOffBase, regSoon, inShop };
-  }, [vehicles]);
+    for (const p of insurance ?? []) {
+      const dd = daysUntilYMD(String(p.expiryDate ?? ""));
+      if (dd !== null && dd <= 45) {
+        const label = labelById.get(p.vehicleId) ?? p.vehicleId;
+        insSoon.push(
+          `${label} ${dd < 0 ? `(expired ${-dd}d ago)` : `(in ${dd}d)`}`,
+        );
+      }
+    }
+    return { idleOffBase, regSoon, inShop, insSoon };
+  }, [vehicles, insurance]);
   const hasAttention =
     attention.idleOffBase.length > 0 ||
     attention.regSoon.length > 0 ||
-    attention.inShop.length > 0;
+    attention.inShop.length > 0 ||
+    attention.insSoon.length > 0;
 
   const customerName = useMemo(() => {
     const map = new Map<string, string>();
@@ -476,6 +496,15 @@ export default function Vehicles() {
               footer="Renew before the plate expires."
             />
           )}
+          {attention.insSoon.length > 0 && (
+            <AttentionCard
+              tone="red"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              title={`${attention.insSoon.length} insurance policy${attention.insSoon.length === 1 ? "" : " policies"} due`}
+              items={attention.insSoon}
+              footer="Renew before coverage lapses."
+            />
+          )}
           {attention.inShop.length > 0 && (
             <AttentionCard
               tone="slate"
@@ -616,6 +645,15 @@ export default function Vehicles() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setInsVehicleId(id)}
+                          data-testid="vehicle-ins-btn"
+                          title="Insurance"
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1025,6 +1063,19 @@ export default function Vehicles() {
             );
           })()}
           onClose={() => setMaintVehicleId(null)}
+        />
+      )}
+
+      {insVehicleId && (
+        <InsuranceDialog
+          vehicleId={insVehicleId}
+          label={(() => {
+            const v = rows.find(
+              (r) => String((r as Record<string, unknown>).id) === insVehicleId,
+            ) as Record<string, unknown> | undefined;
+            return v ? vehicleLabelOf(v) : "vehicle";
+          })()}
+          onClose={() => setInsVehicleId(null)}
         />
       )}
     </MainLayout>
@@ -1671,6 +1722,223 @@ function MaintenanceDialog({
                   </TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InsuranceDialog({
+  vehicleId,
+  label,
+  onClose,
+}: {
+  vehicleId: string;
+  label: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: allPolicies } = useListVehicleInsurance();
+  const createPolicy = useCreateVehicleInsurance();
+  const deletePolicy = useDeleteVehicleInsurance();
+
+  const [carrier, setCarrier] = useState("");
+  const [policyNumber, setPolicyNumber] = useState("");
+  const [coverage, setCoverage] = useState("");
+  const [premium, setPremium] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListVehicleInsuranceQueryKey(),
+    });
+
+  const policies = useMemo(
+    () => (allPolicies ?? []).filter((p) => p.vehicleId === vehicleId),
+    [allPolicies, vehicleId],
+  );
+
+  const handleAdd = () => {
+    if (carrier.trim() === "" && policyNumber.trim() === "") return;
+    createPolicy.mutate(
+      {
+        data: {
+          vehicleId,
+          carrier: carrier.trim(),
+          policyNumber: policyNumber.trim(),
+          coverage: coverage.trim(),
+          premium: premium.trim() === "" ? 0 : num(premium),
+          effectiveDate,
+          expiryDate,
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidate();
+          setCarrier("");
+          setPolicyNumber("");
+          setCoverage("");
+          setPremium("");
+          setEffectiveDate("");
+          setExpiryDate("");
+        },
+        onError: () =>
+          toast({ title: "Failed to add policy", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    deletePolicy.mutate(
+      { id },
+      {
+        onSuccess: invalidate,
+        onError: () =>
+          toast({ title: "Failed to delete policy", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Insurance — {label}</DialogTitle>
+          <DialogDescription>
+            Commercial-auto policies for this van.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-12 gap-2 items-end py-2">
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Carrier</Label>
+            <Input
+              value={carrier}
+              onChange={(e) => setCarrier(e.target.value)}
+              data-testid="ins-carrier"
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Policy #</Label>
+            <Input
+              value={policyNumber}
+              onChange={(e) => setPolicyNumber(e.target.value)}
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Premium $</Label>
+            <Input
+              inputMode="decimal"
+              value={premium}
+              onChange={(e) => setPremium(e.target.value)}
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Coverage</Label>
+            <Input
+              value={coverage}
+              onChange={(e) => setCoverage(e.target.value)}
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Effective</Label>
+            <Input
+              type="date"
+              value={effectiveDate}
+              onChange={(e) => setEffectiveDate(e.target.value)}
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Expires</Label>
+            <Input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={handleAdd}
+            disabled={
+              (carrier.trim() === "" && policyNumber.trim() === "") ||
+              createPolicy.isPending
+            }
+            data-testid="ins-add-btn"
+          >
+            {createPolicy.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            <span className="ml-1">Add policy</span>
+          </Button>
+        </div>
+
+        {policies.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No insurance policies recorded yet.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Carrier</TableHead>
+                <TableHead>Policy #</TableHead>
+                <TableHead>Coverage</TableHead>
+                <TableHead className="text-right">Premium</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {policies.map((p) => {
+                const dd = daysUntilYMD(String(p.expiryDate ?? ""));
+                return (
+                  <TableRow key={p.id} data-testid="ins-row">
+                    <TableCell>{p.carrier || "—"}</TableCell>
+                    <TableCell>{p.policyNumber || "—"}</TableCell>
+                    <TableCell className="max-w-[12rem] truncate">
+                      {p.coverage || "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {Number(p.premium ?? 0) > 0
+                        ? `$${Number(p.premium).toLocaleString()}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {p.expiryDate || "—"}
+                      {dd !== null && dd <= 45 && (
+                        <Badge
+                          variant={dd < 0 ? "destructive" : "secondary"}
+                          className="ml-2 text-[10px] px-1.5 py-0"
+                        >
+                          {dd < 0 ? "expired" : `${dd}d`}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(p.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

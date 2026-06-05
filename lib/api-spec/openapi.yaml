@@ -1860,6 +1860,48 @@ paths:
         "204":
           description: Deleted
 
+  /vehicle-insurance:
+    get:
+      operationId: listVehicleInsurance
+      tags: [vehicles]
+      summary: List vehicle insurance policies
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleInsurance" }
+    post:
+      operationId: createVehicleInsurance
+      tags: [vehicles]
+      summary: Add an insurance policy for a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleInsuranceCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleInsurance" }
+  /vehicle-insurance/{id}:
+    delete:
+      operationId: deleteVehicleInsurance
+      tags: [vehicles]
+      summary: Delete a vehicle insurance policy
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -3438,6 +3480,49 @@ components:
         status:
           type: string
           enum: [Active, Expired, Upcoming]
+        note: { type: string }
+
+    VehicleInsurance:
+      type: object
+      description: A commercial-auto insurance policy for a vehicle.
+      required:
+        - id
+        - vehicleId
+        - carrier
+        - policyNumber
+        - coverage
+        - premium
+        - effectiveDate
+        - expiryDate
+        - documentUrl
+        - note
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        carrier: { type: string }
+        policyNumber: { type: string }
+        coverage: { type: string }
+        premium: { type: number }
+        effectiveDate: { type: string }
+        expiryDate: { type: string }
+        documentUrl: { type: string }
+        note: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleInsuranceCreate:
+      type: object
+      required: [vehicleId]
+      properties:
+        vehicleId: { type: string }
+        carrier: { type: string }
+        policyNumber: { type: string }
+        coverage: { type: string }
+        premium: { type: number }
+        effectiveDate: { type: string }
+        expiryDate: { type: string }
+        documentUrl: { type: string }
         note: { type: string }
 
     LeasePdfExtracted:

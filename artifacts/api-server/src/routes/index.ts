@@ -39,6 +39,7 @@ import vehicleRidersRouter from "./vehicle-riders";
 import vehicleFuelChargesRouter from "./vehicle-fuel-charges";
 import vehicleMaintenanceRouter from "./vehicle-maintenance";
 import vehicleLeasesRouter from "./vehicle-leases";
+import vehicleInsuranceRouter from "./vehicle-insurance";
 
 const router: IRouter = Router();
 
@@ -81,6 +82,7 @@ router.use(vehicleRidersRouter);
 router.use(vehicleFuelChargesRouter);
 router.use(vehicleMaintenanceRouter);
 router.use(vehicleLeasesRouter);
+router.use(vehicleInsuranceRouter);
 router.use(assistantRouter);
 
 export default router;

@@ -20,6 +20,7 @@ import { createQboTablesIfNeeded } from "./migrations/create-qbo-tables";
 import { createVehiclesTableIfNeeded } from "./migrations/create-vehicles-table";
 import { createVehicleRidersTablesIfNeeded } from "./migrations/create-vehicle-riders-tables";
 import { createVehicleFuelChargesTableIfNeeded } from "./migrations/create-vehicle-fuel-charges-table";
+import { createVehicleMaintenanceTableIfNeeded } from "./migrations/create-vehicle-maintenance-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -149,6 +150,9 @@ export async function pushSchemaIfNeeded(
 
   // Transportation fuel-card charges.
   await createVehicleFuelChargesTableIfNeeded(pool, log);
+
+  // Transportation maintenance / repair records.
+  await createVehicleMaintenanceTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

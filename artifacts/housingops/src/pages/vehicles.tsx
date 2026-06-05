@@ -63,6 +63,11 @@ import {
   useCreateVehicleFuelCharge,
   useDeleteVehicleFuelCharge,
   getListVehicleFuelChargesQueryKey,
+  useListVehicleMaintenance,
+  useCreateVehicleMaintenance,
+  useUpdateVehicleMaintenance,
+  useDeleteVehicleMaintenance,
+  getListVehicleMaintenanceQueryKey,
 } from "@workspace/api-client-react";
 import {
   Truck,
@@ -73,6 +78,7 @@ import {
   AlertTriangle,
   Users,
   Fuel,
+  Wrench,
 } from "lucide-react";
 
 // Sentinel value for the optional dropdowns. Radix Select cannot use an
@@ -186,6 +192,7 @@ export default function Vehicles() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ridersVehicleId, setRidersVehicleId] = useState<string | null>(null);
   const [fuelVehicleId, setFuelVehicleId] = useState<string | null>(null);
+  const [maintVehicleId, setMaintVehicleId] = useState<string | null>(null);
 
   // vehicleId -> number of associates on its static roster.
   const riderCountByVehicle = useMemo(() => {
@@ -471,6 +478,15 @@ export default function Vehicles() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setMaintVehicleId(id)}
+                          data-testid="vehicle-maint-btn"
+                          title="Maintenance / repairs"
+                        >
+                          <Wrench className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -854,6 +870,25 @@ export default function Vehicles() {
           onClose={() => setFuelVehicleId(null)}
         />
       )}
+
+      {maintVehicleId && (
+        <MaintenanceDialog
+          vehicleId={maintVehicleId}
+          label={(() => {
+            const v = rows.find(
+              (r) =>
+                String((r as Record<string, unknown>).id) === maintVehicleId,
+            ) as Record<string, unknown> | undefined;
+            if (!v) return "vehicle";
+            return (
+              String(v.merchantUnit || "") ||
+              [v.year, v.make, v.model].filter(Boolean).join(" ") ||
+              "vehicle"
+            );
+          })()}
+          onClose={() => setMaintVehicleId(null)}
+        />
+      )}
     </MainLayout>
   );
 }
@@ -1214,6 +1249,293 @@ function RidersDialog({
             )}
           </TabsContent>
         </Tabs>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const MAINT_TYPES = ["Repair", "Service", "Inspection", "Other"] as const;
+const MAINT_STATUSES = ["Needed", "In shop", "Completed"] as const;
+
+function maintStatusVariant(
+  status: string,
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "Completed":
+      return "secondary";
+    case "In shop":
+      return "destructive";
+    case "Needed":
+      return "default";
+    default:
+      return "outline";
+  }
+}
+
+function MaintenanceDialog({
+  vehicleId,
+  label,
+  onClose,
+}: {
+  vehicleId: string;
+  label: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: allRecords } = useListVehicleMaintenance();
+  const createRec = useCreateVehicleMaintenance();
+  const updateRec = useUpdateVehicleMaintenance();
+  const deleteRec = useDeleteVehicleMaintenance();
+
+  const [date, setDate] = useState<string>(todayYMD());
+  const [type, setType] = useState<(typeof MAINT_TYPES)[number]>("Repair");
+  const [description, setDescription] = useState("");
+  const [cost, setCost] = useState("");
+  const [status, setStatus] =
+    useState<(typeof MAINT_STATUSES)[number]>("Needed");
+  const [shopName, setShopName] = useState("");
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListVehicleMaintenanceQueryKey(),
+    });
+
+  const records = useMemo(
+    () =>
+      (allRecords ?? [])
+        .filter((r) => r.vehicleId === vehicleId)
+        .sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    [allRecords, vehicleId],
+  );
+
+  const handleAdd = () => {
+    if (description.trim() === "") return;
+    createRec.mutate(
+      {
+        data: {
+          vehicleId,
+          date,
+          type,
+          description: description.trim(),
+          cost: cost.trim() === "" ? 0 : num(cost),
+          status,
+          shopName: shopName.trim(),
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidate();
+          setDescription("");
+          setCost("");
+          setShopName("");
+        },
+        onError: () =>
+          toast({ title: "Failed to add record", variant: "destructive" }),
+      },
+    );
+  };
+
+  const changeStatus = (id: string, next: string) => {
+    updateRec.mutate(
+      {
+        id,
+        data: {
+          status: next,
+          completedDate: next === "Completed" ? todayYMD() : "",
+        },
+      },
+      {
+        onSuccess: invalidate,
+        onError: () =>
+          toast({ title: "Failed to update record", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    deleteRec.mutate(
+      { id },
+      {
+        onSuccess: invalidate,
+        onError: () =>
+          toast({ title: "Failed to delete record", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Maintenance — {label}</DialogTitle>
+          <DialogDescription>
+            Repairs, service, and inspections for this van.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-12 gap-2 items-end py-2">
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Date</Label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Type</Label>
+            <Select
+              value={type}
+              onValueChange={(v) =>
+                setType(v as (typeof MAINT_TYPES)[number])
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MAINT_TYPES.map((tp) => (
+                  <SelectItem key={tp} value={tp}>
+                    {tp}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <Select
+              value={status}
+              onValueChange={(v) =>
+                setStatus(v as (typeof MAINT_STATUSES)[number])
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MAINT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Cost $</Label>
+            <Input
+              inputMode="decimal"
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+            />
+          </div>
+          <div className="col-span-8">
+            <Label className="text-xs text-muted-foreground">Description</Label>
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              data-testid="maint-description"
+            />
+          </div>
+          <div className="col-span-4">
+            <Label className="text-xs text-muted-foreground">Shop</Label>
+            <Input
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={handleAdd}
+            disabled={description.trim() === "" || createRec.isPending}
+            data-testid="maint-add-btn"
+          >
+            {createRec.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            <span className="ml-1">Add record</span>
+          </Button>
+        </div>
+
+        {records.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No maintenance records yet.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {records.map((r) => (
+                <TableRow key={r.id} data-testid="maint-row">
+                  <TableCell>{r.date || "—"}</TableCell>
+                  <TableCell>{r.type}</TableCell>
+                  <TableCell className="max-w-[16rem] truncate">
+                    {r.description || "—"}
+                    {r.shopName ? (
+                      <span className="text-muted-foreground"> · {r.shopName}</span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {Number(r.cost ?? 0) > 0
+                      ? `$${Number(r.cost).toLocaleString()}`
+                      : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={r.status}
+                      onValueChange={(v) => changeStatus(r.id, v)}
+                    >
+                      <SelectTrigger className="h-7 w-32">
+                        <Badge
+                          variant={maintStatusVariant(r.status)}
+                          className="text-[10px] px-1.5 py-0"
+                        >
+                          {r.status}
+                        </Badge>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MAINT_STATUSES.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(r.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

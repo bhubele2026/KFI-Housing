@@ -1736,6 +1736,68 @@ paths:
         "204":
           description: Deleted
 
+  /vehicle-maintenance:
+    get:
+      operationId: listVehicleMaintenance
+      tags: [vehicles]
+      summary: List maintenance / repair records (all vehicles)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleMaintenance" }
+    post:
+      operationId: createVehicleMaintenance
+      tags: [vehicles]
+      summary: Log a maintenance / repair record for a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleMaintenanceCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleMaintenance" }
+  /vehicle-maintenance/{id}:
+    patch:
+      operationId: updateVehicleMaintenance
+      tags: [vehicles]
+      summary: Update a maintenance record (e.g. advance its status)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleMaintenanceUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleMaintenance" }
+    delete:
+      operationId: deleteVehicleMaintenance
+      tags: [vehicles]
+      summary: Delete a maintenance record
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -3199,6 +3261,72 @@ components:
         gallons: { type: number }
         merchant: { type: string }
         cardLast4: { type: string }
+        note: { type: string }
+
+    VehicleMaintenance:
+      type: object
+      description: A maintenance / repair record for a vehicle.
+      required:
+        - id
+        - vehicleId
+        - date
+        - type
+        - description
+        - cost
+        - status
+        - shopName
+        - completedDate
+        - note
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        date: { type: string }
+        type:
+          type: string
+          enum: [Repair, Service, Inspection, Other]
+        description: { type: string }
+        cost: { type: number }
+        status:
+          type: string
+          enum: [Needed, In shop, Completed]
+        shopName: { type: string }
+        completedDate: { type: string }
+        note: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleMaintenanceCreate:
+      type: object
+      required: [vehicleId, type, status]
+      properties:
+        vehicleId: { type: string }
+        date: { type: string }
+        type:
+          type: string
+          enum: [Repair, Service, Inspection, Other]
+        description: { type: string }
+        cost: { type: number }
+        status:
+          type: string
+          enum: [Needed, In shop, Completed]
+        shopName: { type: string }
+        completedDate: { type: string }
+        note: { type: string }
+    VehicleMaintenanceUpdate:
+      type: object
+      properties:
+        date: { type: string }
+        type:
+          type: string
+          enum: [Repair, Service, Inspection, Other]
+        description: { type: string }
+        cost: { type: number }
+        status:
+          type: string
+          enum: [Needed, In shop, Completed]
+        shopName: { type: string }
+        completedDate: { type: string }
         note: { type: string }
 
     LeasePdfExtracted:

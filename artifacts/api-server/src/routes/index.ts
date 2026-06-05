@@ -34,6 +34,7 @@ import assistantRouter from "./assistant";
 import qboRouter from "./qbo";
 import reconciliationRouter from "./reconciliation";
 import vehiclesRouter from "./vehicles";
+import vehicleRidersRouter from "./vehicle-riders";
 
 const router: IRouter = Router();
 
@@ -71,6 +72,7 @@ router.use(teamRouter);
 router.use(qboRouter);
 router.use(reconciliationRouter);
 router.use(vehiclesRouter);
+router.use(vehicleRidersRouter);
 router.use(assistantRouter);
 
 export default router;

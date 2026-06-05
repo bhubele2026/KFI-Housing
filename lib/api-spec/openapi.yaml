@@ -1600,6 +1600,100 @@ paths:
         "204":
           description: Deleted
 
+  /vehicle-riders:
+    get:
+      operationId: listVehicleRiders
+      tags: [vehicles]
+      summary: List static rider-roster entries (all vehicles)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleRider" }
+    post:
+      operationId: createVehicleRider
+      tags: [vehicles]
+      summary: Add an associate to a vehicle's static rider roster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleRiderCreate" }
+      responses:
+        "200":
+          description: Already on the roster — existing entry returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleRider" }
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleRider" }
+  /vehicle-riders/{id}:
+    delete:
+      operationId: deleteVehicleRider
+      tags: [vehicles]
+      summary: Remove an associate from a vehicle's static rider roster
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Removed
+
+  /vehicle-ride-overrides:
+    get:
+      operationId: listVehicleRideOverrides
+      tags: [vehicles]
+      summary: List per-day ride overrides (all vehicles)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleRideOverride" }
+    post:
+      operationId: createVehicleRideOverride
+      tags: [vehicles]
+      summary: Record a per-day exception to a vehicle's rider roster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleRideOverrideCreate" }
+      responses:
+        "200":
+          description: Existing override for that day updated in place
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleRideOverride" }
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleRideOverride" }
+  /vehicle-ride-overrides/{id}:
+    delete:
+      operationId: deleteVehicleRideOverride
+      tags: [vehicles]
+      summary: Delete a per-day ride override
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -2968,6 +3062,63 @@ components:
           type: ["integer", "null"]
           minimum: 0
         notes: { type: string }
+
+    VehicleRider:
+      type: object
+      description: |
+        A static rider-roster entry — one associate (occupant) that a
+        vehicle regularly transports. Riders are occupants, so the
+        rider's housing (bed / property / customer) is available via the
+        occupant record.
+      required: [id, vehicleId, occupantId]
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        occupantId: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleRiderCreate:
+      type: object
+      required: [vehicleId, occupantId]
+      properties:
+        vehicleId: { type: string }
+        occupantId: { type: string }
+
+    VehicleRideOverride:
+      type: object
+      description: |
+        A per-day exception to a vehicle's static roster. The effective
+        roster for date D = static riders minus "remove" overrides for D,
+        plus "add" overrides for D.
+      required: [id, vehicleId, occupantId, date, action]
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        occupantId: { type: string }
+        date:
+          type: string
+          description: The day this exception applies to (YYYY-MM-DD).
+        action:
+          type: string
+          enum: [add, remove]
+        note: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleRideOverrideCreate:
+      type: object
+      required: [vehicleId, occupantId, date, action]
+      properties:
+        vehicleId: { type: string }
+        occupantId: { type: string }
+        date: { type: string }
+        action:
+          type: string
+          enum: [add, remove]
+        note: { type: string }
 
     LeasePdfExtracted:
       type: object

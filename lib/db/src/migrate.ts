@@ -18,6 +18,7 @@ import { addPropertyUpdatedAtIfNeeded } from "./migrations/add-property-updated-
 import { dropAssistantExportsContentIfNeeded } from "./migrations/drop-assistant-exports-content";
 import { createQboTablesIfNeeded } from "./migrations/create-qbo-tables";
 import { createVehiclesTableIfNeeded } from "./migrations/create-vehicles-table";
+import { createVehicleRidersTablesIfNeeded } from "./migrations/create-vehicle-riders-tables";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -140,6 +141,10 @@ export async function pushSchemaIfNeeded(
   // Transportation: provision the `vehicles` table BEFORE drizzle's
   // pushSchema so deployed environments pick it up at boot. Idempotent.
   await createVehiclesTableIfNeeded(pool, log);
+
+  // Transportation rider roster: static `vehicle_riders` + daily
+  // `vehicle_ride_overrides`. Idempotent, runs before pushSchema.
+  await createVehicleRidersTablesIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

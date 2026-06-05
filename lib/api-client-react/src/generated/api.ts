@@ -76,6 +76,17 @@ import type {
   Utility,
   UtilityUpdate,
   Vehicle,
+  VehicleFuelCharge,
+  VehicleFuelChargeCreate,
+  VehicleLease,
+  VehicleLeaseUpdate,
+  VehicleMaintenance,
+  VehicleMaintenanceCreate,
+  VehicleMaintenanceUpdate,
+  VehicleRideOverride,
+  VehicleRideOverrideCreate,
+  VehicleRider,
+  VehicleRiderCreate,
   VehicleUpdate,
 } from "./api.schemas";
 
@@ -6687,4 +6698,1410 @@ export const useDeleteVehicle = <
   TContext
 > => {
   return useMutation(getDeleteVehicleMutationOptions(options));
+};
+
+/**
+ * @summary List static rider-roster entries (all vehicles)
+ */
+export const getListVehicleRidersUrl = () => {
+  return `/api/vehicle-riders`;
+};
+
+export const listVehicleRiders = async (
+  options?: RequestInit,
+): Promise<VehicleRider[]> => {
+  return customFetch<VehicleRider[]>(getListVehicleRidersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleRidersQueryKey = () => {
+  return [`/api/vehicle-riders`] as const;
+};
+
+export const getListVehicleRidersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleRiders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRiders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListVehicleRidersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleRiders>>
+  > = ({ signal }) => listVehicleRiders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRiders>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleRidersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleRiders>>
+>;
+export type ListVehicleRidersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List static rider-roster entries (all vehicles)
+ */
+
+export function useListVehicleRiders<
+  TData = Awaited<ReturnType<typeof listVehicleRiders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRiders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleRidersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an associate to a vehicle's static rider roster
+ */
+export const getCreateVehicleRiderUrl = () => {
+  return `/api/vehicle-riders`;
+};
+
+export const createVehicleRider = async (
+  vehicleRiderCreate: VehicleRiderCreate,
+  options?: RequestInit,
+): Promise<VehicleRider> => {
+  return customFetch<VehicleRider>(getCreateVehicleRiderUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleRiderCreate),
+  });
+};
+
+export const getCreateVehicleRiderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleRider>>,
+    TError,
+    { data: BodyType<VehicleRiderCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleRider>>,
+  TError,
+  { data: BodyType<VehicleRiderCreate> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleRider"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleRider>>,
+    { data: BodyType<VehicleRiderCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleRider(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleRiderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleRider>>
+>;
+export type CreateVehicleRiderMutationBody = BodyType<VehicleRiderCreate>;
+export type CreateVehicleRiderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an associate to a vehicle's static rider roster
+ */
+export const useCreateVehicleRider = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleRider>>,
+    TError,
+    { data: BodyType<VehicleRiderCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleRider>>,
+  TError,
+  { data: BodyType<VehicleRiderCreate> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleRiderMutationOptions(options));
+};
+
+/**
+ * @summary Remove an associate from a vehicle's static rider roster
+ */
+export const getDeleteVehicleRiderUrl = (id: string) => {
+  return `/api/vehicle-riders/${id}`;
+};
+
+export const deleteVehicleRider = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleRiderUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleRiderMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleRider>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleRider>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleRider"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleRider>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleRider(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleRiderMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleRider>>
+>;
+
+export type DeleteVehicleRiderMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove an associate from a vehicle's static rider roster
+ */
+export const useDeleteVehicleRider = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleRider>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleRider>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleRiderMutationOptions(options));
+};
+
+/**
+ * @summary List per-day ride overrides (all vehicles)
+ */
+export const getListVehicleRideOverridesUrl = () => {
+  return `/api/vehicle-ride-overrides`;
+};
+
+export const listVehicleRideOverrides = async (
+  options?: RequestInit,
+): Promise<VehicleRideOverride[]> => {
+  return customFetch<VehicleRideOverride[]>(getListVehicleRideOverridesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleRideOverridesQueryKey = () => {
+  return [`/api/vehicle-ride-overrides`] as const;
+};
+
+export const getListVehicleRideOverridesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleRideOverrides>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRideOverrides>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListVehicleRideOverridesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleRideOverrides>>
+  > = ({ signal }) => listVehicleRideOverrides({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRideOverrides>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleRideOverridesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleRideOverrides>>
+>;
+export type ListVehicleRideOverridesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List per-day ride overrides (all vehicles)
+ */
+
+export function useListVehicleRideOverrides<
+  TData = Awaited<ReturnType<typeof listVehicleRideOverrides>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleRideOverrides>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleRideOverridesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a per-day exception to a vehicle's rider roster
+ */
+export const getCreateVehicleRideOverrideUrl = () => {
+  return `/api/vehicle-ride-overrides`;
+};
+
+export const createVehicleRideOverride = async (
+  vehicleRideOverrideCreate: VehicleRideOverrideCreate,
+  options?: RequestInit,
+): Promise<VehicleRideOverride> => {
+  return customFetch<VehicleRideOverride>(getCreateVehicleRideOverrideUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleRideOverrideCreate),
+  });
+};
+
+export const getCreateVehicleRideOverrideMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleRideOverride>>,
+    TError,
+    { data: BodyType<VehicleRideOverrideCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleRideOverride>>,
+  TError,
+  { data: BodyType<VehicleRideOverrideCreate> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleRideOverride"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleRideOverride>>,
+    { data: BodyType<VehicleRideOverrideCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleRideOverride(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleRideOverrideMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleRideOverride>>
+>;
+export type CreateVehicleRideOverrideMutationBody =
+  BodyType<VehicleRideOverrideCreate>;
+export type CreateVehicleRideOverrideMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a per-day exception to a vehicle's rider roster
+ */
+export const useCreateVehicleRideOverride = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleRideOverride>>,
+    TError,
+    { data: BodyType<VehicleRideOverrideCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleRideOverride>>,
+  TError,
+  { data: BodyType<VehicleRideOverrideCreate> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleRideOverrideMutationOptions(options));
+};
+
+/**
+ * @summary Delete a per-day ride override
+ */
+export const getDeleteVehicleRideOverrideUrl = (id: string) => {
+  return `/api/vehicle-ride-overrides/${id}`;
+};
+
+export const deleteVehicleRideOverride = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleRideOverrideUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleRideOverrideMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleRideOverride>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleRideOverride>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleRideOverride"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleRideOverride>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleRideOverride(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleRideOverrideMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleRideOverride>>
+>;
+
+export type DeleteVehicleRideOverrideMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a per-day ride override
+ */
+export const useDeleteVehicleRideOverride = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleRideOverride>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleRideOverride>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleRideOverrideMutationOptions(options));
+};
+
+/**
+ * @summary List itemized fuel-card charges (all vehicles)
+ */
+export const getListVehicleFuelChargesUrl = () => {
+  return `/api/vehicle-fuel-charges`;
+};
+
+export const listVehicleFuelCharges = async (
+  options?: RequestInit,
+): Promise<VehicleFuelCharge[]> => {
+  return customFetch<VehicleFuelCharge[]>(getListVehicleFuelChargesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleFuelChargesQueryKey = () => {
+  return [`/api/vehicle-fuel-charges`] as const;
+};
+
+export const getListVehicleFuelChargesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleFuelCharges>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleFuelCharges>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListVehicleFuelChargesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleFuelCharges>>
+  > = ({ signal }) => listVehicleFuelCharges({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleFuelCharges>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleFuelChargesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleFuelCharges>>
+>;
+export type ListVehicleFuelChargesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List itemized fuel-card charges (all vehicles)
+ */
+
+export function useListVehicleFuelCharges<
+  TData = Awaited<ReturnType<typeof listVehicleFuelCharges>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleFuelCharges>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleFuelChargesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a fuel-card charge for a vehicle
+ */
+export const getCreateVehicleFuelChargeUrl = () => {
+  return `/api/vehicle-fuel-charges`;
+};
+
+export const createVehicleFuelCharge = async (
+  vehicleFuelChargeCreate: VehicleFuelChargeCreate,
+  options?: RequestInit,
+): Promise<VehicleFuelCharge> => {
+  return customFetch<VehicleFuelCharge>(getCreateVehicleFuelChargeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleFuelChargeCreate),
+  });
+};
+
+export const getCreateVehicleFuelChargeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleFuelCharge>>,
+    TError,
+    { data: BodyType<VehicleFuelChargeCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleFuelCharge>>,
+  TError,
+  { data: BodyType<VehicleFuelChargeCreate> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleFuelCharge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleFuelCharge>>,
+    { data: BodyType<VehicleFuelChargeCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleFuelCharge(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleFuelChargeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleFuelCharge>>
+>;
+export type CreateVehicleFuelChargeMutationBody =
+  BodyType<VehicleFuelChargeCreate>;
+export type CreateVehicleFuelChargeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record a fuel-card charge for a vehicle
+ */
+export const useCreateVehicleFuelCharge = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleFuelCharge>>,
+    TError,
+    { data: BodyType<VehicleFuelChargeCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleFuelCharge>>,
+  TError,
+  { data: BodyType<VehicleFuelChargeCreate> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleFuelChargeMutationOptions(options));
+};
+
+/**
+ * @summary Delete a fuel-card charge
+ */
+export const getDeleteVehicleFuelChargeUrl = (id: string) => {
+  return `/api/vehicle-fuel-charges/${id}`;
+};
+
+export const deleteVehicleFuelCharge = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleFuelChargeUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleFuelChargeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleFuelCharge>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleFuelCharge>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleFuelCharge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleFuelCharge>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleFuelCharge(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleFuelChargeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleFuelCharge>>
+>;
+
+export type DeleteVehicleFuelChargeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a fuel-card charge
+ */
+export const useDeleteVehicleFuelCharge = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleFuelCharge>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleFuelCharge>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleFuelChargeMutationOptions(options));
+};
+
+/**
+ * @summary List maintenance / repair records (all vehicles)
+ */
+export const getListVehicleMaintenanceUrl = () => {
+  return `/api/vehicle-maintenance`;
+};
+
+export const listVehicleMaintenance = async (
+  options?: RequestInit,
+): Promise<VehicleMaintenance[]> => {
+  return customFetch<VehicleMaintenance[]>(getListVehicleMaintenanceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleMaintenanceQueryKey = () => {
+  return [`/api/vehicle-maintenance`] as const;
+};
+
+export const getListVehicleMaintenanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleMaintenance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleMaintenance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListVehicleMaintenanceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleMaintenance>>
+  > = ({ signal }) => listVehicleMaintenance({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleMaintenance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleMaintenanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleMaintenance>>
+>;
+export type ListVehicleMaintenanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List maintenance / repair records (all vehicles)
+ */
+
+export function useListVehicleMaintenance<
+  TData = Awaited<ReturnType<typeof listVehicleMaintenance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleMaintenance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleMaintenanceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Log a maintenance / repair record for a vehicle
+ */
+export const getCreateVehicleMaintenanceUrl = () => {
+  return `/api/vehicle-maintenance`;
+};
+
+export const createVehicleMaintenance = async (
+  vehicleMaintenanceCreate: VehicleMaintenanceCreate,
+  options?: RequestInit,
+): Promise<VehicleMaintenance> => {
+  return customFetch<VehicleMaintenance>(getCreateVehicleMaintenanceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleMaintenanceCreate),
+  });
+};
+
+export const getCreateVehicleMaintenanceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleMaintenance>>,
+    TError,
+    { data: BodyType<VehicleMaintenanceCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleMaintenance>>,
+  TError,
+  { data: BodyType<VehicleMaintenanceCreate> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleMaintenance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleMaintenance>>,
+    { data: BodyType<VehicleMaintenanceCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleMaintenance(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleMaintenanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleMaintenance>>
+>;
+export type CreateVehicleMaintenanceMutationBody =
+  BodyType<VehicleMaintenanceCreate>;
+export type CreateVehicleMaintenanceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Log a maintenance / repair record for a vehicle
+ */
+export const useCreateVehicleMaintenance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleMaintenance>>,
+    TError,
+    { data: BodyType<VehicleMaintenanceCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleMaintenance>>,
+  TError,
+  { data: BodyType<VehicleMaintenanceCreate> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleMaintenanceMutationOptions(options));
+};
+
+/**
+ * @summary Update a maintenance record (e.g. advance its status)
+ */
+export const getUpdateVehicleMaintenanceUrl = (id: string) => {
+  return `/api/vehicle-maintenance/${id}`;
+};
+
+export const updateVehicleMaintenance = async (
+  id: string,
+  vehicleMaintenanceUpdate: VehicleMaintenanceUpdate,
+  options?: RequestInit,
+): Promise<VehicleMaintenance> => {
+  return customFetch<VehicleMaintenance>(getUpdateVehicleMaintenanceUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleMaintenanceUpdate),
+  });
+};
+
+export const getUpdateVehicleMaintenanceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVehicleMaintenance>>,
+    TError,
+    { id: string; data: BodyType<VehicleMaintenanceUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateVehicleMaintenance>>,
+  TError,
+  { id: string; data: BodyType<VehicleMaintenanceUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateVehicleMaintenance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateVehicleMaintenance>>,
+    { id: string; data: BodyType<VehicleMaintenanceUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateVehicleMaintenance(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateVehicleMaintenanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateVehicleMaintenance>>
+>;
+export type UpdateVehicleMaintenanceMutationBody =
+  BodyType<VehicleMaintenanceUpdate>;
+export type UpdateVehicleMaintenanceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a maintenance record (e.g. advance its status)
+ */
+export const useUpdateVehicleMaintenance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVehicleMaintenance>>,
+    TError,
+    { id: string; data: BodyType<VehicleMaintenanceUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateVehicleMaintenance>>,
+  TError,
+  { id: string; data: BodyType<VehicleMaintenanceUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateVehicleMaintenanceMutationOptions(options));
+};
+
+/**
+ * @summary Delete a maintenance record
+ */
+export const getDeleteVehicleMaintenanceUrl = (id: string) => {
+  return `/api/vehicle-maintenance/${id}`;
+};
+
+export const deleteVehicleMaintenance = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleMaintenanceUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleMaintenanceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleMaintenance>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleMaintenance>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleMaintenance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleMaintenance>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleMaintenance(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleMaintenanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleMaintenance>>
+>;
+
+export type DeleteVehicleMaintenanceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a maintenance record
+ */
+export const useDeleteVehicleMaintenance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleMaintenance>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleMaintenance>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleMaintenanceMutationOptions(options));
+};
+
+/**
+ * @summary List vehicle lease / rental agreements
+ */
+export const getListVehicleLeasesUrl = () => {
+  return `/api/vehicle-leases`;
+};
+
+export const listVehicleLeases = async (
+  options?: RequestInit,
+): Promise<VehicleLease[]> => {
+  return customFetch<VehicleLease[]>(getListVehicleLeasesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleLeasesQueryKey = () => {
+  return [`/api/vehicle-leases`] as const;
+};
+
+export const getListVehicleLeasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleLeases>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleLeases>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListVehicleLeasesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleLeases>>
+  > = ({ signal }) => listVehicleLeases({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleLeases>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleLeasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleLeases>>
+>;
+export type ListVehicleLeasesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List vehicle lease / rental agreements
+ */
+
+export function useListVehicleLeases<
+  TData = Awaited<ReturnType<typeof listVehicleLeases>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleLeases>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleLeasesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a vehicle lease
+ */
+export const getCreateVehicleLeaseUrl = () => {
+  return `/api/vehicle-leases`;
+};
+
+export const createVehicleLease = async (
+  vehicleLease: VehicleLease,
+  options?: RequestInit,
+): Promise<VehicleLease> => {
+  return customFetch<VehicleLease>(getCreateVehicleLeaseUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleLease),
+  });
+};
+
+export const getCreateVehicleLeaseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleLease>>,
+    TError,
+    { data: BodyType<VehicleLease> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleLease>>,
+  TError,
+  { data: BodyType<VehicleLease> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleLease"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleLease>>,
+    { data: BodyType<VehicleLease> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleLease(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleLeaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleLease>>
+>;
+export type CreateVehicleLeaseMutationBody = BodyType<VehicleLease>;
+export type CreateVehicleLeaseMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a vehicle lease
+ */
+export const useCreateVehicleLease = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleLease>>,
+    TError,
+    { data: BodyType<VehicleLease> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleLease>>,
+  TError,
+  { data: BodyType<VehicleLease> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleLeaseMutationOptions(options));
+};
+
+/**
+ * @summary Update a vehicle lease
+ */
+export const getUpdateVehicleLeaseUrl = (id: string) => {
+  return `/api/vehicle-leases/${id}`;
+};
+
+export const updateVehicleLease = async (
+  id: string,
+  vehicleLeaseUpdate: VehicleLeaseUpdate,
+  options?: RequestInit,
+): Promise<VehicleLease> => {
+  return customFetch<VehicleLease>(getUpdateVehicleLeaseUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleLeaseUpdate),
+  });
+};
+
+export const getUpdateVehicleLeaseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVehicleLease>>,
+    TError,
+    { id: string; data: BodyType<VehicleLeaseUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateVehicleLease>>,
+  TError,
+  { id: string; data: BodyType<VehicleLeaseUpdate> },
+  TContext
+> => {
+  const mutationKey = ["updateVehicleLease"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateVehicleLease>>,
+    { id: string; data: BodyType<VehicleLeaseUpdate> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateVehicleLease(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateVehicleLeaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateVehicleLease>>
+>;
+export type UpdateVehicleLeaseMutationBody = BodyType<VehicleLeaseUpdate>;
+export type UpdateVehicleLeaseMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a vehicle lease
+ */
+export const useUpdateVehicleLease = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateVehicleLease>>,
+    TError,
+    { id: string; data: BodyType<VehicleLeaseUpdate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateVehicleLease>>,
+  TError,
+  { id: string; data: BodyType<VehicleLeaseUpdate> },
+  TContext
+> => {
+  return useMutation(getUpdateVehicleLeaseMutationOptions(options));
+};
+
+/**
+ * @summary Delete a vehicle lease
+ */
+export const getDeleteVehicleLeaseUrl = (id: string) => {
+  return `/api/vehicle-leases/${id}`;
+};
+
+export const deleteVehicleLease = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleLeaseUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleLeaseMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleLease>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleLease>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleLease"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleLease>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleLease(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleLeaseMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleLease>>
+>;
+
+export type DeleteVehicleLeaseMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a vehicle lease
+ */
+export const useDeleteVehicleLease = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleLease>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleLease>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleLeaseMutationOptions(options));
 };

@@ -4478,3 +4478,307 @@ export const UpdateVehicleResponse = zod
 export const DeleteVehicleParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * @summary List static rider-roster entries (all vehicles)
+ */
+export const ListVehicleRidersResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    occupantId: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe(
+    "A static rider-roster entry — one associate (occupant) that a\nvehicle regularly transports. Riders are occupants, so the\nrider's housing (bed \/ property \/ customer) is available via the\noccupant record.\n",
+  );
+export const ListVehicleRidersResponse = zod.array(
+  ListVehicleRidersResponseItem,
+);
+
+/**
+ * @summary Add an associate to a vehicle's static rider roster
+ */
+export const CreateVehicleRiderBody = zod.object({
+  vehicleId: zod.string(),
+  occupantId: zod.string(),
+});
+
+export const CreateVehicleRiderResponse = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    occupantId: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe(
+    "A static rider-roster entry — one associate (occupant) that a\nvehicle regularly transports. Riders are occupants, so the\nrider's housing (bed \/ property \/ customer) is available via the\noccupant record.\n",
+  );
+
+/**
+ * @summary Remove an associate from a vehicle's static rider roster
+ */
+export const DeleteVehicleRiderParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List per-day ride overrides (all vehicles)
+ */
+export const ListVehicleRideOverridesResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    occupantId: zod.string(),
+    date: zod
+      .string()
+      .describe("The day this exception applies to (YYYY-MM-DD)."),
+    action: zod.enum(["add", "remove"]),
+    note: zod.string().optional(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe(
+    'A per-day exception to a vehicle\'s static roster. The effective\nroster for date D = static riders minus \"remove\" overrides for D,\nplus \"add\" overrides for D.\n',
+  );
+export const ListVehicleRideOverridesResponse = zod.array(
+  ListVehicleRideOverridesResponseItem,
+);
+
+/**
+ * @summary Record a per-day exception to a vehicle's rider roster
+ */
+export const CreateVehicleRideOverrideBody = zod.object({
+  vehicleId: zod.string(),
+  occupantId: zod.string(),
+  date: zod.string(),
+  action: zod.enum(["add", "remove"]),
+  note: zod.string().optional(),
+});
+
+export const CreateVehicleRideOverrideResponse = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    occupantId: zod.string(),
+    date: zod
+      .string()
+      .describe("The day this exception applies to (YYYY-MM-DD)."),
+    action: zod.enum(["add", "remove"]),
+    note: zod.string().optional(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe(
+    'A per-day exception to a vehicle\'s static roster. The effective\nroster for date D = static riders minus \"remove\" overrides for D,\nplus \"add\" overrides for D.\n',
+  );
+
+/**
+ * @summary Delete a per-day ride override
+ */
+export const DeleteVehicleRideOverrideParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List itemized fuel-card charges (all vehicles)
+ */
+export const ListVehicleFuelChargesResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    date: zod.string().describe("Purchase date (YYYY-MM-DD)."),
+    amount: zod.number().describe("Dollar amount charged."),
+    gallons: zod.number().describe("Gallons purchased (0 when not recorded)."),
+    merchant: zod.string().describe("Station \/ merchant name."),
+    cardLast4: zod.string().describe("Last 4 of the gas card used."),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("One itemized fuel-card purchase for a vehicle.");
+export const ListVehicleFuelChargesResponse = zod.array(
+  ListVehicleFuelChargesResponseItem,
+);
+
+/**
+ * @summary Record a fuel-card charge for a vehicle
+ */
+export const CreateVehicleFuelChargeBody = zod.object({
+  vehicleId: zod.string(),
+  date: zod.string(),
+  amount: zod.number(),
+  gallons: zod.number().optional(),
+  merchant: zod.string().optional(),
+  cardLast4: zod.string().optional(),
+  note: zod.string().optional(),
+});
+
+/**
+ * @summary Delete a fuel-card charge
+ */
+export const DeleteVehicleFuelChargeParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List maintenance / repair records (all vehicles)
+ */
+export const ListVehicleMaintenanceResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    date: zod.string(),
+    type: zod.enum(["Repair", "Service", "Inspection", "Other"]),
+    description: zod.string(),
+    cost: zod.number(),
+    status: zod.enum(["Needed", "In shop", "Completed"]),
+    shopName: zod.string(),
+    completedDate: zod.string(),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A maintenance \/ repair record for a vehicle.");
+export const ListVehicleMaintenanceResponse = zod.array(
+  ListVehicleMaintenanceResponseItem,
+);
+
+/**
+ * @summary Log a maintenance / repair record for a vehicle
+ */
+export const CreateVehicleMaintenanceBody = zod.object({
+  vehicleId: zod.string(),
+  date: zod.string().optional(),
+  type: zod.enum(["Repair", "Service", "Inspection", "Other"]),
+  description: zod.string().optional(),
+  cost: zod.number().optional(),
+  status: zod.enum(["Needed", "In shop", "Completed"]),
+  shopName: zod.string().optional(),
+  completedDate: zod.string().optional(),
+  note: zod.string().optional(),
+});
+
+/**
+ * @summary Update a maintenance record (e.g. advance its status)
+ */
+export const UpdateVehicleMaintenanceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateVehicleMaintenanceBody = zod.object({
+  date: zod.string().optional(),
+  type: zod.enum(["Repair", "Service", "Inspection", "Other"]).optional(),
+  description: zod.string().optional(),
+  cost: zod.number().optional(),
+  status: zod.enum(["Needed", "In shop", "Completed"]).optional(),
+  shopName: zod.string().optional(),
+  completedDate: zod.string().optional(),
+  note: zod.string().optional(),
+});
+
+export const UpdateVehicleMaintenanceResponse = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    date: zod.string(),
+    type: zod.enum(["Repair", "Service", "Inspection", "Other"]),
+    description: zod.string(),
+    cost: zod.number(),
+    status: zod.enum(["Needed", "In shop", "Completed"]),
+    shopName: zod.string(),
+    completedDate: zod.string(),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A maintenance \/ repair record for a vehicle.");
+
+/**
+ * @summary Delete a maintenance record
+ */
+export const DeleteVehicleMaintenanceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List vehicle lease / rental agreements
+ */
+export const ListVehicleLeasesResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    lessor: zod.string(),
+    startDate: zod.string(),
+    endDate: zod.string(),
+    monthlyCost: zod.number(),
+    deposit: zod.number(),
+    buyoutCost: zod.number(),
+    deductions: zod.string(),
+    status: zod.enum(["Active", "Expired", "Upcoming"]),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A lease \/ rental agreement for a vehicle.");
+export const ListVehicleLeasesResponse = zod.array(
+  ListVehicleLeasesResponseItem,
+);
+
+/**
+ * @summary Create a vehicle lease
+ */
+export const CreateVehicleLeaseBody = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    lessor: zod.string(),
+    startDate: zod.string(),
+    endDate: zod.string(),
+    monthlyCost: zod.number(),
+    deposit: zod.number(),
+    buyoutCost: zod.number(),
+    deductions: zod.string(),
+    status: zod.enum(["Active", "Expired", "Upcoming"]),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A lease \/ rental agreement for a vehicle.");
+
+/**
+ * @summary Update a vehicle lease
+ */
+export const UpdateVehicleLeaseParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateVehicleLeaseBody = zod.object({
+  vehicleId: zod.string().optional(),
+  lessor: zod.string().optional(),
+  startDate: zod.string().optional(),
+  endDate: zod.string().optional(),
+  monthlyCost: zod.number().optional(),
+  deposit: zod.number().optional(),
+  buyoutCost: zod.number().optional(),
+  deductions: zod.string().optional(),
+  status: zod.enum(["Active", "Expired", "Upcoming"]).optional(),
+  note: zod.string().optional(),
+});
+
+export const UpdateVehicleLeaseResponse = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    lessor: zod.string(),
+    startDate: zod.string(),
+    endDate: zod.string(),
+    monthlyCost: zod.number(),
+    deposit: zod.number(),
+    buyoutCost: zod.number(),
+    deductions: zod.string(),
+    status: zod.enum(["Active", "Expired", "Upcoming"]),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A lease \/ rental agreement for a vehicle.");
+
+/**
+ * @summary Delete a vehicle lease
+ */
+export const DeleteVehicleLeaseParams = zod.object({
+  id: zod.coerce.string(),
+});

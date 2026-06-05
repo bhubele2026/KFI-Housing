@@ -1637,6 +1637,242 @@ export interface VehicleUpdate {
   notes?: string;
 }
 
+/**
+ * A static rider-roster entry — one associate (occupant) that a
+vehicle regularly transports. Riders are occupants, so the
+rider's housing (bed / property / customer) is available via the
+occupant record.
+
+ */
+export interface VehicleRider {
+  id: string;
+  vehicleId: string;
+  occupantId: string;
+  createdAt?: string | null;
+}
+
+export interface VehicleRiderCreate {
+  vehicleId: string;
+  occupantId: string;
+}
+
+export type VehicleRideOverrideAction =
+  (typeof VehicleRideOverrideAction)[keyof typeof VehicleRideOverrideAction];
+
+export const VehicleRideOverrideAction = {
+  add: "add",
+  remove: "remove",
+} as const;
+
+/**
+ * A per-day exception to a vehicle's static roster. The effective
+roster for date D = static riders minus "remove" overrides for D,
+plus "add" overrides for D.
+
+ */
+export interface VehicleRideOverride {
+  id: string;
+  vehicleId: string;
+  occupantId: string;
+  /** The day this exception applies to (YYYY-MM-DD). */
+  date: string;
+  action: VehicleRideOverrideAction;
+  note?: string;
+  createdAt?: string | null;
+}
+
+export type VehicleRideOverrideCreateAction =
+  (typeof VehicleRideOverrideCreateAction)[keyof typeof VehicleRideOverrideCreateAction];
+
+export const VehicleRideOverrideCreateAction = {
+  add: "add",
+  remove: "remove",
+} as const;
+
+export interface VehicleRideOverrideCreate {
+  vehicleId: string;
+  occupantId: string;
+  date: string;
+  action: VehicleRideOverrideCreateAction;
+  note?: string;
+}
+
+/**
+ * One itemized fuel-card purchase for a vehicle.
+ */
+export interface VehicleFuelCharge {
+  id: string;
+  vehicleId: string;
+  /** Purchase date (YYYY-MM-DD). */
+  date: string;
+  /** Dollar amount charged. */
+  amount: number;
+  /** Gallons purchased (0 when not recorded). */
+  gallons: number;
+  /** Station / merchant name. */
+  merchant: string;
+  /** Last 4 of the gas card used. */
+  cardLast4: string;
+  note: string;
+  createdAt?: string | null;
+}
+
+export interface VehicleFuelChargeCreate {
+  vehicleId: string;
+  date: string;
+  amount: number;
+  gallons?: number;
+  merchant?: string;
+  cardLast4?: string;
+  note?: string;
+}
+
+export type VehicleMaintenanceType =
+  (typeof VehicleMaintenanceType)[keyof typeof VehicleMaintenanceType];
+
+export const VehicleMaintenanceType = {
+  Repair: "Repair",
+  Service: "Service",
+  Inspection: "Inspection",
+  Other: "Other",
+} as const;
+
+export type VehicleMaintenanceStatus =
+  (typeof VehicleMaintenanceStatus)[keyof typeof VehicleMaintenanceStatus];
+
+export const VehicleMaintenanceStatus = {
+  Needed: "Needed",
+  In_shop: "In shop",
+  Completed: "Completed",
+} as const;
+
+/**
+ * A maintenance / repair record for a vehicle.
+ */
+export interface VehicleMaintenance {
+  id: string;
+  vehicleId: string;
+  date: string;
+  type: VehicleMaintenanceType;
+  description: string;
+  cost: number;
+  status: VehicleMaintenanceStatus;
+  shopName: string;
+  completedDate: string;
+  note: string;
+  createdAt?: string | null;
+}
+
+export type VehicleMaintenanceCreateType =
+  (typeof VehicleMaintenanceCreateType)[keyof typeof VehicleMaintenanceCreateType];
+
+export const VehicleMaintenanceCreateType = {
+  Repair: "Repair",
+  Service: "Service",
+  Inspection: "Inspection",
+  Other: "Other",
+} as const;
+
+export type VehicleMaintenanceCreateStatus =
+  (typeof VehicleMaintenanceCreateStatus)[keyof typeof VehicleMaintenanceCreateStatus];
+
+export const VehicleMaintenanceCreateStatus = {
+  Needed: "Needed",
+  In_shop: "In shop",
+  Completed: "Completed",
+} as const;
+
+export interface VehicleMaintenanceCreate {
+  vehicleId: string;
+  date?: string;
+  type: VehicleMaintenanceCreateType;
+  description?: string;
+  cost?: number;
+  status: VehicleMaintenanceCreateStatus;
+  shopName?: string;
+  completedDate?: string;
+  note?: string;
+}
+
+export type VehicleMaintenanceUpdateType =
+  (typeof VehicleMaintenanceUpdateType)[keyof typeof VehicleMaintenanceUpdateType];
+
+export const VehicleMaintenanceUpdateType = {
+  Repair: "Repair",
+  Service: "Service",
+  Inspection: "Inspection",
+  Other: "Other",
+} as const;
+
+export type VehicleMaintenanceUpdateStatus =
+  (typeof VehicleMaintenanceUpdateStatus)[keyof typeof VehicleMaintenanceUpdateStatus];
+
+export const VehicleMaintenanceUpdateStatus = {
+  Needed: "Needed",
+  In_shop: "In shop",
+  Completed: "Completed",
+} as const;
+
+export interface VehicleMaintenanceUpdate {
+  date?: string;
+  type?: VehicleMaintenanceUpdateType;
+  description?: string;
+  cost?: number;
+  status?: VehicleMaintenanceUpdateStatus;
+  shopName?: string;
+  completedDate?: string;
+  note?: string;
+}
+
+export type VehicleLeaseStatus =
+  (typeof VehicleLeaseStatus)[keyof typeof VehicleLeaseStatus];
+
+export const VehicleLeaseStatus = {
+  Active: "Active",
+  Expired: "Expired",
+  Upcoming: "Upcoming",
+} as const;
+
+/**
+ * A lease / rental agreement for a vehicle.
+ */
+export interface VehicleLease {
+  id: string;
+  vehicleId: string;
+  lessor: string;
+  startDate: string;
+  endDate: string;
+  monthlyCost: number;
+  deposit: number;
+  buyoutCost: number;
+  deductions: string;
+  status: VehicleLeaseStatus;
+  note: string;
+  createdAt?: string | null;
+}
+
+export type VehicleLeaseUpdateStatus =
+  (typeof VehicleLeaseUpdateStatus)[keyof typeof VehicleLeaseUpdateStatus];
+
+export const VehicleLeaseUpdateStatus = {
+  Active: "Active",
+  Expired: "Expired",
+  Upcoming: "Upcoming",
+} as const;
+
+export interface VehicleLeaseUpdate {
+  vehicleId?: string;
+  lessor?: string;
+  startDate?: string;
+  endDate?: string;
+  monthlyCost?: number;
+  deposit?: number;
+  buyoutCost?: number;
+  deductions?: string;
+  status?: VehicleLeaseUpdateStatus;
+  note?: string;
+}
+
 export type LeasePdfExtractedConfidence =
   (typeof LeasePdfExtractedConfidence)[keyof typeof LeasePdfExtractedConfidence];
 

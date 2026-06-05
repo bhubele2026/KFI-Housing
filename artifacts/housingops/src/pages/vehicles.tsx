@@ -50,6 +50,10 @@ import {
   useListCustomers,
   useListOccupants,
   useListProperties,
+  useListVehicleRiders,
+  useCreateVehicleRider,
+  useDeleteVehicleRider,
+  getListVehicleRidersQueryKey,
 } from "@workspace/api-client-react";
 import {
   Truck,
@@ -58,6 +62,7 @@ import {
   Trash2,
   Loader2,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 
 // Sentinel value for the optional dropdowns. Radix Select cannot use an
@@ -152,6 +157,7 @@ export default function Vehicles() {
   const { data: customers } = useListCustomers();
   const { data: occupants } = useListOccupants();
   const { data: properties } = useListProperties();
+  const { data: riders } = useListVehicleRiders();
 
   const createMutation = useCreateVehicle();
   const updateMutation = useUpdateVehicle();
@@ -161,6 +167,16 @@ export default function Vehicles() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<VehicleForm>(EMPTY_FORM);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [ridersVehicleId, setRidersVehicleId] = useState<string | null>(null);
+
+  // vehicleId -> number of associates on its static roster.
+  const riderCountByVehicle = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of riders ?? []) {
+      map.set(r.vehicleId, (map.get(r.vehicleId) ?? 0) + 1);
+    }
+    return map;
+  }, [riders]);
 
   const customerName = useMemo(() => {
     const map = new Map<string, string>();
@@ -360,7 +376,13 @@ export default function Vehicles() {
                     String(vv.status) === "Available" &&
                     String(vv.currentLocationNote ?? "").trim() !== "";
                   const seats = Number(vv.seats ?? 0);
-                  const riders = Number(vv.associatesTransported ?? 0);
+                  const rosterCount = riderCountByVehicle.get(id) ?? 0;
+                  // Prefer the live roster count; fall back to the manual
+                  // quick-capture figure when no riders have been assigned.
+                  const riderCount =
+                    rosterCount > 0
+                      ? rosterCount
+                      : Number(vv.associatesTransported ?? 0);
                   return (
                     <TableRow key={id} data-testid="vehicle-row">
                       <TableCell className="font-medium">
@@ -402,10 +424,20 @@ export default function Vehicles() {
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {riders}
-                        {seats ? (
-                          <span className="text-muted-foreground">/{seats}</span>
-                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setRidersVehicleId(id)}
+                          className="hover:underline"
+                          data-testid="vehicle-riders-count"
+                          title="Manage riders"
+                        >
+                          {riderCount}
+                          {seats ? (
+                            <span className="text-muted-foreground">
+                              /{seats}
+                            </span>
+                          ) : null}
+                        </button>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {Number(vv.monthlyCost ?? 0) > 0
@@ -421,6 +453,15 @@ export default function Vehicles() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setRidersVehicleId(id)}
+                          data-testid="vehicle-riders-btn"
+                          title="Manage riders"
+                        >
+                          <Users className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -749,7 +790,189 @@ export default function Vehicles() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {ridersVehicleId && (
+        <RidersDialog
+          vehicleId={ridersVehicleId}
+          label={(() => {
+            const v = rows.find(
+              (r) => String((r as Record<string, unknown>).id) === ridersVehicleId,
+            ) as Record<string, unknown> | undefined;
+            if (!v) return "vehicle";
+            return (
+              String(v.merchantUnit || "") ||
+              [v.year, v.make, v.model].filter(Boolean).join(" ") ||
+              "vehicle"
+            );
+          })()}
+          occupants={occupants ?? []}
+          onClose={() => setRidersVehicleId(null)}
+        />
+      )}
     </MainLayout>
+  );
+}
+
+interface OccupantLite {
+  id: string;
+  name?: string;
+  kfisAuthorizedToDrive?: boolean | null;
+}
+
+function RidersDialog({
+  vehicleId,
+  label,
+  occupants,
+  onClose,
+}: {
+  vehicleId: string;
+  label: string;
+  occupants: OccupantLite[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: allRiders } = useListVehicleRiders();
+  const createRider = useCreateVehicleRider();
+  const deleteRider = useDeleteVehicleRider();
+  const [addId, setAddId] = useState<string>(NONE);
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListVehicleRidersQueryKey(),
+    });
+
+  const roster = useMemo(
+    () => (allRiders ?? []).filter((r) => r.vehicleId === vehicleId),
+    [allRiders, vehicleId],
+  );
+  const rosterOccupantIds = useMemo(
+    () => new Set(roster.map((r) => r.occupantId)),
+    [roster],
+  );
+
+  const occName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const o of occupants) map.set(o.id, o.name || o.id);
+    return map;
+  }, [occupants]);
+
+  // Occupants not already on this roster, authorised drivers first.
+  const available = useMemo(
+    () =>
+      occupants
+        .filter((o) => !rosterOccupantIds.has(o.id))
+        .sort((a, b) => {
+          const ad = a.kfisAuthorizedToDrive ? 0 : 1;
+          const bd = b.kfisAuthorizedToDrive ? 0 : 1;
+          if (ad !== bd) return ad - bd;
+          return (a.name || "").localeCompare(b.name || "");
+        }),
+    [occupants, rosterOccupantIds],
+  );
+
+  const handleAdd = () => {
+    if (addId === NONE || !addId) return;
+    createRider.mutate(
+      { data: { vehicleId, occupantId: addId } },
+      {
+        onSuccess: () => {
+          invalidate();
+          setAddId(NONE);
+        },
+        onError: () =>
+          toast({ title: "Failed to add rider", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleRemove = (riderId: string) => {
+    deleteRider.mutate(
+      { id: riderId },
+      {
+        onSuccess: invalidate,
+        onError: () =>
+          toast({ title: "Failed to remove rider", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Riders — {label}</DialogTitle>
+          <DialogDescription>
+            Associates this van transports day-to-day. (Day-specific
+            exceptions come next.)
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-2 py-2">
+          <Select value={addId} onValueChange={setAddId}>
+            <SelectTrigger data-testid="rider-add-select">
+              <SelectValue placeholder="Add an associate…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE} disabled>
+                Add an associate…
+              </SelectItem>
+              {available.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name || o.id}
+                  {o.kfisAuthorizedToDrive ? " (driver)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            onClick={handleAdd}
+            disabled={addId === NONE || createRider.isPending}
+            data-testid="rider-add-btn"
+          >
+            {createRider.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
+        {roster.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No riders assigned yet.
+          </div>
+        ) : (
+          <div className="divide-y rounded-md border">
+            {roster.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between px-3 py-2"
+                data-testid="rider-row"
+              >
+                <span className="text-sm">
+                  {occName.get(r.occupantId) ?? r.occupantId}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleRemove(r.id)}
+                  data-testid="rider-remove-btn"
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

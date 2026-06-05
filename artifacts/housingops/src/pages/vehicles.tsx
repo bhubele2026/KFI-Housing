@@ -59,6 +59,10 @@ import {
   useCreateVehicleRideOverride,
   useDeleteVehicleRideOverride,
   getListVehicleRideOverridesQueryKey,
+  useListVehicleFuelCharges,
+  useCreateVehicleFuelCharge,
+  useDeleteVehicleFuelCharge,
+  getListVehicleFuelChargesQueryKey,
 } from "@workspace/api-client-react";
 import {
   Truck,
@@ -68,6 +72,7 @@ import {
   Loader2,
   AlertTriangle,
   Users,
+  Fuel,
 } from "lucide-react";
 
 // Sentinel value for the optional dropdowns. Radix Select cannot use an
@@ -180,6 +185,7 @@ export default function Vehicles() {
   const [form, setForm] = useState<VehicleForm>(EMPTY_FORM);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ridersVehicleId, setRidersVehicleId] = useState<string | null>(null);
+  const [fuelVehicleId, setFuelVehicleId] = useState<string | null>(null);
 
   // vehicleId -> number of associates on its static roster.
   const riderCountByVehicle = useMemo(() => {
@@ -465,6 +471,15 @@ export default function Vehicles() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setFuelVehicleId(id)}
+                          data-testid="vehicle-fuel-btn"
+                          title="Fuel charges"
+                        >
+                          <Fuel className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -819,6 +834,24 @@ export default function Vehicles() {
           })()}
           occupants={occupants ?? []}
           onClose={() => setRidersVehicleId(null)}
+        />
+      )}
+
+      {fuelVehicleId && (
+        <FuelDialog
+          vehicleId={fuelVehicleId}
+          label={(() => {
+            const v = rows.find(
+              (r) => String((r as Record<string, unknown>).id) === fuelVehicleId,
+            ) as Record<string, unknown> | undefined;
+            if (!v) return "vehicle";
+            return (
+              String(v.merchantUnit || "") ||
+              [v.year, v.make, v.model].filter(Boolean).join(" ") ||
+              "vehicle"
+            );
+          })()}
+          onClose={() => setFuelVehicleId(null)}
         />
       )}
     </MainLayout>
@@ -1181,6 +1214,208 @@ function RidersDialog({
             )}
           </TabsContent>
         </Tabs>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FuelDialog({
+  vehicleId,
+  label,
+  onClose,
+}: {
+  vehicleId: string;
+  label: string;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: allCharges } = useListVehicleFuelCharges();
+  const createCharge = useCreateVehicleFuelCharge();
+  const deleteCharge = useDeleteVehicleFuelCharge();
+
+  const [date, setDate] = useState<string>(todayYMD());
+  const [amount, setAmount] = useState("");
+  const [gallons, setGallons] = useState("");
+  const [merchant, setMerchant] = useState("");
+  const [cardLast4, setCardLast4] = useState("");
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({
+      queryKey: getListVehicleFuelChargesQueryKey(),
+    });
+
+  const charges = useMemo(
+    () =>
+      (allCharges ?? [])
+        .filter((c) => c.vehicleId === vehicleId)
+        .sort((a, b) => (b.date || "").localeCompare(a.date || "")),
+    [allCharges, vehicleId],
+  );
+  const total = useMemo(
+    () => charges.reduce((sum, c) => sum + Number(c.amount ?? 0), 0),
+    [charges],
+  );
+
+  const handleAdd = () => {
+    if (amount.trim() === "") return;
+    createCharge.mutate(
+      {
+        data: {
+          vehicleId,
+          date,
+          amount: num(amount),
+          gallons: gallons.trim() === "" ? 0 : num(gallons),
+          merchant: merchant.trim(),
+          cardLast4: cardLast4.trim(),
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidate();
+          setAmount("");
+          setGallons("");
+          setMerchant("");
+        },
+        onError: () =>
+          toast({ title: "Failed to add charge", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleDelete = (id: string) => {
+    deleteCharge.mutate(
+      { id },
+      {
+        onSuccess: invalidate,
+        onError: () =>
+          toast({ title: "Failed to delete charge", variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Fuel charges — {label}</DialogTitle>
+          <DialogDescription>
+            Itemized gas-card purchases for this van.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-12 gap-2 items-end py-2">
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Date</Label>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground">Amount $</Label>
+            <Input
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              data-testid="fuel-amount"
+            />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground">Gallons</Label>
+            <Input
+              inputMode="decimal"
+              value={gallons}
+              onChange={(e) => setGallons(e.target.value)}
+            />
+          </div>
+          <div className="col-span-3">
+            <Label className="text-xs text-muted-foreground">Merchant</Label>
+            <Input
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+            />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs text-muted-foreground">Card ••</Label>
+            <Input
+              value={cardLast4}
+              onChange={(e) => setCardLast4(e.target.value)}
+              maxLength={4}
+            />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            onClick={handleAdd}
+            disabled={amount.trim() === "" || createCharge.isPending}
+            data-testid="fuel-add-btn"
+          >
+            {createCharge.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            <span className="ml-1">Add charge</span>
+          </Button>
+        </div>
+
+        {charges.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No fuel charges recorded yet.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">Gallons</TableHead>
+                <TableHead>Merchant</TableHead>
+                <TableHead>Card</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {charges.map((c) => (
+                <TableRow key={c.id} data-testid="fuel-row">
+                  <TableCell>{c.date || "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    ${Number(c.amount ?? 0).toLocaleString()}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {Number(c.gallons ?? 0) > 0 ? Number(c.gallons) : "—"}
+                  </TableCell>
+                  <TableCell>{c.merchant || "—"}</TableCell>
+                  <TableCell>{c.cardLast4 ? `••${c.cardLast4}` : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(c.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow>
+                <TableCell className="font-medium">Total</TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  ${total.toLocaleString()}
+                </TableCell>
+                <TableCell colSpan={4} />
+              </TableRow>
+            </TableBody>
+          </Table>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

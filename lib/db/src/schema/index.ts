@@ -30,3 +30,4 @@ export * from "./qbo-account-classifications";
 export * from "./qbo-mapping-overrides";
 export * from "./vehicles";
 export * from "./vehicle-riders";
+export * from "./vehicle-fuel-charges";

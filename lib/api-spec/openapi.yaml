@@ -1694,6 +1694,48 @@ paths:
         "204":
           description: Deleted
 
+  /vehicle-fuel-charges:
+    get:
+      operationId: listVehicleFuelCharges
+      tags: [vehicles]
+      summary: List itemized fuel-card charges (all vehicles)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleFuelCharge" }
+    post:
+      operationId: createVehicleFuelCharge
+      tags: [vehicles]
+      summary: Record a fuel-card charge for a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleFuelChargeCreate" }
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleFuelCharge" }
+  /vehicle-fuel-charges/{id}:
+    delete:
+      operationId: deleteVehicleFuelCharge
+      tags: [vehicles]
+      summary: Delete a fuel-card charge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -3118,6 +3160,45 @@ components:
         action:
           type: string
           enum: [add, remove]
+        note: { type: string }
+
+    VehicleFuelCharge:
+      type: object
+      description: One itemized fuel-card purchase for a vehicle.
+      required: [id, vehicleId, date, amount, gallons, merchant, cardLast4, note]
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        date:
+          type: string
+          description: Purchase date (YYYY-MM-DD).
+        amount:
+          type: number
+          description: Dollar amount charged.
+        gallons:
+          type: number
+          description: Gallons purchased (0 when not recorded).
+        merchant:
+          type: string
+          description: Station / merchant name.
+        cardLast4:
+          type: string
+          description: Last 4 of the gas card used.
+        note: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleFuelChargeCreate:
+      type: object
+      required: [vehicleId, date, amount]
+      properties:
+        vehicleId: { type: string }
+        date: { type: string }
+        amount: { type: number }
+        gallons: { type: number }
+        merchant: { type: string }
+        cardLast4: { type: string }
         note: { type: string }
 
     LeasePdfExtracted:

@@ -19,6 +19,7 @@ import { dropAssistantExportsContentIfNeeded } from "./migrations/drop-assistant
 import { createQboTablesIfNeeded } from "./migrations/create-qbo-tables";
 import { createVehiclesTableIfNeeded } from "./migrations/create-vehicles-table";
 import { createVehicleRidersTablesIfNeeded } from "./migrations/create-vehicle-riders-tables";
+import { createVehicleFuelChargesTableIfNeeded } from "./migrations/create-vehicle-fuel-charges-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -145,6 +146,9 @@ export async function pushSchemaIfNeeded(
   // Transportation rider roster: static `vehicle_riders` + daily
   // `vehicle_ride_overrides`. Idempotent, runs before pushSchema.
   await createVehicleRidersTablesIfNeeded(pool, log);
+
+  // Transportation fuel-card charges.
+  await createVehicleFuelChargesTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

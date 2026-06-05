@@ -21,6 +21,7 @@ import { createVehiclesTableIfNeeded } from "./migrations/create-vehicles-table"
 import { createVehicleRidersTablesIfNeeded } from "./migrations/create-vehicle-riders-tables";
 import { createVehicleFuelChargesTableIfNeeded } from "./migrations/create-vehicle-fuel-charges-table";
 import { createVehicleMaintenanceTableIfNeeded } from "./migrations/create-vehicle-maintenance-table";
+import { createVehicleLeasesTableIfNeeded } from "./migrations/create-vehicle-leases-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -153,6 +154,9 @@ export async function pushSchemaIfNeeded(
 
   // Transportation maintenance / repair records.
   await createVehicleMaintenanceTableIfNeeded(pool, log);
+
+  // Transportation vehicle leases.
+  await createVehicleLeasesTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

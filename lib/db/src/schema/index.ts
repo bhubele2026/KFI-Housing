@@ -32,3 +32,4 @@ export * from "./vehicles";
 export * from "./vehicle-riders";
 export * from "./vehicle-fuel-charges";
 export * from "./vehicle-maintenance";
+export * from "./vehicle-leases";

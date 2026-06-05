@@ -54,6 +54,7 @@ const SettingsPage = lazy(() => import("@/pages/settings"));
 const AssistantChangelog = lazy(() => import("@/pages/assistant-changelog"));
 const TransportStub = lazy(() => import("@/pages/transport-stub"));
 const Vehicles = lazy(() => import("@/pages/vehicles"));
+const VehicleLeases = lazy(() => import("@/pages/vehicle-leases"));
 
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
   window.location.hostname,
@@ -153,9 +154,7 @@ function AppRoutes() {
         <Route path="/settings" component={SettingsPage} />
         <Route path="/assistant/changelog" component={AssistantChangelog} />
         <Route path="/transport/vehicles" component={Vehicles} />
-        <Route path="/transport/vehicle-leases">
-          <TransportStub titleKey="nav.transport.vehicleLeases" />
-        </Route>
+        <Route path="/transport/vehicle-leases" component={VehicleLeases} />
         <Route path="/transport/drivers">
           <TransportStub titleKey="nav.transport.drivers" />
         </Route>

@@ -1798,6 +1798,68 @@ paths:
         "204":
           description: Deleted
 
+  /vehicle-leases:
+    get:
+      operationId: listVehicleLeases
+      tags: [vehicles]
+      summary: List vehicle lease / rental agreements
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/VehicleLease" }
+    post:
+      operationId: createVehicleLease
+      tags: [vehicles]
+      summary: Create a vehicle lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleLease" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleLease" }
+  /vehicle-leases/{id}:
+    patch:
+      operationId: updateVehicleLease
+      tags: [vehicles]
+      summary: Update a vehicle lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleLeaseUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VehicleLease" }
+    delete:
+      operationId: deleteVehicleLease
+      tags: [vehicles]
+      summary: Delete a vehicle lease
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -3327,6 +3389,55 @@ components:
           enum: [Needed, In shop, Completed]
         shopName: { type: string }
         completedDate: { type: string }
+        note: { type: string }
+
+    VehicleLease:
+      type: object
+      description: A lease / rental agreement for a vehicle.
+      required:
+        - id
+        - vehicleId
+        - lessor
+        - startDate
+        - endDate
+        - monthlyCost
+        - deposit
+        - buyoutCost
+        - deductions
+        - status
+        - note
+      properties:
+        id: { type: string }
+        vehicleId: { type: string }
+        lessor: { type: string }
+        startDate: { type: string }
+        endDate: { type: string }
+        monthlyCost: { type: number }
+        deposit: { type: number }
+        buyoutCost: { type: number }
+        deductions: { type: string }
+        status:
+          type: string
+          enum: [Active, Expired, Upcoming]
+        note: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+    VehicleLeaseUpdate:
+      type: object
+      properties:
+        vehicleId: { type: string }
+        lessor: { type: string }
+        startDate: { type: string }
+        endDate: { type: string }
+        monthlyCost: { type: number }
+        deposit: { type: number }
+        buyoutCost: { type: number }
+        deductions: { type: string }
+        status:
+          type: string
+          enum: [Active, Expired, Upcoming]
         note: { type: string }
 
     LeasePdfExtracted:

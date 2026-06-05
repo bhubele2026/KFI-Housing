@@ -862,3 +862,61 @@ export function normalizeUtilityRow<
   }
   return out as T;
 }
+
+// ---------------------------------------------------------------------------
+// Vehicles (Transportation)
+// ---------------------------------------------------------------------------
+
+import type { VehicleRow, InsertVehicleRow } from "@workspace/db";
+
+const VEHICLE_OWNERSHIPS = new Set<string>(["owned", "leased", "rented"]);
+const VEHICLE_STATUSES = new Set<string>([
+  "In use",
+  "Available",
+  "In shop",
+  "Out of service",
+]);
+
+function normalizeVehicleOwnership(value: unknown): string {
+  if (typeof value === "string" && VEHICLE_OWNERSHIPS.has(value)) {
+    return value;
+  }
+  return "owned";
+}
+
+function normalizeVehicleStatus(value: unknown): string {
+  if (typeof value === "string" && VEHICLE_STATUSES.has(value)) {
+    return value;
+  }
+  return "Available";
+}
+
+/**
+ * Normalize a vehicle row at the DB ↔ API boundary. Coerces the two
+ * enum-ish columns (`ownership`, `status`) to known members so a legacy
+ * / hand-crafted value never trips `ListVehiclesResponse.parse`, and
+ * keeps the `inShop` flag consistent with a `status === "In shop"`.
+ */
+export function normalizeVehicleRow<
+  T extends Partial<VehicleRow> | Partial<InsertVehicleRow>,
+>(row: T, fixups?: NormalizerFixup[]): T {
+  const out: Record<string, unknown> = { ...row };
+  if ("ownership" in row) {
+    const after = normalizeVehicleOwnership(row.ownership);
+    recordFixup(fixups, "ownership", row.ownership, after);
+    out.ownership = after;
+  }
+  if ("status" in row) {
+    const after = normalizeVehicleStatus(row.status);
+    recordFixup(fixups, "status", row.status, after);
+    out.status = after;
+  }
+  // Keep the convenience flag in lock-step with the canonical status so
+  // the list filters and the "in shop" badge never disagree.
+  if (out.status === "In shop") {
+    out.inShop = true;
+  } else if ("status" in row && out.status !== "In shop" && !("inShop" in row)) {
+    out.inShop = false;
+  }
+  return out as T;
+}

@@ -1538,6 +1538,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /vehicles:
+    get:
+      operationId: listVehicles
+      tags: [vehicles]
+      summary: List all fleet vehicles
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Vehicle" }
+    post:
+      operationId: createVehicle
+      tags: [vehicles]
+      summary: Create a vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Vehicle" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+  /vehicles/{id}:
+    patch:
+      operationId: updateVehicle
+      tags: [vehicles]
+      summary: Update a vehicle
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleUpdate" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+    delete:
+      operationId: deleteVehicle
+      tags: [vehicles]
+      summary: Delete a vehicle
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     UploadUrlRequest:
@@ -2741,6 +2803,171 @@ components:
         propertyId: { type: string }
         label: { type: string }
         monthlyCost: { type: number }
+
+    Vehicle:
+      type: object
+      description: |
+        A fleet vehicle (KFI van) — the first-class entity of the
+        Transportation section, mirroring how `Property` anchors Housing.
+        Ties to the client it serves (`customerId`), the housing location
+        it is based at (`propertyId`), and its driver (`driverOccupantId`,
+        an occupant who already carries `kfisAuthorizedToDrive`).
+      required:
+        - id
+        - vin
+        - plate
+        - plateState
+        - make
+        - model
+        - seats
+        - merchantUnit
+        - bookValue
+        - ownership
+        - monthlyCost
+        - customerId
+        - status
+        - repairsNeeded
+        - homeBaseState
+        - currentLocationNote
+        - associatesTransported
+        - registrationExpires
+        - notes
+      properties:
+        id: { type: string }
+        vin: { type: string }
+        plate: { type: string }
+        plateState:
+          type: string
+          description: State the plate is registered in (e.g. "WI"). Empty when unknown.
+        year:
+          type: ["integer", "null"]
+          description: Model year. Null when unknown.
+        make: { type: string }
+        model: { type: string }
+        seats:
+          type: integer
+          description: Passenger capacity; compared with `associatesTransported` to flag under-utilised vans.
+        merchantUnit:
+          type: string
+          description: Internal "Merchant Unit #" the team uses to reference the van.
+        bookValue:
+          type: number
+          description: Current book value in dollars.
+        ownership:
+          type: string
+          enum: [owned, leased, rented]
+          description: |
+            Ownership arrangement. "owned" implies no recurring
+            `monthlyCost`. Off-list values coerce to "owned" at the
+            boundary normaliser.
+        monthlyCost:
+          type: number
+          description: Monthly lease / rent cost in dollars; 0 when owned outright.
+        customerId:
+          type: string
+          description: Client this van serves. Empty = unassigned / available.
+        propertyId:
+          type: string
+          nullable: true
+          description: |
+            Housing location the van is based at / parked. Null when the
+            van is sitting somewhere that is not one of our properties
+            (see `currentLocationNote`).
+        driverOccupantId:
+          type: string
+          nullable: true
+          description: |
+            Driver of the van, modelled as an occupant id. Null when no
+            driver is currently assigned. When the driver is housed, the
+            occupant's own `bedId`/`propertyId` answer where they reside.
+        status:
+          type: string
+          enum: ["In use", "Available", "In shop", "Out of service"]
+          description: |
+            Operational status. "Available" + a non-WI location is the
+            case the team most wants to see (idle van that should come
+            back to WI). Off-list values coerce to "Available".
+        inShop:
+          type: boolean
+          description: Convenience flag kept in lock-step with `status === "In shop"`.
+        repairsNeeded:
+          type: string
+          description: Free-text description of repairs needed / pending.
+        homeBaseState:
+          type: string
+          description: State the van should home-base to (the team's goal is WI).
+        currentLocationNote:
+          type: string
+          description: |
+            Where the van is physically sitting when it is not at a known
+            property (e.g. "Parked at Schuette Metals — Schofield WI").
+        associatesTransported:
+          type: integer
+          description: |
+            Quick-capture count of associates currently transported in
+            this van. Superseded by the rider-roster table's live count
+            once that ships.
+        registrationExpires:
+          type: string
+          description: |
+            Registration / plate expiration date (YYYY-MM-DD). Feeds the
+            same expiry-alert pipeline as lease + insurance-cert
+            expirations. Empty when unknown.
+        odometer:
+          type: ["integer", "null"]
+          minimum: 0
+          description: Last recorded odometer reading (miles). Null when not tracked.
+        notes: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Server-managed creation timestamp. Read-only; clients may omit on write.
+        updatedAt:
+          type: string
+          format: date-time
+          description: |
+            Last-touched timestamp, set by the API boundary on every
+            mutation. Server-managed — clients should treat it as
+            read-only and may omit it on write.
+    VehicleUpdate:
+      type: object
+      description: Partial update for a vehicle; every field optional.
+      properties:
+        vin: { type: string }
+        plate: { type: string }
+        plateState: { type: string }
+        year:
+          type: ["integer", "null"]
+        make: { type: string }
+        model: { type: string }
+        seats: { type: integer }
+        merchantUnit: { type: string }
+        bookValue: { type: number }
+        ownership:
+          type: string
+          enum: [owned, leased, rented]
+        monthlyCost: { type: number }
+        customerId: { type: string }
+        propertyId:
+          type: string
+          nullable: true
+        driverOccupantId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: ["In use", "Available", "In shop", "Out of service"]
+        inShop: { type: boolean }
+        repairsNeeded: { type: string }
+        homeBaseState: { type: string }
+        currentLocationNote: { type: string }
+        associatesTransported: { type: integer }
+        registrationExpires: { type: string }
+        odometer:
+          type: ["integer", "null"]
+          minimum: 0
+        notes: { type: string }
 
     LeasePdfExtracted:
       type: object

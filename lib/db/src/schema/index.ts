@@ -28,3 +28,4 @@ export * from "./qbo-connections";
 export * from "./qbo-transactions";
 export * from "./qbo-account-classifications";
 export * from "./qbo-mapping-overrides";
+export * from "./vehicles";

@@ -17,6 +17,7 @@ import { addBedNeedsCleaningSinceIfNeeded } from "./migrations/add-bed-needs-cle
 import { addPropertyUpdatedAtIfNeeded } from "./migrations/add-property-updated-at";
 import { dropAssistantExportsContentIfNeeded } from "./migrations/drop-assistant-exports-content";
 import { createQboTablesIfNeeded } from "./migrations/create-qbo-tables";
+import { createVehiclesTableIfNeeded } from "./migrations/create-vehicles-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -135,6 +136,10 @@ export async function pushSchemaIfNeeded(
   // a deployed environment picks them up at boot without waiting for
   // a separate push. Idempotent — no-op once everything exists.
   await createQboTablesIfNeeded(pool, log);
+
+  // Transportation: provision the `vehicles` table BEFORE drizzle's
+  // pushSchema so deployed environments pick it up at boot. Idempotent.
+  await createVehiclesTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListVehicles,
@@ -79,6 +80,7 @@ import {
   Users,
   Fuel,
   Wrench,
+  Download,
 } from "lucide-react";
 
 // Sentinel value for the optional dropdowns. Radix Select cannot use an
@@ -172,6 +174,27 @@ function todayYMD(): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
+// Whole days from today until `ymd` (YYYY-MM-DD); negative if past. Null
+// when the string is blank or unparseable.
+function daysUntilYMD(ymd: string): number | null {
+  if (!ymd) return null;
+  const parts = ymd.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((n) => !n)) return null;
+  const [y, m, d] = parts;
+  const target = new Date(y, m - 1, d).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((target - today) / 86400000);
+}
+
+function vehicleLabelOf(vv: Record<string, unknown>): string {
+  return (
+    String(vv.merchantUnit || "") ||
+    [vv.year, vv.make, vv.model].filter(Boolean).join(" ") ||
+    String(vv.id)
+  );
+}
+
 export default function Vehicles() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -202,6 +225,35 @@ export default function Vehicles() {
     }
     return map;
   }, [riders]);
+
+  // At-a-glance attention buckets surfaced above the table.
+  const attention = useMemo(() => {
+    const idleOffBase: string[] = [];
+    const regSoon: string[] = [];
+    const inShop: string[] = [];
+    for (const v of vehicles ?? []) {
+      const vv = v as Record<string, unknown>;
+      const label = vehicleLabelOf(vv);
+      const loc = String(vv.currentLocationNote ?? "").trim();
+      // Available van parked somewhere noted = not in use for a client and
+      // sitting off-base. Goal is to bring it back to WI.
+      if (String(vv.status) === "Available" && loc !== "") {
+        idleOffBase.push(`${label} — ${loc}`);
+      }
+      if (String(vv.status) === "In shop") inShop.push(label);
+      const dd = daysUntilYMD(String(vv.registrationExpires ?? ""));
+      if (dd !== null && dd <= 45) {
+        regSoon.push(
+          `${label} ${dd < 0 ? `(expired ${-dd}d ago)` : `(in ${dd}d)`}`,
+        );
+      }
+    }
+    return { idleOffBase, regSoon, inShop };
+  }, [vehicles]);
+  const hasAttention =
+    attention.idleOffBase.length > 0 ||
+    attention.regSoon.length > 0 ||
+    attention.inShop.length > 0;
 
   const customerName = useMemo(() => {
     const map = new Map<string, string>();
@@ -348,6 +400,52 @@ export default function Vehicles() {
     );
   };
 
+  const handleExport = () => {
+    const data = vehicles ?? [];
+    const cell = (vv: Record<string, unknown>, k: string) =>
+      vv[k] == null ? "" : String(vv[k]);
+    const csv = toCsv(
+      data.map((v) => v as Record<string, unknown>),
+      [
+        { header: "Unit", value: (v) => cell(v, "merchantUnit") },
+        { header: "Year", value: (v) => cell(v, "year") },
+        { header: "Make", value: (v) => cell(v, "make") },
+        { header: "Model", value: (v) => cell(v, "model") },
+        { header: "VIN", value: (v) => cell(v, "vin") },
+        { header: "Plate", value: (v) => cell(v, "plate") },
+        { header: "Plate State", value: (v) => cell(v, "plateState") },
+        { header: "Seats", value: (v) => cell(v, "seats") },
+        { header: "Ownership", value: (v) => cell(v, "ownership") },
+        { header: "Monthly Cost", value: (v) => Number(v.monthlyCost ?? 0) },
+        { header: "Book Value", value: (v) => Number(v.bookValue ?? 0) },
+        { header: "Status", value: (v) => cell(v, "status") },
+        {
+          header: "Client",
+          value: (v) =>
+            v.customerId
+              ? customerName.get(String(v.customerId)) ?? String(v.customerId)
+              : "",
+        },
+        {
+          header: "Driver",
+          value: (v) =>
+            v.driverOccupantId
+              ? occupantName.get(String(v.driverOccupantId)) ??
+                String(v.driverOccupantId)
+              : "",
+        },
+        {
+          header: "Riders",
+          value: (v) => riderCountByVehicle.get(String(v.id)) ?? 0,
+        },
+        { header: "Home Base", value: (v) => cell(v, "homeBaseState") },
+        { header: "Current Location", value: (v) => cell(v, "currentLocationNote") },
+        { header: "Registration Expires", value: (v) => cell(v, "registrationExpires") },
+      ],
+    );
+    downloadCsv(timestampedCsvName("housingops-vehicles"), csv);
+  };
+
   const saving = createMutation.isPending || updateMutation.isPending;
   const rows = vehicles ?? [];
 
@@ -358,7 +456,47 @@ export default function Vehicles() {
         description="KFI transportation fleet — vans, their driver, the client they serve, and where they are."
       />
 
-      <div className="flex justify-end mb-4">
+      {hasAttention && (
+        <div className="grid gap-3 sm:grid-cols-3 mb-4" data-testid="vehicle-attention">
+          {attention.idleOffBase.length > 0 && (
+            <AttentionCard
+              tone="amber"
+              icon={<AlertTriangle className="h-4 w-4" />}
+              title={`${attention.idleOffBase.length} available, off-base`}
+              items={attention.idleOffBase}
+              footer="Goal: return to WI."
+            />
+          )}
+          {attention.regSoon.length > 0 && (
+            <AttentionCard
+              tone="red"
+              icon={<AlertTriangle className="h-4 w-4" />}
+              title={`${attention.regSoon.length} registration${attention.regSoon.length === 1 ? "" : "s"} due`}
+              items={attention.regSoon}
+              footer="Renew before the plate expires."
+            />
+          )}
+          {attention.inShop.length > 0 && (
+            <AttentionCard
+              tone="slate"
+              icon={<Wrench className="h-4 w-4" />}
+              title={`${attention.inShop.length} in the shop`}
+              items={attention.inShop}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2 mb-4">
+        <Button
+          variant="outline"
+          onClick={handleExport}
+          disabled={rows.length === 0}
+          data-testid="vehicle-export-btn"
+        >
+          <Download className="h-4 w-4" />
+          <span className="ml-1">Export CSV</span>
+        </Button>
         <Button onClick={openAdd} data-testid="vehicle-add-btn">
           <Plus className="h-4 w-4" />
           <span className="ml-1">Add vehicle</span>
@@ -1746,6 +1884,47 @@ function FuelDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AttentionCard({
+  tone,
+  icon,
+  title,
+  items,
+  footer,
+}: {
+  tone: "amber" | "red" | "slate";
+  icon: ReactNode;
+  title: string;
+  items: string[];
+  footer?: string;
+}) {
+  const toneClasses: Record<"amber" | "red" | "slate", string> = {
+    amber: "border-amber-300 bg-amber-50 text-amber-800",
+    red: "border-red-300 bg-red-50 text-red-800",
+    slate: "border-slate-300 bg-slate-50 text-slate-700",
+  };
+  return (
+    <Card className={toneClasses[tone]}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {icon}
+          {title}
+        </div>
+        <ul className="mt-2 space-y-0.5 text-xs">
+          {items.slice(0, 5).map((s, i) => (
+            <li key={i} className="truncate">
+              {s}
+            </li>
+          ))}
+          {items.length > 5 && (
+            <li className="opacity-70">+{items.length - 5} more</li>
+          )}
+        </ul>
+        {footer && <p className="mt-2 text-[11px] opacity-70">{footer}</p>}
+      </CardContent>
+    </Card>
   );
 }
 

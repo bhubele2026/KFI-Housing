@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -54,6 +55,10 @@ import {
   useCreateVehicleRider,
   useDeleteVehicleRider,
   getListVehicleRidersQueryKey,
+  useListVehicleRideOverrides,
+  useCreateVehicleRideOverride,
+  useDeleteVehicleRideOverride,
+  getListVehicleRideOverridesQueryKey,
 } from "@workspace/api-client-react";
 import {
   Truck,
@@ -147,6 +152,13 @@ function statusVariant(
 function num(value: string): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function todayYMD(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 export default function Vehicles() {
@@ -833,13 +845,20 @@ function RidersDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: allRiders } = useListVehicleRiders();
+  const { data: allOverrides } = useListVehicleRideOverrides();
   const createRider = useCreateVehicleRider();
   const deleteRider = useDeleteVehicleRider();
+  const createOverride = useCreateVehicleRideOverride();
+  const deleteOverride = useDeleteVehicleRideOverride();
   const [addId, setAddId] = useState<string>(NONE);
+  const [dayAddId, setDayAddId] = useState<string>(NONE);
+  const [date, setDate] = useState<string>(todayYMD());
 
-  const invalidate = () =>
+  const invalidateRiders = () =>
+    queryClient.invalidateQueries({ queryKey: getListVehicleRidersQueryKey() });
+  const invalidateOverrides = () =>
     queryClient.invalidateQueries({
-      queryKey: getListVehicleRidersQueryKey(),
+      queryKey: getListVehicleRideOverridesQueryKey(),
     });
 
   const roster = useMemo(
@@ -871,13 +890,52 @@ function RidersDialog({
     [occupants, rosterOccupantIds],
   );
 
+  // --- Daily overrides for the selected date ---
+  const removeOverrideByOcc = useMemo(() => {
+    const m = new Map<string, { id: string }>();
+    for (const o of allOverrides ?? []) {
+      if (o.vehicleId === vehicleId && o.date === date && o.action === "remove")
+        m.set(o.occupantId, { id: o.id });
+    }
+    return m;
+  }, [allOverrides, vehicleId, date]);
+  const addOverrideByOcc = useMemo(() => {
+    const m = new Map<string, { id: string }>();
+    for (const o of allOverrides ?? []) {
+      if (o.vehicleId === vehicleId && o.date === date && o.action === "add")
+        m.set(o.occupantId, { id: o.id });
+    }
+    return m;
+  }, [allOverrides, vehicleId, date]);
+
+  // Effective roster for the date: static riders not removed today, plus
+  // anyone explicitly added for today.
+  const ridingToday = useMemo(() => {
+    const ids: string[] = [];
+    for (const r of roster)
+      if (!removeOverrideByOcc.has(r.occupantId)) ids.push(r.occupantId);
+    for (const id of addOverrideByOcc.keys())
+      if (!ids.includes(id)) ids.push(id);
+    return ids;
+  }, [roster, removeOverrideByOcc, addOverrideByOcc]);
+  const removedToday = useMemo(
+    () => roster.filter((r) => removeOverrideByOcc.has(r.occupantId)),
+    [roster, removeOverrideByOcc],
+  );
+  const dayAvailable = useMemo(() => {
+    const taken = new Set(ridingToday);
+    return occupants
+      .filter((o) => !taken.has(o.id))
+      .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [occupants, ridingToday]);
+
   const handleAdd = () => {
     if (addId === NONE || !addId) return;
     createRider.mutate(
       { data: { vehicleId, occupantId: addId } },
       {
         onSuccess: () => {
-          invalidate();
+          invalidateRiders();
           setAddId(NONE);
         },
         onError: () =>
@@ -890,9 +948,34 @@ function RidersDialog({
     deleteRider.mutate(
       { id: riderId },
       {
-        onSuccess: invalidate,
+        onSuccess: invalidateRiders,
         onError: () =>
           toast({ title: "Failed to remove rider", variant: "destructive" }),
+      },
+    );
+  };
+
+  const recordOverride = (occupantId: string, action: "add" | "remove") => {
+    createOverride.mutate(
+      { data: { vehicleId, occupantId, date, action } },
+      {
+        onSuccess: () => {
+          invalidateOverrides();
+          setDayAddId(NONE);
+        },
+        onError: () =>
+          toast({ title: "Failed to update day", variant: "destructive" }),
+      },
+    );
+  };
+
+  const clearOverride = (overrideId: string) => {
+    deleteOverride.mutate(
+      { id: overrideId },
+      {
+        onSuccess: invalidateOverrides,
+        onError: () =>
+          toast({ title: "Failed to update day", variant: "destructive" }),
       },
     );
   };
@@ -903,68 +986,201 @@ function RidersDialog({
         <DialogHeader>
           <DialogTitle>Riders — {label}</DialogTitle>
           <DialogDescription>
-            Associates this van transports day-to-day. (Day-specific
-            exceptions come next.)
+            The default roster is who this van normally transports. Use “By
+            day” to record one-off exceptions.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-2 py-2">
-          <Select value={addId} onValueChange={setAddId}>
-            <SelectTrigger data-testid="rider-add-select">
-              <SelectValue placeholder="Add an associate…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE} disabled>
-                Add an associate…
-              </SelectItem>
-              {available.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.name || o.id}
-                  {o.kfisAuthorizedToDrive ? " (driver)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            onClick={handleAdd}
-            disabled={addId === NONE || createRider.isPending}
-            data-testid="rider-add-btn"
-          >
-            {createRider.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
+        <Tabs defaultValue="default" className="w-full">
+          <TabsList>
+            <TabsTrigger value="default" data-testid="riders-tab-default">
+              Default roster
+            </TabsTrigger>
+            <TabsTrigger value="byday" data-testid="riders-tab-byday">
+              By day
+            </TabsTrigger>
+          </TabsList>
 
-        {roster.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            No riders assigned yet.
-          </div>
-        ) : (
-          <div className="divide-y rounded-md border">
-            {roster.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between px-3 py-2"
-                data-testid="rider-row"
+          <TabsContent value="default" className="mt-4">
+            <div className="flex gap-2 py-1">
+              <Select value={addId} onValueChange={setAddId}>
+                <SelectTrigger data-testid="rider-add-select">
+                  <SelectValue placeholder="Add an associate…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE} disabled>
+                    Add an associate…
+                  </SelectItem>
+                  {available.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name || o.id}
+                      {o.kfisAuthorizedToDrive ? " (driver)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={handleAdd}
+                disabled={addId === NONE || createRider.isPending}
+                data-testid="rider-add-btn"
               >
-                <span className="text-sm">
-                  {occName.get(r.occupantId) ?? r.occupantId}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleRemove(r.id)}
-                  data-testid="rider-remove-btn"
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                {createRider.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {roster.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                No riders assigned yet.
               </div>
-            ))}
-          </div>
-        )}
+            ) : (
+              <div className="mt-2 divide-y rounded-md border">
+                {roster.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between px-3 py-2"
+                    data-testid="rider-row"
+                  >
+                    <span className="text-sm">
+                      {occName.get(r.occupantId) ?? r.occupantId}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemove(r.id)}
+                      data-testid="rider-remove-btn"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="byday" className="mt-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">Date</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-44"
+                data-testid="riders-day-date"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Select value={dayAddId} onValueChange={setDayAddId}>
+                <SelectTrigger data-testid="day-add-select">
+                  <SelectValue placeholder="Add someone for this day…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE} disabled>
+                    Add someone for this day…
+                  </SelectItem>
+                  {dayAvailable.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name || o.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() =>
+                  dayAddId !== NONE && recordOverride(dayAddId, "add")
+                }
+                disabled={dayAddId === NONE || createOverride.isPending}
+                data-testid="day-add-btn"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Riding on {date} ({ridingToday.length})
+              </p>
+              {ridingToday.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  No one riding this day.
+                </div>
+              ) : (
+                <div className="divide-y rounded-md border">
+                  {ridingToday.map((occId) => {
+                    const added = addOverrideByOcc.get(occId);
+                    return (
+                      <div
+                        key={occId}
+                        className="flex items-center justify-between px-3 py-2"
+                        data-testid="day-rider-row"
+                      >
+                        <span className="text-sm">
+                          {occName.get(occId) ?? occId}
+                          {added ? (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              (added for today)
+                            </span>
+                          ) : null}
+                        </span>
+                        {added ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => clearOverride(added.id)}
+                          >
+                            Remove
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => recordOverride(occId, "remove")}
+                          >
+                            Not riding
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {removedToday.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">
+                  Off the van today
+                </p>
+                <div className="divide-y rounded-md border">
+                  {removedToday.map((r) => {
+                    const ov = removeOverrideByOcc.get(r.occupantId);
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between px-3 py-2"
+                      >
+                        <span className="text-sm text-muted-foreground line-through">
+                          {occName.get(r.occupantId) ?? r.occupantId}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => ov && clearOverride(ov.id)}
+                        >
+                          Restore
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

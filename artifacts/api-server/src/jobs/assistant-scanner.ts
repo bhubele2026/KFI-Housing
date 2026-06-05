@@ -8,6 +8,7 @@ import {
   propertiesTable,
   payrollDeductionsTable,
   assistantScannerRunsTable,
+  vehiclesTable,
 } from "@workspace/db";
 import { emitNudge, parseScannerRecipientUserIds } from "../lib/assistant-nudges";
 import { mostRecentSaturday } from "../lib/pay-week";
@@ -52,6 +53,9 @@ const CHECKS = [
   "leases-without-occupants",
   "occupants-without-leases",
   "dormant-properties",
+  "idle-off-base-vans",
+  "vehicle-registration-expiry",
+  "vehicle-insurance-expiry",
 ] as const;
 type CheckName = (typeof CHECKS)[number];
 
@@ -116,6 +120,12 @@ async function runCheck(
       return runOccupantsWithoutLeasesCheck(recipients);
     case "dormant-properties":
       return runDormantPropertiesCheck(recipients, now);
+    case "idle-off-base-vans":
+      return runIdleOffBaseVansCheck(recipients);
+    case "vehicle-registration-expiry":
+      return runVehicleRegistrationExpiryCheck(recipients, now);
+    case "vehicle-insurance-expiry":
+      return runVehicleInsuranceExpiryCheck(recipients, now);
   }
 }
 
@@ -428,6 +438,144 @@ async function runDormantPropertiesCheck(
       pagePattern: "/properties",
       anchorType: "property",
       anchorId: id,
+    });
+  }
+  return { found: list.length, emitted };
+}
+
+// Check 7 (Transportation): vans that are Available and parked off-base
+// (a non-blank current-location note) — i.e. not in use for a client and
+// sitting somewhere it should be brought back to WI from. Dedup per-van
+// so the nudge persists until the van is put back in use / the note is
+// cleared.
+async function runIdleOffBaseVansCheck(
+  recipients: string[],
+): Promise<{ found: number; emitted: number }> {
+  const rows = await db
+    .select({
+      id: vehiclesTable.id,
+      merchantUnit: vehiclesTable.merchantUnit,
+      make: vehiclesTable.make,
+      model: vehiclesTable.model,
+      loc: vehiclesTable.currentLocationNote,
+      homeBaseState: vehiclesTable.homeBaseState,
+      customerId: vehiclesTable.customerId,
+    })
+    .from(vehiclesTable)
+    .where(
+      and(
+        eq(vehiclesTable.status, "Available"),
+        sql`${vehiclesTable.currentLocationNote} <> ''`,
+      ),
+    );
+  let emitted = 0;
+  for (const v of rows) {
+    const label =
+      v.merchantUnit || [v.make, v.model].filter(Boolean).join(" ") || v.id;
+    emitted += await emitToAll(recipients, {
+      ruleKey: `idle-van:${v.id}`,
+      source: "scanner",
+      severity: "info",
+      customerId: v.customerId || null,
+      title: `Van ${label} is idle off-base`,
+      body: `Available and parked at "${v.loc}". Goal is to bring it back to ${v.homeBaseState || "WI"}.`,
+      ctaLabel: "Open vehicles",
+      ctaPrompt: `Show van ${v.id} — it's available and sitting off-base.`,
+      pagePattern: "/transport/vehicles",
+      anchorType: "vehicle",
+      anchorId: v.id,
+    });
+  }
+  return { found: rows.length, emitted };
+}
+
+// Check 8 (Transportation): vehicle registrations expiring within 30
+// days (or already expired). YMD text column compares lexicographically.
+async function runVehicleRegistrationExpiryCheck(
+  recipients: string[],
+  now: Date,
+): Promise<{ found: number; emitted: number }> {
+  const cutoff = ymd(addDays(now, 30));
+  const rows = await db
+    .select({
+      id: vehiclesTable.id,
+      merchantUnit: vehiclesTable.merchantUnit,
+      make: vehiclesTable.make,
+      model: vehiclesTable.model,
+      reg: vehiclesTable.registrationExpires,
+      customerId: vehiclesTable.customerId,
+    })
+    .from(vehiclesTable)
+    .where(
+      and(
+        sql`${vehiclesTable.registrationExpires} <> ''`,
+        sql`${vehiclesTable.registrationExpires} <= ${cutoff}`,
+      ),
+    );
+  let emitted = 0;
+  for (const v of rows) {
+    const label =
+      v.merchantUnit || [v.make, v.model].filter(Boolean).join(" ") || v.id;
+    const days = Math.round(
+      (new Date(v.reg).getTime() - now.getTime()) / 86_400_000,
+    );
+    const past = days < 0;
+    emitted += await emitToAll(recipients, {
+      ruleKey: `vehicle-registration:${v.id}`,
+      source: "scanner",
+      severity: past ? "warn" : "info",
+      customerId: v.customerId || null,
+      title: `Registration for van ${label} ${past ? "has expired" : `expires in ${days} day${days === 1 ? "" : "s"}`}`,
+      body: `Plate registration ${past ? `expired ${-days} day${days === -1 ? "" : "s"} ago` : `expires`} (${v.reg}). Renew it.`,
+      ctaLabel: "Open vehicles",
+      ctaPrompt: `Show van ${v.id} and its registration.`,
+      pagePattern: "/transport/vehicles",
+      anchorType: "vehicle",
+      anchorId: v.id,
+    });
+  }
+  return { found: rows.length, emitted };
+}
+
+// Check 9 (Transportation): vehicle insurance policies expiring within
+// 30 days (or already expired). Joined to vehicles for a friendly label.
+async function runVehicleInsuranceExpiryCheck(
+  recipients: string[],
+  now: Date,
+): Promise<{ found: number; emitted: number }> {
+  const cutoff = ymd(addDays(now, 30));
+  const rows = await db.execute(sql`
+    SELECT vi.id, vi.vehicle_id, vi.expiry_date, vi.carrier,
+           v.merchant_unit, v.make, v.model, v.customer_id
+    FROM vehicle_insurance vi
+    LEFT JOIN vehicles v ON v.id = vi.vehicle_id
+    WHERE vi.expiry_date <> '' AND vi.expiry_date <= ${cutoff}
+    LIMIT 500
+  `);
+  const list = (rows as unknown as { rows: any[] }).rows ?? (rows as any);
+  let emitted = 0;
+  for (const r of list as any[]) {
+    const policyId = String(r.id);
+    const vehicleId = String(r.vehicle_id ?? "");
+    const label =
+      String(r.merchant_unit || "") ||
+      [r.make, r.model].filter(Boolean).join(" ") ||
+      vehicleId;
+    const expiry = String(r.expiry_date ?? "");
+    const days = Math.round((new Date(expiry).getTime() - now.getTime()) / 86_400_000);
+    const past = days < 0;
+    emitted += await emitToAll(recipients, {
+      ruleKey: `vehicle-insurance:${policyId}`,
+      source: "scanner",
+      severity: past ? "warn" : "info",
+      customerId: r.customer_id || null,
+      title: `Insurance for van ${label} ${past ? "has expired" : `expires in ${days} day${days === 1 ? "" : "s"}`}`,
+      body: `${String(r.carrier || "Policy")} coverage ${past ? "expired" : "expires"} ${expiry}. Renew before it lapses.`,
+      ctaLabel: "Open vehicles",
+      ctaPrompt: `Show van ${vehicleId} and its insurance.`,
+      pagePattern: "/transport/vehicles",
+      anchorType: "vehicle",
+      anchorId: vehicleId,
     });
   }
   return { found: list.length, emitted };

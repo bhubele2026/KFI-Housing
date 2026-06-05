@@ -16,7 +16,11 @@ import {
   Briefcase, ChevronLeft, ChevronRight, Building2, BedDouble,
   TrendingUp, Mail, Phone, FileText, User, Receipt, Truck, Users,
 } from "lucide-react";
-import { useListVehicles, useListVehicleRiders } from "@workspace/api-client-react";
+import {
+  useListVehicles,
+  useListVehicleRiders,
+  useListVehicleFuelCharges,
+} from "@workspace/api-client-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -66,6 +70,7 @@ export default function CustomerDetail() {
   // the vehicles API hooks since vehicles aren't part of the data-store.
   const { data: allVehicles } = useListVehicles();
   const { data: allVehicleRiders } = useListVehicleRiders();
+  const { data: allVehicleFuel } = useListVehicleFuelCharges();
   const transportRollup = useMemo(() => {
     const occName = new Map<string, string>();
     for (const o of occupants) occName.set(o.id, o.name || o.id);
@@ -75,7 +80,14 @@ export default function CustomerDetail() {
       list.push(occName.get(r.occupantId) ?? r.occupantId);
       ridersByVehicle.set(r.vehicleId, list);
     }
-    return (allVehicles ?? [])
+    const fuelByVehicle = new Map<string, number>();
+    for (const c of allVehicleFuel ?? []) {
+      fuelByVehicle.set(
+        c.vehicleId,
+        (fuelByVehicle.get(c.vehicleId) ?? 0) + Number(c.amount ?? 0),
+      );
+    }
+    const vans = (allVehicles ?? [])
       .filter((v) => v.customerId === id)
       .map((v) => ({
         id: v.id,
@@ -88,8 +100,13 @@ export default function CustomerDetail() {
           ? occName.get(v.driverOccupantId) ?? v.driverOccupantId
           : "",
         riders: ridersByVehicle.get(v.id) ?? [],
+        monthly: Number(v.monthlyCost ?? 0),
+        fuel: fuelByVehicle.get(v.id) ?? 0,
       }));
-  }, [allVehicles, allVehicleRiders, occupants, id]);
+    const monthlyTotal = vans.reduce((s, v) => s + v.monthly, 0);
+    const fuelTotal = vans.reduce((s, v) => s + v.fuel, 0);
+    return { vans, monthlyTotal, fuelTotal };
+  }, [allVehicles, allVehicleRiders, allVehicleFuel, occupants, id]);
   const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(() => {
     if (typeof window === "undefined") return 12;
     try {
@@ -728,14 +745,18 @@ export default function CustomerDetail() {
                 Transportation
               </span>
               <span className="text-xs font-normal text-muted-foreground">
-                {transportRollup.length === 1
+                {transportRollup.vans.length === 1
                   ? "1 van"
-                  : `${transportRollup.length} vans`}
+                  : `${transportRollup.vans.length} vans`}
+                {transportRollup.monthlyTotal > 0 &&
+                  ` · ${formatUsd(transportRollup.monthlyTotal)}/mo`}
+                {transportRollup.fuelTotal > 0 &&
+                  ` · ${formatUsd(transportRollup.fuelTotal)} fuel`}
               </span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {transportRollup.length === 0 ? (
+            {transportRollup.vans.length === 0 ? (
               <p
                 className="px-6 pb-6 text-sm text-muted-foreground"
                 data-testid="empty-transport"
@@ -755,7 +776,7 @@ export default function CustomerDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {transportRollup.map((v) => (
+                  {transportRollup.vans.map((v) => (
                     <tr
                       key={v.id}
                       className="cursor-pointer hover:bg-muted/50 border-b transition-colors group"

@@ -210,6 +210,8 @@ export default function Vehicles() {
   const { data: properties } = useListProperties();
   const { data: riders } = useListVehicleRiders();
   const { data: insurance } = useListVehicleInsurance();
+  const { data: allFuel } = useListVehicleFuelCharges();
+  const { data: allMaint } = useListVehicleMaintenance();
 
   const createMutation = useCreateVehicle();
   const updateMutation = useUpdateVehicle();
@@ -274,6 +276,26 @@ export default function Vehicles() {
     attention.regSoon.length > 0 ||
     attention.inShop.length > 0 ||
     attention.insSoon.length > 0;
+
+  // Fleet cost rollup: recurring monthly (lease/own) across the fleet,
+  // plus all fuel and maintenance logged to date.
+  const fleetCost = useMemo(() => {
+    const monthly = (vehicles ?? []).reduce(
+      (s, v) => s + Number((v as Record<string, unknown>).monthlyCost ?? 0),
+      0,
+    );
+    const fuel = (allFuel ?? []).reduce((s, c) => s + Number(c.amount ?? 0), 0);
+    const maint = (allMaint ?? []).reduce((s, m) => s + Number(m.cost ?? 0), 0);
+    return { monthly, fuel, maint };
+  }, [vehicles, allFuel, allMaint]);
+  // vehicleId -> total fuel logged, for the per-row cost hint.
+  const fuelByVehicle = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of allFuel ?? []) {
+      map.set(c.vehicleId, (map.get(c.vehicleId) ?? 0) + Number(c.amount ?? 0));
+    }
+    return map;
+  }, [allFuel]);
 
   const customerName = useMemo(() => {
     const map = new Map<string, string>();
@@ -532,6 +554,44 @@ export default function Vehicles() {
         </Button>
       </div>
 
+      {rows.length > 0 && (
+        <div
+          className="grid grid-cols-3 gap-3 mb-4"
+          data-testid="vehicle-cost-summary"
+        >
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">
+                Monthly lease/rent
+              </div>
+              <div className="text-lg font-semibold tabular-nums">
+                ${fleetCost.monthly.toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">
+                Fuel logged
+              </div>
+              <div className="text-lg font-semibold tabular-nums">
+                ${fleetCost.fuel.toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-xs text-muted-foreground">
+                Maintenance logged
+              </div>
+              <div className="text-lg font-semibold tabular-nums">
+                ${fleetCost.maint.toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -635,6 +695,11 @@ export default function Vehicles() {
                         {Number(vv.monthlyCost ?? 0) > 0
                           ? `$${Number(vv.monthlyCost).toLocaleString()}`
                           : "—"}
+                        {(fuelByVehicle.get(id) ?? 0) > 0 && (
+                          <div className="text-[11px] text-muted-foreground">
+                            ⛽ ${Number(fuelByVehicle.get(id)).toLocaleString()}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="max-w-[14rem] truncate text-sm text-muted-foreground">
                         {String(

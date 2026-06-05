@@ -7,11 +7,15 @@ import {
   propertiesTable,
   utilitiesTable,
   qboTransactionsTable,
+  qboConnectionsTable,
+  qboMappingOverridesTable,
   type LeaseRow,
   type PropertyRow,
   type QboTransactionRow,
   type UtilityRow,
 } from "@workspace/db";
+import { memoToken as toMemoToken } from "../../lib/qbo-mapping";
+import { reclassifyForRule } from "../../lib/qbo-reclassify";
 import {
   buildXlsxBuffer,
   colLetter,
@@ -240,6 +244,236 @@ qboAssistantTools.push({
       )
       .limit(limit);
     return { transactions: rows };
+  },
+});
+
+qboAssistantTools.push({
+  name: "list_qbo_mapping_rules",
+  kind: "read",
+  description:
+    "List every saved QuickBooks → HousingOps memo→property mapping rule the operator has authored on the Mapping Rules page (Task #694). Returns rule rows from `qbo_mapping_overrides` with the resolved property name attached, so the assistant can answer questions like 'do we already have a rule for the Maple 3107 invoices?' without round-tripping the UI.",
+  input_schema: obj({ propertyId: StrOpt, customerId: StrOpt }),
+  summarize: (i) =>
+    `Listing QBO mapping rules${i.propertyId ? " (one property)" : ""}${i.customerId ? " (one customer)" : ""}`,
+  execute: async (input) => {
+    const [conn] = await db.select().from(qboConnectionsTable).limit(1);
+    if (!conn) return { rules: [] };
+    // Resolve HousingOps customerId → its linked qboCustomerId so we
+    // can answer questions like "what rules are set for Burnett
+    // Dairy?" in HousingOps terms even though rules are keyed by the
+    // QBO id the sync engine sees.
+    let qboCustomerIdFilter: string | null = null;
+    if (input.customerId) {
+      const [c] = await db
+        .select({ qboCustomerId: customersTable.qboCustomerId })
+        .from(customersTable)
+        .where(eq(customersTable.id, input.customerId));
+      qboCustomerIdFilter = c?.qboCustomerId ?? "__NEVER_MATCH__";
+    }
+    const rules = await db
+      .select()
+      .from(qboMappingOverridesTable)
+      .where(eq(qboMappingOverridesTable.realmId, conn.realmId));
+    const filtered = rules.filter((r) => {
+      if (input.propertyId && r.propertyId !== input.propertyId) return false;
+      if (qboCustomerIdFilter !== null && r.qboCustomerId !== qboCustomerIdFilter)
+        return false;
+      return true;
+    });
+    return { rules: filtered };
+  },
+});
+
+/**
+ * READ-ONLY proposal tool. Returns a *draft* (no DB writes) plus a
+ * dry-run match count from the existing `qbo_transactions` mirror, so
+ * the operator can see exactly what the rule would do before agreeing.
+ * The assistant runtime renders this as a confirm card; only
+ * `confirm_qbo_mapping_rule` actually writes to `qbo_mapping_overrides`
+ * and triggers reclassification.
+ */
+qboAssistantTools.push({
+  name: "propose_qbo_mapping_rule",
+  kind: "read",
+  description:
+    "READ-ONLY draft helper. Given a `qboCustomerId` (or HousingOps `customerId`) and a `memoSample` from a real transaction, derive the canonical `memoToken` we'd save, recommend a `propertyId` based on what's already mapped most often for the same customer + memo token, and dry-run how many existing mirrored transactions the rule would reclassify. NEVER writes to the database. Returns a `draft` the assistant should show the operator; only after explicit approval may you call confirm_qbo_mapping_rule with that draft. Use whenever the operator says things like 'always map invoices from <customer> that mention <phrase> to <property>'.",
+  input_schema: obj(
+    {
+      qboCustomerId: StrOpt,
+      customerId: StrOpt,
+      qboVendorId: StrOpt,
+      memoSample: Str,
+      propertyId: StrOpt,
+      leaseId: StrOpt,
+      utilityId: StrOpt,
+    },
+    ["memoSample"],
+  ),
+  summarize: (i) =>
+    `Drafting rule from memo sample "${String(i.memoSample).slice(0, 40)}"`,
+  execute: async (input) => {
+    const [conn] = await db.select().from(qboConnectionsTable).limit(1);
+    if (!conn) return { error: "QuickBooks is not connected." };
+
+    let qboCustomerId = (input.qboCustomerId as string) ?? "";
+    if (!qboCustomerId && input.customerId) {
+      const [c] = await db
+        .select({ qboCustomerId: customersTable.qboCustomerId })
+        .from(customersTable)
+        .where(eq(customersTable.id, input.customerId));
+      qboCustomerId = c?.qboCustomerId ?? "";
+    }
+    const qboVendorId = (input.qboVendorId as string) ?? "";
+
+    // Canonicalize the memo sample into our token form. We use the
+    // shared suggester so the draft matches what the UI would derive
+    // from the Reconciliation "Save as rule…" affordance for the
+    // same transaction.
+    const { suggestMemoToken } = await import("../../lib/qbo-mapping");
+    const allRows = await db
+      .select({
+        memo: qboTransactionsTable.memo,
+        qboCustomerId: qboTransactionsTable.qboCustomerId,
+        qboVendorId: qboTransactionsTable.qboVendorId,
+        propertyId: qboTransactionsTable.propertyId,
+        type: qboTransactionsTable.type,
+        txnDate: qboTransactionsTable.txnDate,
+        amount: qboTransactionsTable.amount,
+        id: qboTransactionsTable.id,
+        manualOverride: qboTransactionsTable.manualOverride,
+      })
+      .from(qboTransactionsTable)
+      .where(eq(qboTransactionsTable.realmId, conn.realmId));
+    const otherMemos = allRows
+      .filter(
+        (r) =>
+          (!qboCustomerId || r.qboCustomerId === qboCustomerId) &&
+          !r.propertyId &&
+          r.memo !== input.memoSample,
+      )
+      .map((r) => r.memo ?? "");
+    const tok = suggestMemoToken(String(input.memoSample), otherMemos);
+
+    const matches = allRows.filter((r) => {
+      if (qboCustomerId && r.qboCustomerId !== qboCustomerId) return false;
+      if (qboVendorId && r.qboVendorId !== qboVendorId) return false;
+      if (toMemoToken(r.memo ?? "") !== tok) return false;
+      return true;
+    });
+
+    // Recommend a property: the most common already-mapped property
+    // among matching transactions, OR fall back to the operator's
+    // explicit propertyId if provided.
+    const propCounts = new Map<string, number>();
+    for (const m of matches) {
+      if (m.propertyId) {
+        propCounts.set(m.propertyId, (propCounts.get(m.propertyId) ?? 0) + 1);
+      }
+    }
+    let suggestedPropertyId = (input.propertyId as string) ?? "";
+    if (!suggestedPropertyId && propCounts.size > 0) {
+      suggestedPropertyId = [...propCounts.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0][0];
+    }
+
+    const skippedManual = matches.filter((m) => m.manualOverride).length;
+    return {
+      draft: {
+        memoToken: tok,
+        qboCustomerId,
+        qboVendorId,
+        customerId: input.customerId ?? null,
+        propertyId: suggestedPropertyId,
+        leaseId: input.leaseId ?? null,
+        utilityId: input.utilityId ?? null,
+      },
+      wouldReclassify: matches.length - skippedManual,
+      skippedManual,
+      sampleTransactions: matches.slice(0, 10).map((m) => ({
+        id: m.id,
+        txnDate: m.txnDate,
+        type: m.type,
+        memo: m.memo,
+        amount: m.amount,
+        currentPropertyId: m.propertyId,
+      })),
+    };
+  },
+});
+
+/**
+ * WRITE tool. The assistant runtime gates this behind a confirm card.
+ * Persists the rule (insert or natural-key upsert) and runs the
+ * one-shot reclassifier — i.e. the same code path the Mapping Rules
+ * page uses on Save.
+ */
+qboAssistantTools.push({
+  name: "confirm_qbo_mapping_rule",
+  kind: "write",
+  description:
+    "Persist a QuickBooks → HousingOps memo→property mapping rule the operator has just approved, and one-shot reclassify every mirrored transaction that matches it. ONLY call this with the `draft` returned by a prior propose_qbo_mapping_rule call AND after the operator explicitly says yes — never invent the draft fields.",
+  input_schema: obj(
+    {
+      memoToken: Str,
+      propertyId: Str,
+      qboCustomerId: StrOpt,
+      qboVendorId: StrOpt,
+      leaseId: StrOpt,
+      utilityId: StrOpt,
+    },
+    ["memoToken", "propertyId"],
+  ),
+  summarize: (i) =>
+    `Saving rule: memo "${i.memoToken}" → property ${i.propertyId}`,
+  execute: async (input) => {
+    const [conn] = await db.select().from(qboConnectionsTable).limit(1);
+    if (!conn) return { error: "QuickBooks is not connected." };
+    const qboCustomerId = (input.qboCustomerId as string) ?? "";
+    const qboVendorId = (input.qboVendorId as string) ?? "";
+    const tok = toMemoToken(String(input.memoToken));
+    const id = `qov-${randomUUID().slice(0, 8)}`;
+    const [rule] = await db
+      .insert(qboMappingOverridesTable)
+      .values({
+        id,
+        realmId: conn.realmId,
+        qboCustomerId,
+        qboVendorId,
+        memoToken: tok,
+        propertyId: input.propertyId,
+        leaseId: input.leaseId ?? null,
+        utilityId: input.utilityId ?? null,
+        createdByUserId: "",
+      })
+      .onConflictDoUpdate({
+        target: [
+          qboMappingOverridesTable.realmId,
+          qboMappingOverridesTable.qboCustomerId,
+          qboMappingOverridesTable.qboVendorId,
+          qboMappingOverridesTable.memoToken,
+        ],
+        set: {
+          propertyId: input.propertyId,
+          leaseId: input.leaseId ?? null,
+          utilityId: input.utilityId ?? null,
+        },
+      })
+      .returning();
+    const r = await reclassifyForRule({
+      realmId: conn.realmId,
+      qboCustomerId,
+      qboVendorId,
+      memoToken: tok,
+      propertyId: input.propertyId,
+      leaseId: input.leaseId ?? null,
+      utilityId: input.utilityId ?? null,
+    });
+    return {
+      rule,
+      reclassified: r.reclassified,
+      skippedManual: r.skippedManual,
+    };
   },
 });
 

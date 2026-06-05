@@ -1467,6 +1467,176 @@ export interface OtherCostUpdate {
   monthlyCost?: number;
 }
 
+/**
+ * Ownership arrangement. "owned" implies no recurring
+`monthlyCost`. Off-list values coerce to "owned" at the
+boundary normaliser.
+
+ */
+export type VehicleOwnership =
+  (typeof VehicleOwnership)[keyof typeof VehicleOwnership];
+
+export const VehicleOwnership = {
+  owned: "owned",
+  leased: "leased",
+  rented: "rented",
+} as const;
+
+/**
+ * Operational status. "Available" + a non-WI location is the
+case the team most wants to see (idle van that should come
+back to WI). Off-list values coerce to "Available".
+
+ */
+export type VehicleStatus = (typeof VehicleStatus)[keyof typeof VehicleStatus];
+
+export const VehicleStatus = {
+  In_use: "In use",
+  Available: "Available",
+  In_shop: "In shop",
+  Out_of_service: "Out of service",
+} as const;
+
+/**
+ * A fleet vehicle (KFI van) — the first-class entity of the
+Transportation section, mirroring how `Property` anchors Housing.
+Ties to the client it serves (`customerId`), the housing location
+it is based at (`propertyId`), and its driver (`driverOccupantId`,
+an occupant who already carries `kfisAuthorizedToDrive`).
+
+ */
+export interface Vehicle {
+  id: string;
+  vin: string;
+  plate: string;
+  /** State the plate is registered in (e.g. "WI"). Empty when unknown. */
+  plateState: string;
+  /**
+   * Model year. Null when unknown.
+   * @nullable
+   */
+  year?: number | null;
+  make: string;
+  model: string;
+  /** Passenger capacity; compared with `associatesTransported` to flag under-utilised vans. */
+  seats: number;
+  /** Internal "Merchant Unit */
+  merchantUnit: string;
+  /** Current book value in dollars. */
+  bookValue: number;
+  /** Ownership arrangement. "owned" implies no recurring
+`monthlyCost`. Off-list values coerce to "owned" at the
+boundary normaliser.
+ */
+  ownership: VehicleOwnership;
+  /** Monthly lease / rent cost in dollars; 0 when owned outright. */
+  monthlyCost: number;
+  /** Client this van serves. Empty = unassigned / available. */
+  customerId: string;
+  /** Housing location the van is based at / parked. Null when the
+van is sitting somewhere that is not one of our properties
+(see `currentLocationNote`).
+ */
+  propertyId?: string | null;
+  /** Driver of the van, modelled as an occupant id. Null when no
+driver is currently assigned. When the driver is housed, the
+occupant's own `bedId`/`propertyId` answer where they reside.
+ */
+  driverOccupantId?: string | null;
+  /** Operational status. "Available" + a non-WI location is the
+case the team most wants to see (idle van that should come
+back to WI). Off-list values coerce to "Available".
+ */
+  status: VehicleStatus;
+  /** Convenience flag kept in lock-step with `status === "In shop"`. */
+  inShop?: boolean;
+  /** Free-text description of repairs needed / pending. */
+  repairsNeeded: string;
+  /** State the van should home-base to (the team's goal is WI). */
+  homeBaseState: string;
+  /** Where the van is physically sitting when it is not at a known
+property (e.g. "Parked at Schuette Metals — Schofield WI").
+ */
+  currentLocationNote: string;
+  /** Quick-capture count of associates currently transported in
+this van. Superseded by the rider-roster table's live count
+once that ships.
+ */
+  associatesTransported: number;
+  /** Registration / plate expiration date (YYYY-MM-DD). Feeds the
+same expiry-alert pipeline as lease + insurance-cert
+expirations. Empty when unknown.
+ */
+  registrationExpires: string;
+  /**
+   * Last recorded odometer reading (miles). Null when not tracked.
+   * @minimum 0
+   * @nullable
+   */
+  odometer?: number | null;
+  notes: string;
+  /** Server-managed creation timestamp. Read-only; clients may omit on write. */
+  createdAt?: string | null;
+  /** Last-touched timestamp, set by the API boundary on every
+mutation. Server-managed — clients should treat it as
+read-only and may omit it on write.
+ */
+  updatedAt?: string;
+}
+
+export type VehicleUpdateOwnership =
+  (typeof VehicleUpdateOwnership)[keyof typeof VehicleUpdateOwnership];
+
+export const VehicleUpdateOwnership = {
+  owned: "owned",
+  leased: "leased",
+  rented: "rented",
+} as const;
+
+export type VehicleUpdateStatus =
+  (typeof VehicleUpdateStatus)[keyof typeof VehicleUpdateStatus];
+
+export const VehicleUpdateStatus = {
+  In_use: "In use",
+  Available: "Available",
+  In_shop: "In shop",
+  Out_of_service: "Out of service",
+} as const;
+
+/**
+ * Partial update for a vehicle; every field optional.
+ */
+export interface VehicleUpdate {
+  vin?: string;
+  plate?: string;
+  plateState?: string;
+  /** @nullable */
+  year?: number | null;
+  make?: string;
+  model?: string;
+  seats?: number;
+  merchantUnit?: string;
+  bookValue?: number;
+  ownership?: VehicleUpdateOwnership;
+  monthlyCost?: number;
+  customerId?: string;
+  propertyId?: string | null;
+  driverOccupantId?: string | null;
+  status?: VehicleUpdateStatus;
+  inShop?: boolean;
+  repairsNeeded?: string;
+  homeBaseState?: string;
+  currentLocationNote?: string;
+  associatesTransported?: number;
+  registrationExpires?: string;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  odometer?: number | null;
+  notes?: string;
+}
+
 export type LeasePdfExtractedConfidence =
   (typeof LeasePdfExtractedConfidence)[keyof typeof LeasePdfExtractedConfidence];
 

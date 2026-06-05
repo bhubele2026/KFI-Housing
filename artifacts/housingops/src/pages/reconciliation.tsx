@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface RollupRow {
   propertyId: string;
@@ -67,6 +68,7 @@ interface QboTxn {
   accountName: string | null;
   propertyId: string | null;
   mappedConfidence: number;
+  qboVendorId?: string | null;
 }
 
 interface PropertyLite {
@@ -296,6 +298,40 @@ export default function ReconciliationPage() {
       }
       return { ...prev, [txnId]: next };
     });
+  };
+
+  /**
+   * Open the shared add-rule dialog on the Mapping Rules page,
+   * prefilled from this transaction. We deliberately do NOT save here
+   * — the operator needs to confirm the suggested memo token, scope,
+   * and lease/utility choice in the same dialog they'd see if they
+   * started on the Mapping Rules page (per Task #694 UX spec). The
+   * prefill is passed via query-string so the page can read the
+   * suggested token from the server and feed it to <MemoRules>'s
+   * initialDraft.
+   */
+  const saveAsRule = (txnId: string) => {
+    const draft = remapDraft[txnId];
+    if (!draft?.propertyId) {
+      toast({ title: "Select a property first", variant: "destructive" });
+      return;
+    }
+    const txn = unmapped.find((t) => t.id === txnId);
+    const params = new URLSearchParams({
+      prefillTxn: txnId,
+      propertyId: draft.propertyId,
+    });
+    if (draft.leaseId) params.set("leaseId", draft.leaseId);
+    if (draft.utilityId) params.set("utilityId", draft.utilityId);
+    // Carry vendor identity when the source is a bill/vendor-credit so
+    // the prefilled rule scopes to that vendor — otherwise a vendor
+    // rule would over-broadly match every vendor with the same memo
+    // token. The page also re-fetches qboVendorId from the server via
+    // /suggest-token as a fallback for cases where the unmapped tray
+    // didn't include it.
+    if (txn?.qboVendorId) params.set("qboVendorId", txn.qboVendorId);
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+    window.location.assign(`${base}/qbo/mapping-rules?${params.toString()}`);
   };
 
   const remap = async (txnId: string) => {
@@ -637,14 +673,26 @@ export default function ReconciliationPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => void remap(t.id)}
-                            disabled={!draftPropId}
-                            data-testid={`unmapped-save-${t.id}`}
-                          >
-                            Save
-                          </Button>
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              size="sm"
+                              onClick={() => void remap(t.id)}
+                              disabled={!draftPropId}
+                              data-testid={`unmapped-save-${t.id}`}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void saveAsRule(t.id)}
+                              disabled={!draftPropId}
+                              data-testid={`unmapped-save-rule-${t.id}`}
+                              title="Save as a reusable rule that auto-maps future transactions like this one"
+                            >
+                              Save as rule…
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

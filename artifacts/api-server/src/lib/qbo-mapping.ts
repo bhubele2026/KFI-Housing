@@ -299,6 +299,78 @@ export function pickUtilityForUtility(
 // Override lookup
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Memo-token n-gram suggestion (Task #694 — "Save as rule…" affordance)
+// ---------------------------------------------------------------------------
+
+const SUGGEST_STOP = new Set([
+  ...MEMO_STOP,
+  ...MONTHS,
+  "the",
+  "a",
+  "an",
+  "from",
+  "with",
+  "by",
+  "on",
+  "in",
+  "at",
+  "no",
+  "ref",
+  "amt",
+]);
+
+function suggestTokens(memo: string): string[] {
+  const n = norm(memo);
+  if (!n) return [];
+  return n
+    .split(" ")
+    .filter((t) => {
+      if (t.length < 2) return false;
+      if (SUGGEST_STOP.has(t)) return false;
+      // Skip numbers, dates (YYYY-MM-DD style is already split on dashes
+      // by `norm`, so individual numeric tokens drop here).
+      if (/^\d+$/.test(t)) return false;
+      return true;
+    });
+}
+
+/**
+ * Pick a stable "memo contains" token to seed the Save-as-rule flow.
+ *
+ * Deterministic heuristic (no model calls):
+ *   1. Tokenise `memo` and every other unmapped memo from the same
+ *      customer; drop generic stop-words, months, and pure numbers.
+ *   2. Find the longest contiguous 2–4 word n-gram in `memo` that also
+ *      appears in at least one other unmapped memo — that shared
+ *      phrase is the strongest "this is the same kind of charge"
+ *      signal we can get without an LLM.
+ *   3. If no overlap, fall back to the first 3 non-stop tokens of the
+ *      memo so the dialog still has *something* to pre-fill.
+ *   4. If the memo itself has no usable tokens, return an empty string
+ *      so the operator types the rule from scratch.
+ */
+export function suggestMemoToken(
+  memo: string,
+  otherUnmappedMemos: string[],
+): string {
+  const tokens = suggestTokens(memo);
+  if (tokens.length === 0) return "";
+  const others = otherUnmappedMemos
+    .map((m) => suggestTokens(m).join(" "))
+    .filter(Boolean);
+  // Walk n-gram widths 4 → 2 so the LONGEST shared phrase wins.
+  for (const width of [4, 3, 2]) {
+    if (tokens.length < width) continue;
+    for (let i = 0; i + width <= tokens.length; i += 1) {
+      const phrase = tokens.slice(i, i + width).join(" ");
+      if (others.some((o) => o.includes(phrase))) return phrase;
+    }
+  }
+  // No overlap — fall back to the first 3 (or fewer) tokens.
+  return tokens.slice(0, 3).join(" ");
+}
+
 export function findOverride(
   realmId: string,
   qboCustomerId: string,

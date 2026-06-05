@@ -603,6 +603,25 @@ export async function runSyncForConnection(
     }
   }
 
+  // Rule-driven reclassification pass (Task #694) — re-run every saved
+  // memo→property mapping rule against the realm so rows imported in
+  // this sync inherit overrides written before the sync started. Done
+  // BEFORE the fuzzy remap pass below so the rule's confidence=1
+  // mapping wins over a fuzzy match.
+  try {
+    const { qboMappingOverridesTable } = await import("@workspace/db");
+    const { reclassifyForAllRules } = await import("./qbo-reclassify");
+    const rules = await db
+      .select()
+      .from(qboMappingOverridesTable)
+      .where(eq(qboMappingOverridesTable.realmId, conn.realmId));
+    if (rules.length) {
+      await reclassifyForAllRules(conn.realmId, rules);
+    }
+  } catch (err) {
+    logger.warn({ err, realmId: conn.realmId }, "qbo_sync.reclassify_pass_error");
+  }
+
   // Remap pass — re-run the mapping pipeline against every transaction
   // that is still missing a propertyId (or was manually marked unmapped).
   // This catches rows whose underlying property/lease/utility/customer

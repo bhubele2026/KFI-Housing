@@ -4113,3 +4113,368 @@ export const GetPublicObjectParams = zod.object({
 export const GetStorageObjectParams = zod.object({
   objectPath: zod.coerce.string(),
 });
+
+/**
+ * @summary List all fleet vehicles
+ */
+export const listVehiclesResponseOdometerMin = 0;
+
+export const ListVehiclesResponseItem = zod
+  .object({
+    id: zod.string(),
+    vin: zod.string(),
+    plate: zod.string(),
+    plateState: zod
+      .string()
+      .describe(
+        'State the plate is registered in (e.g. \"WI\"). Empty when unknown.',
+      ),
+    year: zod.number().nullish().describe("Model year. Null when unknown."),
+    make: zod.string(),
+    model: zod.string(),
+    seats: zod
+      .number()
+      .describe(
+        "Passenger capacity; compared with `associatesTransported` to flag under-utilised vans.",
+      ),
+    merchantUnit: zod.string().describe('Internal \"Merchant Unit'),
+    bookValue: zod.number().describe("Current book value in dollars."),
+    ownership: zod
+      .enum(["owned", "leased", "rented"])
+      .describe(
+        'Ownership arrangement. \"owned\" implies no recurring\n`monthlyCost`. Off-list values coerce to \"owned\" at the\nboundary normaliser.\n',
+      ),
+    monthlyCost: zod
+      .number()
+      .describe(
+        "Monthly lease \/ rent cost in dollars; 0 when owned outright.",
+      ),
+    customerId: zod
+      .string()
+      .describe("Client this van serves. Empty = unassigned \/ available."),
+    propertyId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Housing location the van is based at \/ parked. Null when the\nvan is sitting somewhere that is not one of our properties\n(see `currentLocationNote`).\n",
+      ),
+    driverOccupantId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Driver of the van, modelled as an occupant id. Null when no\ndriver is currently assigned. When the driver is housed, the\noccupant's own `bedId`\/`propertyId` answer where they reside.\n",
+      ),
+    status: zod
+      .enum(["In use", "Available", "In shop", "Out of service"])
+      .describe(
+        'Operational status. \"Available\" + a non-WI location is the\ncase the team most wants to see (idle van that should come\nback to WI). Off-list values coerce to \"Available\".\n',
+      ),
+    inShop: zod
+      .boolean()
+      .optional()
+      .describe(
+        'Convenience flag kept in lock-step with `status === \"In shop\"`.',
+      ),
+    repairsNeeded: zod
+      .string()
+      .describe("Free-text description of repairs needed \/ pending."),
+    homeBaseState: zod
+      .string()
+      .describe("State the van should home-base to (the team's goal is WI)."),
+    currentLocationNote: zod
+      .string()
+      .describe(
+        'Where the van is physically sitting when it is not at a known\nproperty (e.g. \"Parked at Schuette Metals — Schofield WI\").\n',
+      ),
+    associatesTransported: zod
+      .number()
+      .describe(
+        "Quick-capture count of associates currently transported in\nthis van. Superseded by the rider-roster table's live count\nonce that ships.\n",
+      ),
+    registrationExpires: zod
+      .string()
+      .describe(
+        "Registration \/ plate expiration date (YYYY-MM-DD). Feeds the\nsame expiry-alert pipeline as lease + insurance-cert\nexpirations. Empty when unknown.\n",
+      ),
+    odometer: zod
+      .number()
+      .min(listVehiclesResponseOdometerMin)
+      .nullish()
+      .describe(
+        "Last recorded odometer reading (miles). Null when not tracked.",
+      ),
+    notes: zod.string(),
+    createdAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Server-managed creation timestamp. Read-only; clients may omit on write.",
+      ),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Last-touched timestamp, set by the API boundary on every\nmutation. Server-managed — clients should treat it as\nread-only and may omit it on write.\n",
+      ),
+  })
+  .describe(
+    "A fleet vehicle (KFI van) — the first-class entity of the\nTransportation section, mirroring how `Property` anchors Housing.\nTies to the client it serves (`customerId`), the housing location\nit is based at (`propertyId`), and its driver (`driverOccupantId`,\nan occupant who already carries `kfisAuthorizedToDrive`).\n",
+  );
+export const ListVehiclesResponse = zod.array(ListVehiclesResponseItem);
+
+/**
+ * @summary Create a vehicle
+ */
+export const createVehicleBodyOdometerMin = 0;
+
+export const CreateVehicleBody = zod
+  .object({
+    id: zod.string(),
+    vin: zod.string(),
+    plate: zod.string(),
+    plateState: zod
+      .string()
+      .describe(
+        'State the plate is registered in (e.g. \"WI\"). Empty when unknown.',
+      ),
+    year: zod.number().nullish().describe("Model year. Null when unknown."),
+    make: zod.string(),
+    model: zod.string(),
+    seats: zod
+      .number()
+      .describe(
+        "Passenger capacity; compared with `associatesTransported` to flag under-utilised vans.",
+      ),
+    merchantUnit: zod.string().describe('Internal \"Merchant Unit'),
+    bookValue: zod.number().describe("Current book value in dollars."),
+    ownership: zod
+      .enum(["owned", "leased", "rented"])
+      .describe(
+        'Ownership arrangement. \"owned\" implies no recurring\n`monthlyCost`. Off-list values coerce to \"owned\" at the\nboundary normaliser.\n',
+      ),
+    monthlyCost: zod
+      .number()
+      .describe(
+        "Monthly lease \/ rent cost in dollars; 0 when owned outright.",
+      ),
+    customerId: zod
+      .string()
+      .describe("Client this van serves. Empty = unassigned \/ available."),
+    propertyId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Housing location the van is based at \/ parked. Null when the\nvan is sitting somewhere that is not one of our properties\n(see `currentLocationNote`).\n",
+      ),
+    driverOccupantId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Driver of the van, modelled as an occupant id. Null when no\ndriver is currently assigned. When the driver is housed, the\noccupant's own `bedId`\/`propertyId` answer where they reside.\n",
+      ),
+    status: zod
+      .enum(["In use", "Available", "In shop", "Out of service"])
+      .describe(
+        'Operational status. \"Available\" + a non-WI location is the\ncase the team most wants to see (idle van that should come\nback to WI). Off-list values coerce to \"Available\".\n',
+      ),
+    inShop: zod
+      .boolean()
+      .optional()
+      .describe(
+        'Convenience flag kept in lock-step with `status === \"In shop\"`.',
+      ),
+    repairsNeeded: zod
+      .string()
+      .describe("Free-text description of repairs needed \/ pending."),
+    homeBaseState: zod
+      .string()
+      .describe("State the van should home-base to (the team's goal is WI)."),
+    currentLocationNote: zod
+      .string()
+      .describe(
+        'Where the van is physically sitting when it is not at a known\nproperty (e.g. \"Parked at Schuette Metals — Schofield WI\").\n',
+      ),
+    associatesTransported: zod
+      .number()
+      .describe(
+        "Quick-capture count of associates currently transported in\nthis van. Superseded by the rider-roster table's live count\nonce that ships.\n",
+      ),
+    registrationExpires: zod
+      .string()
+      .describe(
+        "Registration \/ plate expiration date (YYYY-MM-DD). Feeds the\nsame expiry-alert pipeline as lease + insurance-cert\nexpirations. Empty when unknown.\n",
+      ),
+    odometer: zod
+      .number()
+      .min(createVehicleBodyOdometerMin)
+      .nullish()
+      .describe(
+        "Last recorded odometer reading (miles). Null when not tracked.",
+      ),
+    notes: zod.string(),
+    createdAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Server-managed creation timestamp. Read-only; clients may omit on write.",
+      ),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Last-touched timestamp, set by the API boundary on every\nmutation. Server-managed — clients should treat it as\nread-only and may omit it on write.\n",
+      ),
+  })
+  .describe(
+    "A fleet vehicle (KFI van) — the first-class entity of the\nTransportation section, mirroring how `Property` anchors Housing.\nTies to the client it serves (`customerId`), the housing location\nit is based at (`propertyId`), and its driver (`driverOccupantId`,\nan occupant who already carries `kfisAuthorizedToDrive`).\n",
+  );
+
+/**
+ * @summary Update a vehicle
+ */
+export const UpdateVehicleParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateVehicleBodyOdometerMin = 0;
+
+export const UpdateVehicleBody = zod
+  .object({
+    vin: zod.string().optional(),
+    plate: zod.string().optional(),
+    plateState: zod.string().optional(),
+    year: zod.number().nullish(),
+    make: zod.string().optional(),
+    model: zod.string().optional(),
+    seats: zod.number().optional(),
+    merchantUnit: zod.string().optional(),
+    bookValue: zod.number().optional(),
+    ownership: zod.enum(["owned", "leased", "rented"]).optional(),
+    monthlyCost: zod.number().optional(),
+    customerId: zod.string().optional(),
+    propertyId: zod.string().nullish(),
+    driverOccupantId: zod.string().nullish(),
+    status: zod
+      .enum(["In use", "Available", "In shop", "Out of service"])
+      .optional(),
+    inShop: zod.boolean().optional(),
+    repairsNeeded: zod.string().optional(),
+    homeBaseState: zod.string().optional(),
+    currentLocationNote: zod.string().optional(),
+    associatesTransported: zod.number().optional(),
+    registrationExpires: zod.string().optional(),
+    odometer: zod.number().min(updateVehicleBodyOdometerMin).nullish(),
+    notes: zod.string().optional(),
+  })
+  .describe("Partial update for a vehicle; every field optional.");
+
+export const updateVehicleResponseOdometerMin = 0;
+
+export const UpdateVehicleResponse = zod
+  .object({
+    id: zod.string(),
+    vin: zod.string(),
+    plate: zod.string(),
+    plateState: zod
+      .string()
+      .describe(
+        'State the plate is registered in (e.g. \"WI\"). Empty when unknown.',
+      ),
+    year: zod.number().nullish().describe("Model year. Null when unknown."),
+    make: zod.string(),
+    model: zod.string(),
+    seats: zod
+      .number()
+      .describe(
+        "Passenger capacity; compared with `associatesTransported` to flag under-utilised vans.",
+      ),
+    merchantUnit: zod.string().describe('Internal \"Merchant Unit'),
+    bookValue: zod.number().describe("Current book value in dollars."),
+    ownership: zod
+      .enum(["owned", "leased", "rented"])
+      .describe(
+        'Ownership arrangement. \"owned\" implies no recurring\n`monthlyCost`. Off-list values coerce to \"owned\" at the\nboundary normaliser.\n',
+      ),
+    monthlyCost: zod
+      .number()
+      .describe(
+        "Monthly lease \/ rent cost in dollars; 0 when owned outright.",
+      ),
+    customerId: zod
+      .string()
+      .describe("Client this van serves. Empty = unassigned \/ available."),
+    propertyId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Housing location the van is based at \/ parked. Null when the\nvan is sitting somewhere that is not one of our properties\n(see `currentLocationNote`).\n",
+      ),
+    driverOccupantId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Driver of the van, modelled as an occupant id. Null when no\ndriver is currently assigned. When the driver is housed, the\noccupant's own `bedId`\/`propertyId` answer where they reside.\n",
+      ),
+    status: zod
+      .enum(["In use", "Available", "In shop", "Out of service"])
+      .describe(
+        'Operational status. \"Available\" + a non-WI location is the\ncase the team most wants to see (idle van that should come\nback to WI). Off-list values coerce to \"Available\".\n',
+      ),
+    inShop: zod
+      .boolean()
+      .optional()
+      .describe(
+        'Convenience flag kept in lock-step with `status === \"In shop\"`.',
+      ),
+    repairsNeeded: zod
+      .string()
+      .describe("Free-text description of repairs needed \/ pending."),
+    homeBaseState: zod
+      .string()
+      .describe("State the van should home-base to (the team's goal is WI)."),
+    currentLocationNote: zod
+      .string()
+      .describe(
+        'Where the van is physically sitting when it is not at a known\nproperty (e.g. \"Parked at Schuette Metals — Schofield WI\").\n',
+      ),
+    associatesTransported: zod
+      .number()
+      .describe(
+        "Quick-capture count of associates currently transported in\nthis van. Superseded by the rider-roster table's live count\nonce that ships.\n",
+      ),
+    registrationExpires: zod
+      .string()
+      .describe(
+        "Registration \/ plate expiration date (YYYY-MM-DD). Feeds the\nsame expiry-alert pipeline as lease + insurance-cert\nexpirations. Empty when unknown.\n",
+      ),
+    odometer: zod
+      .number()
+      .min(updateVehicleResponseOdometerMin)
+      .nullish()
+      .describe(
+        "Last recorded odometer reading (miles). Null when not tracked.",
+      ),
+    notes: zod.string(),
+    createdAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "Server-managed creation timestamp. Read-only; clients may omit on write.",
+      ),
+    updatedAt: zod.coerce
+      .date()
+      .optional()
+      .describe(
+        "Last-touched timestamp, set by the API boundary on every\nmutation. Server-managed — clients should treat it as\nread-only and may omit it on write.\n",
+      ),
+  })
+  .describe(
+    "A fleet vehicle (KFI van) — the first-class entity of the\nTransportation section, mirroring how `Property` anchors Housing.\nTies to the client it serves (`customerId`), the housing location\nit is based at (`propertyId`), and its driver (`driverOccupantId`,\nan occupant who already carries `kfisAuthorizedToDrive`).\n",
+  );
+
+/**
+ * @summary Delete a vehicle
+ */
+export const DeleteVehicleParams = zod.object({
+  id: zod.coerce.string(),
+});

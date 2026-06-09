@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { gte, desc, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { activityLogTable } from "@workspace/db/schema";
+import { activityLogTable, appUsersTable } from "@workspace/db/schema";
 
 const router: IRouter = Router();
 
@@ -15,14 +15,28 @@ function sinceDate(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
+// Latest of a Date (app_users.last_seen_at) and a timestamp string
+// (max audit createdAt), returned as an ISO string or null when neither exists.
+function latestIso(
+  a: Date | null,
+  b: string | null | undefined,
+): string | null {
+  const ta = a ? a.getTime() : Number.NEGATIVE_INFINITY;
+  const tb = b ? new Date(b).getTime() : Number.NEGATIVE_INFINITY;
+  if (ta === Number.NEGATIVE_INFINITY && tb === Number.NEGATIVE_INFINITY) {
+    return null;
+  }
+  return new Date(Math.max(ta, tb)).toISOString();
+}
+
 // Recent activity entries (most recent first), limited to the last N days.
 router.get("/activity", async (req, res) => {
   const days = parseDays(req.query.days);
   const rawLimit =
     typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : NaN;
   const limit = Number.isFinite(rawLimit)
-    ? Math.min(Math.max(rawLimit, 1), 500)
-    : 200;
+    ? Math.min(Math.max(rawLimit, 1), 2000)
+    : 1000;
 
   const rows = await db
     .select()
@@ -45,38 +59,70 @@ router.get("/activity", async (req, res) => {
   );
 });
 
-// Per-user rollup over the last N days: how many actions each person took and
-// when they were last active. Answers "who has used the app recently?".
+// Per-user rollup answering "who has used the app, and when were they last
+// active?". We start from every known account (app_users) so the list covers
+// people who used the app BEFORE the audit log existed — their last_seen_at is
+// tracked on every request and predates this feature. We then layer on the
+// audit log's per-user action counts + most recent action within the window.
 router.get("/activity/summary", async (req, res) => {
   const days = parseDays(req.query.days);
+  const since = sinceDate(days);
 
-  const rows = (await db
+  const users = await db
+    .select({
+      id: appUsersTable.id,
+      email: appUsersTable.email,
+      name: appUsersTable.name,
+      role: appUsersTable.role,
+      lastSeenAt: appUsersTable.lastSeenAt,
+      createdAt: appUsersTable.createdAt,
+    })
+    .from(appUsersTable);
+
+  const counts = (await db
     .select({
       userId: activityLogTable.userId,
-      userEmail: activityLogTable.userEmail,
-      userName: activityLogTable.userName,
       actionCount: sql<number>`count(*)::int`,
-      lastActiveAt: sql<string>`max(${activityLogTable.createdAt})`,
+      lastActionAt: sql<string>`max(${activityLogTable.createdAt})`,
     })
     .from(activityLogTable)
-    .where(gte(activityLogTable.createdAt, sinceDate(days)))
-    .groupBy(
-      activityLogTable.userId,
-      activityLogTable.userEmail,
-      activityLogTable.userName,
-    )
-    .orderBy(desc(sql`max(${activityLogTable.createdAt})`))) as Array<{
+    .where(gte(activityLogTable.createdAt, since))
+    .groupBy(activityLogTable.userId)) as Array<{
     userId: string;
-    userEmail: string;
-    userName: string;
     actionCount: number;
-    lastActiveAt: string;
+    lastActionAt: string;
   }>;
+
+  const byUser = new Map(counts.map((c) => [c.userId, c]));
+  const sinceMs = since.getTime();
+
+  const merged = users.map((u) => {
+    const c = byUser.get(u.id);
+    const lastActiveAt = latestIso(u.lastSeenAt, c?.lastActionAt);
+    return {
+      userId: u.id,
+      userEmail: u.email,
+      userName: u.name,
+      role: u.role,
+      actionCount: c?.actionCount ?? 0,
+      lastActiveAt,
+      activeInWindow:
+        lastActiveAt !== null && new Date(lastActiveAt).getTime() >= sinceMs,
+      joinedAt: u.createdAt,
+    };
+  });
+
+  merged.sort((a, b) => {
+    const ta = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0;
+    const tb = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0;
+    return tb - ta;
+  });
 
   res.json({
     days,
-    activeUsers: rows.length,
-    users: rows,
+    activeUsers: merged.filter((m) => m.activeInWindow).length,
+    totalUsers: merged.length,
+    users: merged,
   });
 });
 

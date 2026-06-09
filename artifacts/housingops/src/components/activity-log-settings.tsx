@@ -99,8 +99,8 @@ export function ActivityLogSettings() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="14">Last 14 days</SelectItem>
-                <SelectItem value="21">Last 21 days</SelectItem>
+                <SelectItem value="14">Last 2 weeks</SelectItem>
+                <SelectItem value="21">Last 3 weeks</SelectItem>
                 <SelectItem value="30">Last 30 days</SelectItem>
               </SelectContent>
             </Select>

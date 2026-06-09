@@ -9,6 +9,7 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import { requireAuth } from "./middlewares/requireAuth";
+import { auditLog } from "./middlewares/auditLog";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -54,6 +55,6 @@ app.use(
 // Every /api/* route requires a signed-in + invited user (the
 // middleware itself whitelists /healthz, /__clerk, /config so the app
 // shell + Clerk proxy still work for signed-out users).
-app.use("/api", requireAuth, router);
+app.use("/api", requireAuth, auditLog, router);
 
 export default app;

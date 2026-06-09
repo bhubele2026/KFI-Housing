@@ -17,6 +17,7 @@ export * from "./digest-recipients";
 export * from "./payroll-deductions";
 export * from "./bed-weekly-rates";
 export * from "./app-users";
+export * from "./activity-log";
 export * from "./monthly-snapshots";
 export * from "./assistant-conversations";
 export * from "./assistant-messages";

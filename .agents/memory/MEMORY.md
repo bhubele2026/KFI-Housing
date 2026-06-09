@@ -1,0 +1,1 @@
+- [HousingOps schema & data-fetch](housingops-schema-and-data-fetch.md) — add+export a schema file to auto-create tables at boot (no migrations); use customFetch+TanStack Query to skip OpenAPI codegen for simple reads.

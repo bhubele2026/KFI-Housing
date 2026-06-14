@@ -16,6 +16,7 @@ import { seedAttachedLeasesIfMissing } from "./lib/seed-attached-leases";
 import { seedChateauKnollIfMissing } from "./lib/seed-chateau-knoll";
 import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
 import { seedSunsetPlaceIfMissing } from "./lib/seed-sunset-place";
+import { seedHarvestedPropertiesIfMissing } from "./lib/seed-harvested-properties";
 import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedPendaNewPineryIfMissing } from "./lib/seed-penda-new-pinery";
@@ -73,6 +74,9 @@ void start({
   },
   seedSunsetPlaceIfMissing: async () => {
     await seedSunsetPlaceIfMissing();
+  },
+  seedHarvestedPropertiesIfMissing: async () => {
+    await seedHarvestedPropertiesIfMissing();
   },
   seedParkPlaceIfMissing: async () => {
     await seedParkPlaceIfMissing();

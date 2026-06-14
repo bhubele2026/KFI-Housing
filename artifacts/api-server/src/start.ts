@@ -95,6 +95,10 @@ export interface StartDeps {
   // Manufacturing crew housing. Runs alongside the other per-property
   // seeds. Non-fatal.
   seedSunsetPlaceIfMissing: () => Promise<void>;
+  // Idempotent generic seeder for the remaining harvested properties
+  // (Stonleigh, Foote Hills, College Towne, the hotels, etc.) from the
+  // June 2026 Outlook + SharePoint housing harvest. Non-fatal.
+  seedHarvestedPropertiesIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
   // Idempotent Landscape Structures / Park Place Plymouth seed
   // (Task #569). Non-fatal.
@@ -515,6 +519,19 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.warn(
         { err },
         "Failed to apply Sunset Place seed — continuing to serve",
+      );
+    }
+  }
+
+  // Idempotent generic seeder for the remaining harvested properties
+  // (June 2026 Outlook + SharePoint housing harvest); non-fatal.
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedHarvestedPropertiesIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply harvested-properties seed — continuing to serve",
       );
     }
   }

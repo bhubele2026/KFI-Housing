@@ -1,1 +1,2 @@
 - [HousingOps schema & data-fetch](housingops-schema-and-data-fetch.md) — add+export a schema file to auto-create tables at boot (no migrations); use customFetch+TanStack Query to skip OpenAPI codegen for simple reads.
+- [Zenople Client API](zenople-api.md) — read-only staffing data feed; OAuth2 client-creds (reuse 2h token, 20 token/hr cap), POST action+UTC window; non-array 200 {"msg":"Large data set"} means chunk dates.

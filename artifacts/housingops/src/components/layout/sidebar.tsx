@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, Calculator, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import houseLogoUrl from "@/assets/kfi-staffing-logo.png";
@@ -73,6 +73,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/occupants", labelKey: "nav.occupants", icon: Users },
   { kind: "leaf", href: "/utilities", labelKey: "nav.utilities", icon: Zap },
   { kind: "leaf", href: "/finance", labelKey: "nav.finance", icon: DollarSign },
+  { kind: "leaf", href: "/economics", labelKey: "nav.economics", icon: Calculator },
   { kind: "leaf", href: "/reconciliation", labelKey: "nav.reconciliation", icon: Receipt },
   { kind: "leaf", href: "/qbo/mapping-rules", labelKey: "nav.qboMappingRules", icon: Receipt },
   { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },

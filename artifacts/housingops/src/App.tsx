@@ -48,6 +48,7 @@ const Occupants = lazy(() => import("@/pages/occupants"));
 const OccupantDetail = lazy(() => import("@/pages/occupant-detail"));
 const Utilities = lazy(() => import("@/pages/utilities"));
 const Finance = lazy(() => import("@/pages/finance"));
+const Economics = lazy(() => import("@/pages/economics"));
 const Reconciliation = lazy(() => import("@/pages/reconciliation"));
 const QboMappingRules = lazy(() => import("@/pages/qbo-mapping-rules"));
 const InsuranceCertificates = lazy(() => import("@/pages/insurance-certificates"));
@@ -150,6 +151,7 @@ function AppRoutes() {
         <Route path="/occupants/:id" component={OccupantDetail} />
         <Route path="/utilities" component={Utilities} />
         <Route path="/finance" component={Finance} />
+        <Route path="/economics" component={Economics} />
         <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/qbo/mapping-rules" component={QboMappingRules} />
         <Route path="/insurance" component={InsuranceCertificates} />

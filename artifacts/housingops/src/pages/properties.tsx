@@ -6,6 +6,7 @@ import { formatPropertyName } from "@/lib/property-name";
 import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
+import { HousingAuditPanel } from "@/components/housing-audit-panel";
 import { useData } from "@/context/data-store";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -1419,6 +1420,8 @@ export default function Properties() {
             </Button>
           </>}
         />
+
+        <HousingAuditPanel properties={properties} leases={leases} />
 
         {(activeCustomerName || needsReviewFilter === "NeedsReview") && (
           <div className="flex items-center gap-2 flex-wrap">

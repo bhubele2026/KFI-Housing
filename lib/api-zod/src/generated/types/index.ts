@@ -126,6 +126,8 @@ export * from "./utilityUpdateType";
 export * from "./vehicle";
 export * from "./vehicleFuelCharge";
 export * from "./vehicleFuelChargeCreate";
+export * from "./vehicleInsurance";
+export * from "./vehicleInsuranceCreate";
 export * from "./vehicleLease";
 export * from "./vehicleLeaseStatus";
 export * from "./vehicleLeaseUpdate";

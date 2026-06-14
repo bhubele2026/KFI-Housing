@@ -1873,6 +1873,35 @@ export interface VehicleLeaseUpdate {
   note?: string;
 }
 
+/**
+ * A commercial-auto insurance policy for a vehicle.
+ */
+export interface VehicleInsurance {
+  id: string;
+  vehicleId: string;
+  carrier: string;
+  policyNumber: string;
+  coverage: string;
+  premium: number;
+  effectiveDate: string;
+  expiryDate: string;
+  documentUrl: string;
+  note: string;
+  createdAt?: string | null;
+}
+
+export interface VehicleInsuranceCreate {
+  vehicleId: string;
+  carrier?: string;
+  policyNumber?: string;
+  coverage?: string;
+  premium?: number;
+  effectiveDate?: string;
+  expiryDate?: string;
+  documentUrl?: string;
+  note?: string;
+}
+
 export type LeasePdfExtractedConfidence =
   (typeof LeasePdfExtractedConfidence)[keyof typeof LeasePdfExtractedConfidence];
 

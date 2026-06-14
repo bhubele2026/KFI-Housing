@@ -78,6 +78,8 @@ import type {
   Vehicle,
   VehicleFuelCharge,
   VehicleFuelChargeCreate,
+  VehicleInsurance,
+  VehicleInsuranceCreate,
   VehicleLease,
   VehicleLeaseUpdate,
   VehicleMaintenance,
@@ -8104,4 +8106,250 @@ export const useDeleteVehicleLease = <
   TContext
 > => {
   return useMutation(getDeleteVehicleLeaseMutationOptions(options));
+};
+
+/**
+ * @summary List vehicle insurance policies
+ */
+export const getListVehicleInsuranceUrl = () => {
+  return `/api/vehicle-insurance`;
+};
+
+export const listVehicleInsurance = async (
+  options?: RequestInit,
+): Promise<VehicleInsurance[]> => {
+  return customFetch<VehicleInsurance[]>(getListVehicleInsuranceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVehicleInsuranceQueryKey = () => {
+  return [`/api/vehicle-insurance`] as const;
+};
+
+export const getListVehicleInsuranceQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVehicleInsurance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleInsurance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListVehicleInsuranceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVehicleInsurance>>
+  > = ({ signal }) => listVehicleInsurance({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleInsurance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVehicleInsuranceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVehicleInsurance>>
+>;
+export type ListVehicleInsuranceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List vehicle insurance policies
+ */
+
+export function useListVehicleInsurance<
+  TData = Awaited<ReturnType<typeof listVehicleInsurance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVehicleInsurance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVehicleInsuranceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add an insurance policy for a vehicle
+ */
+export const getCreateVehicleInsuranceUrl = () => {
+  return `/api/vehicle-insurance`;
+};
+
+export const createVehicleInsurance = async (
+  vehicleInsuranceCreate: VehicleInsuranceCreate,
+  options?: RequestInit,
+): Promise<VehicleInsurance> => {
+  return customFetch<VehicleInsurance>(getCreateVehicleInsuranceUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(vehicleInsuranceCreate),
+  });
+};
+
+export const getCreateVehicleInsuranceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleInsurance>>,
+    TError,
+    { data: BodyType<VehicleInsuranceCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVehicleInsurance>>,
+  TError,
+  { data: BodyType<VehicleInsuranceCreate> },
+  TContext
+> => {
+  const mutationKey = ["createVehicleInsurance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVehicleInsurance>>,
+    { data: BodyType<VehicleInsuranceCreate> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVehicleInsurance(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVehicleInsuranceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVehicleInsurance>>
+>;
+export type CreateVehicleInsuranceMutationBody =
+  BodyType<VehicleInsuranceCreate>;
+export type CreateVehicleInsuranceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add an insurance policy for a vehicle
+ */
+export const useCreateVehicleInsurance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVehicleInsurance>>,
+    TError,
+    { data: BodyType<VehicleInsuranceCreate> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVehicleInsurance>>,
+  TError,
+  { data: BodyType<VehicleInsuranceCreate> },
+  TContext
+> => {
+  return useMutation(getCreateVehicleInsuranceMutationOptions(options));
+};
+
+/**
+ * @summary Delete a vehicle insurance policy
+ */
+export const getDeleteVehicleInsuranceUrl = (id: string) => {
+  return `/api/vehicle-insurance/${id}`;
+};
+
+export const deleteVehicleInsurance = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVehicleInsuranceUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVehicleInsuranceMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleInsurance>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVehicleInsurance>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteVehicleInsurance"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVehicleInsurance>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVehicleInsurance(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVehicleInsuranceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVehicleInsurance>>
+>;
+
+export type DeleteVehicleInsuranceMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a vehicle insurance policy
+ */
+export const useDeleteVehicleInsurance = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVehicleInsurance>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVehicleInsurance>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteVehicleInsuranceMutationOptions(options));
 };

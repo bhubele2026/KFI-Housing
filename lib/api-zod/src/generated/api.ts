@@ -4782,3 +4782,47 @@ export const UpdateVehicleLeaseResponse = zod
 export const DeleteVehicleLeaseParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * @summary List vehicle insurance policies
+ */
+export const ListVehicleInsuranceResponseItem = zod
+  .object({
+    id: zod.string(),
+    vehicleId: zod.string(),
+    carrier: zod.string(),
+    policyNumber: zod.string(),
+    coverage: zod.string(),
+    premium: zod.number(),
+    effectiveDate: zod.string(),
+    expiryDate: zod.string(),
+    documentUrl: zod.string(),
+    note: zod.string(),
+    createdAt: zod.coerce.date().nullish(),
+  })
+  .describe("A commercial-auto insurance policy for a vehicle.");
+export const ListVehicleInsuranceResponse = zod.array(
+  ListVehicleInsuranceResponseItem,
+);
+
+/**
+ * @summary Add an insurance policy for a vehicle
+ */
+export const CreateVehicleInsuranceBody = zod.object({
+  vehicleId: zod.string(),
+  carrier: zod.string().optional(),
+  policyNumber: zod.string().optional(),
+  coverage: zod.string().optional(),
+  premium: zod.number().optional(),
+  effectiveDate: zod.string().optional(),
+  expiryDate: zod.string().optional(),
+  documentUrl: zod.string().optional(),
+  note: zod.string().optional(),
+});
+
+/**
+ * @summary Delete a vehicle insurance policy
+ */
+export const DeleteVehicleInsuranceParams = zod.object({
+  id: zod.coerce.string(),
+});

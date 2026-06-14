@@ -91,6 +91,10 @@ export interface StartDeps {
   backfillOccupantPayrollIds: () => Promise<void>;
   seedHickoryHavenIfMissing: () => Promise<void>;
   seedGreenockManorIfMissing: () => Promise<void>;
+  // Idempotent Sunset Place Apartments (Neillsville, WI) seed for WB
+  // Manufacturing crew housing. Runs alongside the other per-property
+  // seeds. Non-fatal.
+  seedSunsetPlaceIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
   // Idempotent Landscape Structures / Park Place Plymouth seed
   // (Task #569). Non-fatal.
@@ -498,6 +502,19 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.warn(
         { err },
         "Failed to apply Greenock Manor seed — continuing to serve",
+      );
+    }
+  }
+
+  // Idempotent Sunset Place Apartments (Neillsville, WI) seed for WB
+  // Manufacturing; non-fatal for the same reason.
+  if (!autoSeedDisabled) {
+    try {
+      await deps.seedSunsetPlaceIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to apply Sunset Place seed — continuing to serve",
       );
     }
   }

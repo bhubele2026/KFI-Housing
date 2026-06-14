@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   Search, UserPlus, Download, Upload, Users, Trash2, AlertTriangle, UserPlus2,
-  CheckCircle2, ChevronLeft, ChevronRight,
+  CheckCircle2, ChevronLeft, ChevronRight, RefreshCw,
 } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
 import { SkeletonRows } from "@/components/skeleton-rows";
@@ -375,6 +375,63 @@ export default function Occupants() {
     }
   };
 
+  // Pull housing deductions straight from Zenople (the staffing/payroll
+  // system) for the trailing year of Mon→Sat pay-weeks and feed them
+  // into the same snapshot pipeline the .xlsx import uses. This is the
+  // API-driven alternative to exporting a spreadsheet and uploading it,
+  // and it backfills every pay-week in one click.
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleSyncZenople = async () => {
+    setIsSyncing(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const res = await fetch(
+        `${baseUrl}api/payroll/sync-zenople-deductions?weeks=52`,
+        { method: "POST" },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        weeksProcessed?: number;
+        deductionsImported?: number;
+        totalAmount?: number;
+        unmatchedCount?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(body.error ?? `Sync failed (${res.status}).`);
+      }
+      toast({
+        title: "Synced from Zenople",
+        description: `Imported ${body.deductionsImported ?? 0} deduction${
+          (body.deductionsImported ?? 0) === 1 ? "" : "s"
+        } across ${body.weeksProcessed ?? 0} pay-week${
+          (body.weeksProcessed ?? 0) === 1 ? "" : "s"
+        }${
+          typeof body.totalAmount === "number"
+            ? `, total ${formatUsd(body.totalAmount)}`
+            : ""
+        }.${
+          body.unmatchedCount
+            ? ` ${body.unmatchedCount} person${
+                body.unmatchedCount === 1 ? "" : "s"
+              } didn't match an occupant.`
+            : ""
+        }`,
+      });
+      // A bulk multi-week sync touches occupant cache rows and every
+      // finance rollup, so refresh all active queries rather than a
+      // single pay-week.
+      await queryClient.invalidateQueries();
+    } catch (err) {
+      toast({
+        title: "Couldn't sync from Zenople",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleDownloadCsv = () => {
     const csv = toCsv(filteredOccupants, [
       { header: "Name",              value: (o) => o.name },
@@ -557,6 +614,18 @@ export default function Occupants() {
               >
                 <Upload className="mr-2 h-4 w-4" />
                 {isImporting ? "Importing…" : "Import deductions (.xlsx)"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleSyncZenople}
+                disabled={isSyncing}
+                data-testid="button-sync-zenople-deductions"
+                title="Pull the trailing year of housing deductions from Zenople"
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`}
+                />
+                {isSyncing ? "Syncing…" : "Sync from Zenople"}
               </Button>
               <Button
                 variant="outline"

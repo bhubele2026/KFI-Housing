@@ -16,5 +16,11 @@ KFI Staffing's tenant exposes the Zenople Client API (read-only data retrieval, 
 - Rate limits: 60 req/min, 1000 req/hr, **only 20 token requests/hr** — so never re-auth per call. Docs require queuing + exponential backoff; avoid parallel bulk pulls.
 - Responses are plain JSON arrays (no pagination param); large entities (TransactionItemData ~14k rows/30MB) must be pulled in date slices.
 
+**Housing deductions (the one feature built on this API):**
+- Pull from `DeductionData`, filter `TransactionCode === "Housing"` & `Adjustment > 0`. Use **Adjustment** (the recurring weekly rate), NOT Deduction — Deduction diverges from the true weekly rate on ~75% of rows.
+- The UTC start/end window filters on **last-modified time**, not the pay period. A recent (~30-day) window returns the FULL current history (180+ periods) in ONE call — so fetch once and bucket rows by pay-week locally instead of querying per period.
+- `AccountingPeriod` is always a **Sunday**; the Mon→Sat pay-week's Saturday end-date is `AccountingPeriod − 1 day`. Dedupe per `(personId, payWeek)` keeping the latest `CheckDate`.
+- `PersonId` (numeric) == HousingOps `occupant.employeeId`; emit `customer:""` and let the seeder resolve customer/property from the matched occupant.
+
 **Why:** Confirmed by a discovery probe hitting all 34 actions — all returned 200, none 403, so this tenant has full access.
 **How to apply:** For any Zenople feature, fetch one token and reuse it; query per-entity with bounded UTC windows; chunk dates when a 200 returns `{"msg":"Large data set"}`. Data is highly sensitive (SSN/TIN/DOB/bank/EEO) — pull only needed fields and gate access. Discovery script: `artifacts/api-server/scripts/zenople-probe.mjs`.

@@ -5,8 +5,7 @@ import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, Calculator, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import houseLogoUrl from "@/assets/kfi-staffing-logo.png";
-import vanLogoUrl from "@/assets/kfi-staffing-van-logo.png";
+import { KfiLogo } from "@/components/kfi-logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -668,18 +667,10 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
               <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,255,255,0.35),rgba(255,255,255,0.12)_55%,transparent_75%)] blur-md transition-transform duration-500 ease-out group-hover:scale-110" />
               <div className="absolute -right-6 top-1/2 h-24 w-32 -translate-y-1/2 rotate-12 rounded-full bg-[radial-gradient(closest-side,rgba(120,180,255,0.25),transparent_70%)] blur-lg transition-transform duration-700 ease-out group-hover:translate-x-2" />
             </div>
-            {/* Swap the house artwork for the van artwork while the user
-                is anywhere inside a Transportation route, so the sidebar
-                signals the active sub-product at a glance. Both PNGs are
-                transparent-background and sit on top of the swoosh above. */}
-            <img
-              src={location.startsWith("/transport") ? vanLogoUrl : houseLogoUrl}
-              alt="KFI Staffing"
-              className={cn(
-                "relative z-10 w-auto max-w-full object-contain select-none drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out group-hover:scale-[1.03]",
-                location.startsWith("/transport") ? "h-20" : "h-32",
-              )}
-              draggable={false}
+            {/* KFI Workforce Deployment wordmark (crisp SVG, white on navy). */}
+            <KfiLogo
+              variant="full"
+              className="relative z-10 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out group-hover:scale-[1.03]"
               data-testid="img-sidebar-logo"
             />
             {onToggleCollapsed ? (

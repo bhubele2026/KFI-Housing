@@ -29,6 +29,22 @@ Today bills/leases were harvested manually via the M365 connector. To automate:
 3. Attach source PDFs to object storage (the app already has GCS upload via
    `/api/storage`).
 
+## 3. "Find new leases" button → scan the SharePoint master lease folder
+Goal: a button on the Leases page that scans where the leases actually live —
+`KFISImplementation / Shared Documents / Housing Master File and Leases / Leases`
+(driveId b!D_coNqVzXUW1..., the per-property lease folders) — pulls any NEW
+lease PDFs, creates the lease, and flags expired ones.
+Needs the SAME Microsoft Graph app registration as #2 (Sites.Read.All /
+Files.Read.All). Then:
+1. `POST /api/leases/scan-sharepoint` (admin): list children of the Leases
+   folder, diff against existing leases (by property+unit), parse new PDFs with
+   the existing lease-PDF parser, upsert with needsReview when scanned.
+2. Expiry: ALREADY handled in-app — leases carry start/end and the app computes
+   Active/Expired/Upcoming + shows dashboard "Lease expiry alerts" and the
+   lease-digest. Newly-imported leases get scored automatically.
+Until Graph creds exist, lease discovery is run manually via the harvest tools;
+expiry works the moment leases are loaded.
+
 ## Data already captured (feeds the above)
 - `imports/lanyard-invoices.json` — every Lanyard invoice + line items
 - `imports/rental-companies.json` — landlord/vendor contacts + portals

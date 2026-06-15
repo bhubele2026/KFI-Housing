@@ -81,7 +81,9 @@ export function computePropertyEconomics(
   occupants: readonly Occupant[],
   utilities: readonly Utility[],
 ): { rows: EconomicsRow[]; summary: EconomicsSummary } {
-  const safeProps = properties ?? [];
+  const safeProps = (properties ?? []).filter(
+    (p) => (p.status ?? "Active") !== "Inactive",
+  );
   const safeLeases = leases ?? [];
   const safeOccupants = occupants ?? [];
   const safeUtilities = utilities ?? [];

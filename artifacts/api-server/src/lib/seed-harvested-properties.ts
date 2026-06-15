@@ -70,11 +70,17 @@ interface HarvestedPropertySpec {
   paymentRecipient?: string;
   notes: string;
   leases: readonly HarvestedLeaseSpec[];
+  /** Archived / fully-expired — seed as Inactive and deactivate if already loaded. */
+  inactive?: boolean;
+  /** Also mark the customer inactive (former client, e.g. Roskam). Only for sole-use customers. */
+  deactivateCustomer?: boolean;
 }
 
 export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   {
     key: "stonleigh-court-leavenworth",
+    inactive: true,
+    deactivateCustomer: true,
     client: "Heatron",
     endClientPattern: "Heatron%",
     propertyName: "Stonleigh Court Apartments – Leavenworth, KS",
@@ -102,6 +108,8 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   },
   {
     key: "foote-hills-grand-rapids",
+    inactive: true,
+    deactivateCustomer: true,
     client: "Roskam",
     endClientPattern: "Roskam%",
     propertyName: "Foote Hills Apartments – Grand Rapids, MI",
@@ -256,6 +264,7 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   },
   {
     key: "las-palmas-arlington",
+    inactive: true,
     client: "(Arlington, TX)",
     endClientPattern: "",
     propertyName: "Las Palmas – Arlington, TX",
@@ -316,6 +325,7 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   },
   {
     key: "palace-motel-de-queen",
+    inactive: true,
     client: "Bell Lumber",
     endClientPattern: "Bell Lumber%",
     propertyName: "Palace Motel – De Queen, AR",
@@ -362,6 +372,7 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   },
   {
     key: "days-inn-morehead",
+    inactive: true,
     client: "(Morehead, KY)",
     endClientPattern: "",
     propertyName: "Days Inn – Morehead, KY",
@@ -439,6 +450,7 @@ function buildCustomerRow(spec: HarvestedPropertySpec): InsertCustomerRow {
     contactName: "",
     email: "",
     phone: "",
+    isInactive: spec.deactivateCustomer ?? false,
     notes: `Staffing customer ${clientDisplayName(spec)} — workers housed at ${spec.propertyName}. Created from the June 2026 housing harvest; fill in contact details. Vendor: ${spec.vendor || "—"}.`,
   };
 }
@@ -456,7 +468,7 @@ function buildPropertyRow(spec: HarvestedPropertySpec, custId: string): InsertPr
     totalBeds: 0,
     monthlyRent: totalMonthly,
     chargePerBed: 0,
-    status: "Active",
+    status: spec.inactive ? "Inactive" : "Active",
     propertyType: spec.propertyType,
     landlordName: spec.landlordName ?? "",
     landlordEmail: spec.landlordEmail ?? "",
@@ -665,13 +677,39 @@ export async function seedHarvestedPropertiesIfMissing(
     }
   }
 
+  // Deactivate stale (SharePoint-archived / fully-expired) harvested
+  // properties that may already be loaded — flip property status to Inactive
+  // (and the customer to inactive for confirmed-former clients like Roskam /
+  // Heatron). Status-only updates: never deletes, never touches operator-
+  // edited fields, idempotent.
+  let deactivated = 0;
+  for (const spec of HARVESTED_PROPERTIES.filter((s) => s.inactive)) {
+    try {
+      const upd = await database
+        .update(propertiesTable)
+        .set({ status: "Inactive" })
+        .where(eq(propertiesTable.id, propertyId(spec)))
+        .returning({ id: propertiesTable.id });
+      if (upd.length > 0) deactivated += 1;
+      if (spec.deactivateCustomer) {
+        await database
+          .update(customersTable)
+          .set({ isInactive: true })
+          .where(eq(customersTable.id, clientCustomerId(spec)));
+      }
+    } catch (err) {
+      log.warn({ err, property: spec.propertyName }, "Failed to deactivate stale harvested property");
+    }
+  }
+
   if (
     totals.propertiesInserted > 0 ||
     totals.leasesInserted > 0 ||
     totals.customersInserted > 0 ||
-    totals.repointed > 0
+    totals.repointed > 0 ||
+    deactivated > 0
   ) {
-    log.info(totals, "Harvested properties seed applied.");
+    log.info({ ...totals, deactivated }, "Harvested properties seed applied.");
   }
   return totals;
 }

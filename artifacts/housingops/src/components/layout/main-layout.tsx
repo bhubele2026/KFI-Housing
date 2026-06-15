@@ -1,6 +1,7 @@
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { Briefcase, Copy, Menu, X } from "lucide-react";
 import { Sidebar } from "./sidebar";
+import { TopNav } from "./top-nav";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
 import { Link, Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -93,6 +94,9 @@ export function MainLayout({ children }: { children: ReactNode }) {
       </Sheet>
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Professional top nav (md+) — primary "clicker" for main areas,
+            alongside the sidebar. */}
+        <TopNav />
         {/* Mobile header — only the hamburger trigger. On md+ the
             desktop rail is visible and this bar collapses away. */}
         <div className="md:hidden flex h-12 items-center gap-2 border-b border-border bg-background px-3">

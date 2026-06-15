@@ -81,10 +81,14 @@ export function computePropertyEconomics(
   occupants: readonly Occupant[],
   utilities: readonly Utility[],
 ): { rows: EconomicsRow[]; summary: EconomicsSummary } {
-  const rows = properties.map((p): EconomicsRow => {
-    const activeRent = sumActiveRent(leases, p.id);
+  const safeProps = properties ?? [];
+  const safeLeases = leases ?? [];
+  const safeOccupants = occupants ?? [];
+  const safeUtilities = utilities ?? [];
+  const rows = safeProps.map((p): EconomicsRow => {
+    const activeRent = sumActiveRent(safeLeases, p.id);
     const monthlyRent = activeRent > 0 ? activeRent : p.monthlyRent || 0;
-    const monthlyUtilities = utilities.reduce(
+    const monthlyUtilities = safeUtilities.reduce(
       (s, u) => (u.propertyId === p.id ? s + (u.monthlyCost || 0) : s),
       0,
     );
@@ -93,7 +97,7 @@ export function computePropertyEconomics(
     const beds = p.totalBeds || 0;
     const bedsKnown = beds > 0;
 
-    const activeOcc = occupants.filter(
+    const activeOcc = safeOccupants.filter(
       (o) => o.propertyId === p.id && o.status === "Active" && !o.moveOutDate,
     );
     const occupied = bedsKnown

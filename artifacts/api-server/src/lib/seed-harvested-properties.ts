@@ -218,6 +218,21 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
     leases: [{ unit: "TBD", needsReview: true, note: "Pending — lease not issued yet (#9V4DOO)." }],
   },
   {
+    key: "copa-parque-tindall",
+    client: "Tindall",
+    endClientPattern: "Tindall%",
+    propertyName: "Copa Parque Apartments – Forest Park, GA",
+    propertyType: "Apartment",
+    address: "Copa Parque Apartments",
+    city: "Forest Park",
+    state: "GA",
+    zip: "",
+    vendor: "Lanyard",
+    notes:
+      "Tindall (NEW customer) crew housing, Housing Request #3QRIW1 (Conley / Forest Park, GA). Application stage as of June 2026 — docs uploading to the Lanyard portal; lease not issued yet. Confirm + fill in units/rent.",
+    leases: [{ unit: "TBD", needsReview: true, note: "Pending — lease not issued yet (#3QRIW1)." }],
+  },
+  {
     key: "independent-stave-howard-lebanon",
     client: "Independent Stave",
     endClientPattern: "Independent Stave%",

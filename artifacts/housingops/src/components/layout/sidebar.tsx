@@ -70,6 +70,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/leases", labelKey: "nav.leases", icon: KeyRound },
   { kind: "leaf", href: "/beds", labelKey: "nav.beds", icon: BedDouble },
   { kind: "leaf", href: "/occupants", labelKey: "nav.occupants", icon: Users },
+  { kind: "leaf", href: "/roster", labelKey: "nav.roster", icon: Contact },
   { kind: "leaf", href: "/utilities", labelKey: "nav.utilities", icon: Zap },
   { kind: "leaf", href: "/finance", labelKey: "nav.finance", icon: DollarSign },
   { kind: "leaf", href: "/economics", labelKey: "nav.economics", icon: Calculator },

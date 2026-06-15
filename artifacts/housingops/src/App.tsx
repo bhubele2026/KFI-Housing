@@ -133,8 +133,13 @@ function RouteFallback() {
 }
 
 function AppRoutes() {
+  const [loc] = useLocation();
   return (
     <Suspense fallback={<RouteFallback />}>
+      {/* Per-navigation error boundary: a single page that throws shows the
+          error inline (with its message) instead of blanking the whole app,
+          and remounts fresh on the next navigation. */}
+      <ErrorBoundary key={loc}>
       <Switch>
         <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
         <Route path="/login" component={Login} />
@@ -183,6 +188,7 @@ function AppRoutes() {
         </Route>
         <Route component={NotFound} />
       </Switch>
+      </ErrorBoundary>
     </Suspense>
   );
 }

@@ -10,7 +10,6 @@ import {
 } from "@workspace/db";
 import { logger as defaultLogger } from "./logger";
 import { computeLeaseStatus, todayIso } from "./lease-status";
-import { repointFallbackToEndClient } from "./seed-fallback-repoint";
 import type { Logger } from "pino";
 
 /**
@@ -390,9 +389,6 @@ export const HARVESTED_PROPERTIES: readonly HarvestedPropertySpec[] = [
   },
 ];
 
-function customerId(spec: HarvestedPropertySpec): string {
-  return `cust-kfi-${spec.key}`;
-}
 function propertyId(spec: HarvestedPropertySpec): string {
   return `prop-${spec.key}`;
 }
@@ -403,17 +399,32 @@ function leaseId(spec: HarvestedPropertySpec, unit: string): string {
 function unitMarker(unit: string): string {
   return `Unit ${unit} —`;
 }
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
-const KFI_CUSTOMER_NAME_PATTERN = "KFI Staffing%";
+const UNASSIGNED_CUSTOMER = "Unassigned — needs customer";
+
+/**
+ * The real customer (staffing client) this property's workers serve. Hotels
+ * with no clear client (spec.client like "(City, ST)") group under one
+ * "Unassigned" customer so they're visible and an operator can re-attach them.
+ */
+function clientDisplayName(spec: HarvestedPropertySpec): string {
+  return spec.client.trim().startsWith("(") ? UNASSIGNED_CUSTOMER : spec.client.trim();
+}
+function clientCustomerId(spec: HarvestedPropertySpec): string {
+  return `cust-${slug(clientDisplayName(spec))}`;
+}
 
 function buildCustomerRow(spec: HarvestedPropertySpec): InsertCustomerRow {
   return {
-    id: customerId(spec),
-    name: `KFI Staffing – ${spec.city}, ${spec.state}`,
+    id: clientCustomerId(spec),
+    name: clientDisplayName(spec),
     contactName: "",
     email: "",
     phone: "",
-    notes: `KFI Staffing housing for ${spec.client} at ${spec.propertyName}. Vendor: ${spec.vendor || "—"}. Source: June 2026 Outlook + SharePoint harvest.`,
+    notes: `Staffing customer ${clientDisplayName(spec)} — workers housed at ${spec.propertyName}. Created from the June 2026 housing harvest; fill in contact details. Vendor: ${spec.vendor || "—"}.`,
   };
 }
 
@@ -509,29 +520,25 @@ async function applyOne(
   today: string,
 ): Promise<{ customerInserted: boolean; propertyInserted: boolean; leasesInserted: number; repointed: boolean }> {
   return database.transaction(async (tx) => {
-    // Customer: prefer the real end-client, else an existing KFI fallback,
-    // else create this property's deterministic KFI fallback.
+    // Customer: attach to the REAL staffing client. Reuse an existing match
+    // (by end-client pattern when known, else by client name); otherwise
+    // CREATE the real customer so the property is never stranded on a generic
+    // fallback. Hotels with no clear client land on one "Unassigned" customer.
     let custId: string;
     let customerInserted = false;
-    const endClient =
+    const pattern =
       spec.endClientPattern.length > 0
-        ? await tx
-            .select({ id: customersTable.id })
-            .from(customersTable)
-            .where(like(customersTable.name, spec.endClientPattern))
-            .limit(1)
-        : [];
-    const fallback = await tx
+        ? spec.endClientPattern
+        : `${clientDisplayName(spec)}%`;
+    const existingCust = await tx
       .select({ id: customersTable.id })
       .from(customersTable)
-      .where(like(customersTable.name, KFI_CUSTOMER_NAME_PATTERN))
+      .where(like(customersTable.name, pattern))
       .limit(1);
-    if (endClient.length > 0) {
-      custId = endClient[0]!.id;
-    } else if (fallback.length > 0) {
-      custId = fallback[0]!.id;
+    if (existingCust.length > 0) {
+      custId = existingCust[0]!.id;
     } else {
-      custId = customerId(spec);
+      custId = clientCustomerId(spec);
       const ins = await tx
         .insert(customersTable)
         .values(buildCustomerRow(spec))
@@ -542,7 +549,7 @@ async function applyOne(
         const re = await tx
           .select({ id: customersTable.id })
           .from(customersTable)
-          .where(like(customersTable.name, KFI_CUSTOMER_NAME_PATTERN))
+          .where(eq(customersTable.id, clientCustomerId(spec)))
           .limit(1);
         if (re.length > 0) custId = re[0]!.id;
       }
@@ -613,20 +620,7 @@ async function applyOne(
       if (ins.length > 0) leasesInserted += 1;
     }
 
-    let repointed = false;
-    if (spec.endClientPattern.length > 0) {
-      const r = await repointFallbackToEndClient({
-        tx,
-        propertyId: propId,
-        currentCustomerId: custId,
-        endClientNamePattern: spec.endClientPattern,
-        fallbackNamePattern: KFI_CUSTOMER_NAME_PATTERN,
-        fallbackCustomerId: customerId(spec),
-      });
-      repointed = r.repointedToEndClient;
-    }
-
-    return { customerInserted, propertyInserted, leasesInserted, repointed };
+    return { customerInserted, propertyInserted, leasesInserted, repointed: false };
   });
 }
 

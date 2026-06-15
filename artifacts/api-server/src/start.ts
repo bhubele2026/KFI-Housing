@@ -406,6 +406,19 @@ export async function start(deps: StartDeps): Promise<void> {
     }
   }
 
+  // One-shot override: set FORCE_HARVEST_SEED=true to apply the additive,
+  // idempotent harvested-property + Sunset Place seeds even in production
+  // (where autoSeedDisabled is always true). These never delete or overwrite
+  // existing rows, so they're safe to run against live data; unset the flag
+  // again after the new properties appear.
+  const forceHarvestSeed =
+    (deps.env["FORCE_HARVEST_SEED"] ?? "").toLowerCase() === "true";
+  if (forceHarvestSeed) {
+    deps.logger.info(
+      "FORCE_HARVEST_SEED=true — applying additive harvested-property + Sunset Place seeds regardless of auto-seed gating.",
+    );
+  }
+
   if (!autoSeedDisabled) {
     try {
       await deps.seedIfEmpty();
@@ -512,7 +525,7 @@ export async function start(deps: StartDeps): Promise<void> {
 
   // Idempotent Sunset Place Apartments (Neillsville, WI) seed for WB
   // Manufacturing; non-fatal for the same reason.
-  if (!autoSeedDisabled) {
+  if (!autoSeedDisabled || forceHarvestSeed) {
     try {
       await deps.seedSunsetPlaceIfMissing();
     } catch (err) {
@@ -525,7 +538,7 @@ export async function start(deps: StartDeps): Promise<void> {
 
   // Idempotent generic seeder for the remaining harvested properties
   // (June 2026 Outlook + SharePoint housing harvest); non-fatal.
-  if (!autoSeedDisabled) {
+  if (!autoSeedDisabled || forceHarvestSeed) {
     try {
       await deps.seedHarvestedPropertiesIfMissing();
     } catch (err) {

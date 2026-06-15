@@ -26,8 +26,6 @@ import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import { LeasesTable } from "@/components/leases-table";
 import { AddLeaseDialog } from "@/components/add-lease-dialog";
 import { UploadLeasePdfDialog } from "@/components/upload-lease-pdf-dialog";
-import { ImportMasterLeasesButton } from "@/components/import-master-leases-button";
-import { LastAutoImportIndicator } from "@/components/last-auto-import-indicator";
 import { useState } from "react";
 
 // Buyout filter values. "All" lets every lease through; "Yes" / "No" map
@@ -413,8 +411,6 @@ export default function Leases() {
                 {t("pages.leases.downloadCsv")}
               </Button>
               <UploadLeasePdfDialog onPdfImportFailed={() => setPdfFallbackOpen(true)} />
-              <LastAutoImportIndicator />
-              <ImportMasterLeasesButton />
               <AddLeaseDialog
                 properties={properties}
                 customers={customers}

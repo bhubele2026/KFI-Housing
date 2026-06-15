@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
+import { CustomerLogo } from "@/components/customer-logo";
 import { useData, CustomerInUseError } from "@/context/data-store";
 import {
   type Customer,
@@ -648,10 +649,8 @@ export default function Customers() {
                         data-testid={`row-customer-${c.id}`}
                       >
                         <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-md bg-primary/10">
-                              <Briefcase className="h-3.5 w-3.5 text-primary" />
-                            </div>
+                          <div className="flex items-center gap-2.5">
+                            <CustomerLogo name={c.name} size={28} />
                             <button
                               type="button"
                               onClick={() => navigate(`/customers/${encodeURIComponent(c.id)}`)}

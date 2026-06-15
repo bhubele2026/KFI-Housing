@@ -44,6 +44,7 @@ export interface EconomicsRow {
   propertyId: string;
   customerId: string;
   name: string;
+  propertyType: string;
   monthlyRent: number;
   monthlyUtilities: number;
   monthlyCost: number;
@@ -132,6 +133,7 @@ export function computePropertyEconomics(
       propertyId: p.id,
       customerId: p.customerId,
       name: p.name || p.id,
+      propertyType: p.propertyType ?? "",
       monthlyRent: round2(monthlyRent),
       monthlyUtilities: round2(monthlyUtilities),
       monthlyCost,

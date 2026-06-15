@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/table";
 import { TrendingDown, BedDouble, DollarSign, AlertTriangle } from "lucide-react";
 import { computePropertyEconomics } from "@/lib/property-economics";
+import { PropertyTypeIcon } from "@/components/property-type-icon";
+import { CustomerLogo } from "@/components/customer-logo";
 
 const usd = (n: number | null | undefined) =>
   n == null
@@ -138,8 +140,20 @@ export default function EconomicsPage() {
                     return (
                       <TableRow key={r.propertyId} className={r.monthlyLoss > 0 ? "bg-red-50/40 dark:bg-red-950/10" : undefined}>
                         <TableCell>
-                          <div className="font-medium">{r.name}</div>
-                          <div className="text-xs text-muted-foreground">{customerName.get(r.customerId) ?? ""}</div>
+                          <div className="flex items-center gap-2.5">
+                            <PropertyTypeIcon type={r.propertyType} />
+                            <div className="min-w-0">
+                              <div className="font-medium">{r.name}</div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                {customerName.get(r.customerId) ? (
+                                  <>
+                                    <CustomerLogo name={customerName.get(r.customerId)!} size={16} />
+                                    <span className="truncate">{customerName.get(r.customerId)}</span>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{usd(r.monthlyCost)}</TableCell>
                         <TableCell className="text-center">

@@ -61,10 +61,10 @@ export function KfiLogo({
 
   return (
     <div data-testid={testId} className={cn("flex items-center gap-3 text-current select-none", className)}>
-      <span className="h-12 shrink-0">{Mark}</span>
-      <div className="leading-[1.05]">
-        <div className="text-[15px] font-light tracking-[0.22em]">WORKFORCE</div>
-        <div className="text-[15px] font-light tracking-[0.22em]">DEPLOYMENT</div>
+      <span className="h-11 shrink-0">{Mark}</span>
+      <div className="leading-[1.08]">
+        <div className="text-[14px] font-light tracking-[0.2em]">WORKFORCE</div>
+        <div className="text-[14px] font-light tracking-[0.2em]">DEPLOYMENT</div>
       </div>
     </div>
   );

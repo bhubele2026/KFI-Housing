@@ -656,21 +656,12 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Tooltip>
           ) : null
         ) : (
-          <div className="group relative flex items-center justify-center px-2 py-3">
-            {/* Soft radial swoosh behind the logo so the dark-navy artwork
-                reads against the sidebar token instead of melting into it.
-                The blur sweeps on hover for a little life. */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 -z-0 overflow-hidden rounded-2xl"
-            >
-              <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,255,255,0.35),rgba(255,255,255,0.12)_55%,transparent_75%)] blur-md transition-transform duration-500 ease-out group-hover:scale-110" />
-              <div className="absolute -right-6 top-1/2 h-24 w-32 -translate-y-1/2 rotate-12 rounded-full bg-[radial-gradient(closest-side,rgba(120,180,255,0.25),transparent_70%)] blur-lg transition-transform duration-700 ease-out group-hover:translate-x-2" />
-            </div>
-            {/* KFI Workforce Deployment wordmark (crisp SVG, white on navy). */}
+          <div className="flex items-center justify-between gap-2 px-1">
+            {/* KFI Workforce Deployment wordmark — crisp SVG, white, flat on
+                the navy sidebar (no backing glow so it blends cleanly). */}
             <KfiLogo
               variant="full"
-              className="relative z-10 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+              className="min-w-0 text-white"
               data-testid="img-sidebar-logo"
             />
             {onToggleCollapsed ? (
@@ -678,7 +669,7 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
                 type="button"
                 onClick={onToggleCollapsed}
                 aria-label={t("nav.collapseSidebar")}
-                className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
                 data-testid="button-sidebar-toggle"
               >
                 <PanelLeftClose className="h-4 w-4" />

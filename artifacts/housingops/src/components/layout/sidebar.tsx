@@ -76,6 +76,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/reconciliation", labelKey: "nav.reconciliation", icon: Receipt },
   { kind: "leaf", href: "/qbo/mapping-rules", labelKey: "nav.qboMappingRules", icon: Receipt },
   { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
+  { kind: "leaf", href: "/rental-companies", labelKey: "nav.rentalCompanies", icon: Building2 },
 ];
 
 const TRANSPORT_CHILDREN: NavLeaf[] = [

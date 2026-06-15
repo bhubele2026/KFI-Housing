@@ -656,25 +656,15 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
             </Tooltip>
           ) : null
         ) : (
-          <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center px-1">
             {/* KFI Workforce Deployment wordmark — crisp SVG, white, flat on
-                the navy sidebar (no backing glow so it blends cleanly). */}
+                the navy sidebar (no backing glow so it blends cleanly).
+                The collapse control now lives at the bottom of the rail. */}
             <KfiLogo
               variant="full"
               className="min-w-0 text-white"
               data-testid="img-sidebar-logo"
             />
-            {onToggleCollapsed ? (
-              <button
-                type="button"
-                onClick={onToggleCollapsed}
-                aria-label={t("nav.collapseSidebar")}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-                data-testid="button-sidebar-toggle"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
-            ) : null}
           </div>
         )}
       </div>
@@ -1004,6 +994,19 @@ export function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }: Si
           </Button>,
         )}
         */}
+        {/* Collapse the rail — lives at the bottom, out of the logo area. */}
+        {!collapsed && onToggleCollapsed ? (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={t("nav.collapseSidebar")}
+            className="mt-1 flex w-full items-center justify-start gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            data-testid="button-sidebar-toggle"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+            {t("nav.collapseSidebar")}
+          </button>
+        ) : null}
       </div>
 
       <AlertDialog open={demoResetOpen} onOpenChange={setDemoResetOpen}>

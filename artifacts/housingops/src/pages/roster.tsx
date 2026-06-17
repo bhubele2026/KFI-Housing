@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/select";
 import { useData } from "@/context/data-store";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
-import { CustomerLogo } from "@/components/customer-logo";
 import { shortPropertyName } from "@/lib/property-name";
 import type { Occupant } from "@/data/mockData";
 
@@ -69,8 +68,9 @@ type RosterResponse = {
 export default function RosterPage() {
   const [q, setQ] = useState("");
   const [company, setCompany] = useState<string>("");
-  // "all" | "deduction" | "gap" (gap = has deduction but not placed)
-  const [view, setView] = useState<"all" | "deduction" | "gap">("all");
+  // all | deduction | gap (charged, not placed) | placed-no-ded (housed, uncharged)
+  const [view, setView] = useState<"all" | "deduction" | "gap" | "placed-no-ded">("all");
+  const [sort, setSort] = useState<"name" | "company" | "deduction">("name");
   const [showStale, setShowStale] = useState(false);
   const [period, setPeriod] = useState<string>(""); // "" = latest payroll period
 
@@ -124,24 +124,28 @@ export default function RosterPage() {
   const stats = useMemo(() => {
     let withDeduction = 0;
     let gap = 0; // has deduction but not placed
+    let placedNoDed = 0; // placed in a bed but NOT being charged
     for (const p of people) {
       const placed = !!matchOccupant(p.personId, p.name);
       if (p.hasDeduction) {
         withDeduction++;
         if (!placed) gap++;
+      } else if (placed) {
+        placedNoDed++;
       }
     }
-    return { total: people.length, withDeduction, gap };
+    return { total: people.length, withDeduction, gap, placedNoDed };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [people, housed]);
 
   const rows = useMemo(() => {
     const needle = norm(q);
-    return people.filter((r) => {
+    const filtered = people.filter((r) => {
       if (company && r.company !== company) return false;
       const placed = !!matchOccupant(r.personId, r.name);
       if (view === "deduction" && !r.hasDeduction) return false;
       if (view === "gap" && !(r.hasDeduction && !placed)) return false;
+      if (view === "placed-no-ded" && !(placed && !r.hasDeduction)) return false;
       if (
         needle &&
         !norm(`${r.name} ${r.company} ${r.jobTitle}`).includes(needle)
@@ -150,8 +154,17 @@ export default function RosterPage() {
       }
       return true;
     });
+    const sorted = [...filtered];
+    if (sort === "company") {
+      sorted.sort((a, b) => (a.company || "~").localeCompare(b.company || "~") || a.name.localeCompare(b.name));
+    } else if (sort === "deduction") {
+      sorted.sort((a, b) => (b.weeklyDeduction || 0) - (a.weeklyDeduction || 0) || a.name.localeCompare(b.name));
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, q, company, view, housed]);
+  }, [people, q, company, view, sort, housed]);
 
   // Reconciliation: occupants marked Active in the app whose personId
   // (and name) are NOT on the last payroll — likely a move-out / term.
@@ -308,7 +321,7 @@ export default function RosterPage() {
         ) : (
           <>
             {/* Headline metrics — click to filter the list */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <StatCard
                 label="On last payroll"
                 value={stats.total}
@@ -327,6 +340,13 @@ export default function RosterPage() {
                 tone="warn"
                 onClick={() => setView("gap")}
                 active={view === "gap"}
+              />
+              <StatCard
+                label="Placed, no deduction"
+                value={stats.placedNoDed}
+                tone="warn"
+                onClick={() => setView("placed-no-ded")}
+                active={view === "placed-no-ded"}
               />
             </div>
 
@@ -369,14 +389,7 @@ export default function RosterPage() {
                           <TableRow key={o.id}>
                             <TableCell className="font-medium">{o.name}</TableCell>
                             <TableCell>
-                              {o.company ? (
-                                <span className="flex items-center gap-2">
-                                  <CustomerLogo name={o.company} size={16} />
-                                  {o.company}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
+                              {o.company || <span className="text-muted-foreground">—</span>}
                             </TableCell>
                             <TableCell className="text-muted-foreground">{locationOf(o)}</TableCell>
                             <TableCell className="text-right">
@@ -429,6 +442,19 @@ export default function RosterPage() {
                   {c}
                 </button>
               ))}
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Sort</span>
+                <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
+                  <SelectTrigger className="h-8 w-44" data-testid="select-roster-sort">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name A–Z</SelectItem>
+                    <SelectItem value="company">Company</SelectItem>
+                    <SelectItem value="deduction">Deduction (high → low)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <Card>
@@ -464,10 +490,7 @@ export default function RosterPage() {
                           >
                             <TableCell className="font-medium">{r.name}</TableCell>
                             <TableCell>
-                              <span className="flex items-center gap-2">
-                                {r.company ? <CustomerLogo name={r.company} size={18} /> : null}
-                                {r.company || <span className="text-muted-foreground">—</span>}
-                              </span>
+                              {r.company || <span className="text-muted-foreground">—</span>}
                             </TableCell>
                             <TableCell className="text-muted-foreground">
                               {r.jobTitle || "—"}

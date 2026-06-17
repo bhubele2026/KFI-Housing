@@ -5,7 +5,7 @@ import { KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, ExternalLink, Briefcase, Hotel, CheckCircle2, CalendarClock, Zap, Building2 } from "lucide-react";
+import { Trash2, DollarSign, FileText, AlertTriangle, Wrench, Briefcase, Hotel, CheckCircle2, CalendarClock, Zap, Building2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -521,7 +521,11 @@ export function LeasesTable({
                   role="button"
                   tabIndex={0}
                   aria-label={`Open lease for ${property?.name ?? "unknown property"}`}
-                  className="cursor-pointer hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring"
+                  className={cn(
+                    "cursor-pointer hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-ring",
+                    // De-emphasize expired leases so active rows read first.
+                    lease.status === "Expired" && "opacity-60",
+                  )}
                 >
                   {bulkEnabled && (
                     <TableCell
@@ -573,6 +577,17 @@ export function LeasesTable({
                             buildingById={buildingById}
                             onUpdateLease={onUpdateLease}
                           />
+                          {lease.unit?.trim() && (
+                            // Show the unit so multi-unit properties don't
+                            // read as duplicate rows (same property name +
+                            // dates on every line).
+                            <span
+                              className="text-[11px] font-normal text-muted-foreground tabular-nums"
+                              data-testid={`lease-unit-${lease.id}`}
+                            >
+                              Unit {lease.unit}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="italic text-muted-foreground">Unknown</span>
@@ -807,13 +822,14 @@ export function LeasesTable({
                             title={`Open source PDF: ${sourcePdf}`}
                           >
                             <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 px-2 text-xs"
                               aria-label="View source PDF"
                               tabIndex={-1}
                             >
-                              <ExternalLink className="h-3.5 w-3.5" />
+                              <FileText className="h-3.5 w-3.5" />
+                              PDF
                             </Button>
                           </a>
                         );

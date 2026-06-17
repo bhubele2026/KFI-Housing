@@ -86,7 +86,7 @@ export default function Customers() {
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
-  const [arrangeBy, setArrangeBy] = useState<ArrangeBy>("state");
+  const [arrangeBy, setArrangeBy] = useState<ArrangeBy>("az");
 
   // Per-customer roll-ups: property count, total/occupied beds, occupancy %, and
   // monthly revenue (summed from each occupant's normalized monthly charge).

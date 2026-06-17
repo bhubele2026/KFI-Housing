@@ -658,10 +658,10 @@ export function LeasesTable({
                               type="button"
                               onClick={(e) => e.stopPropagation()}
                               data-testid={`badge-lease-no-end-date-${lease.id}`}
-                              title="Click to set the lease end date"
+                              title="Month-to-month — click to set a fixed end date if this lease has one"
                               className="inline-flex items-center rounded-md border border-dashed border-input bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
-                              No end date
+                              Month-to-month
                             </button>
                           }
                         />
@@ -704,7 +704,12 @@ export function LeasesTable({
                       >
                         {lease.status}
                       </Badge>
-                      {(!lease.startDate || !lease.endDate) && (
+                      {isBlankYMD(lease.startDate) && !isBlankYMD(lease.endDate) && (
+                        // Only flag a genuinely incomplete fixed-term lease
+                        // (has an end date but no start). A lease with NO end
+                        // date is month-to-month, not "missing dates", so it
+                        // shows the neutral Month-to-month pill instead and
+                        // never nags here (operator request).
                         // Blank-date triage flag (task #363) — master-import
                         // and Ridge Motor Inn seed rows can land with empty
                         // start/end dates, so we surface a dedicated amber

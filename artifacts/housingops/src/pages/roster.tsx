@@ -249,7 +249,7 @@ export default function RosterPage() {
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <div className="p-8 max-w-[1600px] mx-auto space-y-6">
         <PageHeader
           title="Active Roster"
           description="Everyone on the last payroll run (live from Zenople). Tagged by housing deduction, so you can spot anyone being charged for housing who isn't placed in a bed — then place them."

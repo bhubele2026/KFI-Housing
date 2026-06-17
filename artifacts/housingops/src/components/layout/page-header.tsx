@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { LanguageToggle } from "@/components/language-toggle";
 import { cn } from "@/lib/utils";
 
 /**

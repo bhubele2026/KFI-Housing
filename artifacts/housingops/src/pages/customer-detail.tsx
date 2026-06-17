@@ -304,7 +304,7 @@ export default function CustomerDetail() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="p-8 max-w-7xl mx-auto space-y-6" data-testid="customer-detail-loading">
+        <div className="p-8 max-w-[1600px] mx-auto space-y-6" data-testid="customer-detail-loading">
           <div className="flex items-center gap-3">
             <Skeleton className="h-7 w-28" />
             <span className="text-muted-foreground">/</span>
@@ -385,7 +385,7 @@ export default function CustomerDetail() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="p-8 max-w-7xl mx-auto space-y-6"
+        className="p-8 max-w-[1600px] mx-auto space-y-6"
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-3">

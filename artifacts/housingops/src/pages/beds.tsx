@@ -118,7 +118,7 @@ export default function Beds() {
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-8">
+      <div className="p-8 max-w-[1600px] mx-auto space-y-8">
         <PageHeader
           title={t("pages.beds.title")}
           description={t("pages.beds.description")}

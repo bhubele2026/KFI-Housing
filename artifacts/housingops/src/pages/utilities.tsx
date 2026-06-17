@@ -113,7 +113,7 @@ export default function Utilities() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
-        className="p-8 max-w-7xl mx-auto space-y-8"
+        className="p-8 max-w-[1600px] mx-auto space-y-8"
       >
         <PageHeader
           title={t("pages.utilities.title")}

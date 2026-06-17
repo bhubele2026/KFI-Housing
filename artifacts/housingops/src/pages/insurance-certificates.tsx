@@ -169,7 +169,7 @@ export default function InsuranceCertificates() {
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-8">
+      <div className="p-8 max-w-[1600px] mx-auto space-y-8">
         <PageHeader
           title={t("pages.insurance.title")}
           description={t("pages.insurance.description")}

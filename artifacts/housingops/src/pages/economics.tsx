@@ -83,7 +83,7 @@ export default function EconomicsPage() {
 
   return (
     <MainLayout>
-      <div className="p-8 max-w-7xl mx-auto space-y-6">
+      <div className="p-8 max-w-[1600px] mx-auto space-y-6">
         <PageHeader
           title="Rent Recovery"
           description="Are we recovering the rent we pay out? Cost vs. what payroll actually deducted, per property — biggest gap first."

@@ -29,6 +29,7 @@ import {
   UserPlus,
   Trash2,
   Pencil,
+  Sparkles,
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { titleCaseName } from "@/lib/name-format";
@@ -58,6 +59,45 @@ const today = () => new Date().toISOString().split("T")[0];
 
 type RosterPerson = { personId: string; name: string; company: string; aliases: string[] };
 type VacantBed = { id: string; propertyId: string; label: string };
+
+// Name-similarity (Dice over char bigrams + last-name boost) used to
+// SUGGEST the roster person a needs-match occupant most likely is, so one
+// click stamps their Zenople ID. Scores against the person's name AND every
+// known alias.
+function nbigrams(s: string): string[] {
+  const t = s.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "");
+  const g: string[] = [];
+  for (let i = 0; i < t.length - 1; i++) g.push(t.slice(i, i + 2));
+  return g;
+}
+function diceScore(a: string, b: string): number {
+  const A = nbigrams(a);
+  const B = nbigrams(b);
+  if (!A.length || !B.length) return 0;
+  const m = new Map<string, number>();
+  for (const x of A) m.set(x, (m.get(x) ?? 0) + 1);
+  let o = 0;
+  for (const x of B) { const c = m.get(x) ?? 0; if (c > 0) { o++; m.set(x, c - 1); } }
+  return (2 * o) / (A.length + B.length);
+}
+function lastTok(s: string): string {
+  const p = s.trim().toLowerCase().replace(/[^a-z ]/g, "").split(/\s+/).filter(Boolean);
+  return p[p.length - 1] ?? "";
+}
+function matchScore(a: string, b: string): number {
+  let s = diceScore(a, b);
+  const la = lastTok(a);
+  if (la && la === lastTok(b)) s = Math.min(1, s + 0.15);
+  return s;
+}
+function bestRosterMatch(name: string, people: RosterPerson[]): { person: RosterPerson; score: number } | null {
+  let best: { person: RosterPerson; score: number } | null = null;
+  for (const p of people) {
+    const score = Math.max(matchScore(name, p.name), ...(p.aliases ?? []).map((a) => matchScore(name, a)));
+    if (!best || score > best.score) best = { person: p, score };
+  }
+  return best;
+}
 
 export function PropertyBedTable({
   property,
@@ -648,6 +688,28 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
         <DialogHeader><DialogTitle>{titleCaseName(occ.name)}</DialogTitle></DialogHeader>
         {mode === "menu" && (
           <div className="space-y-3 pt-1">
+            {/* One-click suggested match by Zenople ID — links the best
+                roster person (by name + aliases) so matching is by ID. */}
+            {!matched && (() => {
+              const sug = bestRosterMatch(occ.name, rosterPeople);
+              if (!sug || sug.score < 0.55) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => { onMatch(occ, sug.person); close(); }}
+                  className="w-full rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-left hover:bg-primary/10"
+                  data-testid="suggested-match"
+                >
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" /> Suggested match — link by Zenople ID
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {titleCaseName(sug.person.name)} · ID {sug.person.personId}
+                    {sug.person.company ? ` · ${sug.person.company}` : ""} · {Math.round(sug.score * 100)}% name match
+                  </div>
+                </button>
+              );
+            })()}
             {/* Detail — editable shift + projected move-out, read-only ID,
                 move-in, and charge — so the bed section carries the full
                 picture without a separate table. */}

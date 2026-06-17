@@ -60,6 +60,7 @@ import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { useUpload } from "@workspace/object-storage-web";
 import { Upload, FileText, Loader2 } from "lucide-react";
+import { extractSourcePdfFilename, sourcePdfHref } from "@/lib/lease-source-pdf";
 
 const RENT_FREQUENCIES: readonly RentFrequency[] = ["Weekly", "Bi-Weekly", "Monthly"] as const;
 const RENT_FREQUENCY_FACTOR: Record<RentFrequency, number> = {
@@ -1979,51 +1980,98 @@ export default function PropertyDetail() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-1.5 pt-0">
-                  {[...propLeases]
-                    .sort((a, b) => a.endDate.localeCompare(b.endDate))
-                    .map((l) => (
-                      <div
-                        key={l.id}
-                        className="flex items-center justify-between text-sm py-1 border-b border-dashed last:border-b-0"
-                        data-testid={`row-active-lease-rent-${l.id}`}
-                      >
-                        <Link href={`/leases/${l.id}?from=${encodeURIComponent(`/properties/${id}`)}`}>
-                          <button
-                            type="button"
-                            className="text-left hover:underline flex items-center gap-2"
-                            data-testid={`link-active-lease-${l.id}`}
-                          >
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span>
-                              {l.startDate || "—"} → {l.endDate || "—"}
-                            </span>
-                            <Badge
-                              variant={
-                                l.status === "Active"
-                                  ? "default"
-                                  : l.status === "Expired"
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-[10px] px-1.5 py-0"
-                              data-testid={`badge-breakdown-status-${l.id}`}
-                            >
-                              {l.status}
-                            </Badge>
-                          </button>
-                        </Link>
-                        <span
-                          className={
-                            "font-medium tabular-nums " +
-                            (l.status === "Active"
-                              ? ""
-                              : "text-muted-foreground line-through decoration-muted")
-                          }
+                  {(() => {
+                    const STATUS_RANK: Record<string, number> = { Active: 0, Upcoming: 1, Expired: 2 };
+                    const sorted = [...propLeases].sort(
+                      (a, b) =>
+                        (STATUS_RANK[a.status] ?? 3) - (STATUS_RANK[b.status] ?? 3) ||
+                        (a.unit || "").localeCompare(b.unit || "", undefined, { numeric: true }) ||
+                        a.endDate.localeCompare(b.endDate),
+                    );
+                    // Flag a rent wildly above its peers (e.g. a $10,000 typo
+                    // for $1,000) against the median of the other active,
+                    // positive rents on this property so data errors jump out.
+                    const activeRents = propLeases
+                      .filter((x) => x.status === "Active" && (x.monthlyRent || 0) > 0)
+                      .map((x) => x.monthlyRent);
+                    const median =
+                      activeRents.length > 0
+                        ? [...activeRents].sort((a, b) => a - b)[Math.floor(activeRents.length / 2)]
+                        : 0;
+                    return sorted.map((l) => {
+                      const pdf = extractSourcePdfFilename(l.notes, l.clauses);
+                      const anomalous = median > 0 && (l.monthlyRent || 0) > median * 2.5;
+                      return (
+                        <div
+                          key={l.id}
+                          className="flex items-center justify-between gap-2 text-sm py-1.5 border-b border-dashed last:border-b-0"
+                          data-testid={`row-active-lease-rent-${l.id}`}
                         >
-                          {formatUsd((l.monthlyRent || 0))}{t("pages.propertyDetail.perMonthSuffix")}
-                        </span>
-                      </div>
-                    ))}
+                          <Link href={`/leases/${l.id}?from=${encodeURIComponent(`/properties/${id}`)}`}>
+                            <button
+                              type="button"
+                              className="text-left hover:underline flex items-center gap-2 min-w-0"
+                              data-testid={`link-active-lease-${l.id}`}
+                            >
+                              <span className="font-semibold tabular-nums shrink-0">
+                                {l.unit?.trim() ? l.unit : "—"}
+                              </span>
+                              <Badge
+                                variant={
+                                  l.status === "Active"
+                                    ? "default"
+                                    : l.status === "Expired"
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                                className="text-[10px] px-1.5 py-0 shrink-0"
+                                data-testid={`badge-breakdown-status-${l.id}`}
+                              >
+                                {l.status}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground truncate">
+                                {l.startDate || "—"} → {l.endDate || "—"}
+                              </span>
+                            </button>
+                          </Link>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {anomalous && (
+                              <span
+                                className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600"
+                                title="Rent is far above the other units here — check for a typo"
+                              >
+                                <AlertTriangle className="h-3 w-3" /> check
+                              </span>
+                            )}
+                            {pdf && (
+                              <a
+                                href={sourcePdfHref(pdf)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-0.5 text-[11px] text-primary hover:underline"
+                                title="Open the source lease PDF"
+                                data-testid={`link-breakdown-pdf-${l.id}`}
+                              >
+                                <FileText className="h-3 w-3" /> PDF
+                              </a>
+                            )}
+                            <span
+                              className={
+                                "font-medium tabular-nums " +
+                                (l.status === "Active"
+                                  ? anomalous
+                                    ? "text-amber-600"
+                                    : ""
+                                  : "text-muted-foreground line-through decoration-muted")
+                              }
+                            >
+                              {formatUsd(l.monthlyRent || 0)}{t("pages.propertyDetail.perMonthSuffix")}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                   <div
                     className="flex items-center justify-between text-sm pt-2 border-t font-semibold"
                     data-testid="row-active-lease-rent-total"

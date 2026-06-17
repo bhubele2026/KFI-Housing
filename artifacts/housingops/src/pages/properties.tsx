@@ -2293,18 +2293,19 @@ export default function Properties() {
                               }}
                               title={
                                 property.status === "Active"
-                                  ? "Click to deactivate"
-                                  : "Click to reactivate"
+                                  ? "Click to set Inactive"
+                                  : "Click to set Active"
                               }
                               data-testid={`button-toggle-status-${property.id}`}
                             >
                               <Badge
                                 variant={property.status === "Active" ? "default" : "secondary"}
-                                className="cursor-pointer"
+                                className="cursor-pointer gap-1 ring-1 ring-transparent transition hover:opacity-80 hover:ring-primary/40"
                               >
                                 {property.status === "Active"
                                   ? t("pages.properties.statusActive")
                                   : t("pages.properties.statusInactive")}
+                                <ChevronRight className="h-2.5 w-2.5 rotate-90 opacity-60" />
                               </Badge>
                             </button>
                             {/* One-click type cycle (Town house -> Apartment -> Motel -> ...). */}
@@ -2326,12 +2327,13 @@ export default function Properties() {
                             >
                               <Badge
                                 variant="outline"
-                                className={`text-[11px] font-medium cursor-pointer ${
+                                className={`text-[11px] font-medium cursor-pointer gap-1 ring-1 ring-transparent transition hover:opacity-80 hover:ring-primary/40 ${
                                   property.propertyType ? "" : "text-muted-foreground"
                                 }`}
                                 data-testid={`badge-property-type-${property.id}`}
                               >
                                 {property.propertyType ?? t("pages.properties.addDialog.noType")}
+                                <ChevronRight className="h-2.5 w-2.5 rotate-90 opacity-60" />
                               </Badge>
                             </button>
                           </div>

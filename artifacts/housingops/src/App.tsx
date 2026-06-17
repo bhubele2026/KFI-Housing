@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { Toaster } from "@/components/ui/toaster";
+import { VersionUpdatePrompt } from "@/components/version-update-prompt";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
 import { DataProvider } from "@/context/data-store";
@@ -263,6 +264,7 @@ function ClerkProviderWithRoutes() {
           </AuthProvider>
           <MapsKeyErrorToastListener />
           <Toaster />
+          <VersionUpdatePrompt />
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>

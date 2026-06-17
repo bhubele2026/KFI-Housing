@@ -46,6 +46,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /version:
+    get:
+      operationId: getVersion
+      tags: [health]
+      summary: Deployed build identifier
+      description: |
+        Returns the running server's per-deploy build id. The web client
+        polls this and, when the value changes from what it first saw
+        (i.e. the app was republished), shows a "new version — refresh"
+        prompt. Changes on every server reboot.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionStatus"
 
   /config:
     get:
@@ -2853,6 +2870,14 @@ components:
           type: string
           enum: [occupied, needs_cleaning, in_progress, ready]
 
+    VersionStatus:
+      type: object
+      required:
+        - version
+      properties:
+        version:
+          type: string
+          description: Per-deploy build identifier (changes on every server reboot).
     ActiveRosterPerson:
       type: object
       required:

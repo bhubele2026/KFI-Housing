@@ -57,7 +57,7 @@ import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift
 import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
 import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
-import { PropertyBedTable, PropertyOccupantDetail } from "@/components/bed-grid";
+import { PropertyBedTable } from "@/components/bed-grid";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { useUpload } from "@workspace/object-storage-web";
 import { Upload, FileText, Loader2 } from "lucide-react";
@@ -2999,15 +2999,11 @@ export default function PropertyDetail() {
               propOccupants={propOccupants}
             />
 
-            {/* Same clean room×bed grid as the customer Beds area (assign
-                from roster, move, match, cleaning), followed by a grid-style
-                occupant detail table (ID/match, shift, move-in/out, charge). */}
-            {property && (
-              <>
-                <PropertyBedTable property={property} showHeaderLink={false} />
-                <PropertyOccupantDetail property={property} />
-              </>
-            )}
+            {/* One unified bed + occupant table (same as the customer Beds
+                area): per-room rows, occupant ID/match, shift, move-in,
+                projected move-out, and charge — assign / move / match / clean
+                all inline. */}
+            {property && <PropertyBedTable property={property} showHeaderLink={false} />}
           </TabsContent>
 
           {/* ── FURNISHINGS TAB ── */}

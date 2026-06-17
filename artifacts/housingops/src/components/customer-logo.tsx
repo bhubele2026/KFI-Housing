@@ -16,14 +16,21 @@ export function CustomerLogo({
   size?: number;
   className?: string;
 }) {
-  // Source ladder: Clearbit brand logo -> clean colored-initials monogram.
-  // We deliberately do NOT use the Google favicon service: for domains
-  // without a real favicon it returns a generic blurry globe (looks cheap),
-  // and it never 404s so it never falls through. Clearbit 404s cleanly when
-  // there's no logo, so a miss lands on a sharp initials mark instead.
-  const [failed, setFailed] = useState(false);
+  // Source ladder: Clearbit brand logo -> Google favicon -> colored
+  // initials. Clearbit gives clean corporate logos but is flaky (often
+  // 404s → most companies fell straight to initials). The favicon service
+  // backfills a real mark for the rest. Its failure mode is a generic blurry
+  // globe (served at ~16px when a domain has no favicon, and it never 404s),
+  // so on load we REJECT anything that small and drop to initials — a sharp
+  // monogram, never a globe.
+  const [stage, setStage] = useState(0);
   const domain = domainForCustomer(name);
-  const src = domain && !failed ? `https://logo.clearbit.com/${domain}?size=${size * 2}` : null;
+  const src =
+    domain && stage === 0
+      ? `https://logo.clearbit.com/${domain}?size=${size * 2}`
+      : domain && stage === 1
+        ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+        : null;
 
   if (src) {
     return (
@@ -33,7 +40,14 @@ export function CustomerLogo({
         width={size}
         height={size}
         loading="lazy"
-        onError={() => setFailed(true)}
+        onError={() => setStage((s) => s + 1)}
+        onLoad={(e) => {
+          // Reject Google's generic globe (returned ~16px when a domain has
+          // no real favicon) — fall through to the initials monogram.
+          if (stage === 1 && e.currentTarget.naturalWidth > 0 && e.currentTarget.naturalWidth < 24) {
+            setStage((s) => s + 1);
+          }
+        }}
         className={cn("shrink-0 rounded-md object-contain bg-white p-0.5 ring-1 ring-border", className)}
         style={{ width: size, height: size }}
         data-testid="customer-logo"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
@@ -31,29 +31,24 @@ import {
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { titleCaseName } from "@/lib/name-format";
-import {
-  STANDARD_SHIFTS,
-  toWeeklyCharge,
-  toMonthlyCharge,
-  formatUsdWhole,
-} from "@/data/mockData";
+import { STANDARD_SHIFTS, toWeeklyCharge, toMonthlyCharge, formatUsdWhole } from "@/data/mockData";
 import type { Bed, Occupant, Property } from "@/data/mockData";
 
 /**
- * Shared BED GRID for ONE property — one row per room, beds as columns.
- * Used by the customer-scoped bed area AND the property page's Beds tab so
- * both surfaces look and behave identically. Self-contained: it reads the
- * data store + active roster and owns every mutation (assign / move /
- * remove / replace / match / cleaning / add-unit / add-bed / remove-unit),
- * so callers only pass the property.
+ * Shared BED + OCCUPANT table for ONE property — ONE unified, flat table
+ * (grouped by room, one row per bed) used by both the customer Beds area
+ * and the property Beds tab. Each bed row shows the occupant (name +
+ * Zenople ID + match), or assign/cleaning controls when vacant, plus shift,
+ * move-in, projected move-out (editable), and charge — so there's a single
+ * place to see and manage who's where. Self-contained: reads the data store
+ * + active roster and owns every mutation.
  *
  * Click a person's NAME for an actions menu (Match / Move / Replace /
- * Remove); assign a vacant bed from the ACTIVE ROSTER (most recent payroll
- * week). The name is never an inline rename — it only opens the menu.
+ * Remove). The name is never an inline rename.
  */
 
-const MAX_BED_COLS = 6;
 const today = () => new Date().toISOString().split("T")[0];
+const SHIFT_NONE = "__none";
 
 type RosterPerson = { personId: string; name: string; company: string; aliases: string[] };
 type VacantBed = { id: string; propertyId: string; label: string };
@@ -75,9 +70,6 @@ export function PropertyBedTable({
     personId: p.personId,
     name: p.name,
     company: p.company,
-    // Cast-safe: the generated client may not carry `aliases` until codegen
-    // re-runs on deploy; reading it defensively keeps `pnpm build` typecheck
-    // green either way.
     aliases: (p as { aliases?: string[] }).aliases ?? [],
   }));
   const rosterIds = new Set(rosterPeople.map((p) => p.personId));
@@ -129,11 +121,9 @@ export function PropertyBedTable({
         beds: rBeds.slice().sort((a, b) => a.bedNumber - b.bedNumber),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-    const maxBeds = roomRows.reduce((m, r) => Math.max(m, r.beds.length), 1);
-    const colCount = Math.min(Math.max(maxBeds, 1), MAX_BED_COLS);
     const total = propBeds.length;
     const occupied = propBeds.filter((b) => occupantByBedId.has(b.id)).length;
-    return { roomRows, colCount, total, occupied };
+    return { roomRows, total, occupied };
   }, [beds, property.id, roomName, occupantByBedId]);
 
   // ── Mutations ──────────────────────────────────────────────────────
@@ -210,8 +200,7 @@ export function PropertyBedTable({
   };
 
   const cellProps = { rosterPeople, rosterIds, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace, onSetCleaning: handleSetCleaning, onMatch: handleMatch };
-  const { roomRows, colCount, total, occupied } = block;
-  const bedCols = Array.from({ length: colCount }, (_, i) => i);
+  const { roomRows, total, occupied } = block;
 
   return (
     <Card className="overflow-hidden">
@@ -250,197 +239,99 @@ export function PropertyBedTable({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full text-sm">
             <thead>
               <tr className="text-[11px] uppercase tracking-wide text-muted-foreground bg-muted/30">
-                <th className="px-3 py-2.5 text-left font-medium w-[26%]">Room / Unit</th>
-                <th className="px-2 py-2.5 text-center font-medium w-14">Cap</th>
-                {bedCols.map((i) => (
-                  <th key={i} className="px-3 py-2.5 text-left font-medium border-l border-border/40">Bed {i + 1}</th>
-                ))}
-                <th className="px-2 py-2.5 text-center font-medium w-16 border-l border-border/40">Open</th>
+                <th className="px-3 py-2 text-left font-medium w-16">Bed</th>
+                <th className="px-3 py-2 text-left font-medium">Occupant</th>
+                <th className="px-3 py-2 text-left font-medium w-28">Shift</th>
+                <th className="px-3 py-2 text-left font-medium w-28">Move-in</th>
+                <th className="px-3 py-2 text-left font-medium w-40">Move-out (proj.)</th>
+                <th className="px-3 py-2 text-right font-medium w-28">Charge</th>
               </tr>
             </thead>
             <tbody>
               {roomRows.map((room) => {
                 const cap = room.beds.length;
                 const occ = room.beds.filter((b) => occupantByBedId.has(b.id)).length;
-                const open = cap - occ;
                 return (
-                  <tr key={room.roomId} className="border-t hover:bg-muted/20">
-                    <td className="px-3 py-2.5">
-                      <div className="group/r flex items-center gap-2">
-                        <span className="font-medium truncate">{room.name}</span>
-                        <button type="button" onClick={() => handleAddBed(room.roomId, room.beds)}
-                          title="Add a bed to this unit"
-                          className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0">
-                          <Plus className="h-3 w-3" /> bed
-                        </button>
-                        <button type="button"
-                          disabled={occ > 0}
-                          onClick={() => {
-                            if (occ === 0 && window.confirm(`Remove unit "${room.name}" and its ${cap} bed${cap === 1 ? "" : "s"}?`)) {
-                              handleRemoveUnit(room.roomId, room.beds);
-                            }
-                          }}
-                          title={occ > 0 ? "Vacate occupants before removing this unit" : "Remove this unit"}
-                          className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 shrink-0">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-2 py-2.5 text-center text-muted-foreground">{cap}</td>
-                    {bedCols.map((i) => {
-                      if (i === colCount - 1 && room.beds.length > colCount) {
-                        return (
-                          <td key={i} className="px-3 py-2 border-l border-border/40 align-middle">
-                            <div className="space-y-1.5">
-                              {room.beds.slice(colCount - 1).map((b) => (
-                                <BedCell key={b.id} bed={b} occ={occupantByBedId.get(b.id)} {...cellProps} />
-                              ))}
-                            </div>
-                          </td>
-                        );
-                      }
-                      const b = room.beds[i];
+                  <Fragment key={room.roomId}>
+                    <tr className="border-t bg-muted/20">
+                      <td colSpan={6} className="px-3 py-1.5">
+                        <div className="group/r flex items-center gap-2">
+                          <span className="font-medium truncate">{room.name}</span>
+                          <span className="text-[11px] text-muted-foreground">{occ}/{cap} filled</span>
+                          <button type="button" onClick={() => handleAddBed(room.roomId, room.beds)}
+                            title="Add a bed to this unit"
+                            className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0">
+                            <Plus className="h-3 w-3" /> bed
+                          </button>
+                          <button type="button"
+                            disabled={occ > 0}
+                            onClick={() => {
+                              if (occ === 0 && window.confirm(`Remove unit "${room.name}" and its ${cap} bed${cap === 1 ? "" : "s"}?`)) {
+                                handleRemoveUnit(room.roomId, room.beds);
+                              }
+                            }}
+                            title={occ > 0 ? "Vacate occupants before removing this unit" : "Remove this unit"}
+                            className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 shrink-0">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {room.beds.map((bed) => {
+                      const o = occupantByBedId.get(bed.id);
+                      const freq = o?.billingFrequency ?? "Monthly";
+                      const wk = o && o.chargePerBed > 0 ? toWeeklyCharge(o.chargePerBed, freq) : 0;
+                      const mo = o && o.chargePerBed > 0 ? toMonthlyCharge(o.chargePerBed, freq) : 0;
                       return (
-                        <td key={i} className="px-3 py-2 border-l border-border/40 align-middle">
-                          {b ? <BedCell bed={b} occ={occupantByBedId.get(b.id)} {...cellProps} /> : null}
-                        </td>
+                        <tr key={bed.id} className="border-t hover:bg-muted/20">
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">Bed {bed.bedNumber}</td>
+                          <td className="px-3 py-2">
+                            {o ? (
+                              <ManageOccupantDialog bed={bed} occ={o} {...cellProps} />
+                            ) : (
+                              <BedVacantCell bed={bed} rosterPeople={rosterPeople} onAssign={handleAssign} onSetCleaning={handleSetCleaning} />
+                            )}
+                          </td>
+                          {o ? (
+                            <>
+                              <td className="px-3 py-2">
+                                <Select value={o.shift ?? SHIFT_NONE} onValueChange={(v) => updateOccupant(o.id, { shift: v === SHIFT_NONE ? null : v })}>
+                                  <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value={SHIFT_NONE}>—</SelectItem>
+                                    {STANDARD_SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{o.moveInDate || "—"}</td>
+                              <td className="px-3 py-2">
+                                <Input type="date" value={o.moveOutDate ?? ""} onChange={(e) => updateOccupant(o.id, { moveOutDate: e.target.value || null })} className="h-7 w-36 text-xs" />
+                              </td>
+                              <td className="px-3 py-2 text-right whitespace-nowrap">
+                                {wk > 0 ? (
+                                  <>
+                                    <span className="font-medium">{formatUsdWhole(wk)}/wk</span>
+                                    <span className="block text-[11px] text-muted-foreground">{formatUsdWhole(mo)}/mo</span>
+                                  </>
+                                ) : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </>
+                          ) : (
+                            <td colSpan={4} className="px-3 py-2 text-xs text-muted-foreground">Vacant</td>
+                          )}
+                        </tr>
                       );
                     })}
-                    <td className={"px-2 py-2.5 text-center font-medium border-l border-border/40 " + (open > 0 ? "text-amber-600" : "text-muted-foreground")}>
-                      {open}
-                    </td>
-                  </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
         </div>
       )}
-    </Card>
-  );
-}
-
-const SHIFT_NONE = "__none";
-
-/**
- * Clean, grid-style occupant detail for one property — the same flat look
- * as the bed grid, one row per housed person, showing the info the old
- * per-room table carried (minus Company): Zenople ID + match status, shift
- * (editable), move-in, projected move-out (editable — ties the bed back to
- * the move-out plan), and the weekly/monthly charge.
- */
-export function PropertyOccupantDetail({ property }: { property: Property }) {
-  const { rooms, beds, occupants, updateOccupant } = useData();
-  const rosterIds = new Set((useListActiveRoster().data?.people ?? []).map((p) => p.personId));
-
-  const roomName = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of rooms) m.set(r.id, r.name);
-    return m;
-  }, [rooms]);
-  const bedById = useMemo(() => {
-    const m = new Map<string, Bed>();
-    for (const b of beds) m.set(b.id, b);
-    return m;
-  }, [beds]);
-
-  const rows = useMemo(() => {
-    return occupants
-      .filter((o) => o.status === "Active" && o.propertyId === property.id && o.bedId)
-      .map((o) => {
-        const bed = o.bedId ? bedById.get(o.bedId) : undefined;
-        return {
-          occ: o,
-          room: bed ? roomName.get(bed.roomId) ?? "—" : "—",
-          bedNum: bed?.bedNumber ?? 0,
-        };
-      })
-      .sort(
-        (a, b) =>
-          a.room.localeCompare(b.room, undefined, { numeric: true }) || a.bedNum - b.bedNum,
-      );
-  }, [occupants, property.id, bedById, roomName]);
-
-  if (rows.length === 0) return null;
-
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center gap-2 bg-muted/60 px-4 py-3 border-b">
-        <span className="font-semibold text-sm">Occupant detail</span>
-        <span className="text-xs text-muted-foreground">{rows.length} housed · move-in / move-out / charge</span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wide text-muted-foreground bg-muted/30">
-              <th className="px-3 py-2.5 text-left font-medium">Room · Bed</th>
-              <th className="px-3 py-2.5 text-left font-medium">Occupant</th>
-              <th className="px-3 py-2.5 text-left font-medium">Shift</th>
-              <th className="px-3 py-2.5 text-left font-medium">Move-in</th>
-              <th className="px-3 py-2.5 text-left font-medium">Move-out (proj.)</th>
-              <th className="px-3 py-2.5 text-right font-medium">Charge</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ occ, room, bedNum }) => {
-              const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
-              const freq = occ.billingFrequency ?? "Monthly";
-              const wk = occ.chargePerBed > 0 ? toWeeklyCharge(occ.chargePerBed, freq) : 0;
-              const mo = occ.chargePerBed > 0 ? toMonthlyCharge(occ.chargePerBed, freq) : 0;
-              return (
-                <tr key={occ.id} className="border-t hover:bg-muted/20">
-                  <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">{room} · Bed {bedNum}</td>
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium">{titleCaseName(occ.name)}</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-[11px]">
-                      {occ.employeeId ? <span className="text-muted-foreground">ID {occ.employeeId}</span> : null}
-                      {matched ? (
-                        <span className="text-emerald-600">✓ matched</span>
-                      ) : (
-                        <span className="text-amber-600">⚠ needs match</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <Select
-                      value={occ.shift ?? SHIFT_NONE}
-                      onValueChange={(v) => updateOccupant(occ.id, { shift: v === SHIFT_NONE ? null : v })}
-                    >
-                      <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SHIFT_NONE}>—</SelectItem>
-                        {STANDARD_SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">{occ.moveInDate || "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <Input
-                      type="date"
-                      value={occ.moveOutDate ?? ""}
-                      onChange={(e) => updateOccupant(occ.id, { moveOutDate: e.target.value || null })}
-                      className="h-7 w-36 text-xs"
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                    {wk > 0 ? (
-                      <>
-                        <span className="font-medium">{formatUsdWhole(wk)}/wk</span>
-                        <span className="block text-[11px] text-muted-foreground">{formatUsdWhole(mo)}/mo</span>
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
     </Card>
   );
 }
@@ -457,13 +348,23 @@ interface CellHandlers {
   onMatch: (occ: Occupant, person: RosterPerson) => void;
 }
 
-function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & CellHandlers) {
-  if (occ) return <ManageOccupantDialog bed={bed} occ={occ} {...h} />;
+// Vacant bed cell: assign from roster, or flag/clear cleaning.
+function BedVacantCell({
+  bed,
+  rosterPeople,
+  onAssign,
+  onSetCleaning,
+}: {
+  bed: Bed;
+  rosterPeople: RosterPerson[];
+  onAssign: (bed: Bed, person: RosterPerson) => void;
+  onSetCleaning: (bed: Bed, status: "ready" | "needs_cleaning") => void;
+}) {
   if (bed.cleaningStatus !== "ready")
     return (
       <button
         type="button"
-        onClick={() => h.onSetCleaning(bed, "ready")}
+        onClick={() => onSetCleaning(bed, "ready")}
         title="Mark clean & ready to assign"
         className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
       >
@@ -471,11 +372,11 @@ function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & C
       </button>
     );
   return (
-    <div className="group/bc flex items-center justify-between gap-1">
-      <AssignFromRosterDialog bed={bed} rosterPeople={h.rosterPeople} onAssign={h.onAssign} />
+    <div className="group/bc flex items-center gap-2">
+      <AssignFromRosterDialog bed={bed} rosterPeople={rosterPeople} onAssign={onAssign} />
       <button
         type="button"
-        onClick={() => h.onSetCleaning(bed, "needs_cleaning")}
+        onClick={() => onSetCleaning(bed, "needs_cleaning")}
         title="Flag this bed as needs cleaning"
         className="opacity-0 group-hover/bc:opacity-100 focus:opacity-100 transition-opacity shrink-0 text-[11px] text-muted-foreground hover:text-amber-600"
       >
@@ -546,7 +447,6 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
   const close = () => { setOpen(false); reset(); };
   const moveTargets = vacantBeds.filter((b) => b.id !== bed.id);
   const chosen = moveTargets.find((b) => b.id === moveBedId);
-  const payrollDeduction = occ.chargeSource === "payroll" && occ.chargePerBed > 0 ? occ.chargePerBed : 0;
   const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
@@ -556,9 +456,7 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
             {titleCaseName(occ.name)}
           </span>
           <span className="mt-0.5 flex items-center gap-2 text-[11px] leading-tight">
-            {payrollDeduction > 0 && (
-              <span className="text-muted-foreground">${Math.round(payrollDeduction)}/wk</span>
-            )}
+            {occ.employeeId ? <span className="text-muted-foreground">ID {occ.employeeId}</span> : null}
             {matched ? (
               <span className="text-emerald-600">✓ matched</span>
             ) : (

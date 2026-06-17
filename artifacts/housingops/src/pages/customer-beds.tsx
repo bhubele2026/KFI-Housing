@@ -217,10 +217,19 @@ export default function CustomerBeds() {
     for (const b of roomBeds) deleteBed(b.id);
     deleteRoom(roomId);
   };
-  // Flip a mid-turnover bed back to assignable.
-  const handleClearCleaning = (bed: Bed) => updateBed(bed.id, { cleaningStatus: "ready" });
+  // Flag a vacant bed's housekeeping state (needs cleaning ↔ ready).
+  const handleSetCleaning = (bed: Bed, status: "ready" | "needs_cleaning") =>
+    updateBed(bed.id, { cleaningStatus: status });
+  // Link an occupant to a Zenople roster person so their payroll deduction
+  // matches. The roster name is authoritative (fixes "last name TBD" etc.).
+  const handleMatch = (occ: Occupant, person: RosterPerson) =>
+    updateOccupant(occ.id, {
+      employeeId: person.personId,
+      name: person.name,
+      company: person.company || occ.company,
+    });
 
-  const cellProps = { rosterPeople, rosterIds, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace, onClearCleaning: handleClearCleaning };
+  const cellProps = { rosterPeople, rosterIds, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace, onSetCleaning: handleSetCleaning, onMatch: handleMatch };
 
   return (
     <MainLayout>
@@ -381,23 +390,38 @@ interface CellHandlers {
   onRemove: (bed: Bed, occ: Occupant) => void;
   onReplace: (bed: Bed, current: Occupant, person: RosterPerson) => void;
   rosterIds: Set<string>;
-  onClearCleaning: (bed: Bed) => void;
+  onSetCleaning: (bed: Bed, status: "ready" | "needs_cleaning") => void;
+  onMatch: (occ: Occupant, person: RosterPerson) => void;
 }
 
 function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & CellHandlers) {
   if (occ) return <ManageOccupantDialog bed={bed} occ={occ} {...h} />;
+  // Vacant + mid-turnover: show the cleaning state with a one-click "mark ready".
   if (bed.cleaningStatus !== "ready")
     return (
       <button
         type="button"
-        onClick={() => h.onClearCleaning(bed)}
+        onClick={() => h.onSetCleaning(bed, "ready")}
         title="Mark clean & ready to assign"
         className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700"
       >
         🧹 cleaning <span className="underline">· mark ready</span>
       </button>
     );
-  return <AssignFromRosterDialog bed={bed} rosterPeople={h.rosterPeople} onAssign={h.onAssign} />;
+  // Vacant + ready: assign someone, or flag the bed as needing a clean.
+  return (
+    <div className="group/bc flex items-center justify-between gap-1">
+      <AssignFromRosterDialog bed={bed} rosterPeople={h.rosterPeople} onAssign={h.onAssign} />
+      <button
+        type="button"
+        onClick={() => h.onSetCleaning(bed, "needs_cleaning")}
+        title="Flag this bed as needs cleaning"
+        className="opacity-0 group-hover/bc:opacity-100 focus:opacity-100 transition-opacity shrink-0 text-[11px] text-muted-foreground hover:text-amber-600"
+      >
+        🧹
+      </button>
+    </div>
+  );
 }
 
 // Searchable active-roster list (most recent active payroll week).
@@ -452,9 +476,9 @@ function AssignFromRosterDialog({ bed, rosterPeople, onAssign }: { bed: Bed; ros
 
 // Name → actions: Move / Replace / Remove. The name is a button, never an
 // inline rename field.
-function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, onMove, onRemove, onReplace }: { bed: Bed; occ: Occupant } & CellHandlers) {
+function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, onMove, onRemove, onReplace, onMatch }: { bed: Bed; occ: Occupant } & CellHandlers) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"menu" | "move" | "replace">("menu");
+  const [mode, setMode] = useState<"menu" | "move" | "replace" | "match">("menu");
   const [moveBedId, setMoveBedId] = useState("");
   const reset = () => { setMode("menu"); setMoveBedId(""); };
   const close = () => { setOpen(false); reset(); };
@@ -486,6 +510,14 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
         <DialogHeader><DialogTitle>{occ.name}</DialogTitle></DialogHeader>
         {mode === "menu" && (
           <div className="space-y-2 pt-1">
+            <Button
+              variant={matched ? "outline" : "default"}
+              className="w-full justify-start gap-2"
+              onClick={() => setMode("match")}
+            >
+              <Search className="h-4 w-4" />
+              {matched ? "Re-match to a roster person" : "Match to a roster person"}
+            </Button>
             <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setMode("move")}>
               <ArrowLeftRight className="h-4 w-4" /> Move to another bed
             </Button>
@@ -517,6 +549,18 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
           <div className="space-y-2 pt-1">
             <p className="text-sm text-muted-foreground">Replace {occ.name} in this bed with someone from the active roster.</p>
             <RosterPicker people={rosterPeople} onPick={(p) => { onReplace(bed, occ, p); close(); }} />
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setMode("menu")}>Back</Button>
+            </div>
+          </div>
+        )}
+        {mode === "match" && (
+          <div className="space-y-2 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Link {occ.name} to a Zenople roster person so their payroll deduction
+              ties to the right employee. Their name is updated to match Zenople.
+            </p>
+            <RosterPicker people={rosterPeople} onPick={(p) => { onMatch(occ, p); close(); }} />
             <div className="flex justify-end">
               <Button variant="ghost" onClick={() => setMode("menu")}>Back</Button>
             </div>

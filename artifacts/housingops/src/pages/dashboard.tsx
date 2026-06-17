@@ -141,7 +141,9 @@ export default function Dashboard() {
   }, [deductions, occupants, effectivePeriod]);
 
   const gapPositive = summary.totalRecoveryGap > 0;
-  const losing = rows.filter((r) => r.recoveryGap > 0).slice(0, 8);
+  // Every under-recovering property this period (no top-N cap) — the card
+  // body scrolls so a long list never blows up the dashboard layout.
+  const losing = rows.filter((r) => r.recoveryGap > 0);
   const occPct = summary.totalBeds > 0 ? Math.round((summary.totalOccupied / summary.totalBeds) * 100) : null;
 
   const QUICK = [
@@ -204,7 +206,7 @@ export default function Dashboard() {
               </h2>
               <Link href="/economics" className="text-xs text-primary hover:underline">Rent Recovery →</Link>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[28rem] overflow-y-auto overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

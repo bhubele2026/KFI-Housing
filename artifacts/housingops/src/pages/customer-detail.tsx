@@ -4,7 +4,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
-import { getCustomerResponsibleLeases, sumCustomerResponsibleRent, sumOtherCostsForProperty, toMonthlyCharge, formatUsd } from "@/data/mockData";
+import { getCustomerResponsibleLeases, sumCustomerResponsibleRent, sumOtherCostsForProperty, toMonthlyCharge, formatUsd, NO_HOUSING_REASONS, type NoHousingReason } from "@/data/mockData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   ChevronLeft, ChevronRight, Building2, BedDouble,
-  TrendingUp, Mail, Phone, FileText, User, Receipt, Truck, Users,
+  TrendingUp, Mail, Phone, FileText, User, Receipt, Truck, Users, MapPin,
 } from "lucide-react";
 import {
   useListVehicles,
@@ -665,6 +668,43 @@ export default function CustomerDetail() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+                  <MapPin className="h-3 w-3" /> State
+                </p>
+                <div className="mt-0.5" data-testid="contact-state">
+                  <InlineEdit
+                    value={customer.state ?? ""}
+                    placeholder="Add state"
+                    inputClassName="w-24"
+                    onSave={(v) => saveField("state", v.trim().toUpperCase(), "State")}
+                    testId="inline-contact-state"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">No-housing reason</p>
+                <div className="mt-1" data-testid="contact-no-housing-reason">
+                  <Select
+                    value={customer.noHousingReason ?? "__none"}
+                    onValueChange={(v) =>
+                      saveField("noHousingReason", (v === "__none" ? null : (v as NoHousingReason)) as typeof customer.noHousingReason, "No-housing reason")
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-full" data-testid="select-no-housing-reason">
+                      <SelectValue placeholder="— none —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">— none —</SelectItem>
+                      {NO_HOUSING_REASONS.map((reason) => (
+                        <SelectItem key={reason} value={reason}>
+                          {t(`common.noHousingReasons.${reason}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
                   <FileText className="h-3 w-3" />
                   {t("pages.customerDetail.notes")}
                 </p>
@@ -732,14 +772,16 @@ export default function CustomerDetail() {
                                   status: property.status === "Active" ? "Inactive" : "Active",
                                 });
                               }}
-                              title={property.status === "Active" ? "Click to deactivate" : "Click to reactivate"}
+                              title={property.status === "Active" ? "Click to set Inactive" : "Click to set Active"}
                               data-testid={`button-customer-property-status-${property.id}`}
+                              className="shrink-0"
                             >
                               <Badge
                                 variant={property.status === "Active" ? "default" : "secondary"}
-                                className="text-[10px] px-1.5 py-0 cursor-pointer"
+                                className="text-[10px] px-1.5 py-0 cursor-pointer gap-1 ring-1 ring-transparent transition hover:opacity-80 hover:ring-primary/40"
                               >
                                 {property.status}
+                                <ChevronRight className="h-2.5 w-2.5 rotate-90 opacity-60" />
                               </Badge>
                             </button>
                           </div>

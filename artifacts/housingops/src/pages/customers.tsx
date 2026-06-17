@@ -199,7 +199,9 @@ export default function Customers() {
           c.name.toLowerCase().includes(q) ||
           c.contactName.toLowerCase().includes(q) ||
           c.email.toLowerCase().includes(q) ||
-          c.phone.toLowerCase().includes(q),
+          c.phone.toLowerCase().includes(q) ||
+          (c.notes ?? "").toLowerCase().includes(q) ||
+          (c.state ?? "").toLowerCase().includes(q),
         )
       : customers.slice();
 

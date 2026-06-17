@@ -1524,17 +1524,27 @@ export default function PropertyDetail() {
   return (
     <MainLayout>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="p-8 max-w-[1600px] mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link href="/properties">
-            <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground">
-              <ChevronLeft className="h-4 w-4" />
-              Properties
-            </Button>
-          </Link>
-          <span className="text-muted-foreground">/</span>
-          <span className="text-sm font-medium">{property.name}</span>
-        </div>
+        {/* Breadcrumb — lead with the CUSTOMER (the hub) so you can always
+            jump back up the customer → property → beds trail. */}
+        {(() => {
+          const propCustomer = customers.find((c) => c.id === property.customerId);
+          return (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <Link href="/customers"><span className="text-muted-foreground hover:text-foreground">Customers</span></Link>
+              {propCustomer && (
+                <>
+                  <span className="text-muted-foreground">/</span>
+                  <Link href={`/customers/${propCustomer.id}`}>
+                    <span className="text-muted-foreground hover:text-foreground hover:underline">{propCustomer.name}</span>
+                  </Link>
+                </>
+              )}
+              <span className="text-muted-foreground">/</span>
+              <span className="font-medium">{property.name}</span>
+              <Link href="/properties"><span className="ml-1 text-xs text-muted-foreground hover:text-foreground">· all properties</span></Link>
+            </div>
+          );
+        })()}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">

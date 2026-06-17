@@ -91,7 +91,7 @@ export default function CustomerDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer } = useData();
+  const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer, updateProperty } = useData();
   const { toast } = useToast();
 
   // Transportation rollup (Task: per-client transport list). Vans served by
@@ -723,12 +723,25 @@ export default function CustomerDetail() {
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <span className="font-semibold">{property.name}</span>
-                            <Badge
-                              variant={property.status === "Active" ? "default" : "secondary"}
-                              className="text-[10px] px-1.5 py-0"
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                updateProperty(property.id, {
+                                  status: property.status === "Active" ? "Inactive" : "Active",
+                                });
+                              }}
+                              title={property.status === "Active" ? "Click to deactivate" : "Click to reactivate"}
+                              data-testid={`button-customer-property-status-${property.id}`}
                             >
-                              {property.status}
-                            </Badge>
+                              <Badge
+                                variant={property.status === "Active" ? "default" : "secondary"}
+                                className="text-[10px] px-1.5 py-0 cursor-pointer"
+                              >
+                                {property.status}
+                              </Badge>
+                            </button>
                           </div>
                         </td>
                         <td className="p-4 text-sm text-muted-foreground">

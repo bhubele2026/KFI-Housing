@@ -241,6 +241,10 @@ const EMPTY_PROPERTY_DRAFT: PropertyDraft = {
 // item value, so we map "" ↔ null at the boundary.
 const NO_PROPERTY_TYPE_VALUE = "__none__";
 
+// Synthetic group id for the "Inactive" bucket that collects every
+// Inactive property at the bottom of the list, regardless of customer.
+const INACTIVE_GROUP_ID = "__inactive__";
+
 interface NewCustomerDraft {
   name: string;
   contactName: string;
@@ -488,7 +492,14 @@ export default function Properties() {
   // expanded section.
   const customerGroups = useMemo(() => {
     const map = new Map<string, Property[]>();
+    // Inactive properties don't belong under their customer — they drop
+    // into a single "Inactive" bucket rendered last.
+    const inactive: Property[] = [];
     for (const p of filtered) {
+      if (p.status === "Inactive") {
+        inactive.push(p);
+        continue;
+      }
       // Surface shared-housing properties (task #295) under every
       // customer that uses them — the primary `customerId` AND every
       // entry in `sharedWithCustomerIds`. Single-tenant properties
@@ -539,8 +550,23 @@ export default function Properties() {
     // matches the sidebar ordering and keeps the list stable as
     // properties are added.
     list.sort((a, b) => a.customer.name.localeCompare(b.customer.name));
+    // Append the Inactive bucket at the very bottom, after the
+    // alphabetical customer groups.
+    if (inactive.length > 0) {
+      list.push({
+        customer: {
+          id: INACTIVE_GROUP_ID,
+          name: t("pages.properties.inactiveBucket", { defaultValue: "Inactive" }),
+          contactName: "",
+          email: "",
+          phone: "",
+          notes: "",
+        } as Customer,
+        properties: inactive,
+      });
+    }
     return list;
-  }, [filtered, customerById, customerFilter]);
+  }, [filtered, customerById, customerFilter, t]);
 
   // Per-property derived data used by the grouped table rows. Previously
   // these filter/find/IIFE chains were computed inline inside

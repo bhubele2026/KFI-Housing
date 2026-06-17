@@ -10,13 +10,13 @@ import { Briefcase, X, Settings } from "lucide-react";
  * areas — like a bank's top nav. Sits above the page content; the sidebar
  * stays for the full list. Flat, brand-consistent, active section underlined.
  */
+// Top bar is now the ONLY nav (sidebar removed). Keep it to the core
+// areas; Transportation is intentionally hidden for now.
 const PRIMARY = [
   { href: "/dashboard", key: "nav.dashboard", fallback: "Dashboard" },
-  { href: "/properties", key: "nav.properties", fallback: "Properties" },
-  { href: "/leases", key: "nav.leases", fallback: "Leases" },
-  { href: "/economics", key: "nav.economics", fallback: "Economics" },
+  { href: "/customers", key: "nav.customers", fallback: "Customers" },
   { href: "/roster", key: "nav.roster", fallback: "Roster" },
-  { href: "/rental-companies", key: "nav.rentalCompanies", fallback: "Rental Companies" },
+  { href: "/economics", key: "nav.economics", fallback: "Economics" },
   { href: "/finance", key: "nav.finance", fallback: "Finance" },
 ];
 
@@ -29,19 +29,9 @@ export function TopNav() {
     customerId !== ALL_CUSTOMERS ? customers.find((c) => c.id === customerId) : undefined;
 
   return (
-    <header className="hidden md:flex h-14 items-center gap-6 bg-[#0b1f3a] px-6 text-white">
+    <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 bg-[#0b1f3a] px-4 py-2 text-white sm:px-6">
       <Link href="/dashboard" className="flex items-center" aria-label="KFI Workforce Deployment">
         <KfiLogo variant="mark" className="h-8 text-white" />
-      </Link>
-
-      <Link
-        href="/settings"
-        data-testid="topnav-settings"
-        aria-label={t("nav.settings", "Settings")}
-        title={t("nav.settings", "Settings")}
-        className="rounded-md p-2 text-blue-100/70 transition-colors hover:bg-white/5 hover:text-white"
-      >
-        <Settings className="h-5 w-5" />
       </Link>
 
       <nav className="flex items-center gap-1">
@@ -83,6 +73,15 @@ export function TopNav() {
             </button>
           </span>
         )}
+        <Link
+          href="/settings"
+          data-testid="topnav-settings"
+          aria-label={t("nav.settings", "Settings")}
+          title={t("nav.settings", "Settings")}
+          className="rounded-md p-2 text-blue-100/70 transition-colors hover:bg-white/5 hover:text-white"
+        >
+          <Settings className="h-5 w-5" />
+        </Link>
       </div>
     </header>
   );

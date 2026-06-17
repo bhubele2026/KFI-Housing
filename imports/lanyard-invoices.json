@@ -1,0 +1,810 @@
+{
+  "summary": "Read each Lanyard bill.com invoice email and extract per-property/unit line items, totals, due dates",
+  "agentCount": 12,
+  "logs": [
+    "Parsed 12 invoices, 11 readable, 85 line items total"
+  ],
+  "result": {
+    "invoices": [
+      {
+        "invoiceNumber": "1110-1293",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 3870.61,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Service First Rentals - Beau Chateau",
+            "unit": "Unit 12",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 748.24
+          },
+          {
+            "property": "Service First Rentals - Beau Chateau",
+            "unit": "Unit 16",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 748.24
+          },
+          {
+            "property": "Service First Rentals - Beau Chateau",
+            "unit": "Unit 10",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 748.24
+          },
+          {
+            "property": "Service First Rentals - Beau Chateau",
+            "unit": "Unit 11",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 748.24
+          },
+          {
+            "property": "Service First Rentals - Dexter Grant Apartment",
+            "unit": "Unit A3",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 597.65
+          },
+          {
+            "property": "Service First Rentals",
+            "unit": "each",
+            "description": "Utilities Technology Fee",
+            "period": "",
+            "qty": 5,
+            "amount": 30
+          },
+          {
+            "property": "Service First Rentals",
+            "unit": "",
+            "description": "Payment Setup Fee",
+            "period": "",
+            "qty": 1,
+            "amount": 250
+          }
+        ],
+        "notes": "Body of email had only summary fields (Invoice 1110-1293, Amount due $3,870.61, Due Jun 25, 2026); all line items extracted from attached PDF Invoice_1110-1293.pdf. Vendor Lanyard (27 East 28th Street, NY). Bill to KFI Staffing, Madison WI. Terms: Due upon receipt. Paid $0.00. $150 late fee applies if not paid by end of day Jul 1, 2026 PT. Notes on invoice: Housing Request #FR4R5Z, KFI Staffing, Sikeston, MO, May 26. Utilities Technology Fee qty 5 @ $6.00 = $30.00. Line items sum to $3,870.61, matches total."
+      },
+      {
+        "invoiceNumber": "1110-1286",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 9927.95,
+        "dueDate": "2026-06-12",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Prairie Hill Village",
+            "unit": "509",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1970.59
+          },
+          {
+            "property": "Prairie Hill Village",
+            "unit": "510",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1970.59
+          },
+          {
+            "property": "Prairie Hill Village",
+            "unit": "512",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1970.59
+          },
+          {
+            "property": "Prairie Hill Village",
+            "unit": "811",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1970.59
+          },
+          {
+            "property": "Prairie Hill Village",
+            "unit": "812",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1970.59
+          },
+          {
+            "property": "Prairie Hill Village",
+            "unit": "512",
+            "description": "Mail Key Replacement",
+            "qty": 1,
+            "amount": -75
+          },
+          {
+            "property": "Lanyard",
+            "description": "Lanyard Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150
+          }
+        ],
+        "notes": "Line items extracted from attached PDF Invoice_1110-1286.pdf (email body only had summary). Paid $0.00, amount due $9,927.95. Terms: Due upon receipt. To avoid a $150 late fee, pay by EOD Jun 18, 2026 PT (a $150 late fee line is already present on this invoice). Note: Mail Key Replacement for Unit 512 is a -$75.00 credit. Housing Request #YJON3K, KFI Staffing, Prairie du Sac, WI, Sep 2025. Bill to: KFI Staffing, 4005 Felland Road Suite 104, Madison, WI 53718."
+      },
+      {
+        "invoiceNumber": "1110-1288",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 7173.54,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "402-304",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "410-205",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "410-304",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "406-204",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "406-205",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Willow Wind Apartments",
+            "unit": "406-302",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1170.59
+          },
+          {
+            "property": "Lanyard",
+            "description": "Lanyard Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150
+          }
+        ],
+        "notes": "Line items were not in the email body (HTML body only listed total/amount due/due date). They were extracted from the attached PDF Invoice_1110-1288.pdf. Invoice date Jun 12, 2026; Terms: Due upon receipt. Paid $0.00; amount due $7,173.54. Subtotal $7,173.54, no tax. Notes on invoice: \"Housing Request #RAYUX6, KFIS Staffing LLC, Grantsburg, WI, Sep 2025\". Email warns of a $150.00 late fee if not paid by Jul 1, 2026 PT (a $150.00 Lanyard Late Fee for Jun 2026 is already a line item on this invoice). Bill to: KFI Staffing, 4005 Felland Road Suite 104, Madison, WI 53718."
+      },
+      {
+        "invoiceNumber": "1110-1298",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 2733.82,
+        "dueDate": "2026-06-15",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Virginia Manor",
+            "unit": "Unit 506",
+            "description": "Security Deposit",
+            "period": "",
+            "qty": 1,
+            "amount": 975
+          },
+          {
+            "property": "Virginia Manor",
+            "unit": "Unit 506",
+            "description": "Rent",
+            "period": "Jun 15-30, 2026",
+            "qty": 1,
+            "amount": 1147.06
+          },
+          {
+            "property": "Virginia Manor",
+            "unit": "Unit 506",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 611.76
+          }
+        ],
+        "notes": "Paid $0.00 of $2,733.82. Terms: Due upon receipt. $150.00 late fee if not paid by Jun 21, 2026 PT. Housing Request #UT7ZZU, KFI Staffing, Irwin, PA, Jun 26. Email body had only summary; line items extracted from attached PDF Invoice_1110-1298.pdf."
+      },
+      {
+        "invoiceNumber": "1110-1292",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 7559.78,
+        "dueDate": "2026-06-12",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 148",
+            "description": "Rent",
+            "period": "Jul 1-8 2026",
+            "qty": 1,
+            "amount": 330.63
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 215",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1628.24
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 117",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1392.94
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "134 ADA",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1616.47
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "132",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1598.82
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "106",
+            "description": "Rent",
+            "period": "Jul 8-31 2026",
+            "qty": 1,
+            "amount": 885.62
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "132 Transferred Apartment",
+            "description": "Security Deposit",
+            "period": "",
+            "qty": 1,
+            "amount": 90
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "132 Transferred Apartment",
+            "description": "Rent",
+            "period": "Jun 12-30 2026",
+            "qty": 1,
+            "amount": 67.06
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "106 Transferred Apartment",
+            "description": "Security Deposit Return",
+            "period": "",
+            "qty": 1,
+            "amount": -50
+          }
+        ],
+        "notes": "Vendor Lanyard (27 East 28th Street, 8th Floor, New York, NY 10016; billing@lanyardstays.com), billed via Bill.com to KFI Staffing AP (ap@kfistaffing.com). Terms: Due upon receipt. Email warns of a $150.00 late fee if not paid by Jun 18, 2026 PT. Paid $0.00, full $7,559.78 still due. PDF Notes: \"Housing Request #D5CYJY, KFI Staffing, Thorp, WI, May 26\". Line items extracted from attachment Invoice_1110-1292.pdf (email body had only the summary). Line item amounts sum exactly to the $7,559.78 total. The two \"132 / 132 Transferred Apartment\" rows and the negative Security Deposit Return on \"106 Transferred Apartment\" reflect an apartment transfer/move adjustment."
+      },
+      {
+        "invoiceNumber": "1110-1283",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 14516.29,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "notes": "Terms: Due upon receipt. Paid $0.00; Amount due $14,516.29. Bill.com invoice from Lanyard to KFI Staffing. Late $150 fee if not paid by EOD Jul 1, 2026 PT. Housing Request #K825A9, KFI Staffing, Delano, MN, Dec 23. Line items reconstructed from PDF; the 600-127 late fee amount ($147.68) appeared after the subtotal block in the raw text.",
+        "lineItems": [
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-127",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2058.46
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-315",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2099.8
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 605-201",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2036.12
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 605-218",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2058.46
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-342",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2065.17
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 500-118",
+            "description": "Monthly Rent + Fees",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2094.22
+          },
+          {
+            "property": "Conservice",
+            "description": "Utilities",
+            "period": "Apr 2026",
+            "qty": 6,
+            "amount": 263.52
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-127",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 147.68
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-315",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150.64
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 605-201",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 146.08
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 605-218",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 147.68
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-342",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 148.16
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 500-118",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150.24
+          },
+          {
+            "property": "Lanyard",
+            "description": "Lanyard Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-127",
+            "description": "Key Fob",
+            "qty": 1,
+            "amount": 50
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-315",
+            "description": "Key Fob",
+            "qty": 1,
+            "amount": 50
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 500-118",
+            "description": "Key Fob",
+            "qty": 1,
+            "amount": 50
+          },
+          {
+            "property": "Park Place Apartments",
+            "unit": "Apt 600-315",
+            "description": "Cleaning Fee",
+            "qty": 1,
+            "amount": 650.06
+          }
+        ]
+      },
+      {
+        "invoiceNumber": "1110-1290",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 12418.98,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Chateau Knoll",
+            "unit": "2108",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1903.53
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "3524",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1768.24
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "3512",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1768.24
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "3604",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 2041.18
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "1407",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1764.71
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "1506",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1809.41
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "",
+            "description": "Utilities - Gas and Trash",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 273
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "",
+            "description": "Utilities - Water & Sewer",
+            "period": "May 2026",
+            "qty": 1,
+            "amount": 580.67
+          },
+          {
+            "property": "Chateau Knoll",
+            "unit": "2108, 3524, 3512, 3604, 1407 & 1506",
+            "description": "Late Fee",
+            "period": "Jun 2026",
+            "qty": 6,
+            "amount": 360
+          },
+          {
+            "property": "Lanyard",
+            "unit": "",
+            "description": "Lanyard Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150
+          }
+        ],
+        "notes": "Line items extracted from attached PDF (Invoice_1110-1290.pdf); email body only had invoice/total/due-date summary. Vendor Lanyard, 27 East 28th Street 8th Floor, New York, NY 10016, billing@lanyardstays.com. Bill to KFI Staffing, 4005 Felland Road Suite 104, Madison, WI 53718. Terms: Due upon receipt. Invoice date Jun 12, 2026. Paid $0.00. Two utility rows in the PDF had no property column populated (Gas and Trash, Water & Sewer) and are associated with Chateau Knoll. The $360 Late Fee row covers all 6 Chateau Knoll units (6 x $60). A $150 Lanyard Late Fee also applies. PDF note: Housing Request #P0CCTB, KFIS Staffing LLC, Bettendorf, IA, Jan 26. Email warns of an additional $150 late fee if not paid by end of day Jul 1, 2026 PT. Subtotal/Total = $12,418.98, which matches sum of all line items."
+      },
+      {
+        "invoiceNumber": "1110-1285",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 8462.5,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Greenock Manor",
+            "unit": "36",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "48",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "49",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "32",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "45",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "42",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "unit": "52",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1187.5
+          },
+          {
+            "property": "Greenock Manor",
+            "description": "Lanyard Late Fee",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 150
+          }
+        ],
+        "notes": "Bill to: KFI Staffing, 4005 Felland Road Suite 104, Madison, WI 53718. Invoice date Jun 12, 2026; terms Due upon receipt. Paid $0.00 per PDF. Email warns a $150.00 late fee applies if not paid by Jul 1, 2026 PT; the PDF already includes a \"Lanyard Late Fee Jun 2026\" line of $150.00. Housing Request #7EFFWK, KFI Staffing, Irwin, PA, Oct 24. Pay link: https://app02.us.bill.com/p/lanyard. Line items extracted from attachment Invoice_1110-1285.pdf (email body had only summary totals)."
+      },
+      {
+        "invoiceNumber": "1110-1297",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 5779.4,
+        "dueDate": "2026-06-25",
+        "paidStatus": "Open",
+        "lineItems": [
+          {
+            "property": "Bloomfield Gardens Apartments",
+            "unit": "327 E. Bloomfield St, Apt 4",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1172.94
+          },
+          {
+            "property": "Bloomfield Gardens Apartments",
+            "unit": "414 E. Bloomfield St, Apt 3",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1055.29
+          },
+          {
+            "property": "Bloomfield Gardens Apartments",
+            "unit": "512 E. Bloomfield St, Apt 3",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1055.29
+          },
+          {
+            "property": "Bloomfield Gardens Apartments",
+            "unit": "329 E. Bloomfield St, Apt 4",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1172.94
+          },
+          {
+            "property": "Bloomfield Gardens Apartments",
+            "unit": "322 E. Bloomfield St, Apt 2",
+            "description": "Rent",
+            "period": "Jul 2026",
+            "qty": 1,
+            "amount": 1172.94
+          },
+          {
+            "property": "Lanyard Late Fee",
+            "description": "Lanyard Late Fee",
+            "qty": 1,
+            "amount": 150
+          }
+        ],
+        "notes": "Vendor Lanyard (27 East 28th Street, 8th Floor, New York, NY 10016 / billing@lanyardstays.com). Bill to KFI Staffing, 4005 Felland Road Suite 104, Madison, WI 53718. Invoice date Jun 12, 2026; terms Due upon receipt. Subtotal $5,779.40, Total $5,779.40, Paid $0.00. A $150.00 late fee applies if not paid by end of day Jul 1, 2026 PT. PDF Notes field: \"Housing Request #0L24R0, KFIS Staffing, Camden, NY, Apr26\". Line items came from attached PDF Invoice_1110-1297.pdf; email body only had summary totals."
+      },
+      {
+        "invoiceNumber": "1110-1241",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 4647.06,
+        "dueDate": "2026-05-13",
+        "paidStatus": "Past due",
+        "lineItems": [
+          {
+            "property": "Hickory Haven Apartments",
+            "unit": "Unit 6",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1264.71
+          },
+          {
+            "property": "Hickory Haven Apartments",
+            "unit": "Unit 8",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1058.82
+          },
+          {
+            "property": "Hickory Haven Apartments",
+            "unit": "Unit 12",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1264.71
+          },
+          {
+            "property": "Hickory Haven Apartments",
+            "unit": "Unit 11",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1058.82
+          }
+        ],
+        "notes": "Line items extracted from attached PDF Invoice_1110-1241.pdf (email body only had summary). Terms: Due upon receipt. PDF shows Paid $0.00, Amount due $4,647.06. Due date May 13, 2026 is before today (2026-06-14), so marked Past due. Housing Request #Q5K9F4, KFIS Staffing LLC, Thorp, WI, Feb 26. Note: PDF line items are for period Jun 2026 (email subject/body emphasized May 13 due date)."
+      },
+      {
+        "invoiceNumber": "1110-1263",
+        "readOk": true,
+        "vendor": "Lanyard",
+        "total": 7791.35,
+        "dueDate": "2026-06-01",
+        "paidStatus": "Past due",
+        "lineItems": [
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 215",
+            "description": "Security Deposit",
+            "period": "",
+            "qty": 1,
+            "amount": 1309
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 117",
+            "description": "Security Deposit",
+            "period": "",
+            "qty": 1,
+            "amount": 1109
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 134 ADA",
+            "description": "Security Deposit",
+            "period": "",
+            "qty": 1,
+            "amount": 1299
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 215",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1657.65
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 117",
+            "description": "Rent",
+            "period": "Jun 2026",
+            "qty": 1,
+            "amount": 1392.94
+          },
+          {
+            "property": "Sunset Place Apartments",
+            "unit": "Unit 134 ADA",
+            "description": "Rent",
+            "period": "Jun 12-30, 2026",
+            "qty": 1,
+            "amount": 1023.76
+          }
+        ],
+        "notes": "Line items came from the PDF attachment Invoice_1110-1263.pdf, not the email body (the body only had an invoice summary). Invoice date May 28, 2026; terms \"Due upon receipt\"; due date Jun 1, 2026. Paid $0.00, so Past due as of today (2026-06-14). A $150.00 late fee applies if not paid by Jun 7, 2026 PT (per email; not a line item). Subtotal $7,791.35 = Total $7,791.35. Notes on invoice: Housing Request #D5CYJY, KFI Staffing, Thorp, WI, May 26. Vendor Lanyard, billing@lanyardstays.com. Period blank on the three Security Deposit rows."
+      },
+      {
+        "invoiceNumber": "1110-1256",
+        "readOk": false,
+        "vendor": "Lanyard",
+        "total": 4915.07,
+        "dueDate": "2026-05-27",
+        "paidStatus": "Open",
+        "lineItems": [],
+        "notes": "The Outlook email body is a Bill.com payment-notification template, not the itemized invoice. It only contains the invoice summary (Invoice #: 1110-1256, Amount Due: $4,915.07, Due Date: 05/27/26) and a \"View & Pay Invoice\" link. No per-property/per-unit line items appear in the body, so readOk=false and lineItems is empty. The actual itemized rows are in the attached PDF \"Invoice_1110-1256.pdf\" (30,254 bytes), which is not parseable via the read_resource email body. A $150.00 late fee applies if not paid by Jun 2, 2026 PT. Sender: Lanyard via account-services@inform.bill.com; addressed to KFI Staffing AP (Dawn). Received 2026-05-28."
+      }
+    ]
+  }
+}

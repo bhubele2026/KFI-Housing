@@ -1,0 +1,4625 @@
+{
+  "masterRecords": [
+    {
+      "name": "Ridge Motor Inn",
+      "vendor": "Ridge Motor Inn",
+      "client": "Trienda / Penda - Portage, WI",
+      "address": "2900 New Pinery Rd",
+      "city": "Portage",
+      "state": "WI",
+      "zip": "53901",
+      "propertyType": "Motel",
+      "costPerWeek": 175,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Costs: Trienda - Portage $175/wk, Penda - Portage $175/wk. Google Maps confirms 'The Ridge Motor Inn' at 2900 New Pinery Rd, Portage, WI. Listed as Hotel/Motel.",
+      "units": [
+        {
+          "unit": "Room",
+          "rateType": "room-night"
+        }
+      ]
+    },
+    {
+      "name": "Hickory Havens Apartments",
+      "vendor": "Lanyard",
+      "client": "WB Manufacturing - Thorp, WI",
+      "address": "600 W Hickory St",
+      "city": "Gilman",
+      "state": "WI",
+      "zip": "54433",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 103.43,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Also appears in second block as 'Hickory Haven Apartments LLC', 600 W Hickory St, Gilman, WI 54433. Vendor Lanyard. Address format on sheet: 600 W Hickory St. Apt.___ Gilman, WI 54433.",
+      "units": [
+        {
+          "unit": "6",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "8",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "11",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "12",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Sunset Place Apartments",
+      "vendor": "Lanyard",
+      "address": "216 Sunset Pl",
+      "city": "Neillsville",
+      "state": "WI",
+      "zip": "54456",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "216 Sunset Pl, Neillsville, WI 54456. Vendor Lanyard. Address had truncated Google Maps link ('https://www.google.com/maps/place/Suns...').",
+      "units": [
+        {
+          "unit": "200",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "108",
+          "rateType": "monthly",
+          "notes": "1341 S 8th Ave Apt 108 referenced nearby; unit 108 associated here."
+        }
+      ]
+    },
+    {
+      "name": "Park Place Apartments",
+      "vendor": "Siren",
+      "address": "7666 Southshore Dr",
+      "city": "Siren",
+      "state": "WI",
+      "zip": "54872",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 125,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Vendor 'Siren'. Burnett Grantsburg Landscape client $125/wk. Also appears in second supplier block: Park Place Apartments, 14550 34th Ave N, Plymouth, MN 55447 - possible second Park Place location for MN (Schreiber Foods area). Two addresses present; primary Siren WI here. Multi-unit apartment building with several apt numbers (see units).",
+      "units": [
+        {
+          "unit": "Top - Apt #1-1",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #1 - 2",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #2 - 1",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #2 - 2",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #3 - 1",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #3 - 2",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Basement",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Econo Lodge Hotel",
+      "vendor": "N/A",
+      "client": "Independent Stave - Lebanon, MO / Adient",
+      "address": "1926 Jefferson St",
+      "city": "Jefferson City",
+      "state": "MO",
+      "zip": "65109",
+      "propertyType": "Motel",
+      "costPerWeek": 175,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Listed as Econolodge Hotel / Econo Lodge Hotel. Vendor N/A. Second block confirms address 1926 Jefferson St, Jefferson City, MO 65109. Adient $175/wk; Independent Stave-Lebanon, MO $150/wk also nearby in client list.",
+      "units": [
+        {
+          "unit": "Room",
+          "rateType": "room-night"
+        }
+      ]
+    },
+    {
+      "name": "Yellow House",
+      "vendor": "Yellow House",
+      "client": "Shuster's - Irwin, PA / DeLallo Foods - Mount Pleasant, PA",
+      "address": "6454 Route 30",
+      "city": "Jeannette",
+      "state": "PA",
+      "zip": "15644-3168",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "House used as housing. Address: 6454 Route 30, Jeannette, PA 15644-3168.",
+      "units": [
+        {
+          "unit": "House",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Auto Zone House",
+      "vendor": "Auto Zone House",
+      "client": "Greystone Manufacturing - Bettendorf, IA",
+      "address": "Bettendorf, IA",
+      "city": "Bettendorf",
+      "state": "IA",
+      "zip": "52722",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 98,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "House used as housing in Bettendorf, IA 52722. Greystone Manufacturing - Bettendorf, IA $98/wk for more recent starts; 60 + 38 fringe for pre-March starters with good attendance.",
+      "units": [
+        {
+          "unit": "House",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Chateau Knoll",
+      "vendor": "Chateau Knoll",
+      "client": "Greystone Manufacturing - Bettendorf, IA",
+      "address": "2900 Middle Rd",
+      "city": "Bettendorf",
+      "state": "IA",
+      "zip": "52722",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Second supplier block: Chateau Knoll, 2900 Middle Rd, Bettendorf, IA 52722.",
+      "units": [
+        {
+          "unit": "Apartment",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Greenock Manor",
+      "vendor": "Greenock Manor",
+      "client": "Shuster's - Irwin, PA / DeLallo Foods - Mount Pleasant, PA",
+      "address": "900 Seneca Court",
+      "city": "McKeesport",
+      "state": "PA",
+      "zip": "15135",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Second supplier block: Greenock Manor, 900 Seneca Court, McKeesport, PA 15135. Note: 918 Zimmer Hill Rd, McKeesport, PA 15135 also referenced in address section (possibly a separate McKeesport unit).",
+      "units": [
+        {
+          "unit": "Apartment",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Prairie Hill Village",
+      "vendor": "Prairie Hill Village",
+      "address": "1850 W Pine St",
+      "city": "Baraboo",
+      "state": "WI",
+      "zip": "53913",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 130,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Second supplier block: Prairie Hill Village, 1850 W Pine St, Baraboo, WI 53913. Matches Milwaukee Valve client ($130/wk) at 1850 W Pine St. #____ Baraboo, WI 53913. Unit numbers 509, 510, 512, 811, 812 listed under this address (mapped with codes 1002-509, 1003-510, 1004-512, 1000-811, 1001-812).",
+      "units": [
+        {
+          "unit": "509",
+          "rateType": "monthly",
+          "notes": "code 1002 - 509"
+        },
+        {
+          "unit": "510",
+          "rateType": "monthly",
+          "notes": "code 1003 - 510"
+        },
+        {
+          "unit": "512",
+          "rateType": "monthly",
+          "notes": "code 1004 - 512"
+        },
+        {
+          "unit": "811",
+          "rateType": "monthly",
+          "notes": "code 1000 - 811"
+        },
+        {
+          "unit": "812",
+          "rateType": "monthly",
+          "notes": "code 1001 - 812"
+        }
+      ]
+    },
+    {
+      "name": "Willow Wind Apartments",
+      "vendor": "Willow Wind Apartments",
+      "address": "410 7th St SE",
+      "city": "Hinckley",
+      "state": "MN",
+      "zip": "55037",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Second supplier block: Willow Wind Apartments, 410 7th St SE, Hinckley, MN 55037.",
+      "units": [
+        {
+          "unit": "Apartment",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Bloomfield Gardens Apartments",
+      "vendor": "Bloomfield Gardens Apartments",
+      "address": "404 E Bloomfield St",
+      "city": "Rome",
+      "state": "NY",
+      "zip": "13440",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Second supplier block: Bloomfield Gardens Apartments, 404 E Bloomfield St, Rome, NY 13440.",
+      "units": [
+        {
+          "unit": "Apartment",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Independent Stave Housing (Howard Dr)",
+      "client": "Independent Stave - Lebanon, MO",
+      "address": "# xxx Howard Dr",
+      "city": "Lebanon",
+      "state": "MO",
+      "zip": "65536",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 150,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Independent Stave-Lebanon, MO $150/wk. Address: # xxx Howard Dr, Lebanon, MO 65536. Unit numbers listed: 819, 817, 815, 813, 749, 747, 745, 743.",
+      "units": [
+        {
+          "unit": "819",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "817",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "815",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "813",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "749",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "747",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "745",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "743",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Bell Lumber Housing (Park Dr)",
+      "client": "Bell Lumber - Broken Bow, OK",
+      "address": "302 N Park Dr",
+      "city": "Broken Bow",
+      "state": "OK",
+      "zip": "74728",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "costPerWeek": 150.5,
+      "source": "Housing Lease MASTER.xlsx",
+      "notes": "Bell Lumber - Broken Bow, OK $150.50/wk ($80 fringe to worker + additional $80 fringe to client). Address: 302 N Park Dr, Broken Bow, OK 74728. Also serves Bell Timber, Inc - De Queen, AR ($150.50/wk).",
+      "units": [
+        {
+          "unit": "Unit",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Prairie Hill Village",
+      "vendor": "Prairie Hill Village",
+      "propertyType": "Apartment",
+      "address": "1850 W Pine St",
+      "city": "Baraboo",
+      "state": "WI",
+      "zip": "53913",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Tab also references off-site addresses: 244 12th St Apt 907 Prairie Du Sac WI 53578; S7559 US Highway 12 Lot N 08 North Freedom WI 53951. Occupants assigned per apartment with Bed1(MR)/Bed2(B). Move-out tracking: 510-2 Juan Lozada Lugo 1/24/2026, 811-2 Ricco A. Lorenzana 2/21/2026, 510-2 Claudio Alvarado 3/20/2026.",
+      "units": [
+        {
+          "unit": "509",
+          "occupants": [
+            "Eladio Ramos Jr",
+            "Lawrence Cortez",
+            "Pedro Garcia",
+            "Jonathan Ariola"
+          ],
+          "startDate": "2025-10-04",
+          "rateType": "monthly",
+          "notes": "4 occupants listed; capacity 2/room"
+        },
+        {
+          "unit": "510",
+          "occupants": [
+            "Claudio Alvarado",
+            "Juan Lozada Lugo",
+            "Carlos Galvez Garcia",
+            "Jacob Zepeda"
+          ],
+          "startDate": "2025-10-04",
+          "rateType": "monthly",
+          "notes": "510-2 Juan Lozada Lugo move out 1/24/2026; 510-2 Claudio Alvarado move out 3/20/2026"
+        },
+        {
+          "unit": "512",
+          "occupants": [
+            "Alexander A Marrero",
+            "Alexis Perez",
+            "Xavior R Robinson",
+            "Dorian Kyles"
+          ],
+          "startDate": "2025-10-01",
+          "rateType": "monthly"
+        },
+        {
+          "unit": "811",
+          "occupants": [
+            "Moices Bernal",
+            "Ricco Antonio Lorenzana"
+          ],
+          "startDate": "2025-10-01",
+          "rateType": "monthly",
+          "notes": "811-2 Ricco A. Lorenzana move out 2/21/2026"
+        },
+        {
+          "unit": "812",
+          "occupants": [
+            "Abein Flores",
+            "Antonio Hernandez",
+            "Jose Castro",
+            "Ismael Meza"
+          ],
+          "startDate": "2025-10-04",
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Bloomfield Gardens Apartments",
+      "vendor": "Bloomfield Gardens Apartments",
+      "client": "WB Manufacturing",
+      "propertyType": "Apartment",
+      "address": "404 E Bloomfield St",
+      "city": "Rome",
+      "state": "NY",
+      "zip": "13440",
+      "costPerWeek": 80,
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "WB Manufacturing $80/wk to employee. Unit addresses: 327/414/512/322/329 E. Bloomfield St. Lease range noted: Richard Balderas 5/15/2026 to 5/31/2027; another 4/17/2026 to 4/30/2027.",
+      "units": [
+        {
+          "unit": "327 (Apt 4)",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "327 E. Bloomfield St Apt 4; 2BR/2cap"
+        },
+        {
+          "unit": "414 (Apt 3)",
+          "occupants": [
+            "George Cardoso"
+          ],
+          "rateType": "monthly",
+          "notes": "414 E. Bloomfield St Apt 3"
+        },
+        {
+          "unit": "512 (Apt 3)",
+          "occupants": [
+            "Richard Balderas",
+            "Kristian W Ordiales"
+          ],
+          "rateType": "monthly",
+          "notes": "512 E. Bloomfield St Apt 3; Richard Balderas lease 5/15/2026-5/31/2027"
+        },
+        {
+          "unit": "322 (#2)",
+          "occupants": [
+            "Marcos Garza",
+            "Jose A. Garcia",
+            "Santiago Coello"
+          ],
+          "rateType": "monthly",
+          "notes": "322 E. Bloomfield St #2"
+        },
+        {
+          "unit": "329 (#4)",
+          "occupants": [
+            "Jonathan Cedeno",
+            "Paul L Jackson"
+          ],
+          "rateType": "monthly",
+          "notes": "329 E. Bloomfield St #4. Night roster: Jonathan Cedeno, George Cardoso, Paul L Jackson, Kristian W Ordiales, Stive Pimentel Diaz"
+        }
+      ]
+    },
+    {
+      "name": "Sunset Place Apartments",
+      "vendor": "Sunset Place Apartments",
+      "propertyType": "Apartment",
+      "address": "216 Sunset Place",
+      "city": "Neillsville",
+      "state": "WI",
+      "zip": "54456",
+      "costPerWeek": 115,
+      "landlordPhone": "(715) 635-1749",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Cost $115/wk (El Paso TX customer note on summary). Phone (715) 635-1749. Availability/pricing notes: #215 2BR2B avail now $1,657.65 w/lanyard fee; #117 2BR1B avail now $1,422.35 w/lanyard fee; #134 ADA 2BR1B 6/12 $1,645.88 w/lanyard fee. LS moving date 06/05/26. Also references off-site: 600 W Hickory St Apt ___ Gilman WI 54433. Lease ranges per unit captured below.",
+      "units": [
+        {
+          "unit": "148-106",
+          "occupants": [
+            "Noe Rodriguez",
+            "Anddy Ramirez Pedraza",
+            "Mariana Garcia",
+            "Jessica Acevedo",
+            "Erica D. Silverio Reyes",
+            "Abigail Sarmiento",
+            "Isaiah Young",
+            "Jacob Novak",
+            "Sterlin Adams",
+            "Gilberto Lara",
+            "Andrew Castaneda",
+            "Dennis Jordan",
+            "Andres Ramos",
+            "Roy Serna"
+          ],
+          "startDate": "2026-05-28",
+          "endDate": "2026-11-30",
+          "rateType": "monthly",
+          "notes": "Unit 148 building, room 106 and others; lease 05/28/2026 to 11/30/2026 (one room 07/08/2026 to 11/30/2026). Multiple rooms/beds aggregated."
+        },
+        {
+          "unit": "221-132",
+          "occupants": [],
+          "startDate": "2026-05-28",
+          "endDate": "2026-11-30",
+          "rateType": "monthly",
+          "notes": "Unit 221 building; lease 05/28/2026 to 11/30/2026"
+        },
+        {
+          "unit": "117",
+          "occupants": [],
+          "startDate": "2026-06-01",
+          "endDate": "2027-03-31",
+          "rateType": "monthly",
+          "monthlyRent": 1422.35,
+          "notes": "2BR1B $1,422.35 w/lanyard fee; lease 06/01/2026 to 03/31/2027"
+        },
+        {
+          "unit": "134 ADA",
+          "occupants": [],
+          "startDate": "2026-06-12",
+          "endDate": "2026-11-30",
+          "rateType": "monthly",
+          "monthlyRent": 1645.88,
+          "notes": "ADA 2BR1B $1,645.88 w/lanyard fee; lease 06/12/2026 to 11/30/2026"
+        },
+        {
+          "unit": "215",
+          "occupants": [],
+          "startDate": "2026-06-01",
+          "endDate": "2027-03-31",
+          "rateType": "monthly",
+          "monthlyRent": 1657.65,
+          "notes": "2BR2B $1,657.65 w/lanyard fee; lease 06/01/2026 to 03/31/2027"
+        }
+      ]
+    },
+    {
+      "name": "Hickory Haven Apartments LLC",
+      "vendor": "Hickory Haven Apartments LLC",
+      "propertyType": "Apartment",
+      "address": "600 W Hickory St",
+      "city": "Gilman",
+      "state": "WI",
+      "zip": "54433",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Listed on summary/address tabs as 600 W Hickory St Gilman WI 54433. Referenced from Sunset Place tab as 600 W Hickory St Apt ___ Gilman WI 54433. No unit-level occupancy detail present in this workbook.",
+      "units": [
+        {
+          "unit": "(unspecified)",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "No room-level detail in file"
+        }
+      ]
+    },
+    {
+      "name": "Burnet (Menomonie houses)",
+      "vendor": "Burnett - Wilson",
+      "propertyType": "Apartment",
+      "address": "1721 Plaza Drive",
+      "city": "Menomonie",
+      "state": "WI",
+      "zip": "54751",
+      "costPerWeek": 125,
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Burnett-Wilson customer $125/wk. Tab labeled 'Burnet'. Addresses: 1721 Plaza Drive (Roberto Alvarado group), 602 12th Ave E, 1402 8th St E Menomonie WI 54751. Single-occupancy rooms (capacity 1).",
+      "units": [
+        {
+          "unit": "House 1 Rm1",
+          "occupants": [
+            "Nick Lenardson"
+          ],
+          "rateType": "monthly",
+          "notes": "Nick has a car; 602 12th Ave E or 1402 8th St E group"
+        },
+        {
+          "unit": "House 1 Rm2",
+          "occupants": [
+            "Juan Tapia"
+          ],
+          "rateType": "monthly",
+          "notes": "rides w/Nick"
+        },
+        {
+          "unit": "House 1 Rm3",
+          "occupants": [
+            "Alonzo Jenkins"
+          ],
+          "rateType": "monthly",
+          "notes": "rides w/Nick"
+        },
+        {
+          "unit": "House 1 Rm4",
+          "occupants": [
+            "Alejandro Escamilla"
+          ],
+          "rateType": "monthly",
+          "notes": "plate AVU4859"
+        },
+        {
+          "unit": "1721 Plaza Dr Rm1",
+          "occupants": [
+            "Roberto Alvarado"
+          ],
+          "rateType": "monthly",
+          "notes": "plate AXJ2803"
+        },
+        {
+          "unit": "1721 Plaza Dr Rm2",
+          "occupants": [
+            "Miguel Hernandez"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "1721 Plaza Dr Rm3",
+          "occupants": [
+            "Kevin Anthony Tirado"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "1721 Plaza Dr Rm4",
+          "occupants": [
+            "Ramses Reyna"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "1721 Plaza Dr Rm5",
+          "occupants": [
+            "Gilberto Matthew Ramos"
+          ],
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Siren Apartments",
+      "vendor": "DeLallo",
+      "client": "DeLallo",
+      "propertyType": "Apartment",
+      "address": "7666 South Shore Drive",
+      "city": "Siren",
+      "state": "WI",
+      "zip": "54872",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Part of Siren/Webster/Hinckley DeLallo cluster. Siren $ header (no weekly amount given). Apt #1/#2/#3 units with Top, Street(St), Basement designations.",
+      "units": [
+        {
+          "unit": "Top-Apt #1-1",
+          "occupants": [
+            "Andres Ayala"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #1-2",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "empty"
+        },
+        {
+          "unit": "Apt #2-1 (St)",
+          "occupants": [
+            "Felix A. Baez Caballero",
+            "Orlando Moreno"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #2-2 (St)",
+          "occupants": [
+            "Ricardo Mondragon",
+            "Luis E Ceballos Martinez"
+          ],
+          "rateType": "monthly",
+          "notes": "Luis E Ceballos Martinez - Basement"
+        },
+        {
+          "unit": "Apt #3-1",
+          "occupants": [
+            "Cory Banuelos",
+            "Albert Garcia"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Apt #3-2",
+          "occupants": [
+            "Brandon Didonato",
+            "Miguel Mata"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Basement",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "Water - N/A"
+        }
+      ]
+    },
+    {
+      "name": "Webster Apartments",
+      "vendor": "DeLallo",
+      "client": "DeLallo",
+      "propertyType": "Apartment",
+      "address": "7112 Zielsdorf Drive",
+      "city": "Webster",
+      "state": "WI",
+      "zip": "54893",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Webster $ header (no weekly amount). West/East units, capacity 2 each.",
+      "units": [
+        {
+          "unit": "West-1",
+          "occupants": [
+            "Willie A. Medina Jr"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "West-2",
+          "occupants": [
+            "Johnathan M. Reynolds"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "East-1",
+          "occupants": [
+            "Jordan A. Sanders",
+            "Jordan Doyle"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "East-2",
+          "occupants": [
+            "Fernando D. Reyes",
+            "Gabriel M. Vega"
+          ],
+          "rateType": "monthly",
+          "notes": "Also Cody S. Ogden listed Webster"
+        }
+      ]
+    },
+    {
+      "name": "Hinckley Apartments",
+      "vendor": "DeLallo",
+      "client": "DeLallo",
+      "propertyType": "Apartment",
+      "address": "7th St SE",
+      "city": "Hinckley",
+      "state": "MN",
+      "zip": "55037",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Hinckley $ header (no weekly amount). Buildings 402/404/406/410 with unit-floor numbers. Some apartments flagged 'Looking into moving them to another apartment.' Address also given as 410 7th St SE Hinckley MN 55037 on summary.",
+      "units": [
+        {
+          "unit": "402-304",
+          "occupants": [
+            "Jayden Robertson",
+            "Christian Frias",
+            "Devin M. Law"
+          ],
+          "rateType": "monthly",
+          "notes": "Devin M. Law listed Hinkley 404-304 on roster"
+        },
+        {
+          "unit": "410-205",
+          "occupants": [
+            "Eric D. Moore",
+            "Ronald Glen Holmes",
+            "Nicholas T. Preston"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "410-304",
+          "occupants": [
+            "Steven N. Holliday",
+            "Evan Sanders",
+            "Colby Peters"
+          ],
+          "rateType": "monthly",
+          "notes": "Colby Peters/Steven Holliday rostered 410-204"
+        },
+        {
+          "unit": "406-204",
+          "occupants": [
+            "Luis A. Hernandez",
+            "Jose Calderon",
+            "Edher Ayala",
+            "Carlos Sosa Hernandez",
+            "Anthony Moore",
+            "Elijah Davis"
+          ],
+          "rateType": "monthly",
+          "notes": "Flagged: looking into moving to another apartment"
+        },
+        {
+          "unit": "406-205",
+          "occupants": [
+            "Felix Arroyo",
+            "Ramon Almeida Ruiz",
+            "Cody S. Ogden",
+            "Isidro Guerrero"
+          ],
+          "rateType": "monthly",
+          "notes": "Felix Arroyo - KFI Sup."
+        },
+        {
+          "unit": "406-302",
+          "occupants": [
+            "Jose Gallegos",
+            "Devin R. Neal",
+            "Juan Sanchez",
+            "Anthony C Shaverin",
+            "Frank Quinones",
+            "Luis A. Hernandez"
+          ],
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Park Place Apartments",
+      "vendor": "Park Place Apartments",
+      "propertyType": "Apartment",
+      "address": "14500-14605 34th Ave N",
+      "city": "Plymouth",
+      "state": "MN",
+      "zip": "55447",
+      "costPerWeek": 125,
+      "landlordPhone": "763-445-2265",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "$125/wk header. Property address 14550 34th Ave N Plymouth MN 55447, phone 763-445-2265. Website liveatparkplace.com. Per-unit building addresses below. Move-out: Abel A Guzman last day 5/18/2026 (also 6/5/2026 note).",
+      "units": [
+        {
+          "unit": "118",
+          "occupants": [
+            "Julio Orgonez",
+            "Raymundo Leija",
+            "Ethan Davis",
+            "Joseph Bullock"
+          ],
+          "rateType": "monthly",
+          "notes": "14500 34th Ave N Apt 118"
+        },
+        {
+          "unit": "127",
+          "occupants": [
+            "Alfred A Beserra",
+            "Jordan Torres",
+            "David Davis",
+            "Erasmo Garza",
+            "Noe Morales",
+            "Steven Loves"
+          ],
+          "rateType": "monthly",
+          "notes": "14600 34th Ave N Apt 127"
+        },
+        {
+          "unit": "201",
+          "occupants": [
+            "Jonathan Reynosa",
+            "Evarado Delgado",
+            "Sebastian Villarreal",
+            "Tyrek J Patterson"
+          ],
+          "rateType": "monthly",
+          "notes": "14605 34th Ave N Apt 201"
+        },
+        {
+          "unit": "218",
+          "occupants": [
+            "Eduardo Campos",
+            "Gabriel J Womack",
+            "Gilbert Bustos Jr",
+            "Justin Deangelis"
+          ],
+          "rateType": "monthly",
+          "notes": "14605 34th Ave N Apt 218"
+        },
+        {
+          "unit": "315",
+          "occupants": [
+            "Abel A Guzman",
+            "Luis Rodriguez Rivera",
+            "Nicholas R Franklin"
+          ],
+          "rateType": "monthly",
+          "notes": "14600 34th Ave N Apt 315; Abel A Guzman move out 5/18/2026"
+        },
+        {
+          "unit": "342",
+          "occupants": [
+            "Jordan Torres",
+            "Jose Molina",
+            "Marcos Antonio Lara"
+          ],
+          "rateType": "monthly",
+          "notes": "14600 34th Ave N Apt 342"
+        }
+      ]
+    },
+    {
+      "name": "Wausau Apartments",
+      "vendor": "Wausau",
+      "propertyType": "Apartment",
+      "address": "1331-1341 S 8th Ave",
+      "city": "Wausau",
+      "state": "WI",
+      "zip": "54401",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Cut Form 3am and CWF 5am operations. Rent noted $1,410 (5/1 to 10/31 - $1,410; 6/15 to ___ - $1,410). Per-unit addresses below. Note '***Different address***'.",
+      "units": [
+        {
+          "unit": "Apt 200",
+          "occupants": [
+            "Cole C Hayek",
+            "Erin B Miller"
+          ],
+          "startDate": "2026-03-30",
+          "monthlyRent": 1410,
+          "rateType": "monthly",
+          "notes": "1331 S 8th Ave Apt 200"
+        },
+        {
+          "unit": "Apt 108",
+          "occupants": [
+            "Joshua B Allen",
+            "William Johnson",
+            "Julian T Lewis",
+            "Elijah Patterson"
+          ],
+          "startDate": "2026-03-30",
+          "monthlyRent": 1410,
+          "rateType": "monthly",
+          "notes": "1341 S 8th Ave Apt 108; William Johnson move in 5/1/2026"
+        },
+        {
+          "unit": "Apt 208",
+          "occupants": [
+            "Eduardo Solano Rios",
+            "Jacob Slade Brown",
+            "Ethan Long",
+            "James W Hart",
+            "Andrew B Sweet",
+            "Austin Crawford"
+          ],
+          "startDate": "2026-06-12",
+          "monthlyRent": 1410,
+          "rateType": "monthly",
+          "notes": "1341 S 8th Ave Apt 208; group move in 6/12/2026"
+        }
+      ]
+    },
+    {
+      "name": "Greenock Manor",
+      "vendor": "Greenock Manor",
+      "propertyType": "Apartment",
+      "address": "900 Seneca Court",
+      "city": "McKeesport",
+      "state": "PA",
+      "zip": "15135",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Address 900 Seneca Court McKeesport PA 15135. Capacity 4/unit. Also references 918 Zimmer Ln Apt (range 61-69) McKeesport PA 15135-2334 and 1040 Complex Dr Apt (range 71-79) McKeesport PA 15135-2332. Move-ins 4/18/2026 group; Landon Rankin & Roy Serna 5/14/2026. Richard Balderas move 5/16/2026.",
+      "units": [
+        {
+          "unit": "Apt 45",
+          "occupants": [
+            "Harold Covington"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 45 McKeesport PA 15135-2333; cap 4"
+        },
+        {
+          "unit": "Apt 36",
+          "occupants": [
+            "Justin Martinez",
+            "Jerry Rivas"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 36; Jerry Rivas move in 4/14/2026"
+        },
+        {
+          "unit": "Apt 48",
+          "occupants": [
+            "Tony Perry"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 48"
+        },
+        {
+          "unit": "Apt 49",
+          "occupants": [
+            "Mandrell Coretz"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 49"
+        },
+        {
+          "unit": "Apt 32",
+          "occupants": [
+            "Abel Perez",
+            "Candelario Nunez"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 32"
+        },
+        {
+          "unit": "Apt 42",
+          "occupants": [
+            "Timothy Rouse"
+          ],
+          "rateType": "monthly",
+          "notes": "900 Seneca Ct Apt 42"
+        },
+        {
+          "unit": "Apt 52",
+          "occupants": [
+            "Xavier Aaron Addison",
+            "Rolando Rene Avitia",
+            "Benjamin Zacatzontle",
+            "Michael J Wilson",
+            "Lucas J Young"
+          ],
+          "rateType": "monthly",
+          "notes": "cap 4; group move in 4/18/2026"
+        }
+      ]
+    },
+    {
+      "name": "Portage Housing (2900 New Pinery Rd)",
+      "vendor": "Portage",
+      "propertyType": "Apartment",
+      "address": "2900 New Pinery Rd",
+      "city": "Portage",
+      "state": "WI",
+      "zip": "53901",
+      "costPerWeek": 175,
+      "landlordPhone": "(877) 742-5306",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "$175/wk header. Phone (877) 742-5306. Large rooming facility with numbered rooms plus a separate S8 building block. Occupant codes (P#/T#) appear to be shift/crew tags. Many move-in dates 4/10-4/16/2026 and move-outs through May 2026.",
+      "units": [
+        {
+          "unit": "305",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "empty"
+        },
+        {
+          "unit": "205",
+          "occupants": [
+            "Ryan Fiegen",
+            "Brandon Johnson"
+          ],
+          "rateType": "monthly",
+          "notes": "move in 5/11/2026"
+        },
+        {
+          "unit": "134",
+          "occupants": [
+            "Claudia M Ramirez",
+            "Sybella Sandoval",
+            "Dalida M Diaz"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "149",
+          "occupants": [
+            "Zabdi X Rodriguez",
+            "John Tyler Clark"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "216",
+          "occupants": [
+            "Brandon Morgan",
+            "Diego Martinez"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "215",
+          "occupants": [
+            "Evian D Napier",
+            "Stephen Archambo"
+          ],
+          "rateType": "monthly",
+          "notes": "Evian D Napier move in/out 5/12/2026"
+        },
+        {
+          "unit": "247",
+          "occupants": [
+            "Jordan T. Smith",
+            "Trey Grant"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "122",
+          "occupants": [
+            "Javien Robinson",
+            "Zion Glover"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "303",
+          "occupants": [
+            "Ryan Thomas",
+            "Dario Munoz"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "232",
+          "occupants": [
+            "Noah Vaughn",
+            "Felix M. Rivera"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "136",
+          "occupants": [
+            "Sybella Sandoval",
+            "Dalida M Diaz"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "104",
+          "occupants": [
+            "Yuniel Perez"
+          ],
+          "rateType": "monthly",
+          "notes": "capacity 1"
+        },
+        {
+          "unit": "S8-207",
+          "occupants": [
+            "Jason Allen Mills",
+            "Cristian A Jackson"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "S8-209",
+          "occupants": [
+            "Logan J Rogers",
+            "Josue D Martinez Garza"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "S8-211",
+          "occupants": [
+            "Christian Quinones",
+            "Ethan Hasty"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "S8-218",
+          "occupants": [
+            "Trevor Jermaine Horne",
+            "Eric A Brunson"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "S8-219",
+          "occupants": [
+            "Alberto Lee Monnar",
+            "Daniel Young"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "S8-221",
+          "occupants": [
+            "Jonathan Isaiah Spears"
+          ],
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Greensburg / Jeannette Houses (DeLallo)",
+      "vendor": "DeLallo",
+      "propertyType": "Apartment",
+      "address": "6454 Route 30",
+      "city": "Jeannette",
+      "state": "PA",
+      "zip": "15644-3168",
+      "costPerWeek": 69.23,
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "$69.23/wk header. 'Yellow House' at 6454 Route 30 Jeannette PA 15644 with up/down/Attic/Basement rooms; second address 6481 US-30 Jeannette PA 15644. AutoZone customer/route. Move-out names: Willie Turner, Dylan Farmer, Abel.",
+      "units": [
+        {
+          "unit": "Up-1",
+          "occupants": [
+            "Diron Weaver"
+          ],
+          "rateType": "monthly",
+          "notes": "6454 Route 30"
+        },
+        {
+          "unit": "Up-2",
+          "occupants": [
+            "Jordan Brown"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Down-3",
+          "occupants": [
+            "Davidson"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Down-4",
+          "occupants": [
+            "Abel Small"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Attic-1 (Yellow House)",
+          "occupants": [],
+          "rateType": "monthly",
+          "notes": "6481 US-30 Jeannette PA 15644"
+        },
+        {
+          "unit": "Yellow House-2",
+          "occupants": [
+            "Julian Ybarra"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Yellow House-4",
+          "occupants": [
+            "Daniel Leos Jr"
+          ],
+          "rateType": "monthly"
+        },
+        {
+          "unit": "Basement-1 (Yellow House)",
+          "occupants": [
+            "Cory Brittman"
+          ],
+          "rateType": "monthly"
+        }
+      ]
+    },
+    {
+      "name": "Chateau Knoll",
+      "vendor": "Chateau Knoll",
+      "propertyType": "Apartment",
+      "address": "2900 Middle Rd",
+      "city": "Bettendorf",
+      "state": "IA",
+      "zip": "52722",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Property address 2900 Middle Rd Bettendorf IA 52722. Per-unit street addresses (e.g. 2108/3512/3524/3604/1407/1506 Chateau Knoll). Move-in dates 01/26/2026, 03/11/2026, 03/31/2026, 04/08/2026; several move-outs early-May 2026.",
+      "units": [
+        {
+          "unit": "2108",
+          "occupants": [
+            "Gage C. Moody",
+            "Richard M. Anthony Fuller",
+            "Victor A. Valenzuela Espinoza"
+          ],
+          "startDate": "2026-04-08",
+          "rateType": "monthly",
+          "notes": "2108 Chateau Knoll; cap 4"
+        },
+        {
+          "unit": "3512",
+          "occupants": [
+            "Jose Angulo"
+          ],
+          "rateType": "monthly",
+          "notes": "3512 Chateau Knls; Jose Angulo - Driver; cap 4"
+        },
+        {
+          "unit": "3524",
+          "occupants": [
+            "Devin F Holly",
+            "Branden Gonzalez"
+          ],
+          "rateType": "monthly",
+          "notes": "3524 Chateau Knoll; cap 4"
+        },
+        {
+          "unit": "3604",
+          "occupants": [
+            "Aaron Collins",
+            "Gabriel A Clark",
+            "Gabriel C Shamam",
+            "Christopher Aaron Delarosa"
+          ],
+          "startDate": "2026-01-26",
+          "rateType": "monthly",
+          "notes": "3604 Chateau Knoll; cap 6"
+        },
+        {
+          "unit": "1407",
+          "occupants": [
+            "Jaylon Marquan Clark",
+            "Marquis Jamel Sanders",
+            "Jacoby Chenevert",
+            "Giovanni O. Lynn Alexander"
+          ],
+          "startDate": "2026-03-31",
+          "rateType": "monthly",
+          "notes": "1407 Chateau Knoll; cap 4"
+        },
+        {
+          "unit": "1506",
+          "occupants": [
+            "Tanner James William Langford",
+            "Jacob David Varney"
+          ],
+          "startDate": "2026-03-31",
+          "rateType": "monthly",
+          "notes": "1506 Chateau Knoll; cap 4"
+        }
+      ]
+    },
+    {
+      "name": "Ridge Motor Inn",
+      "vendor": "Ridge Motor Inn",
+      "client": "Penda",
+      "propertyType": "Motel",
+      "landlordName": "Phil and Joe",
+      "costPerWeek": 175,
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Listed only on the customer/cost summary tab: Penda customer, $175/wk, 'Ridge Motor Inn - Phil and Joe'. No room-level occupancy detail in this workbook. Captured as Motel/room-night per instructions.",
+      "units": [
+        {
+          "unit": "(unspecified)",
+          "rateType": "room-night",
+          "notes": "No room-level detail in file"
+        }
+      ]
+    },
+    {
+      "name": "Econo Lodge Hotel",
+      "vendor": "Econo Lodge Hotel",
+      "propertyType": "Motel",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Listed only on the customer/cost summary tab (no address, weekly cost, or room-level detail in this workbook). Captured as Motel/room-night per instructions.",
+      "units": [
+        {
+          "unit": "(unspecified)",
+          "rateType": "room-night",
+          "notes": "No room-level detail in file"
+        }
+      ]
+    },
+    {
+      "name": "Willow Wind Apartments",
+      "vendor": "Willow Wind Apartments",
+      "propertyType": "Apartment",
+      "source": "Housing Master File 2026.xlsx (occupancy)",
+      "notes": "Listed only on the customer/cost summary tab; no address or room-level detail in this workbook.",
+      "units": [
+        {
+          "unit": "(unspecified)",
+          "rateType": "monthly",
+          "notes": "No room-level detail in file"
+        }
+      ]
+    },
+    {
+      "name": "Foote Hills",
+      "propertyType": "Town house",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "city": "Grand Rapids",
+      "state": "MI",
+      "zip": "49546",
+      "landlordName": "Foote Hill Group, LLC",
+      "landlordPhone": "Leasing office addr: 4630 Common Way Dr SE, Grand Rapids, MI 49546",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Leasing contact ADAM CASTANEDA LD via Lanyard. Utilities: DTE Energy (townhomes only) acct MI55946909; Consumers Energy (apartments & townhomes) acct 4331988994. Rent Due 1st of month. All units #Tenant=4 except 103DW=6.",
+      "units": [
+        {
+          "unit": "505DW",
+          "monthlyRent": 1800,
+          "costPerWeek": null,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2025-01-03",
+          "endDate": "2026-01-02",
+          "rateType": "monthly",
+          "occupants": [
+            "Esteban Lopez",
+            "Richard Marrroquin",
+            "Roberto Flores Jr",
+            "Luis Suarez"
+          ],
+          "notes": "Rent+Lanyard $2,068.97 (Lanyard fee $268.97). Addr 4710 Wrightwind Dr. SR #505. Rent per bed $119.36; current deduction $116; early move out $1,530."
+        },
+        {
+          "unit": "103DW",
+          "monthlyRent": 2200,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-12-03",
+          "endDate": "2025-11-10",
+          "rateType": "monthly",
+          "occupants": [
+            "Israel Duenas Juarez",
+            "Kenedy Flores",
+            "Daniel Alvarez",
+            "Mario Penaflor",
+            "Rafael Aragon Parra"
+          ],
+          "notes": "6-bed; Bed1 Empty. Rent+Lanyard $2,528.74 (fee $328.74). Addr 4785 Shady Pine Ln SE #103 DW. Rent per bed $97.26; deduction $116; early move out $1,870."
+        },
+        {
+          "unit": "B05D",
+          "monthlyRent": 1525,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-12-20",
+          "endDate": "2025-12-19",
+          "rateType": "monthly",
+          "occupants": [
+            "Nelson Colon",
+            "Miguel Molina",
+            "Diego Fuerte",
+            "Juan De Dios Flores"
+          ],
+          "notes": "Rent+Lanyard $1,752.87 (fee $227.87). Addr 4739 Wrightwind Dr SE #B05P. Rent per bed $101.13; early move out $1,296.25."
+        },
+        {
+          "unit": "902P",
+          "monthlyRent": 1700,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-14",
+          "rateType": "monthly",
+          "occupants": [
+            "David Perdomo Nieto",
+            "Christopher Olson",
+            "Gabriel Carbonel",
+            "Angel Magana A"
+          ],
+          "notes": "Rent+Lanyard $1,954.03 (fee $254.03). Addr 2675 Trails End Dr SE #902P. Rent per bed $112.73; early move out $1,445."
+        },
+        {
+          "unit": "A02P",
+          "monthlyRent": 1625,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-11-11",
+          "endDate": "2025-11-10",
+          "rateType": "monthly",
+          "occupants": [
+            "Felix Ruiz Talavera",
+            "Evaristo Romero",
+            "Julio Games",
+            "Mateo Martinez"
+          ],
+          "notes": "Rent+Lanyard $1,867.82 (fee $242.82). Addr 4740 Hickory Way DR SE #A02P. Rent per bed $107.76; deduction $117; early move out $1,381.25."
+        },
+        {
+          "unit": "D06",
+          "monthlyRent": 1525,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-11-22",
+          "endDate": "2025-11-21",
+          "rateType": "monthly",
+          "occupants": [
+            "Luis M Medel Labrada",
+            "Victor Ortiz Soto",
+            "Christopher Ross",
+            "Isaac Rada"
+          ],
+          "notes": "Rent+Lanyard $1,752.87 (fee $227.87). Addr 4699 Hickory Way DR SE #D06. Rent per bed $101.13; deduction $117; early move out $1,296.25."
+        },
+        {
+          "unit": "E02P",
+          "monthlyRent": 1625,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-14",
+          "rateType": "monthly",
+          "occupants": [
+            "Jose Galvan Rod",
+            "Mauricio Garcia",
+            "Jesus Duron"
+          ],
+          "notes": "Bed3 Empty. Rent+Lanyard $1,867.82 (fee $242.82). Addr 4680 Lamplight Lane SE #E02. Rent per bed $107.76; early move out $1,381.25."
+        },
+        {
+          "unit": "A10P",
+          "monthlyRent": 1550,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2025-02-03",
+          "endDate": "2026-02-02",
+          "rateType": "monthly",
+          "occupants": [
+            "Ricardo Alonso",
+            "Jose Hernandez A",
+            "Edwin Zamora",
+            "Armando Gonzalez"
+          ],
+          "notes": "Rent+Lanyard $1,781.61 (fee $231.61). Addr 4740 Hickory Way DR SE #A10P. Rent per bed $95.44; deduction $116."
+        },
+        {
+          "unit": "B03P",
+          "monthlyRent": 1625,
+          "securityDeposit": 0,
+          "rentDueDay": 1,
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-14",
+          "rateType": "monthly",
+          "occupants": [
+            "Yesenia Diaz",
+            "Claudia Leanos",
+            "Zoraida Perez Dominguez",
+            "Sulema Sanchez"
+          ],
+          "notes": "Rent+Lanyard $1,867.82 (fee $242.82). Addr 4739 Wrightwind Dr SE #B03P. Rent per bed $107.76; deduction $117."
+        }
+      ]
+    },
+    {
+      "name": "Days Inn Hotel",
+      "propertyType": "Motel",
+      "rateType": "room-night",
+      "rentFrequency": "nightly",
+      "vendor": "Lanyard",
+      "address": "170 Toms Dr",
+      "city": "Morehead",
+      "state": "KY",
+      "zip": "40351",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Nightly rate $65/room. Lease start 5/14/2024. Vehicle AXJ2803 (12) occupants noted: Michael Runyon, Emmanuel Martinez, Adam Forte, Jonathan Torres, Oscar Delgado, Christpher Thomas. Rent per bed $175.",
+      "units": [
+        {
+          "unit": "206",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "occupants": [
+            "Emmanuel Martinez",
+            "Oscar Delgado"
+          ],
+          "notes": "#Tenant 2. Rent per bed $175."
+        },
+        {
+          "unit": "209",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "occupants": [],
+          "status": "Returned",
+          "notes": "#Tenant 2; Returned."
+        },
+        {
+          "unit": "210",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "occupants": [
+            "Adam Forte",
+            "Christpher Thomas"
+          ],
+          "notes": "#Tenant 2. Rent per bed $175."
+        },
+        {
+          "unit": "211",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "occupants": [
+            "Jonathan Torres",
+            "Milton Flores"
+          ],
+          "notes": "#Tenant 2. Rent per bed $175."
+        }
+      ]
+    },
+    {
+      "name": "GoForth Investments LLC",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "GoForth Leasing",
+      "address": "743 Howard Ave.",
+      "city": "Lebanon",
+      "state": "MO",
+      "zip": "65536",
+      "landlordName": "GoForth Leasing",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Single unit house, 6 occupants.",
+      "units": [
+        {
+          "unit": "743",
+          "monthlyRent": 2400,
+          "securityDeposit": 2400,
+          "startDate": "2022-11-01",
+          "endDate": "2023-10-31",
+          "rateType": "monthly",
+          "occupants": [
+            "Alex Martinez",
+            "Kevin Padilla",
+            "Chrsitopher Martinez"
+          ],
+          "notes": "#Tenant 6. Bed4 'Returned 4/10/25'."
+        }
+      ]
+    },
+    {
+      "name": "Express Inn & Suites",
+      "propertyType": "Motel",
+      "rateType": "room-night",
+      "rentFrequency": "nightly",
+      "vendor": "Lanyard",
+      "address": "1601 Hwy 31 SW",
+      "city": "Hartselle",
+      "state": "AL",
+      "zip": "35640",
+      "landlordName": "Kate",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Nightly rate $60.50. Vehicles: AVU4892, AWT8509 (Vehicle 1 = 4 employees, Vehicle 2 = 10 employees).",
+      "units": [
+        {
+          "unit": "113",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Martin Cruz Ramirez 2nd",
+            "Lary Casares 2nd"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "124",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Leonardo Rivera 2nd",
+            "John Colon"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "125",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Bejamin Hardee 2nd",
+            "Carlos Diaz 2nd"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "127",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Miguel Williams",
+            "Antonio Aguilar"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "129",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Johny Moril 1st"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "130",
+          "nightlyRate": 60.5,
+          "rateType": "room-night",
+          "occupants": [
+            "Adrian Avila"
+          ],
+          "notes": "#Tenant 2."
+        }
+      ]
+    },
+    {
+      "name": "Greenock Manor Apartments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "900 Seneca Court",
+      "city": "Mckeesport",
+      "state": "PA",
+      "zip": "15135",
+      "landlordPhone": "Mike Smith - 412-208-4262 txt/call",
+      "landlordName": "Leasing office: 918 Zimmer Hill Rd Mckeesport, PA 15135",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Maintenance/contact Mike Smith 412-208-4262. Rent per bed $64.54, rent change $75. Many cross-listed occupant names (e.g., Eriel Taylor, Darrian Mauricio, Robert Sykes/Dykes) appear in overflow list. Unit 52 added (Empty).",
+      "units": [
+        {
+          "unit": "45",
+          "monthlyRent": 895,
+          "startDate": "2025-01-01",
+          "endDate": "2026-12-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Timothy Murphy",
+            "Robert Sullivan",
+            "Harold Covington"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,118.75 (fee $223.75). Bed4 Empty. Renewal end 12/31/2026."
+        },
+        {
+          "unit": "36",
+          "monthlyRent": 895,
+          "startDate": "2024-10-25",
+          "endDate": "2025-10-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Andres Gallegos",
+            "Justin Martinez",
+            "Derrick Black"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,118.75. Bed4 Empty."
+        },
+        {
+          "unit": "48",
+          "monthlyRent": 895,
+          "startDate": "2024-10-25",
+          "endDate": "2025-10-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Tony Perry",
+            "Tyler Smith",
+            "Christopher Hill",
+            "Jared Lemert"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,118.75."
+        },
+        {
+          "unit": "49",
+          "monthlyRent": 895,
+          "startDate": "2024-10-25",
+          "endDate": "2025-10-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Mandrell Coretz",
+            "Joy Doran",
+            "Richard Balderas",
+            "Jeffrey Jackson"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,118.75."
+        },
+        {
+          "unit": "32",
+          "monthlyRent": 895,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Jaime Alvarado",
+            "Christian Decuire",
+            "Sam Houston",
+            "Christopher Hopson"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,118.75."
+        },
+        {
+          "unit": "42",
+          "monthlyRent": 900,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Timothy Rouse",
+            "Jacob Mullinax",
+            "Richard Russell"
+          ],
+          "notes": "#Tenant 4. Rent+Lanyard $1,125.00 (fee $225). Bed4 Empty. Rent per bed $64.54."
+        },
+        {
+          "unit": "52",
+          "monthlyRent": 895,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 4. Empty/Empty/Empty/Empty. Rent per bed $65.54, $84.00."
+        }
+      ]
+    },
+    {
+      "name": "MSK Investments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "1703 Soles St.",
+      "city": "Mackeesport",
+      "state": "PA",
+      "zip": "15132",
+      "landlordPhone": "412-484-8452",
+      "landlordName": "Leasing office: 1415 Fifth Ave. Mckeesport, PA 15132",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Listed alongside Greenock block. Status Returned. Overflow occupant list referencing units 1703/32/48/49/36 includes Juan Gomez, Jacob Chaplin, Emmanuel Diaz, Jesus Ramirez Jr, Benjamin Heward.",
+      "units": [
+        {
+          "unit": "1703",
+          "startDate": "2025-05-12",
+          "rateType": "monthly",
+          "securityDeposit": 900,
+          "status": "Returned",
+          "occupants": [
+            "Juan Gomez",
+            "Jacob Chaplin",
+            "Emmanuel Diaz",
+            "Jesus Ramirez Jr",
+            "Benjamin Heward"
+          ],
+          "notes": "#Tenant 4 (occupant list overflows). Month to month."
+        }
+      ]
+    },
+    {
+      "name": "Prairie Hill Village",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "1850 W Pine St",
+      "city": "Baraboo",
+      "state": "WI",
+      "zip": "53913",
+      "landlordName": "Patriot Properties",
+      "landlordPhone": "Leasing office: 204 Moravian Valley Rd Suite N, Waunakee, WI 53597",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "No early termination fee - responsible for full 12 months. All units #Tenant 4, Active, rent per bed $130. Lease 9/30/2025 - 09/31/2026.",
+      "units": [
+        {
+          "unit": "509",
+          "monthlyRent": 1690,
+          "securityDeposit": 1675,
+          "startDate": "2025-09-30",
+          "endDate": "2026-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Jonathan Ariola",
+            "Pedro Garcia",
+            "Lawrence Cortez",
+            "Eladio Ramos Jr"
+          ],
+          "notes": "Rent+Lanyard $1,970.59 (fee $280.59). Rent per bed $130."
+        },
+        {
+          "unit": "510",
+          "monthlyRent": 1690,
+          "securityDeposit": 1675,
+          "startDate": "2025-09-30",
+          "endDate": "2026-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Carlos Galvez Garcia",
+            "Claudio Alvarado",
+            "Juan Lozada Lugo",
+            "Jacob Zepeda"
+          ],
+          "notes": "Rent+Lanyard $1,970.59. Rent per bed $130."
+        },
+        {
+          "unit": "512",
+          "monthlyRent": 1690,
+          "securityDeposit": 1675,
+          "startDate": "2025-09-30",
+          "endDate": "2026-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Alexander Marrero",
+            "Xavior Robinson",
+            "Alexis Perez",
+            "Dorian Kyles"
+          ],
+          "notes": "Rent+Lanyard $1,970.59. Rent per bed $130."
+        },
+        {
+          "unit": "811",
+          "monthlyRent": 1690,
+          "securityDeposit": 1675,
+          "startDate": "2025-09-30",
+          "endDate": "2026-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Moices Bernal",
+            "Gabriel Romero",
+            "Jacob Ferguson",
+            "Ricco Lorenza"
+          ],
+          "notes": "Rent+Lanyard $1,970.59. Rent per bed $130."
+        },
+        {
+          "unit": "812",
+          "monthlyRent": 1690,
+          "securityDeposit": 1675,
+          "startDate": "2025-09-30",
+          "endDate": "2026-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Abein Flores",
+            "Jose Castro",
+            "Antonio Hernandez",
+            "Ismael Meza"
+          ],
+          "notes": "Rent+Lanyard $1,970.59. Rent per bed $130."
+        }
+      ]
+    },
+    {
+      "name": "Las Palmas",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "city": "Arlington",
+      "state": "TX",
+      "zip": "76011",
+      "landlordName": "901 N Oak, LLC",
+      "landlordPhone": "Victoria Leiterman (leasing contact)",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Each unit has its own street address on E Sanford St, Arlington TX.",
+      "units": [
+        {
+          "unit": "146",
+          "monthlyRent": 980,
+          "securityDeposit": 0,
+          "startDate": "2024-01-23",
+          "endDate": "2025-01-22",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Alexander Marrero",
+            "Andres Perez"
+          ],
+          "notes": "#Tenant 2. Addr 708 E Sanford St Apt S146. Renewal 1/23/2025-1/22/2026."
+        },
+        {
+          "unit": "209",
+          "monthlyRent": 980,
+          "securityDeposit": 0,
+          "startDate": "2024-01-24",
+          "endDate": "2025-01-23",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [],
+          "notes": "#Tenant 2. Addr 715 E Sanford St Apt 209. Empty/Empty. Renewal 1/24/2025-1/23/2026."
+        },
+        {
+          "unit": "234",
+          "monthlyRent": 980,
+          "securityDeposit": 0,
+          "startDate": "2024-01-17",
+          "endDate": "2025-01-16",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Isaias Martinez",
+            "Alexis Perez"
+          ],
+          "notes": "#Tenant 2. Addr 808 E Sanford St Apt S234. Renewal 1/17/2025-1/16/2026."
+        },
+        {
+          "unit": "235",
+          "monthlyRent": 1295,
+          "securityDeposit": 0,
+          "startDate": "2024-01-17",
+          "endDate": "2025-01-16",
+          "rateType": "monthly",
+          "status": "Returned 4/21/25",
+          "occupants": [],
+          "notes": "#Tenant 4. Addr 707 E Sanford St Apt 235. Empty. Renewal 1/17/2025-1/16/2026."
+        }
+      ]
+    },
+    {
+      "name": "The Park Place Apartments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "city": "Plymouth",
+      "state": "MN",
+      "zip": "55447",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "WB Manufacturing client (departments PLF/PLB/Weld/PP/Paintline noted). Out-of-housing-still-working list: Romeo Salinas 315, Jason Green 201, Gavin Chacon 218, Otniel Alvarez 315, Chris Grier 315, Yader Guido 201, Patricio Magagnato 218, Luis Ruiz 201. All units #Tenant 4. Lease/leasing-office fields blank in export.",
+      "units": [
+        {
+          "unit": "118",
+          "monthlyRent": 1796,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Julio Orgonez",
+            "Reymundo Leija",
+            "Ethan Davis"
+          ],
+          "notes": "Addr 14500 34th Ave N. Rent+Lanyard $2,038.20 / $2089.22. Rent per bed $117.59."
+        },
+        {
+          "unit": "127",
+          "monthlyRent": 1766,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Josue Sanchez",
+            "Angel G Herrera",
+            "Miguel Gutierrez",
+            "Alfred Beserra"
+          ],
+          "notes": "Addr 14600 34th Ave N. Rent+Lanyard $2,003.37; Renewed 11/2026 $2,053.46. Rent per bed $115.58."
+        },
+        {
+          "unit": "315",
+          "monthlyRent": 1801,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Angel Cruz",
+            "Erasmo Garza",
+            "NIcholas Franklin",
+            "Luis Rodriguez"
+          ],
+          "notes": "Addr 14600 34th Ave N. Rent+Lanyard $2,043.82; Renewed 11/2026 $2094.80. Rent per bed $117.91."
+        },
+        {
+          "unit": "342",
+          "monthlyRent": 1771,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Jordan Torres",
+            "Jose Molina",
+            "Marco A Lara",
+            "David Davis"
+          ],
+          "notes": "Addr 14600 34th Ave N. Rent+Lanyard $2,008.99 / $2060.17. Rent per bed $115.90."
+        },
+        {
+          "unit": "201",
+          "monthlyRent": 1726,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Evarado Delgado",
+            "Kassan Myers",
+            "Tyrek Patterson",
+            "Jonathan Reynoso"
+          ],
+          "notes": "Addr 14605 34th Ave N. Rent+Lanyard $1,980.90; Renewed 11/2026 $2,031.12. Rent per bed $114.28."
+        },
+        {
+          "unit": "218",
+          "monthlyRent": 1766,
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Gilberto Bustos",
+            "Eduardo Campos",
+            "Francisco Contreras"
+          ],
+          "notes": "Addr 14605 34th Ave N. Rent+Lanyard $2,003.37 / $2,053.46. Rent per bed $115.58."
+        }
+      ]
+    },
+    {
+      "name": "Siren House",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "7666 S Shore Dr.",
+      "city": "Siren",
+      "state": "WI",
+      "zip": "54872",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Combined block with Webster House and Willow Winds; occupant rows offset and matched by best reasoning. Could make another room if more people needed.",
+      "units": [
+        {
+          "unit": "#1",
+          "rateType": "monthly",
+          "occupants": [
+            "Daniel Hernandez",
+            "Andres Ayala",
+            "Anthony Evans"
+          ],
+          "notes": "2bd 1 bth. Rent per bed $125. Bed4 Empty."
+        },
+        {
+          "unit": "#2",
+          "rateType": "monthly",
+          "occupants": [
+            "Olando Moreno",
+            "Felix Baez Caballero",
+            "Ricardo Mondragon Mercado",
+            "Albert Gracia"
+          ],
+          "notes": "2bd 2 bth."
+        },
+        {
+          "unit": "#3",
+          "rateType": "monthly",
+          "occupants": [
+            "Miguel Mata",
+            "Brandon Didonato",
+            "Cory Banuelos"
+          ],
+          "notes": "2bd 1 bth. Bed4 Empty."
+        },
+        {
+          "unit": "#4",
+          "rateType": "monthly",
+          "occupants": [
+            "Luis Ceballos"
+          ],
+          "notes": "Studio."
+        }
+      ]
+    },
+    {
+      "name": "Webster House",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "7112 Zielsdorf Dr.",
+      "city": "Webster",
+      "state": "WI",
+      "zip": "54893",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Units listed as East (E) and West (W). Occupant rows offset in combined block.",
+      "units": [
+        {
+          "unit": "East",
+          "rateType": "monthly",
+          "occupants": [
+            "Willie Medina",
+            "Cody Ogden",
+            "Johnathan Reynolds"
+          ],
+          "notes": "#Tenant 4. East unit."
+        },
+        {
+          "unit": "West",
+          "rateType": "monthly",
+          "occupants": [
+            "Gabriel Vega",
+            "Fernando Reyes",
+            "Jordan Sanders"
+          ],
+          "notes": "#Tenant 4. West unit."
+        }
+      ]
+    },
+    {
+      "name": "Willow Winds Apartments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "7th St. SE",
+      "city": "Hinckley",
+      "state": "MN",
+      "zip": "55037",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Each unit keyed by building-apt (e.g., 410-205). Rent per bed $86. Utilities: Minnesota Power 800-228-4966. Overflow occupant list: Austin Lyons 410-205, Ernesto Cantu 410-205, Eric Moore 410-204, Bryan Jones 406-204, Adrian Rios 406-205, Gabriel Wiseman 406-302, Joel Gomez 406-205.",
+      "units": [
+        {
+          "unit": "410-205",
+          "rateType": "monthly",
+          "occupants": [
+            "Erik Moore",
+            "Austin Lyons",
+            "Ernesto Cantu"
+          ],
+          "notes": "Bldg 410 Apt 205. #Tenant 4. Rent per bed $86. Bed2/3/4 partly Empty."
+        },
+        {
+          "unit": "410-304",
+          "rateType": "monthly",
+          "occupants": [
+            "Steven Hollyday",
+            "Juan Duran",
+            "Colby Peters",
+            "Ramon Almeida"
+          ],
+          "notes": "Bldg 410 Apt 304. #Tenant 4. Rent per bed $116."
+        },
+        {
+          "unit": "402-304",
+          "rateType": "monthly",
+          "occupants": [
+            "Daniel Smith",
+            "Devin Law",
+            "Christian Frias",
+            "Jordan Doyle"
+          ],
+          "notes": "Bldg 402 Apt 304. #Tenant 4. Rent per bed $116."
+        },
+        {
+          "unit": "406-204",
+          "rateType": "monthly",
+          "occupants": [
+            "Elijah Davis",
+            "Juan Sanchez",
+            "Jayden Robertoson",
+            "Bryan Jones"
+          ],
+          "notes": "Bldg 406 Apt 204. #Tenant 4. Rent per bed $86."
+        },
+        {
+          "unit": "406-205",
+          "rateType": "monthly",
+          "occupants": [
+            "Jose Gallegos",
+            "Felix Arroyo",
+            "Devin Neal",
+            "Adrian Rios",
+            "Joel Gomez"
+          ],
+          "notes": "Bldg 406 Apt 205. #Tenant 4. Rent per bed $86."
+        },
+        {
+          "unit": "406-302",
+          "rateType": "monthly",
+          "occupants": [
+            "Ronald Glen Holmes",
+            "Francisco Palma",
+            "Frank Quinonez",
+            "Gabriel Wiseman"
+          ],
+          "notes": "Bldg 406 Apt 302. #Tenant 4. Rent per bed $86."
+        }
+      ]
+    },
+    {
+      "name": "Stonleigh Court Apartments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "city": "Leavenworth",
+      "state": "KS",
+      "zip": "66048",
+      "landlordName": "Consuelo Martinez",
+      "landlordPhone": "Leasing office: 1331 Stonleigh Ct. Leavenworth, KS 66048",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Spelled 'Stonleigh' in file (likely Stoneleigh). Heatron client units. Rent Due 1st of month. Each unit has own address.",
+      "units": [
+        {
+          "unit": "1341-A",
+          "monthlyRent": 1154,
+          "securityDeposit": 1154,
+          "rentDueDay": 1,
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-31",
+          "rateType": "monthly",
+          "status": "Returned",
+          "occupants": [],
+          "notes": "#Tenant 4. Addr 1341 Stonleigh Ct. #A. Rent+Lanyard $1,442.50 (fee $288.50). Est utilities $75. Rent per bed $83.22. All beds Empty."
+        },
+        {
+          "unit": "1341-C",
+          "monthlyRent": 1154,
+          "securityDeposit": 1154,
+          "rentDueDay": 1,
+          "startDate": "2024-10-01",
+          "endDate": "2025-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Ihala Alfonso Garcia"
+          ],
+          "notes": "#Tenant 4. Addr 1341 Stonleigh Ct. #C. Rent+Lanyard $1,442.50. Est utilities $75. Rent per bed $83.22."
+        },
+        {
+          "unit": "1312-E",
+          "monthlyRent": 1208,
+          "securityDeposit": 1208,
+          "rentDueDay": 1,
+          "startDate": "2024-10-01",
+          "endDate": "2024-09-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Luis Rivera",
+            "Angel Cruz"
+          ],
+          "notes": "#Tenant 6. Addr 1312 Stonleigh Ct. #E. Rent+Lanyard $1,510 (fee $302). Est utilities $75. Rent per bed $58.08."
+        },
+        {
+          "unit": "2023-D",
+          "monthlyRent": 1249,
+          "securityDeposit": 1249,
+          "rentDueDay": 1,
+          "startDate": "2024-11-27",
+          "endDate": "2025-11-30",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [
+            "Arle R Izaguirre (Peter)"
+          ],
+          "notes": "#Tenant 6. Addr 2023 Seneca St. #D. Rent+Lanyard $1,469.41 (fee $220.41). Est utilities $50. Rent per bed $56.52."
+        },
+        {
+          "unit": "2019-B",
+          "monthlyRent": 1249,
+          "securityDeposit": 1249,
+          "rentDueDay": 1,
+          "startDate": "2024-12-11",
+          "endDate": "2025-12-31",
+          "rateType": "monthly",
+          "status": "Returned",
+          "occupants": [],
+          "notes": "#Tenant 6. Addr 2019 Miami St. #B. Rent+Lanyard $1,469.41. Est utilities $50. All beds Empty/N/A."
+        },
+        {
+          "unit": "1315-D",
+          "monthlyRent": 1208,
+          "securityDeposit": 1208,
+          "rentDueDay": 1,
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-31",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 6. Addr 1315 Stonleigh Ct. #D. Rent+Lanyard $1,510 (fee $302). Est utilities $75. Rent per bed $58.08. All beds Empty."
+        },
+        {
+          "unit": "2015-B",
+          "monthlyRent": 1249,
+          "securityDeposit": 1249,
+          "rentDueDay": 1,
+          "startDate": "2024-11-27",
+          "endDate": "2025-11-30",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 6. Addr 2015 Miami St. #B. Rent+Lanyard $1,469.41. Est utilities $50. Rent per bed $56.52. All beds Empty."
+        },
+        {
+          "unit": "1340-F",
+          "monthlyRent": 1099,
+          "securityDeposit": 1099,
+          "rentDueDay": 1,
+          "startDate": "2024-12-11",
+          "endDate": "2025-12-31",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 6. Addr 1340 Stonleigh Ct. #F. Rent+Lanyard $1,373.75 (fee $274.75). Est utilities $75. Rent per bed $52.84. All beds Empty."
+        }
+      ]
+    },
+    {
+      "name": "EconoLodge",
+      "propertyType": "Motel",
+      "rateType": "room-night",
+      "rentFrequency": "nightly",
+      "vendor": "Lanyard",
+      "address": "1926 Jefferson St",
+      "city": "Jefferson City",
+      "state": "MO",
+      "zip": "65109",
+      "landlordName": "EconoLodge",
+      "landlordPhone": "Michelle Zellmann - 573-257-5802",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Nightly $65/room. Adient client. Rent per bed $128.21. Lease start 5/23/2025.",
+      "units": [
+        {
+          "unit": "122",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 2. Empty. Rent per bed $175."
+        },
+        {
+          "unit": "202",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [
+            "Jacob Diaz",
+            "Manuel Morales"
+          ],
+          "notes": "#Tenant 2 (205 moved to 202)."
+        },
+        {
+          "unit": "104",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [
+            "Yuniel Perez"
+          ],
+          "notes": "#Tenant 2. Bed2 Empty."
+        },
+        {
+          "unit": "222",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [
+            "Michael White",
+            "Alex Tyler"
+          ],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "223",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "224",
+          "nightlyRate": 65,
+          "securityDeposit": 0,
+          "rateType": "room-night",
+          "status": "Active",
+          "occupants": [
+            "Luis Salgado",
+            "Matthew Paul"
+          ],
+          "notes": "#Tenant 2."
+        }
+      ]
+    },
+    {
+      "name": "Versaille",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "308 Fairground Rd.",
+      "city": "Versaille",
+      "state": "MO",
+      "zip": "65084",
+      "landlordName": "Dunn Property Management",
+      "landlordPhone": "Connie",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Adient client. Rent $1,000/mo per unit, Rent+Lanyard $1,111.11, rent per bed $116. Lease 5/1/2024-4/30/2025, renewal end 10/31/2025. All units Returned 5/27/25. Listed in same block as EconoLodge.",
+      "units": [
+        {
+          "unit": "3",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2024-05-01",
+          "endDate": "2025-04-30",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [
+            "Raul Castanega",
+            "Mark Huape"
+          ],
+          "notes": "#Tenant 2. Rent+Lanyard $1,111.11. Rent per bed $116."
+        },
+        {
+          "unit": "4",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2024-05-01",
+          "endDate": "2025-04-30",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [
+            "Jacob Diaz",
+            "Omar Rivera"
+          ],
+          "notes": "#Tenant 2. Rent per bed $116."
+        },
+        {
+          "unit": "7",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2024-05-01",
+          "endDate": "2025-04-30",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [
+            "Edward Garza",
+            "Juan Gimaldo"
+          ],
+          "notes": "#Tenant 2. Rent per bed $116."
+        },
+        {
+          "unit": "8",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2024-05-01",
+          "endDate": "2025-04-30",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [
+            "Manuel Morales",
+            "Jake Diaz Guzman"
+          ],
+          "notes": "#Tenant 2. Rent per bed $116."
+        },
+        {
+          "unit": "19",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2024-05-01",
+          "endDate": "2025-04-30",
+          "rateType": "monthly",
+          "status": "Returned 5/27/25",
+          "occupants": [
+            "Francisco Vela",
+            "Rene Martienez"
+          ],
+          "notes": "#Tenant 2. Rent per bed $116."
+        }
+      ]
+    },
+    {
+      "name": "Town Point Apartments",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "111 E Obryan Ave",
+      "city": "Bardstown",
+      "state": "KY",
+      "zip": "40004",
+      "landlordName": "R&P Real Estate Group 2 LLC",
+      "landlordPhone": "Leasing office: 2210 Goldsmith Lane #101, Louisville",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Rent per bed $71.",
+      "units": [
+        {
+          "unit": "47",
+          "rateType": "monthly",
+          "occupants": [
+            "Richard Marroquin",
+            "Jesus Duron"
+          ],
+          "notes": "Rent per bed $71."
+        }
+      ]
+    },
+    {
+      "name": "Holts Summit",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "150 City Plaza",
+      "city": "Holts Summit",
+      "state": "MO",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Rent per person $25. Large room roster (37 rooms) with #Tenant counts but no occupant names populated in export. Room types/counts captured per unit.",
+      "units": [
+        {
+          "unit": "101",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2. Rent per person $25."
+        },
+        {
+          "unit": "102",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "103",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "104",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 1."
+        },
+        {
+          "unit": "105",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "106",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "107",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "109",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "111",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "112",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "113",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 1."
+        },
+        {
+          "unit": "114",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "115",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "116",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 4."
+        },
+        {
+          "unit": "117",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "201",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "202",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "203",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "204",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "205",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "206",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 1."
+        },
+        {
+          "unit": "207",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "208",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 1."
+        },
+        {
+          "unit": "209",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "210",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "211",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 4."
+        },
+        {
+          "unit": "212",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "213",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 3."
+        },
+        {
+          "unit": "214",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "215",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "216",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "217",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "218",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "219",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "220",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 1."
+        },
+        {
+          "unit": "221",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        },
+        {
+          "unit": "222",
+          "rateType": "monthly",
+          "occupants": [],
+          "notes": "#Tenant 2."
+        }
+      ]
+    },
+    {
+      "name": "Chalie Wesley Motor Lodge",
+      "propertyType": "Motel",
+      "rateType": "room-night",
+      "rentFrequency": "weekly",
+      "vendor": "Lanyard",
+      "address": "302 N Park Dr.",
+      "city": "Broken Bow",
+      "state": "OK",
+      "zip": "74728",
+      "landlordName": "Jay (Owner)",
+      "landlordPhone": "580-566-0046",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Rent per week a room $460. Lease start 7/6/2025. Bell/KFIS clients. Utilities/charge structure $150/ee - $40/Bell - $40/KFIS. Rent per bed $230. Maintenance: Contact Jay.",
+      "units": [
+        {
+          "unit": "164",
+          "costPerWeek": 460,
+          "rateType": "room-night",
+          "occupants": [
+            "Joshua Williams",
+            "Evan Zeno"
+          ],
+          "notes": "#Tenant 2. Rent per bed $230. $150/ee - $40/Bell - $40/KFIS."
+        },
+        {
+          "unit": "165",
+          "costPerWeek": 460,
+          "rateType": "room-night",
+          "occupants": [
+            "Daniel Garcia",
+            "Gerard Derby"
+          ],
+          "notes": "#Tenant 2. Rent per bed $230."
+        },
+        {
+          "unit": "167",
+          "costPerWeek": 460,
+          "rateType": "room-night",
+          "occupants": [],
+          "notes": "#Tenant 2. Empty/Empty. Rent per bed $230."
+        },
+        {
+          "unit": "169",
+          "costPerWeek": 460,
+          "rateType": "room-night",
+          "occupants": [
+            "Michael Perez",
+            "Antonio Escobedo"
+          ],
+          "notes": "#Tenant 2. Rent per bed $230."
+        },
+        {
+          "unit": "168",
+          "costPerWeek": 460,
+          "rateType": "room-night",
+          "occupants": [],
+          "notes": "#Tenant '?'. Status unclear."
+        }
+      ]
+    },
+    {
+      "name": "Shusters (unnamed apartment complex)",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Property block had blank Housing Name/address/leasing fields in export; units identified by number with Shusters client occupants from overflow list. Rent per bed $69.23 ('Yellow (8) people'). Overflow occupant->unit map: Michael Felix 3524, Andrew Granville 3604, Brandon Simpson/Steve Nicholson/Gabreil Chavez/Anthony Randall 2108, Kevin Leal/Crispin Martinez 3524, Arthur Bossier/Jacob Moore 3512, Gabriel Gonzalez/Andre Roblez/Jacob Moore/Ethan Osborne/Jeffery Nelson 1506, Terrel Penro/Datravian Ozenne/Damon Johnson 1407.",
+      "units": [
+        {
+          "unit": "2108",
+          "rateType": "monthly",
+          "occupants": [
+            "Brandon Simpson",
+            "Steve Nicholson",
+            "Gabreil Chavez",
+            "Anthony Randall"
+          ],
+          "notes": "#Tenant 4. All beds Empty in grid; occupants from overflow list. Rent per bed $69.23."
+        },
+        {
+          "unit": "3512",
+          "rateType": "monthly",
+          "occupants": [
+            "Jose Angulo",
+            "Devin Holly",
+            "Arthur Bossier"
+          ],
+          "notes": "#Tenant 4. Bed2/3 Empty."
+        },
+        {
+          "unit": "3524",
+          "rateType": "monthly",
+          "occupants": [
+            "Brandon Tilton",
+            "Branden Gonzalez",
+            "Michael Felix",
+            "Kevin Leal",
+            "Crispin Martinez"
+          ],
+          "notes": "#Tenant 4."
+        },
+        {
+          "unit": "3604",
+          "rateType": "monthly",
+          "occupants": [
+            "Aaron Collins",
+            "Jalen Gordon",
+            "Gabriel Clark",
+            "Gabriel Shamam",
+            "Christopher de la Rosa",
+            "Andrew Granville"
+          ],
+          "notes": "#Tenant 6."
+        },
+        {
+          "unit": "1407",
+          "rateType": "monthly",
+          "occupants": [
+            "Jaylon Clark",
+            "Jacoby Cheveret",
+            "Giovanni Alexander",
+            "Terrel Penro",
+            "Datravian Ozenne",
+            "Damon Johnson"
+          ],
+          "notes": "#Tenant 4."
+        },
+        {
+          "unit": "1506",
+          "rateType": "monthly",
+          "occupants": [
+            "Marquis Sanders",
+            "Giovanni Alexander",
+            "Tanner Langford",
+            "Jacob Varney",
+            "Gabriel Gonzalez",
+            "Andre Roblez",
+            "Ethan Osborne",
+            "Jeffery Nelson"
+          ],
+          "notes": "#Tenant 4."
+        }
+      ]
+    },
+    {
+      "name": "Hickory Heaven Apartments LLC",
+      "propertyType": "Apartment",
+      "rateType": "monthly",
+      "rentFrequency": "monthly",
+      "vendor": "Lanyard",
+      "address": "600 W Hickory St.",
+      "city": "Gilman",
+      "state": "WI",
+      "zip": "54433",
+      "landlordName": "Jake Nagel",
+      "landlordEmail": "jnagelpcc@gmail.com",
+      "landlordPhone": "715-290-0025 / 715-290-0026",
+      "source": "HOUSING-TRANSPORTATION MASTER.xlsx",
+      "notes": "Leasing office addr W15430 Old Hwy 194, Sheldon, WI 54766/54767. Lease start 2/27/2026, end 8/31/2026. Units by bedroom config.",
+      "units": [
+        {
+          "unit": "1-1BR",
+          "monthlyRent": 900,
+          "securityDeposit": 900,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 6 / Bed1=2. Rent+Lanyard $1,047.60 (fee $147.60). Rent per bed $103.42."
+        },
+        {
+          "unit": "1-2BR",
+          "monthlyRent": 1075,
+          "securityDeposit": 1075,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 8 / Bed config 3. Rent+Lanyard $1,193.13 (fee $118.13). Rent per bed $103.42."
+        },
+        {
+          "unit": "Studio",
+          "monthlyRent": 900,
+          "securityDeposit": 900,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 11 / Bed 2. Rent per bed $107."
+        },
+        {
+          "unit": "1-2BR (12)",
+          "monthlyRent": 1075,
+          "securityDeposit": 1075,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rateType": "monthly",
+          "status": "Active",
+          "occupants": [],
+          "notes": "#Tenant 12 / Bed 3. Rent per bed $107."
+        }
+      ]
+    }
+  ],
+  "folderRecords": [
+    {
+      "name": "308 Fairgrounds Rd (Dunn Property Management)",
+      "client": "Adient",
+      "vendor": "Lanyard",
+      "propertyType": "Apartment",
+      "address": "308 Fairgrounds Rd",
+      "city": "Versailles",
+      "state": "MO",
+      "zip": "65084",
+      "landlordName": "Dunn Property Management (signer: Ashleigh Bryner)",
+      "landlordPhone": "",
+      "landlordEmail": "",
+      "paymentRecipient": "Dunn Property Management",
+      "rentFrequency": "monthly",
+      "source": "Adient - Versailles, MO - Lanyard - Dunn Property Management",
+      "notes": "Landlord = Dunn Property Management, a Missouri LLC. Landlord/notice & payment address: DPM, 1203 S Bus 54, Eldon, MO 65026. Tenant on all leases = KFI Staffing (occupancy limited to KFI Staffing; no individual EE names in lease body). Governing law Missouri. Utilities provided by landlord: trash, lawn care, electric, water; tenant pays cable/internet, no satellite dishes. Non-smoking units ($1,000 cleaning fee if smoked in). $100 late fee if rent not paid by the 5th at 4:00pm; same $100 fee for returned checks. $40 fee per unreturned key. Break-lease forfeits deposit + owes current month rent. Notice to change payment/notice address requires 15 days advance notice. Holdover = 2x daily rent. Lease auto-converts to month-to-month after term if not renewed. IMPORTANT: original 2024 lease PDFs (units #3,#4,#6,#7,#8,#19,#20) are scanned/image-only -- text layer contains only DocuSign/PandaDoc envelope metadata, not lease body (original PandaDoc leases signed by Janet Johnson, jjohnson@kfistaffing.com, ~May 2024). The machine-readable terms come from the 2025 RENEWAL leases in the 'Lease Renewals' subfolder, signed 03/31/2025 by Ashleigh Bryner (Dunn Property Management). Folder also contains two Amended Lease Agreements swapping occupancy between Unit #8 and Unit #20 (not machine-readable). Units #7 and #8 renewal PDFs timed out on read but follow the identical template (term 05/01/2025-10/31/2025, $1,000/mo) -- verify manually.",
+      "units": [
+        {
+          "unit": "#3",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "securityDeposit": 0,
+          "startDate": "2025-05-01",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "status": "renewed",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "2025 renewal lease (machine-readable). Lease body states $0.00 security deposit on file and $0.00 deposit. Rent $1,000/mo due 1st; $100 late fee after 5th. Signed 03/31/2025."
+        },
+        {
+          "unit": "#4",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "securityDeposit": 1000,
+          "startDate": "2025-05-01",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "status": "renewed",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "2025 renewal lease (machine-readable). Lease notes $1,000.00 security deposit on file (deposit blank/$0 in formal deposit clause). Rent $1,000/mo due 1st. Signed 03/31/2025."
+        },
+        {
+          "unit": "#6",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "startDate": "2024-05-01",
+          "rentDueDay": 1,
+          "status": "original lease on file",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "Original 2024 lease PDF not machine-readable (scanned; only DocuSign envelope metadata). Rent/dates inferred from sibling renewal leases for same complex -- verify manually. No 2025 renewal seen for this unit."
+        },
+        {
+          "unit": "#7",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "startDate": "2025-05-01",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "status": "renewed",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "2025 renewal PDF exists in Lease Renewals subfolder but read timed out; assumed identical template (term 05/01/2025-10/31/2025, $1,000/mo). Verify deposit/exact terms manually. Original 2024 lease PDF not machine-readable."
+        },
+        {
+          "unit": "#8",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "startDate": "2025-05-01",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "status": "renewed",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "2025 renewal PDF exists but read timed out; assumed identical template. Subject of an Amended Lease Agreement swapping with Unit #20 ('Unit #8 to Unit #20' / 'Unit #20 to Unit #8'). Original 2024 lease PDF not machine-readable. Verify manually."
+        },
+        {
+          "unit": "#19",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "securityDeposit": 1000,
+          "startDate": "2025-05-01",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "status": "renewed",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "2025 renewal lease (machine-readable). Lease notes $1,000.00 security deposit on file (formal deposit clause blank/$0). Rent $1,000/mo due 1st; $100 late fee after 5th. Signed 03/31/2025. Original 2024 lease PDF also on file (not machine-readable)."
+        },
+        {
+          "unit": "#20",
+          "rateType": "monthly",
+          "monthlyRent": 1000,
+          "startDate": "2024-05-01",
+          "rentDueDay": 1,
+          "status": "original lease on file",
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "notes": "Original 2024 lease PDF not machine-readable (scanned). Subject of an Amended Lease Agreement swapping with Unit #8. Rent/dates inferred from sibling leases -- verify manually."
+        }
+      ]
+    },
+    {
+      "name": "College Towne Apartments",
+      "address": "",
+      "city": "Lansing",
+      "state": "MI",
+      "client": "Adient",
+      "vendor": "Lanyard",
+      "propertyType": "Apartment",
+      "source": "Adient Bridgewater - Lansing, MI - Lanyard - College Town Apartments",
+      "notes": "Lease PDFs are scanned/image-only; lease body text (rent, dates, deposit, address, notice period) is NOT machine-readable and must be reviewed manually. Only the PandaDoc signature certificate text was extractable. Folder contains 4 executed leases (Units 1122, 1212, 1214, 1222) plus a Lanyard 'KFI Staffing Lansing Reservation Summary.pdf' (Employer Housing Partner reservation form; body not machine-readable). Vendor Lanyard confirmed by reservation form; client Adient (Bridgewater) and Lansing, MI from folder name. Complex name in folder is 'College Town' but lease filenames say 'College Towne Apartments'. Tenant/signer on all leases: Janet Johnson, jjohnson@kfistaffing.com (KFI Staffing). All 4 leases completed/executed via PandaDoc on 17 Jul 2024.",
+      "units": [
+        {
+          "unit": "1122",
+          "status": "executed",
+          "startDate": "2024-07-17",
+          "notes": "Lease Agreement - College Towne Apartments Unit 1122.pdf. Executed/completed via PandaDoc 2024-07-17 (ref WBMGV-Q4UXD-ATCIG-QSZY7). 25 pages, scanned/image-only - rent, term end date, deposit, notice not machine-readable. Signed by Janet Johnson (KFI Staffing). 2024-07-17 signing date; actual lease start/end inside scanned pages - review manually."
+        },
+        {
+          "unit": "1212",
+          "status": "executed",
+          "startDate": "2024-07-17",
+          "notes": "Lease Agreement - College Towne Apartments Unit 1212.pdf. Executed/completed via PandaDoc 2024-07-17 (ref V9SAA-SOCG4-PN6PX-5B3SY). 25 pages, scanned/image-only - lease body not machine-readable. Signed by Janet Johnson (KFI Staffing)."
+        },
+        {
+          "unit": "1214",
+          "status": "executed",
+          "startDate": "2024-07-17",
+          "notes": "Lease Agreement - College Towne Apartments Unit 1214.pdf. Executed/completed via PandaDoc 2024-07-17 (ref YGXQT-US9KC-DRDSN-N4KJK). 25 pages, scanned/image-only - lease body not machine-readable. Signed by Janet Johnson (KFI Staffing)."
+        },
+        {
+          "unit": "1222",
+          "status": "executed",
+          "notes": "Lease Agreement - College Towne Apartments Unit 1222.pdf present in folder (14.1 MB). Scanned/image-only PDF; lease body not machine-readable - not separately re-read but consistent with the other 3 executed College Towne leases signed by KFI Staffing. Review manually for rent/dates/deposit."
+        }
+      ]
+    },
+    {
+      "name": "Palace Motel",
+      "propertyType": "Motel",
+      "address": "607 W Collin Raye Dr",
+      "city": "De Queen",
+      "state": "AR",
+      "zip": "71832",
+      "client": "Bell Lumber",
+      "vendor": "Palace Motel",
+      "landlordName": "Palace Motel",
+      "landlordPhone": "(870) 642-8849",
+      "landlordEmail": "palace607@yahoo.com",
+      "paymentRecipient": "Palace Motel",
+      "source": "Bell Lumber - De Queen, AR - Palace Motel",
+      "notes": "Billed to KFI Staffing. Invoice 260320_857-249 dated 3/20/26. Fax (870) 642-9627. Check-out time 11:00AM. Advanced payment requested. NO PETS - NO REFUNDS. No executed lease agreement in folder; only a motel invoice/receipt and a communication screenshot (PNG, not machine-readable via this endpoint). Tax @ 12.63%.",
+      "units": [
+        {
+          "unit": "Room (guest: Gerard Derby)",
+          "rateType": "room-night",
+          "nightlyRate": 53.91,
+          "startDate": "2026-03-20",
+          "endDate": "2026-04-03",
+          "occupants": [
+            "Gerard Derby"
+          ],
+          "status": "active",
+          "notes": "2 rooms / 2 guests indicated on invoice header. 14 nights total (CHECK-IN 03/20/26 7 nights @ $377.34 + Stayover 03/27/26 7 nights @ $377.34). Weekly room charge $377.34 ($53.91/night). Total billed $850.00 ($754.68 room + $95.32 tax @12.63%). Guest ID/contact: Derby, Gerard, 15329 W St, Omaha NE 68137, (608) 608-3834. Check-out 11:00AM. Effective check-in 3/20/26."
+        }
+      ]
+    },
+    {
+      "name": "Willow Winds",
+      "propertyType": "Apartment",
+      "client": "",
+      "vendor": "Lanyard",
+      "city": "Hinckley",
+      "state": "MN",
+      "source": "Burnett - Hincley, MN - Grantsburg, WI - Lanyard",
+      "notes": "Complex name 'Willow Winds' derived from the 'Willow Winds Residents ID_s.pdf' file in the folder. Folder name encodes location 'Hincley, MN - Grantsburg, WI' (likely Hinckley, MN) and vendor Lanyard; 'Burnett' may be the client or Burnett County, WI (Grantsburg is in Burnett County, WI). All three PDFs (two Lease Agreements + the Residents IDs) returned no machine-readable text via read_resource — lease PDFs not machine-readable; address, landlord/contact, rent, deposit, dates, and occupant names require manual review. Units below are derived from the lease PDF filenames (building-unit format).",
+      "units": [
+        {
+          "unit": "402-304",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 402-304, 410-205, 410-304.pdf' (not machine-readable)"
+        },
+        {
+          "unit": "410-205",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 402-304, 410-205, 410-304.pdf' (not machine-readable)"
+        },
+        {
+          "unit": "410-304",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 402-304, 410-205, 410-304.pdf' (not machine-readable)"
+        },
+        {
+          "unit": "406-204",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 406-204, 406-205, 406-302.pdf' (not machine-readable)"
+        },
+        {
+          "unit": "406-205",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 406-204, 406-205, 406-302.pdf' (not machine-readable)"
+        },
+        {
+          "unit": "406-302",
+          "status": "on lease",
+          "notes": "From lease PDF 'Lease Agreement - 406-204, 406-205, 406-302.pdf' (not machine-readable)"
+        }
+      ]
+    },
+    {
+      "name": "7112 Zielsdorf Drive (Eureka Land Investments multi-family home)",
+      "propertyType": "Apartment",
+      "address": "7112 Zielsdorf Drive",
+      "city": "Webster",
+      "state": "WI",
+      "zip": "54893",
+      "client": "Burnett Dairy",
+      "vendor": "Eureka Land Investments",
+      "landlordName": "Eureka Land Investments (Melissa Anderson)",
+      "landlordEmail": "anderson.melissa.b@gmail.com",
+      "landlordPhone": "715-557-1794",
+      "paymentMethod": "Electronic Payment - Direct deposit into Eureka Land Investments checking account",
+      "paymentRecipient": "Eureka Land Investments",
+      "rentFrequency": "monthly",
+      "source": "Burnett Dairy - Grantsburg, WI (Upper North) - Eureka Land Investments",
+      "notes": "Tenant is KFI Staffing (608-445-1848, bjohnson@kfistaffing.com). Landlord mailing address: 22743 Akermark Road, Grantsburg, WI 54840. Maintenance contact: Kyle Anderson, 715-557-1795, kyle.oscar.anderson@gmail.com. Property described as a multi-family home. Tenant pays all utilities directly. Separate gas and electric meters. NSF fee $50, late fee $100 flat after 7 days, lockout fee $50, lost key fee $25. Early termination: 60 days' notice + $8,000 charge (or max allowable). Auto-renews to month-to-month if no 45-day non-renewal notice. Two identical lease PDFs exist for this address (Webster + Zielsdorf Dr 09Sep2025).",
+      "units": [
+        {
+          "unit": "7112 Zielsdorf Drive",
+          "monthlyRent": 4000,
+          "rateType": "monthly",
+          "securityDeposit": 4000,
+          "startDate": "2025-08-29",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 45,
+          "status": "executed",
+          "notes": "First month pro-rated $400 for Aug 29-31, 2025. Rent due first day of each month. Signed by Melissa Anderson (Landlord) and Valerie Alderman for KFI Staffing (Tenant) on 09/11/2025. 60-day early-termination notice with $8,000 termination charge. 4 unit keys, 0 mailbox keys issued. No occupant/EE names listed (leased to KFI Staffing)."
+        }
+      ]
+    },
+    {
+      "name": "7666 South Shore Drive (Eureka Land Investments)",
+      "propertyType": "Apartment",
+      "address": "7666 South Shore Drive",
+      "city": "Siren",
+      "state": "WI",
+      "client": "Burnett Dairy",
+      "vendor": "Eureka Land Investments",
+      "landlordName": "Eureka Land Investments",
+      "source": "Burnett Dairy - Grantsburg, WI (Upper North) - Eureka Land Investments",
+      "notes": "Fully Signed Lease Agreement dated 24Jan2024. Lease PDF (6.1 MB) not machine-readable via read_resource (returned no text on multiple attempts) - likely scanned/image-based. Address, city/state, executed date taken from file name. NEEDS MANUAL REVIEW for rent, deposit, term dates, and occupants.",
+      "units": [
+        {
+          "unit": "7666 South Shore Drive",
+          "status": "executed",
+          "notes": "Lease PDF not machine-readable; record from file name only. Executed 24Jan2024. Review manually for terms."
+        }
+      ]
+    },
+    {
+      "name": "1402 8th Street",
+      "address": "1402 8th Street",
+      "city": "Menomonie",
+      "state": "WI",
+      "zip": "54751",
+      "client": "Cady Cheese",
+      "vendor": "American Eagle",
+      "landlordName": "MA Properties (managed by American Edge Real Estate Services Inc.)",
+      "landlordPhone": "715-235-7999",
+      "landlordEmail": "info@americanedge.com",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "paymentMethod": "Personal Check, Cashier's Check, Money Order, ACH, Cash; online portal via RentCafe",
+      "paymentRecipient": "American Edge Real Estate Services Inc., 700 Wolske Bay Rd Suite 290, Menomonie, WI 54751",
+      "source": "Cady Cheese - Menomonie, WI - American Eagle",
+      "notes": "Tenant/Authorized Occupants on lease: KFI Staffing (corporate lease; individual EE occupants not named in lease). Effective Date 05/13/2026. Property Manager: American Edge Real Estate Services Inc. Agent for service of process: Timothy Nelson, 700 Wolske Bay Rd Suite 290, Menomonie, WI 54751, 715-235-7999. Move-in total due: $2,400 (first month rent $1,200 + security deposit $1,200). Late fee $100 charged after 5 days (NOT a grace period). Returned check/NSF fee $40. $15 admin charge per extra payment if rent not paid in one payment. Non-smoking unit; renters insurance NOT required. Folder also references a sister apartment at 5602 12th St, Menomonie, WI (pictures only; no separate executed lease was machine-readable). Agreement.pdf failed to load (Graph invalidRequest 400). Executed.pdf (lease #1) returned only minimal text fragment ('1402 8th St E', 05/13/2026 / 06/01/2026) - largely scanned/not machine-readable; full terms taken from RentCafe_LeaseAgreement_Executed2.pdf.",
+      "units": [
+        {
+          "unit": "1402 8th Street",
+          "rateType": "monthly",
+          "monthlyRent": 1200,
+          "securityDeposit": 1200,
+          "startDate": "2026-06-01",
+          "endDate": "2027-05-21",
+          "rentDueDay": 1,
+          "noticePeriodDays": 28,
+          "occupants": [
+            "KFI Staffing (corporate tenant)"
+          ],
+          "status": "executed",
+          "notes": "Fixed-term lease (does not auto-renew; no notice required at end of term). 28-day written notice required only for month-to-month. Late fee $100 after 5 days. Commencement 06/01/2026, End 05/21/2027. Effective Date 05/13/2026."
+        }
+      ]
+    },
+    {
+      "name": "Comfort Suites Madison",
+      "propertyType": "Motel",
+      "city": "Madison",
+      "client": "KFI Staffing",
+      "source": "COMFORT SUITES, MADISON",
+      "notes": "Lease/agreement PDF not machine-readable (read_resource returned no extractable text; likely scanned/image-based). Property + location recorded from folder name 'COMFORT SUITES, MADISON' and file '2026.04 Comfort Suites Madison Agreement_KFI Staffing.pdf'. Comfort Suites is a Choice Hotels hotel brand, so treated as a Motel/hotel with room-night rates. Agreement dated ~2026.04. Needs manual review for address, rates, deposit, dates, contacts, and occupants.",
+      "units": [
+        {
+          "unit": "Unknown",
+          "rateType": "room-night",
+          "notes": "Room/rate details not extractable from non-machine-readable PDF; review manually."
+        }
+      ]
+    },
+    {
+      "name": "Yellow House",
+      "propertyType": "Apartment",
+      "client": "DeLallo (George DeLallo Company, Inc.)",
+      "vendor": "George DeLallo Company, Inc.",
+      "address": "6454 US-30",
+      "city": "Jeannette",
+      "state": "PA",
+      "zip": "15644",
+      "landlordName": "George DeLallo Company, Inc.",
+      "rentFrequency": "monthly",
+      "paymentRecipient": "George DeLallo Company, Inc.",
+      "source": "DeLallo - Jeannette, PA - Yellow House",
+      "notes": "Tenant is KFI Staffing, LLC (a Wisconsin LLC). Lease governed by Commonwealth of Pennsylvania (Allegheny/Westmoreland County courts). Tenant responsible for all utilities (heat, water, electricity, A/C, internet). Max two people per room. No pets, no firearms, no alcohol/tobacco/drugs. 5% per-day late fee on delinquent amounts. Confession of judgment / waiver of notice to quit clauses present. Lease tied to Temporary Employee Staffing Agreement; Landlord may terminate immediately upon termination of that staffing agreement. Signed via DocuSign (Envelope ID E8252F09-4EDF-4F48-8659-50321098863E). Folder also contains an executed 'DeLallo Lease 5.1.26 KFIS' PDF and Auto Zone (6481/6454 US-30) lease docs which did not return readable text on read.",
+      "units": [
+        {
+          "unit": "Whole house",
+          "monthlyRent": 2400,
+          "rateType": "monthly",
+          "startDate": "2026-03-05",
+          "endDate": "2026-09-05",
+          "rentDueDay": 1,
+          "noticePeriodDays": 0,
+          "status": "6-month term then month-to-month",
+          "notes": "6-month term commencing 2026-03-05; converts to month-to-month commencing 2026-09-05. Rent due on the first of the month. Either party may terminate the month-to-month term by written notice on or before the 5th of any month, effective no earlier than the last day of that month. No security deposit specified in lease. Max two people per room."
+        }
+      ]
+    },
+    {
+      "name": "Chateau Knoll Apartments",
+      "address": "Chateau Knoll, Bettendorf, IA 52722 (Leasing Office: 2900 Middle Road)",
+      "city": "Bettendorf",
+      "state": "IA",
+      "zip": "52722",
+      "client": "Greystone",
+      "vendor": "Lanyard",
+      "landlordName": "Chateau Knoll, LLC DBA Chateau Knoll Apartments (Lessor: Chateau Knoll)",
+      "landlordPhone": "(563) 332-8421",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "source": "Greystone - Bettendorf, IA - Lanyard - Chateau Knoll Apartments",
+      "notes": "Lessee on all leases is KFI Staffing. Leasing office 2900 Middle Rd, Bettendorf, IA 52722. Folder also contains BGCK Letter.pdf, Lease buyout procedure - Chateau Knoll.pdf, LOI - Chateau Knoll.pdf, and Renter's Insurance.pdf (not parsed for terms). Each unit billed monthly: Base Rent + Short Term Rent $150 + Gas $35 + Garbage $8 + Utility Reimbursement Admin Fee $3.95, with Water RUBS 100% and Gas RUBS 100%. Rent due 1st (first day) of each month. Notice to renew/vacate: 60 days advance written notice prior to lease end; failure to give notice = 2 additional months rent as liquidated damages. Security deposit $200 per unit. No occupant/EE names listed on the leases (Occupants/Guarantors fields blank).",
+      "units": [
+        {
+          "unit": "1407",
+          "rateType": "monthly",
+          "monthlyRent": 1500,
+          "securityDeposit": 200,
+          "startDate": "2026-02-12",
+          "endDate": "2026-08-11",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,350 + Short Term Rent $150 = $1,500; plus Gas $35, Garbage $8, Admin $3.95 (lease line Total: $1,543.00). Security deposit $200."
+        },
+        {
+          "unit": "1506",
+          "rateType": "monthly",
+          "monthlyRent": 1538,
+          "securityDeposit": 200,
+          "startDate": "2026-02-12",
+          "endDate": "2026-08-11",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,388 + Short Term Rent $150 = $1,538; lease line Total: $1,581.00 (incl. gas/garbage/admin). Security deposit $200."
+        },
+        {
+          "unit": "2108",
+          "rateType": "monthly",
+          "monthlyRent": 1618,
+          "securityDeposit": 200,
+          "startDate": "2026-01-23",
+          "endDate": "2026-07-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,468 + Short Term Rent $150 = $1,618; lease line Total: $1,661.00 (incl. gas/garbage/admin). Security deposit $200."
+        },
+        {
+          "unit": "3512",
+          "rateType": "monthly",
+          "monthlyRent": 1503,
+          "securityDeposit": 200,
+          "startDate": "2026-01-23",
+          "endDate": "2026-07-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,353 + Short Term Rent $150 = $1,503; lease line Total: $1,546.00 (incl. gas/garbage/admin). Security deposit $200."
+        },
+        {
+          "unit": "3524",
+          "rateType": "monthly",
+          "monthlyRent": 1503,
+          "securityDeposit": 200,
+          "startDate": "2026-01-23",
+          "endDate": "2026-07-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,353 + Short Term Rent $150 = $1,503; lease line Total: $1,546.00 (incl. gas/garbage/admin). Security deposit $200."
+        },
+        {
+          "unit": "3604",
+          "rateType": "monthly",
+          "monthlyRent": 1735,
+          "securityDeposit": 200,
+          "startDate": "2026-01-23",
+          "endDate": "2026-07-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Base Rent $1,585 + Short Term Rent $150 = $1,735; lease line Total: $1,793.00 (incl. gas/garbage/admin). Security deposit $200."
+        }
+      ]
+    },
+    {
+      "name": "Stonleigh Court Apartments",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "city": "Leavenworth",
+      "state": "KS",
+      "zip": "66048",
+      "client": "Heatron",
+      "vendor": "Lanyard",
+      "landlordName": "Stonleigh Court Apartments (signed by agent Consuelo Martinez-Hampton)",
+      "paymentRecipient": "Stonleigh Court Apartments / Stonleigh Properties Management",
+      "source": "Heatron - Leavenworth, KS - Lanyard - Stonleigh Apartments",
+      "notes": "Apartment community in Leavenworth, KS leased by KFI Staffing (Janet Johnson, CEO, jjohnson@kfistaffing.com, 608-224-9627) for Heatron associates. Vendor per folder name is Lanyard. 9 executed NAA Kansas Apartment Lease Contracts (Blue Moon eSignature) + 2 buyout letters. Lessor on all leases = 'Stonleigh Court Apartments'; agent Consuelo Martinez-Hampton. Resident/lessee on every lease is the corporate signer Janet Johnson (KFI Staffing) — individual occupant names not in lease docs. Rent due 1st of each month, no grace period, late charge after the 5th, 30-day written termination notice on all units. Buyout notices dated 06/24/2025 with termination 07/24/2025 for units 1341-A and 2019 Miami B. Reservation Summary PDF was not machine-readable beyond headers (EMPLOYER / HOUSING PARTNER / UTILITIES).",
+      "units": [
+        {
+          "unit": "1312 Stonleigh Court #E",
+          "monthlyRent": 1208,
+          "rateType": "monthly",
+          "startDate": "2024-09-27",
+          "endDate": "2025-09-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Prorated first-month rent $1,208.00 due 10/01/2024. Late charge after the 5th. Address: 1312 Stonleigh Court #E, Leavenworth, KS 66048. Signed 09/26/2024."
+        },
+        {
+          "unit": "1315 Stonleigh Court #D",
+          "monthlyRent": 1208,
+          "rateType": "monthly",
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Prorated rent $684.53. Late charge after the 5th. Address: 1315 Stonleigh Court #D, Leavenworth, KS 66048. Signed 09/26/2024."
+        },
+        {
+          "unit": "1341 Stonleigh Court #A",
+          "monthlyRent": 1154,
+          "rateType": "monthly",
+          "startDate": "2024-10-15",
+          "endDate": "2025-10-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "terminated (bought out)",
+          "notes": "Prorated rent $653.93. BUYOUT: 30-day notice dated 06/24/2025, termination 07/24/2025, buyout fee $2,308.00 (per Buyout 1341A.docx). Address: 1341 Stonleigh Court #A, Leavenworth, KS 66048. Signed 09/26/2024."
+        },
+        {
+          "unit": "1341 Stonleigh Court #C",
+          "monthlyRent": 1154,
+          "rateType": "monthly",
+          "startDate": "2024-10-01",
+          "endDate": "2025-09-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Late charge after the 5th. Address: 1341 Stonleigh Court #C, Leavenworth, KS 66048. Signed 09/26/2024."
+        },
+        {
+          "unit": "1340 Stonleigh Court #F",
+          "monthlyRent": 1099,
+          "rateType": "monthly",
+          "startDate": "2024-12-11",
+          "endDate": "2025-12-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Prorated rent $769.30. Late charge after the 5th. Address: 1340 Stonleigh Court #F, Leavenworth, KS 66048. Signed 12/10/2024."
+        },
+        {
+          "unit": "2019 Miami St #B",
+          "monthlyRent": 1249,
+          "rateType": "monthly",
+          "startDate": "2024-12-11",
+          "endDate": "2025-12-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "terminated (bought out)",
+          "notes": "Prorated rent $874.30. BUYOUT: 30-day notice dated 06/24/2025, termination 07/24/2025, buyout fee $2,498.00 (per Buyout 2019B.docx). Address: 2019 Miami St #B, Leavenworth, KS 66048. Signed 12/10/2024."
+        },
+        {
+          "unit": "2015 Miami St #B",
+          "monthlyRent": 1249,
+          "rateType": "monthly",
+          "startDate": "2024-11-27",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Prorated rent $166.53. Late charge after the 5th. Address: 2015 Miami St #B, Leavenworth, KS 66048. Filed under 'Stonleigh West' but lessor is Stonleigh Court Apartments. Signed 11/22/2024."
+        },
+        {
+          "unit": "2023 Seneca St #D",
+          "monthlyRent": 1249,
+          "rateType": "monthly",
+          "startDate": "2024-11-27",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Prorated rent $166.53. Late charge after the 5th. Address: 2023 Seneca St #D, Leavenworth, KS 66048. Filed under 'Stonleigh West' but lessor is Stonleigh Court Apartments. Signed 11/22/2024."
+        }
+      ]
+    },
+    {
+      "name": "Red Roof Inn Morehead",
+      "propertyType": "Motel",
+      "client": "Independent Stave (ISKY)",
+      "vendor": "Lanyard",
+      "city": "Morehead",
+      "state": "KY",
+      "source": "Independent Stave ISKY - Morehead, KY - Lanyard - Red Roof Morehead",
+      "notes": "Lease/reservation PDF largely not machine-readable. Only the document is 'Reservation Summary - Red Roof Morehead.pdf' which extracted just header fragments ('Reservation Summary', 'Employer', 'Supplier', 'Cancellation Policy'). Property is a Red Roof Inn (motel) in Morehead, KY booked via vendor Lanyard for Independent Stave (ISKY). Specific room numbers, nightly rate, dates, deposit, contacts, and occupant names could not be extracted — needs manual review of the PDF.",
+      "units": [
+        {
+          "unit": "Unspecified - see reservation summary",
+          "rateType": "room-night",
+          "status": "Reservation summary - not machine-readable",
+          "notes": "Nightly rate, dates, and occupants not extractable from scanned/non-text PDF."
+        }
+      ]
+    },
+    {
+      "name": "The Bartlett Apartment Homes",
+      "address": "330 Bartlett Dr",
+      "city": "El Paso",
+      "state": "TX",
+      "zip": "79912",
+      "client": "International Wire",
+      "vendor": "Lanyard",
+      "propertyType": "Apartment",
+      "source": "International Wire - El Paso, TX - Lanyard - The Bartlett Apartment Homes",
+      "notes": "Folder contains NO executed lease document. Only two files exist: (1) 'KFI Staffing - Letter of BGC Confirmation - The Bartlett Apartment Homes.docx' — a background-check confirmation letter from KFI Staffing to the property, and (2) 'The Bartlett Apartment Homes - Background Confirmation.pdf' — PDF returned no machine-readable text (likely scanned/image; lease PDF not machine-readable). No rent, deposit, lease dates, unit numbers, rent-due day, notice period, or occupant names available. Property name + address taken from the BGC letter; client/city/state/vendor from folder name. KFI Staffing contact in letter: Dawn Whitmore, Director of Implementation and Delivery, dwhitmore@krugerfamilyindustries.com, 530-798-1364 (this is the staffing agency, NOT the landlord). Needs manual review for lease terms.",
+      "units": [
+        {
+          "unit": "unknown",
+          "notes": "No unit/apartment numbers found; no lease terms available in folder documents."
+        }
+      ]
+    },
+    {
+      "name": "Bloomfield Gardens Apartments",
+      "propertyType": "Apartment",
+      "address": "E. Bloomfield St, Rome, NY 13440",
+      "city": "Rome",
+      "state": "NY",
+      "zip": "13440",
+      "client": "International Wire",
+      "vendor": "Lanyard",
+      "landlordName": "Bloomfield Gardens Apartments LLC",
+      "landlordPhone": "315-533-6405",
+      "landlordEmail": "bloomfield1@lanyardstays.com",
+      "rentFrequency": "monthly",
+      "paymentMethod": "No cash payments accepted",
+      "source": "International Wire - NY Rome - Lanyard - Bloomfield Gardens",
+      "notes": "Two executed NY Lease Agreements with Bloomfield Gardens Apartments LLC; Tenant = KFI Staffing, LLC (Address for Notices: 4005 Felland Rd, STE 104, Madison, WI 53718). Landlord Address for Notices: 404 E. Bloomfield Street, Apt 2, Rome, NY 13440. Rent due on 1st of month; late fee of 5% of monthly rent or $50 whichever is less if received after the 5th. Security deposit = same amount as the rent. Notice to vacate must be provided more than 60 days before lease expiration (else lease renews). Lights/electric/cable/phone are tenant responsibility. Renters insurance required if pets, naming landlord as additional insured. Pet fees: $250 non-refundable per dog / $150 per cat plus $25/mo per dog. Two property types in this complex: 'Red Brick House' ($997/mo) and 'Row Houses' ($897/mo).",
+      "units": [
+        {
+          "unit": "327-4 (Red Brick House) - 327 E. Bloomfield St, Apt 4, Rome, NY 13440",
+          "rateType": "monthly",
+          "monthlyRent": 997,
+          "securityDeposit": 997,
+          "startDate": "2026-04-17",
+          "endDate": "2027-04-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease Date 4/15/2026; Term 12 months. Source: Lease Agreement - Bloomfield Gardens Apartments Units 327-4, 414-3, 512-3.pdf"
+        },
+        {
+          "unit": "414-3 (Row House) - 414 E. Bloomfield St, Apt 3, Rome, NY 13440",
+          "rateType": "monthly",
+          "monthlyRent": 897,
+          "securityDeposit": 897,
+          "startDate": "2026-04-17",
+          "endDate": "2027-04-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease Date 4/15/2026; Term 12 months. Source: Lease Agreement - Bloomfield Gardens Apartments Units 327-4, 414-3, 512-3.pdf"
+        },
+        {
+          "unit": "512-3 (Row House) - 512 E. Bloomfield St, Apt 3, Rome, NY 13440",
+          "rateType": "monthly",
+          "monthlyRent": 897,
+          "securityDeposit": 897,
+          "startDate": "2026-04-17",
+          "endDate": "2027-04-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease Date 4/15/2026; Term 12 months. Source: Lease Agreement - Bloomfield Gardens Apartments Units 327-4, 414-3, 512-3.pdf"
+        },
+        {
+          "unit": "318-4 - 318 E. Bloomfield St, Apt 4, Rome, NY 13440",
+          "rateType": "monthly",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "From second lease PDF (Units 318-4, 322-2, 329-4, 522-3). That PDF would not load (Graph invalidRequest / timed out), so per-unit rent and deposit could not be confirmed from the document. Same complex/landlord/format; expected $997/mo (Red Brick House) or $897/mo (Row House) per complex pricing - REVIEW MANUALLY. Source: Lease Agreement - Bloomfield Gardens Apartments Units 318-4, 322-2, 329-4, 522-3.pdf"
+        },
+        {
+          "unit": "322-2 - 322 E. Bloomfield St, Apt 2, Rome, NY 13440",
+          "rateType": "monthly",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease PDF (Units 318-4, 322-2, 329-4, 522-3) would not load - per-unit rent/deposit unconfirmed; expected $897 or $997/mo per complex pricing. REVIEW MANUALLY."
+        },
+        {
+          "unit": "329-4 - 329 E. Bloomfield St, Apt 4, Rome, NY 13440",
+          "rateType": "monthly",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease PDF (Units 318-4, 322-2, 329-4, 522-3) would not load - per-unit rent/deposit unconfirmed; expected $897 or $997/mo per complex pricing. REVIEW MANUALLY."
+        },
+        {
+          "unit": "522-3 - 522 E. Bloomfield St, Apt 3, Rome, NY 13440",
+          "rateType": "monthly",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease PDF (Units 318-4, 322-2, 329-4, 522-3) would not load - per-unit rent/deposit unconfirmed; expected $897 or $997/mo per complex pricing. REVIEW MANUALLY."
+        }
+      ]
+    },
+    {
+      "name": "Park Place Apartments",
+      "address": "14550 34th Ave N (community office); units at 14500 / 14600 / 14605 34th Ave N",
+      "city": "Plymouth",
+      "state": "MN",
+      "zip": "55447",
+      "client": "Landscape Structures (LSI), Delano, MN",
+      "vendor": "Lanyard (Lanyard Stays)",
+      "landlordName": "Centerspace LP",
+      "landlordEmail": "pp7@lanyardstays.com",
+      "landlordPhone": "",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "paymentMethod": "RentCafe / Centerspace resident portal",
+      "paymentRecipient": "Centerspace LP",
+      "source": "Landscape Structures LSI - Delano, MN - Lanyard",
+      "notes": "Centerspace community 'Park Place'. Folder name says Delano, MN (the LSI worksite/client), but the actual leased housing is in Plymouth, MN 55447. Landlord = Centerspace LP, notices to: Centerspace LP, Attn: Legal Department, 800 LaSalle Plaza, Suite 1600, Minneapolis, MN. Leaseholder on all leases = KFI Staffing. Lanyard is the housing vendor; lease signer Andrew Weisgram, email pp7@lanyardstays.com. Rent due on the 1st of the month regardless of holidays; late fee of 8% of unpaid total monthly payment charged on the 4th day. Security deposit $400 per unit. Notice to vacate: 30-day advance written notice. Lease auto-renews after the term. Folder contains 3 lease years: 2023-2024, 2024-2025, 2025-2026 (current). Units below reflect the executed 2025-2026 Lease Renewal Agreements. The earlier KFI Staffing Delano Reservation Summary PDF returned no machine-readable content. No occupant/EE names listed on the leases (Additional Occupants field blank; leaseholder is the corporate entity KFI Staffing). Total Monthly Payment = apartment rent + $8 utility billing admin fee + pest control etc.",
+      "units": [
+        {
+          "unit": "500-118",
+          "monthlyRent": 1843,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14500 34th Ave N Apt 118, Plymouth, MN 55447. Total monthly payment $1,889.00 (apt rent $1,843 + $8 utility admin + fees). Prior 2024-2025 lease: rent $1,777 / total $1,816, term Dec 1 2024 - Nov 30 2025."
+        },
+        {
+          "unit": "600-127",
+          "monthlyRent": 1811,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14600 34th Ave N Apt 127, Plymouth, MN 55447. Total monthly payment $1,857.00."
+        },
+        {
+          "unit": "600-315",
+          "monthlyRent": 1848,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14600 34th Ave N Apt 315, Plymouth, MN 55447. Total monthly payment $1,894.00."
+        },
+        {
+          "unit": "600-342",
+          "monthlyRent": 1817,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14600 34th Ave N Apt 342, Plymouth, MN 55447. Total monthly payment $1,863.00."
+        },
+        {
+          "unit": "605-201",
+          "monthlyRent": 1791,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14605 34th Ave N Apt 201, Plymouth, MN 55447. Total monthly payment $1,837.00."
+        },
+        {
+          "unit": "605-218",
+          "monthlyRent": 1811,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "Address: 14605 34th Ave N Apt 218, Plymouth, MN 55447. Total monthly payment $1,857.00."
+        },
+        {
+          "unit": "605-102",
+          "monthlyRent": 1844,
+          "rateType": "monthly",
+          "securityDeposit": 400,
+          "startDate": "2024-06-01",
+          "endDate": "2025-05-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "expired",
+          "notes": "Address: 14605 34th Ave N Apt 102, Plymouth, MN 55447. From 2024-2025 lease (RENTCafe Executed + Lease Agreement); rent $1,844 / total $1,881. No 2025-2026 renewal present in folder, so this unit appears to have ended; included for history."
+        }
+      ]
+    },
+    {
+      "name": "Park Place Apartments",
+      "propertyType": "Apartment",
+      "address": "14550 34th Ave N (community office); units at 14500 / 14600 / 14605 34th Ave N",
+      "city": "Plymouth",
+      "state": "MN",
+      "zip": "55447",
+      "client": "Landscape Structures LSI (LSI)",
+      "vendor": "Lanyard",
+      "landlordName": "Centerspace LP (Centerspace, LP / formerly listed Centerspace LLP) - Attn: Legal Department, authorized managing agent",
+      "landlordPhone": "",
+      "landlordEmail": "",
+      "paymentMethod": "Electronic / ACH, debit card, credit card or cash payment program (RENTCafe Resident Portal)",
+      "paymentRecipient": "Centerspace LP",
+      "rentFrequency": "monthly",
+      "source": "Landscape Structures LSI - Plymouth, MN - Lanyard - Park Place Apartments",
+      "notes": "Corporate lease; Leaseholder on all leases is 'KFI Staffing'. 11 executed Centerspace lease PDFs (one per apartment/term) plus a Delano Reservation Summary PDF that is image-based and rendered no extractable text. Shared lease terms across all units: Apartment Deposit $400; Monthly Administrative Fee for Utility Billing ~$6-$8; Pest Control Fee $1; optional Parking/Garage Rent $30 (assigned space per unit); one-time fees: Administrative Fee $150, Application Fee $50/person, Corporate Lease Setup Fee $375, Utility Account Activation/Deactivation $15 each; Late Fee 8% if balance not paid by close of business on the 3rd (charged on the 4th); NSF $30; Renters Insurance Non-Compliance Fee $20/mo; rent due on the 1st of each month. Auto-renews month-to-month unless 60-day written notice. Early termination fee = two months' rent. No individual occupant names listed (corporate leaseholder; Additional Occupants blank). Folder name supplies client=Landscape Structures LSI, vendor=Lanyard. Note: the Delano reservation summary filename references Delano but all lease documents are for Park Place in Plymouth, MN.",
+      "units": [
+        {
+          "unit": "500-118",
+          "rateType": "monthly",
+          "monthlyRent": 1777,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14500 34th Ave N Apt 118. Total monthly payment $1,816 (rent $1,777 + utility admin $8 + pest $1 + parking $30). Parking space 500-118-SSI. Source PDF: Lease Agreement - Park Place Apartments 500-118.pdf"
+        },
+        {
+          "unit": "500-218",
+          "rateType": "monthly",
+          "monthlyRent": 1726,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14500 34th Ave N Apt 218. Total monthly payment $1,765. Source PDF: Lease Agreement - Park Place Apartments 500-218.pdf"
+        },
+        {
+          "unit": "600-127 (2024-25 term)",
+          "rateType": "monthly",
+          "monthlyRent": 1746,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14600 34th Ave N Apt 127. Total monthly payment $1,785. Source PDF: Lease Agreement - Park Place Apartments 600-127.pdf"
+        },
+        {
+          "unit": "600-127 (2025-26 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 1811,
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal term found within a Park Place 600-127 lease PDF. Total monthly payment $1,857."
+        },
+        {
+          "unit": "600-216",
+          "rateType": "monthly",
+          "monthlyRent": 1726,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14600 34th Ave N Apt 216. Total monthly payment $1,765. Source PDF: Lease Agreement - Park Place Apartments 600-216.pdf"
+        },
+        {
+          "unit": "600-315 (2024-25 term)",
+          "rateType": "monthly",
+          "monthlyRent": 1782,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14600 34th Ave N Apt 315. Total monthly payment $1,821. Source PDF: Lease Agreement - Park Place Apartments 600-315.pdf"
+        },
+        {
+          "unit": "600-315 (2025-26 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 1848,
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal term within Park Place 600-315 lease PDF. Total monthly payment $1,894."
+        },
+        {
+          "unit": "600-342 (2024-25 term)",
+          "rateType": "monthly",
+          "monthlyRent": 1751,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14600 34th Ave N Apt 342. Total monthly payment $1,790. Source PDF: Lease Agreement - Park Place Apartments 600-342.pdf"
+        },
+        {
+          "unit": "600-342 (2025-26 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 1817,
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal term within Park Place 600-342 lease PDF. Total monthly payment $1,863."
+        },
+        {
+          "unit": "605-102 (original term)",
+          "rateType": "monthly",
+          "monthlyRent": 1844,
+          "securityDeposit": 400,
+          "startDate": "2024-06-01",
+          "endDate": "2025-05-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14605 34th Ave N Apt 102. Total monthly payment $1,881 (rent $1,844 + utility admin $6 + pest $1 + parking $30, space 605-102-SLV). RENTCafe eSignature executed lease, Document ID 1212732. Source PDF: RENTCafe_LeaseAgreement_Executed - Apt 605-102 (1).pdf"
+        },
+        {
+          "unit": "605-102 (2025 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 2235,
+          "securityDeposit": 400,
+          "startDate": "2025-06-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal/short term found in Lease Agreement - Park Place Apartments 605-102.pdf. Total monthly payment $2,276."
+        },
+        {
+          "unit": "605-201 (2024-25 term)",
+          "rateType": "monthly",
+          "monthlyRent": 1726,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14605 34th Ave N Apt 201. Total monthly payment $1,765. Source PDF: Lease Agreement - Park Place Apartments 605-201.pdf"
+        },
+        {
+          "unit": "605-201 (2025-26 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 1791,
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal term within Park Place 605-201 lease PDF. Total monthly payment $1,837."
+        },
+        {
+          "unit": "605-218 (2024-25 term)",
+          "rateType": "monthly",
+          "monthlyRent": 1746,
+          "securityDeposit": 400,
+          "startDate": "2024-12-01",
+          "endDate": "2025-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Address 14605 34th Ave N Apt 218. Total monthly payment $1,785. Source PDF: Lease Agreement - Park Place Apartments 605-218.pdf"
+        },
+        {
+          "unit": "605-218 (2025-26 renewal)",
+          "rateType": "monthly",
+          "monthlyRent": 1811,
+          "securityDeposit": 400,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "renewal/executed",
+          "notes": "Renewal term within Park Place 605-218 lease PDF. Total monthly payment $1,857."
+        }
+      ]
+    },
+    {
+      "name": "1850 W. Pine St. (Patriot Properties - JCW Baraboo LLC)",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "address": "1850 W. Pine St.",
+      "city": "Baraboo",
+      "state": "WI",
+      "zip": "53913",
+      "client": "Milwaukee Valve",
+      "vendor": "Lanyard",
+      "landlordName": "Patriot Properties (agent) for JCW Baraboo LLC (owner)",
+      "landlordPhone": "(608) 849-6500",
+      "landlordEmail": "PatriotPropertiesLeasing@gmail.com",
+      "paymentMethod": "Tenant Portal E-Check / mailed certified funds; no cash",
+      "paymentRecipient": "JCW Baraboo LLC",
+      "source": "Milwaukee Valve - Prairie du Sac, WI - Lanyard - Patriot Properties",
+      "notes": "All 5 unit leases are corporate leases on KFI Staffing, signed electronically by Valerie Alderman on behalf of KFI Staffing on 09/17/2025. Landlord/management: Patriot Properties, 204 Moravian Valley Rd Suite N, Waunakee, WI 53597. Rent/deposit checks payable to JCW Baraboo LLC (NOT Patriot Properties). Rent due 1st of month, 5-day grace, then 5% late fee. 30-day written notice to vacate. Each unit also has monthly add-on charges (Liability to Landlord Insurance $10.50 + Insurance Compliance Admin Fee $4.50 = $1,690.00 total/mo) but LLI fees waived with proof of valid renter's insurance per Special Notes. One-time concession of $1,675 off first month's rent each unit. Max 4 occupants per unit (2BR). After-hours maintenance 608-567-5070. NOTE: leases state property is in Baraboo, WI 53913; folder name says 'Prairie du Sac, WI' - location per lease docs is Baraboo. List_of_Tenants.pdf returned no machine-readable text (likely scanned/image), so individual occupant (EE) names could not be extracted - review manually for occupant assignments per unit.",
+      "units": [
+        {
+          "unit": "509",
+          "monthlyRent": 1675,
+          "securityDeposit": 1675,
+          "rateType": "monthly",
+          "startDate": "2025-09-30",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "1850 W. Pine St. - 509, Baraboo WI 53913. Total monthly w/ add-ons $1,690.00 (rent $1,675 + LLI insurance $10.50 + admin fee $4.50; LLI waived with proof of renter's insurance). Prorated first charges $55.83. Month-to-month after term end."
+        },
+        {
+          "unit": "510",
+          "monthlyRent": 1675,
+          "securityDeposit": 1675,
+          "rateType": "monthly",
+          "startDate": "2025-09-30",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "1850 W. Pine St. - 510, Baraboo WI 53913. Same terms as unit 509."
+        },
+        {
+          "unit": "512",
+          "monthlyRent": 1675,
+          "securityDeposit": 1675,
+          "rateType": "monthly",
+          "startDate": "2025-09-30",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "1850 W. Pine St. - 512, Baraboo WI 53913. Same terms as unit 509."
+        },
+        {
+          "unit": "811",
+          "monthlyRent": 1675,
+          "securityDeposit": 1675,
+          "rateType": "monthly",
+          "startDate": "2025-09-30",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "1850 W. Pine St. - 811, Baraboo WI 53913. Same terms as unit 509."
+        },
+        {
+          "unit": "812",
+          "monthlyRent": 1675,
+          "securityDeposit": 1675,
+          "rateType": "monthly",
+          "startDate": "2025-09-30",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "active",
+          "notes": "1850 W. Pine St. - 812, Baraboo WI 53913. Same terms as unit 509."
+        }
+      ]
+    },
+    {
+      "name": "Beau Chateau",
+      "client": "Orgill",
+      "vendor": "Lanyard",
+      "city": "Sikeston",
+      "state": "MO",
+      "propertyType": "Apartment",
+      "source": "Orgill - Sikeston, MO - Lanyard - Beau Chateau",
+      "notes": "Only file in folder is 'ORGILL HOUSING SCREENSHOTS FOR LANYARD PROPERTIES 6.3.26.docx' (1.4MB), which is a collection of screenshots/images and returned no machine-readable text (empty/timeout on read). No executed lease PDF present. Lease terms (address, rent, deposit, dates, occupants) not machine-readable — needs manual review of the screenshots doc. Property name, client (Orgill), city/state (Sikeston, MO), and vendor (Lanyard) derived from folder name.",
+      "units": [
+        {
+          "unit": "unknown",
+          "status": "needs manual review",
+          "notes": "No unit/rent/date data available from machine-readable content; review the screenshots .docx manually."
+        }
+      ]
+    },
+    {
+      "name": "TB Rentals LLC - Sikeston, MO",
+      "client": "Orgill",
+      "vendor": "TB Rentals LLC",
+      "landlordName": "TB Rentals LLC",
+      "city": "Sikeston",
+      "state": "MO",
+      "source": "Orgill - Sikeston, MO - TB Rentals LLC",
+      "notes": "Lease PDF not machine-readable. The only document in the folder, 'Lease KFI Staffing-TB Rentals.pdf' (~17 MB), timed out on first read and returned no extractable text on retries, consistent with a scanned/image-based PDF. Property/landlord/city/state derived from the folder name (client Orgill - location Sikeston, MO - vendor/landlord TB Rentals LLC). Lease is between KFI Staffing and TB Rentals LLC. Address, unit numbers, rent, deposit, lease dates, rent-due day, notice period, and occupants could not be extracted - manual review of the PDF required.",
+      "units": [
+        {
+          "unit": "Unknown - manual review required",
+          "status": "needs review",
+          "notes": "Unit/rent/deposit/dates not extractable; lease PDF not machine-readable."
+        }
+      ]
+    },
+    {
+      "name": "The Ridge",
+      "propertyType": "Apartment",
+      "client": "Penda-Trienda",
+      "city": "Portage",
+      "state": "WI",
+      "source": "Portage, WI - Penda-Trienda - The Ridge",
+      "notes": "The only file in the folder is an occupancy/roster spreadsheet (penda y trienda housing ridge.xlsx), NOT an executed lease. No lease PDF present. No street address, zip, landlord/management company, landlord contact, lease start/end dates, security deposit, rent-due day, or notice period are available in this folder. The sheet tracks 14 rooms x 2 beds = 24 beds total (4 available at snapshot). A rate of $53 appears on the sheet (apparently per bed/room-night, labeled 'dia'/day) but is not clearly defined; unit financials not confirmed. Occupant names are tagged with client/shift codes (T4/T5/T6/T7 and P5/P6/P7/P8). City/State derived from folder name. Needs manual review for actual lease terms.",
+      "units": [
+        {
+          "unit": "Room 1",
+          "occupants": [
+            "Luis Ruiz -T4",
+            "Bucky Lee Gonzalez -T4"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 2",
+          "occupants": [
+            "Evian D Napier - P7",
+            "Justin R Hernandez - P7"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 3",
+          "occupants": [
+            "Brandon Hudson- P5",
+            "Emory L. Lewis- P5"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 4",
+          "occupants": [
+            "Derwin B. Williams- P5",
+            "John Tyler Clark - P6"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 5",
+          "occupants": [
+            "Evian D Napier - P7",
+            "Christian Hunter-T5"
+          ],
+          "notes": "Capacity 2 beds; note duplicate name appears across rooms in raw sheet"
+        },
+        {
+          "unit": "Room 6",
+          "occupants": [
+            "Jasmine Arce -T4",
+            "Joshua L Ritch-T5"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 7",
+          "occupants": [
+            "Dulce Ascencio (P5-8)-Noche",
+            "Christopher Lauderdale-T5"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 8",
+          "occupants": [
+            "Michael B. Felix-T7",
+            "Trey Grant-T7"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 9",
+          "occupants": [
+            "Zabdi X Rodriguez - P6",
+            "Christopher M Tuttle -T7"
+          ],
+          "notes": "Capacity 2 beds, occupied"
+        },
+        {
+          "unit": "Room 10",
+          "occupants": [
+            "RICKY ARGUELLES-T5"
+          ],
+          "notes": "Capacity 2 beds"
+        },
+        {
+          "unit": "Room 11",
+          "occupants": [
+            "Christian Lee Richardson-T5"
+          ],
+          "notes": "Capacity 2 beds"
+        },
+        {
+          "unit": "Room 12",
+          "occupants": [
+            "CEDRIC T LEE-T7"
+          ],
+          "notes": "Capacity 2 beds"
+        },
+        {
+          "unit": "Room 13",
+          "occupants": [
+            "Jordan T. Smith-T7"
+          ],
+          "notes": "Capacity 2 beds"
+        },
+        {
+          "unit": "Room 14",
+          "occupants": [
+            "Andrew Granville - P6"
+          ],
+          "notes": "Capacity 2 beds. Other names appearing on roster not clearly mapped to a room: Esdras N Lopez - P7, Alfonzo Deray Tucker- P7, Roberto Golas- P8"
+        }
+      ]
+    },
+    {
+      "name": "Foote Hills Apartments",
+      "propertyType": "Apartment",
+      "address": "4710 Wrightwind Dr SE (leasing/mailing: 4630 Commonway Drive SE)",
+      "city": "Grand Rapids",
+      "state": "MI",
+      "zip": "49546",
+      "client": "KFI Staffing",
+      "vendor": "Lanyard",
+      "landlordName": "Foote Hills Group, LLC",
+      "landlordEmail": "footehills8@lanyardstays.com",
+      "rentFrequency": "monthly",
+      "paymentRecipient": "Foote Hills Group, LLC",
+      "source": "Roskam - Grand Rapids, MI - Lanyard - Foote Hills Apartments",
+      "notes": "Roskam (per folder name) is the staffing client/end-customer; lease cover page lists 'KFI Staffing 8' as the lessee/account and footehills8@lanyardstays.com as the Lanyard-managed contact. Landlord/owner: Foote Hills Group, LLC, 4710 Wrightwind Dr SE #<unit>, Grand Rapids, MI 49546. Website www.footehillsapts.com. 9 executed unit leases in folder: 103, 505, 902, A02, A10P, B05D, D06, E02, B03P. Full lease terms were machine-readable ONLY for Unit 505DW (others are large scanned PDFs that timed out / errored on read and several item URIs were truncated in the folder listing). All units share the same property, landlord (Foote Hills Group, LLC), vendor (Lanyard) and Lease Contract template; per-unit rent/dates/occupants for units other than 505DW need manual verification from each PDF. Notice period 60 days; rent due on the 5th. Phone numbers in the PDF text belong to the EPA lead-paint pamphlet, not the landlord, so no landlord phone is recorded.",
+      "units": [
+        {
+          "unit": "505DW",
+          "status": "executed",
+          "rateType": "monthly",
+          "monthlyRent": 1800,
+          "startDate": "2025-01-03",
+          "endDate": "2026-01-31",
+          "rentDueDay": 5,
+          "noticePeriodDays": 60,
+          "notes": "Executed 12/31/2024 (Docusign Envelope BD949C8B-3B21-4EB2-90E9-36A9F2419369). Cover-page figures: contract/monthly rent $1,800.00; quoted/effective rate $1,683.87; reletting/admin fees noted 50.00 and 35.00. Term begins Jan 3, 2025; ends Jan 2026 (initial term ~13 months). 1 occupant. Source: Foote Hills Apartments Lease - Unit 505 Executed.pdf"
+        },
+        {
+          "unit": "103",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit 103 NEW.pdf - PDF not re-read (large scanned file); terms not extracted, verify manually"
+        },
+        {
+          "unit": "902",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit 902 Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "A02",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit A02 Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "A10P",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit A10P Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "B05D",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit B05D Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "D06",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit D06 Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "E02",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease - Unit E02 Executed.pdf - not re-read; verify manually"
+        },
+        {
+          "unit": "B03P",
+          "status": "executed",
+          "rateType": "monthly",
+          "notes": "Foote Hills Apartments Lease- Unit B03P Executed.pdf - not re-read; verify manually"
+        }
+      ]
+    },
+    {
+      "name": "Kolbe Apartments LLC",
+      "propertyType": "Apartment",
+      "client": "Schutte Metals",
+      "vendor": "Lokre Companies (Kolbe Apartments LLC)",
+      "landlordName": "Kolbe Apartments LLC (managed by Lokre Companies)",
+      "landlordPhone": "(715) 342-9200",
+      "landlordEmail": "",
+      "paymentRecipient": "Kolbe Apartments LLC",
+      "paymentMethod": "Online resident portal, check to management office, or secured drop box",
+      "rentFrequency": "monthly",
+      "address": "1331 South 8th Ave",
+      "city": "Wausau",
+      "state": "WI",
+      "zip": "54401",
+      "source": "Schutte Metals - Wausau, WI - Lokre - Kolbe Apartments LLC",
+      "notes": "Landlord mailing address: Lokre Companies, P.O. Box 215, Plover, WI 54467. Tenant of record: KFI Staffing LLC (staffing company master-leasing for associates). Wisconsin lease (Wis. Stat. ch. 704 / ATCP 134). Corporate Housing Program. Late fee $75/mo (after 5th). Returned payment fee $25. Lessor signer: Tim Follis. Utilities incl gas, water/sewer, internet, trash; tenant pays electricity (WPS). Garage parking $50/mo extra.",
+      "units": [
+        {
+          "unit": "Apt 200",
+          "monthlyRent": 1849,
+          "rateType": "monthly",
+          "securityDeposit": 1000,
+          "startDate": "2026-03-27",
+          "endDate": "2026-09-26",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "executed",
+          "occupants": [
+            "KFI Staffing LLC (tenant of record)"
+          ],
+          "notes": "Lease at 1331 South 8th Ave Apt 200. Prorated rent $298.23; first full month $1,849.00. Lessee signed by Valerie Alderman 03/19/2026; Lessor Tim Follis 03/19/2026. Late fee $75 after 5th day. Auto converts to month-to-month if no 30-day notice. Source PDF: Lease -1331 South 8th Ave Apt 200 Wausau, WI - 54401 kfi-staffing-llc.pdf"
+        },
+        {
+          "unit": "Apt 108",
+          "monthlyRent": 1410,
+          "rateType": "monthly",
+          "securityDeposit": 1000,
+          "startDate": "2026-05-01",
+          "endDate": "2026-10-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "executed",
+          "occupants": [
+            "KFI Staffing LLC (tenant of record)"
+          ],
+          "notes": "Lease at 1341 South 8th Ave Apt 108. NOTE: PDF filename says '1341 South 8th Ave Apt 1' but the lease body states 1341 South 8th Ave Apt 108 -- using body as authoritative. Different street number (1341, not 1331). Prorated rent $1,410.00; full month $1,410.00. Lessee signed by Linoshka Santana 04/21/2026; Lessor Tim Follis 04/23/2026. Source PDF: Lease -1341 South 8th Ave Apt 1 Wausau, WI - 54401 kfi-staffing-llc.pdf"
+        }
+      ]
+    },
+    {
+      "name": "Greenock Manor / Greenock Apartments",
+      "address": "900 Seneca Court",
+      "city": "McKeesport",
+      "state": "PA",
+      "zip": "15135",
+      "client": "KFI Staffing",
+      "vendor": "Lanyard",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "landlordName": "Mick's Properties, LLC (Stacey Oden, Lessor)",
+      "landlordPhone": "(412) 208-4262",
+      "paymentRecipient": "Mick's Properties, LLC",
+      "rentDueDay": 1,
+      "source": "Shuster's - McKeesport, PA - Lanyard - Greenock Apartments",
+      "notes": "Landlord office: Mick's Properties, LLC, 446 Chapeldale Dr, Apollo, PA 15613. All units 2 bed / 1 bath. Leases via PandaDoc, signed by Valerie Alderman (valderman@kfistaffing.com) for KFI Staffing. Landlord pays Water/Sewage/Trash; tenant pays all other utilities (electric via West Penn Power / FirstEnergy). 60-day move-out notice; security deposit forfeited if vacate early. Late fee: +10% after the 5th, additional +5% after the 20th. One-year terms auto-renew if no 60-day notice. Folder name encodes client as 'Shuster's'; lease docs name client/tenant as KFI Staffing. Unit 45 lease is at a different address (918 Zimmer Hill Road, McKeesport, PA 15135) under tenant Janet Johnson. Folder also contains lease files named for Units 36 and 52; by item-ID those resolved to duplicate/other-unit content or were not machine-readable (Unit 52 returned application/octet-stream), so they were not separately captured and should be reviewed manually.",
+      "units": [
+        {
+          "unit": "Apt. 32",
+          "rateType": "monthly",
+          "monthlyRent": 950,
+          "securityDeposit": 895,
+          "startDate": "2025-12-01",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "occupants": [
+            "Valerie Alderman - KFI Staffing"
+          ],
+          "status": "active",
+          "notes": "900 Seneca Court - Apt. 32. Doc Ref S9BWC-4LBNV-9SAZZ-FVN2M; completed 01 Oct 2025. Lease originally created to start 12/1/2024 then amended to 12/01/2025-11/30/2026 (Section 7 references 924 Seneca Court). Security deposit $895 due within 2 days of signing."
+        },
+        {
+          "unit": "Apt. 42",
+          "rateType": "monthly",
+          "monthlyRent": 950,
+          "securityDeposit": 950,
+          "startDate": "2026-02-06",
+          "endDate": "2026-12-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "occupants": [
+            "KFI Staffing"
+          ],
+          "status": "active",
+          "notes": "900 Seneca Court - Apt. 42. Doc Ref FGZUJ-XGET6-XVQUW-NEHBN; signed by Valerie Alderman, completed 04 Feb 2026. First+last month total $1,900; prorate $780.36. Electric set up with West Penn Power, move-in 02/10/2026, $310 electric security deposit billed (acct 100166644466)."
+        },
+        {
+          "unit": "Apt. 48",
+          "rateType": "monthly",
+          "monthlyRent": 950,
+          "securityDeposit": 895,
+          "startDate": "2025-11-01",
+          "endDate": "2026-10-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "occupants": [
+            "Valerie Alderman - KFI Staffing"
+          ],
+          "status": "active",
+          "notes": "900 Seneca Court - Apt. 48. Doc Ref JJU9U-PQBKX-V3Z9H-8NXWD; signed by Valerie Alderman, completed 11 Sep 2025."
+        },
+        {
+          "unit": "Apt. 45 (918 Zimmer Hill Road)",
+          "rateType": "monthly",
+          "monthlyRent": 895,
+          "securityDeposit": 895,
+          "startDate": "2025-01-01",
+          "endDate": "2025-12-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "occupants": [
+            "Janet Johnson"
+          ],
+          "status": "expired/under review",
+          "notes": "DIFFERENT ADDRESS: Apt. 45, 918 Zimmer Hill Road, McKeesport, PA 15135. Lessee Janet Johnson (not KFI); lessor Stacey Oden, Mick's Properties. Made 12/04/2024; term 01/01/2025-12/31/2025 (auto-renews). First+last month total $1,790. Filed in this Greenock folder; confirm whether it belongs to this client/complex."
+        }
+      ]
+    },
+    {
+      "name": "The Ridge Motor Inn",
+      "city": "Madison",
+      "state": "WI",
+      "propertyType": "Motel",
+      "source": "The Ridge Motor Inn - Madison, WI",
+      "notes": "Lease PDF not machine-readable (scanned image, no extractable text). Both PDFs in folder are identical in size (2,735,604 bytes) and returned no output via read_resource. Property name and city/state taken from folder name. Needs manual review of the scanned lease to capture address, landlord/contact, rent/nightly rate, deposit, dates, notice period, and occupants.",
+      "units": [
+        {
+          "unit": "TBD - see scanned lease",
+          "rateType": "room-night",
+          "status": "needs manual review",
+          "notes": "Room number(s) and nightly rate not extractable from scanned PDF."
+        }
+      ]
+    },
+    {
+      "name": "Hickory Haven Apartments",
+      "propertyType": "Apartment",
+      "address": "600 W Hickory St",
+      "city": "Gilman",
+      "state": "WI",
+      "zip": "54433",
+      "client": "WB Manufacturing",
+      "vendor": "Lanyard",
+      "landlordName": "Hickory Haven Apartments LLC (Authorized Signer: Jacob Nagel)",
+      "landlordEmail": "jnagelpcc@gmail.com",
+      "landlordPhone": "(715) 290-0025",
+      "paymentRecipient": "Hickory Haven Apartments LLC",
+      "paymentMethod": "Cash, Personal Check, Cashier's Check, Money Order, ACH / Direct Deposit, or TurboTenant",
+      "rentFrequency": "monthly",
+      "source": "WB Manufacturing - Thorp, WI - Lanyard - Hickory Havens Apts",
+      "notes": "Four executed Wisconsin Residential Rental Agreements (TurboTenant) between Hickory Haven Apartments LLC and KFI Staffing, all for 600 W Hickory St, Gilman, WI 54433. Tenant of record is KFI Staffing (corporate lease; hickory@lanyardstays.com, (646) 298-3419) — no individual associate/EE occupant names listed on any lease. Landlord mailing address: W15430 Old Hwy 194, Sheldon, WI 54766. Rent due on or before 5pm on the 1st of each month; daily late fee of $50 starting 5 days after due date; $20 NSF fee. All units fixed-term ending 08/31/2026, default terminate at end of fixed term (not month-to-month). Pets not permitted; smoking not permitted. Tenant required to carry renters/liability insurance. Insurance: M3 Insurance Solutions certificate (insured KFI Staffing LLC) lists Units 6 & 8 at 600 Hickory St, Gilman WI 54433. Folder also contains 'Move Out Pictures' subfolder, an employee ID PDF, and the insurance ACORD certificate. Notice period differs by lease: Units 6 & 8 (earlier Feb leases) include a 60-day early-termination clause with a fee of one month's rent; Units 11 & 12 (later Mar leases) instead use the standard 30-day written notice for any month-to-month holdover.",
+      "units": [
+        {
+          "unit": "6",
+          "rateType": "monthly",
+          "monthlyRent": 1075,
+          "securityDeposit": 1075,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease dated 02/20/2026, signed by both parties 02/25/2026 (lease_agreement-707085.pdf, Doc ID d64694b5b1817ec7339ab02423973ca4e195056e). No prorated rent. 60-day early-termination clause; termination fee = one month's rent. Keys: 2 Property + 2 Mailbox. Gas/HOA = Landlord."
+        },
+        {
+          "unit": "8",
+          "rateType": "monthly",
+          "monthlyRent": 900,
+          "securityDeposit": 900,
+          "startDate": "2026-02-27",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "executed",
+          "notes": "Lease dated 02/20/2026, signed by both parties 02/25/2026 (lease_agreement-707097.pdf, Doc ID 1bce4bdd1d9549ef3ac00dfbc2cda8ea910be5b8). No prorated rent. 60-day early-termination clause; termination fee = one month's rent. Keys: 2 Property + 2 Mailbox. Gas/HOA = Landlord."
+        },
+        {
+          "unit": "11",
+          "rateType": "monthly",
+          "monthlyRent": 900,
+          "securityDeposit": 900,
+          "startDate": "2026-03-13",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "executed",
+          "notes": "Lease dated 03/10/2026, signed by both parties 03/10/2026 (lease_agreement-715885.pdf, Doc ID abb22f3114ba2902170fed4c2eaf9ac058710534). Prorated first-month rent $551.61. 30-day notice (month-to-month holdover). Keys: 2 Property. Gas = Landlord; HOA/Condo Fee = Tenant."
+        },
+        {
+          "unit": "12",
+          "rateType": "monthly",
+          "monthlyRent": 1075,
+          "securityDeposit": 1075,
+          "startDate": "2026-03-13",
+          "endDate": "2026-08-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 30,
+          "status": "executed",
+          "notes": "Lease dated 03/10/2026, signed by both parties 03/10/2026 (lease_agreement-715837.pdf, Doc ID a1e30d00f741a197548f2c445800545776f1164d). Prorated first-month rent $658.87. 30-day notice (month-to-month holdover). Keys: 2 Property + 2 Mailbox. Gas = Landlord; HOA/Condo Fee = Tenant."
+        }
+      ]
+    },
+    {
+      "name": "Sunset Place Apartments",
+      "address": "216 Sunset Place",
+      "city": "Neillsville",
+      "state": "WI",
+      "zip": "54456",
+      "client": "WB Manufacturing",
+      "vendor": "Lanyard",
+      "propertyType": "Apartment",
+      "rentFrequency": "monthly",
+      "landlordName": "Lisenby Properties LLC (signer: Lynda Lisenby)",
+      "landlordPhone": "(715) 635-1749",
+      "paymentMethod": "Tenant portal or Payslip (accepted at Walmart, Walgreens, CVS)",
+      "paymentRecipient": "Lisenby Properties LLC, PO Box 279, Spooner, WI 54801",
+      "source": "WB Manufacturing - Thorp, WI - Lanyard - Sunset Place Apts",
+      "notes": "Tenant of record on all leases is KFI Staffing. Folder name says Thorp, WI but every lease PDF states the property is 216 Sunset Place, Neillsville, WI 54456 - address taken from the lease documents. Landlord: Lisenby Properties LLC, PO Box 279, Spooner, WI 54801, (715) 635-1749. Lease management: Lanyard (housing vendor per folder). Common terms across all units: rent due 1st of month; 15% late fee assessed on the 6th if not paid by the 5th; security deposit equals one month's rent (cash or FolioGuard replacement), refunded within 21 days (WI); 60-day written notice to vacate; lease break fee = 2 months' rent plus forfeiture of full deposit; $100 lease change fee; $25 NSF fee; no smoking ($500 fine); landlord pays high-speed internet, basic cable, garbage, and (most units) lawn care/snow removal, tenant pays all other utilities; after term, converts to month-to-month. Folder also contains an apartment-change notice: occupant of Unit 221 moved to Unit 132 effective 06/12/2026, and occupant of Unit 148 moved to Unit 106 effective 07/08/2026. WiFi info doc present for units 215 and 117.",
+      "units": [
+        {
+          "unit": "148",
+          "monthlyRent": 989,
+          "securityDeposit": 989,
+          "rateType": "monthly",
+          "startDate": "2026-05-28",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "transferred to Unit 106 effective 07/08/2026 per apt-change note",
+          "occupants": [
+            "Dawn Whitmore (lease signer / Lessee, on behalf of KFI Staffing)"
+          ],
+          "notes": "Fully Executed Lease - 216 Sunset Place, 148.pdf. Prorated first-month rent $127.61. Tenant signed 05/22/2026 (Dawn Whitmore); Lessor Lynda Lisenby signed 05/23/2026. Landlord utilities: high-speed internet, basic cable, garbage, lawn care/snow removal."
+        },
+        {
+          "unit": "221",
+          "monthlyRent": 1169,
+          "securityDeposit": 1169,
+          "rateType": "monthly",
+          "startDate": "2026-05-28",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "transferred to Unit 132 effective 06/12/2026 per apt-change note",
+          "notes": "Lease - WB - 216 Sunset Place, Unit 221.pdf. Landlord utilities: high-speed internet, basic cable, garbage service."
+        },
+        {
+          "unit": "117",
+          "monthlyRent": 1109,
+          "securityDeposit": 1109,
+          "rateType": "monthly",
+          "startDate": "2026-06-01",
+          "endDate": "2027-03-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Lease Agreement - Sunset Place Apartments Unit 117.pdf. Landlord utilities: high-speed internet, basic cable, garbage, lawn care/snow removal. WiFi info doc on file."
+        },
+        {
+          "unit": "215",
+          "monthlyRent": 1309,
+          "securityDeposit": 1309,
+          "rateType": "monthly",
+          "startDate": "2026-06-01",
+          "endDate": "2027-03-31",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "notes": "Lease Agreement - Sunset Place Apartments Unit 215.pdf. Landlord utilities: garbage service, basic cable, high-speed internet. WiFi info doc on file. (Highest rent unit.)"
+        },
+        {
+          "unit": "106",
+          "monthlyRent": 939,
+          "securityDeposit": 939,
+          "rateType": "monthly",
+          "startDate": "2026-07-08",
+          "endDate": "2026-11-30",
+          "rentDueDay": 1,
+          "noticePeriodDays": 60,
+          "status": "new unit for occupant transferred from Unit 148",
+          "notes": "Sunset Place Lease - 106.pdf. Landlord utilities: garbage service, basic cable, high-speed internet, lawn care/snow removal."
+        },
+        {
+          "unit": "132",
+          "rateType": "monthly",
+          "status": "new unit for occupant transferred from Unit 221 effective 06/12/2026",
+          "notes": "Lease PDF 'Sunset Place Lease - 132.pdf' exists in folder but the read returned duplicate content for Unit 106 (likely a server caching glitch); terms not independently confirmed. Review manually. Likely similar terms to Unit 221 ($1,169)."
+        },
+        {
+          "unit": "134",
+          "rateType": "monthly",
+          "notes": "ADA unit. Lease PDF 'Lease Agreement - Sunset Place Apartments Unit 134 ADA.pdf' exists in folder but the read returned duplicate content for Unit 117 (likely a server caching glitch); terms not independently confirmed. Review manually."
+        }
+      ]
+    }
+  ]
+}

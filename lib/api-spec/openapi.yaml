@@ -1108,6 +1108,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Occupant" }
+  /roster/active:
+    get:
+      operationId: listActiveRoster
+      tags: [roster]
+      summary: Active employee roster (active assignments) from Zenople
+      description: |
+        The pool of employees currently on assignment as of the last
+        payroll run, pulled live from Zenople (`AssignmentData`). This is
+        what the Roster page lets an operator place into a property/bed —
+        distinct from the housing-deduction list (which is only people who
+        already carry a housing charge). Cached in-memory for 15 minutes.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActiveRosterResponse" }
   /occupants/{id}:
     patch:
       operationId: updateOccupant
@@ -2835,6 +2852,47 @@ components:
         cleaningStatus:
           type: string
           enum: [occupied, needs_cleaning, in_progress, ready]
+
+    ActiveRosterPerson:
+      type: object
+      required:
+        - personId
+        - name
+        - company
+        - jobTitle
+        - branch
+        - startDate
+        - endDate
+      properties:
+        personId:
+          type: string
+          description: Zenople PersonId — equals occupant.employeeId.
+        name: { type: string }
+        company:
+          type: string
+          description: Staffing client/customer the assignment is for ("" if absent).
+        jobTitle: { type: string }
+        branch: { type: string }
+        startDate: { type: string }
+        endDate: { type: string }
+    ActiveRosterResponse:
+      type: object
+      required:
+        - asOf
+        - source
+        - count
+        - people
+      properties:
+        asOf:
+          type: string
+          description: ISO timestamp the roster was pulled.
+        source:
+          type: string
+          description: Zenople action used (AssignmentData).
+        count: { type: integer }
+        people:
+          type: array
+          items: { $ref: "#/components/schemas/ActiveRosterPerson" }
 
     Occupant:
       type: object

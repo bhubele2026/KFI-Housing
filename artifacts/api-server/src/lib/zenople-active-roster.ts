@@ -1,0 +1,279 @@
+// Zenople API client for the *active employee roster* — the pool of
+// people currently on assignment as of the last payroll run. This is a
+// DIFFERENT concern from `zenople-client.ts`, which pulls housing
+// *deductions* (only people who already have a housing charge). The
+// Roster page uses THIS so an operator can place any active employee
+// into a property/bed, not just people who already appear in payroll
+// deductions.
+//
+// Transport mirrors the proven deductions client exactly: OAuth2
+// client-credentials → ~2h bearer token (cached), then
+// POST /api/common/data {action, filters:{uTCStartDateTime,
+// uTCEndDateTime, includeData}}. See `.agents/memory/zenople-api.md`.
+//
+// WHICH ACTION: "active as of last payroll" is the staffing definition
+// of an active assignment, so we read `AssignmentData` with
+// includeData:"Current". The date window filters on *last-modified*
+// time (same quirk as DeductionData), so a recent window returns the
+// full current assignment set in one call.
+//
+// FIELD NAMES ARE NOT YET CONFIRMED against this tenant's AssignmentData
+// schema (we couldn't run the probe locally — no Node + secrets are
+// Replit-only). So every field is read through a tolerant alias list
+// and the first row's actual keys are logged once on each pull. If the
+// roster comes back empty or thin, check the server log line
+// "zenople active-roster: discovered fields" and adjust the alias lists
+// below — that's the only change needed.
+
+import { logger as defaultLogger } from "./logger";
+import type { Logger } from "pino";
+
+const ASSIGNMENT_ACTION = "AssignmentData";
+// A recent modified-time window returns the full *current* assignment
+// set in one call (same behaviour as DeductionData). 45 days comfortably
+// spans several weekly payroll runs.
+const LOOKBACK_DAYS = 45;
+
+interface ZenopleConfig {
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  tokenPath: string;
+  dataPath: string;
+}
+
+function getConfig(): ZenopleConfig {
+  const clientId = process.env.ZENOPLE_CLIENT_ID;
+  const clientSecret = process.env.ZENOPLE_CLIENT_SECRET;
+  const baseUrl =
+    process.env.ZENOPLE_BASE_URL || "https://kfistaffingapi.zenople.com";
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "Zenople is not configured: missing ZENOPLE_CLIENT_ID / ZENOPLE_CLIENT_SECRET.",
+    );
+  }
+  return {
+    baseUrl: baseUrl.replace(/\/+$/, ""),
+    clientId,
+    clientSecret,
+    tokenPath: process.env.ZENOPLE_TOKEN_PATH || "/connect/token",
+    dataPath: process.env.ZENOPLE_DATA_PATH || "/api/common/data",
+  };
+}
+
+// ── Token cache (re-auth is rate-limited to 20/hr, so never per-call) ─
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getToken(cfg: ZenopleConfig): Promise<string> {
+  const now = Date.now();
+  if (cachedToken && cachedToken.expiresAt - 60_000 > now) {
+    return cachedToken.token;
+  }
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: cfg.clientId,
+    client_secret: cfg.clientSecret,
+  });
+  const res = await fetch(`${cfg.baseUrl}${cfg.tokenPath}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Zenople auth failed (${res.status}). ${text.slice(0, 200)}`.trim(),
+    );
+  }
+  const json = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+  };
+  if (!json.access_token) {
+    throw new Error("Zenople auth response did not include an access_token.");
+  }
+  const ttlMs = (json.expires_in ?? 7200) * 1000;
+  cachedToken = { token: json.access_token, expiresAt: now + ttlMs };
+  return json.access_token;
+}
+
+// Zenople expects ".NET-style" UTC strings, e.g. "2026-06-14 12:00:00.0000000".
+function toZenopleUtc(d: Date): string {
+  return d.toISOString().replace("T", " ").replace("Z", "0000");
+}
+
+async function fetchAction(
+  cfg: ZenopleConfig,
+  token: string,
+  action: string,
+  start: Date,
+  end: Date,
+): Promise<Record<string, unknown>[]> {
+  const res = await fetch(`${cfg.baseUrl}${cfg.dataPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action,
+      filters: {
+        uTCStartDateTime: toZenopleUtc(start),
+        uTCEndDateTime: toZenopleUtc(end),
+        includeData: "Current",
+      },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Zenople ${action} request failed (${res.status}). ${text.slice(0, 200)}`.trim(),
+    );
+  }
+  const json: unknown = await res.json();
+  if (!Array.isArray(json)) {
+    // Non-array 200 means "narrow the window" (e.g. {"msg":"Large data set"}).
+    const msg =
+      json && typeof json === "object" && "msg" in json
+        ? String((json as { msg: unknown }).msg)
+        : "unexpected non-array response";
+    throw new Error(`Zenople ${action} returned no rows: ${msg}.`);
+  }
+  return json as Record<string, unknown>[];
+}
+
+/** First non-empty value across a list of candidate keys (case-sensitive). */
+function pick(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const k of keys) {
+    const v = row[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+  }
+  return undefined;
+}
+
+function str(v: unknown): string {
+  return v == null ? "" : String(v).trim();
+}
+
+function dateOnly(v: unknown): string {
+  const s = str(v);
+  return s ? s.slice(0, 10) : "";
+}
+
+export interface ActiveRosterPerson {
+  /** Zenople PersonId — equals HousingOps `occupant.employeeId`. */
+  personId: string;
+  name: string;
+  /** Staffing client / customer the assignment is for ("" if absent). */
+  company: string;
+  jobTitle: string;
+  branch: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface ActiveRosterResult {
+  asOf: string;
+  source: string;
+  /** Field names seen on the raw rows — surfaced for debugging. */
+  discoveredFields: string[];
+  people: ActiveRosterPerson[];
+}
+
+// Alias lists — first present wins. Extend these (NOT the call sites) if
+// the probe reveals different casings on this tenant.
+const PERSON_ID_KEYS = ["PersonId", "personId", "EmployeeId", "employeeId", "Id", "id"];
+const NAME_KEYS = ["Name", "EmployeeName", "FullName", "PersonName", "name"];
+const FIRST_KEYS = ["FirstName", "firstName", "First"];
+const LAST_KEYS = ["LastName", "lastName", "Last"];
+const COMPANY_KEYS = [
+  "CustomerName", "Customer", "ClientName", "Client",
+  "OrganizationName", "Organization", "Company", "companyName",
+];
+const JOB_KEYS = ["JobTitle", "Title", "Position", "Job", "jobTitle"];
+const BRANCH_KEYS = ["Branch", "Office", "OfficeName", "branch"];
+const START_KEYS = ["StartDate", "AssignmentStartDate", "startDate", "Start"];
+const END_KEYS = ["EndDate", "AssignmentEndDate", "endDate", "End"];
+const ACTIVE_KEYS = ["IsActive", "Active", "Status", "AssignmentStatus", "status"];
+
+/** Treat a row as active unless it has an explicit ended/inactive marker. */
+function isActiveRow(row: Record<string, unknown>, today: string): boolean {
+  const end = dateOnly(pick(row, END_KEYS));
+  if (end && end < today) return false;
+  const active = pick(row, ACTIVE_KEYS);
+  if (active === false) return false;
+  const a = str(active).toLowerCase();
+  if (a && (a === "inactive" || a === "ended" || a === "terminated" || a === "closed" || a === "false")) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Pull the active employee roster (active assignments) from Zenople.
+ * Dedupes by personId, keeping the row with the latest startDate (the
+ * person's current assignment). `includeData:"Current"` already scopes
+ * to live assignments; `isActiveRow` is a belt-and-braces filter for any
+ * ended rows that slip through the modified-time window.
+ */
+export async function fetchActiveRoster(
+  log: Logger = defaultLogger,
+): Promise<ActiveRosterResult> {
+  const cfg = getConfig();
+  const token = await getToken(cfg);
+  const now = new Date();
+  const start = new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000);
+  const raw = await fetchAction(cfg, token, ASSIGNMENT_ACTION, start, now);
+
+  const discoveredFields =
+    raw.length > 0 && raw[0] && typeof raw[0] === "object"
+      ? Object.keys(raw[0])
+      : [];
+  // Log once per pull so a field-name mismatch is diagnosable from the
+  // server log alone (no PII — field NAMES only).
+  log.info(
+    { action: ASSIGNMENT_ACTION, rows: raw.length, fields: discoveredFields },
+    "zenople active-roster: discovered fields",
+  );
+
+  const today = now.toISOString().slice(0, 10);
+  // personId -> {person, startDate} keeping the latest assignment.
+  const byPerson = new Map<string, { person: ActiveRosterPerson; start: string }>();
+
+  for (const row of raw) {
+    if (!isActiveRow(row, today)) continue;
+    const personId = str(pick(row, PERSON_ID_KEYS));
+    let name = str(pick(row, NAME_KEYS));
+    if (!name) {
+      const first = str(pick(row, FIRST_KEYS));
+      const last = str(pick(row, LAST_KEYS));
+      name = `${first} ${last}`.trim();
+    }
+    if (!personId || !name) continue;
+
+    const person: ActiveRosterPerson = {
+      personId,
+      name,
+      company: str(pick(row, COMPANY_KEYS)),
+      jobTitle: str(pick(row, JOB_KEYS)),
+      branch: str(pick(row, BRANCH_KEYS)),
+      startDate: dateOnly(pick(row, START_KEYS)),
+      endDate: dateOnly(pick(row, END_KEYS)),
+    };
+    const existing = byPerson.get(personId);
+    if (!existing || person.startDate > existing.start) {
+      byPerson.set(personId, { person, start: person.startDate });
+    }
+  }
+
+  const people = [...byPerson.values()]
+    .map((v) => v.person)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    asOf: now.toISOString(),
+    source: ASSIGNMENT_ACTION,
+    discoveredFields,
+    people,
+  };
+}

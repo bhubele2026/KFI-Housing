@@ -1,0 +1,669 @@
+{
+  "summary": "Sweep all June 2026 Outlook email, extract every property/lease/rent/hotel/bill/utility into app-schema records for KFI-Housing review",
+  "agentCount": 10,
+  "logs": [
+    "Sweep done: 8 scanners reported, 14 raw property records, mailbox tool available=true"
+  ],
+  "result": {
+    "final": {
+      "properties": [
+        {
+          "name": "Ridge Motor Inn",
+          "propertyType": "Motel",
+          "status": "Active",
+          "landlordName": "Joe (General Manager) / Philip Patel (owner, \"Phil\")",
+          "landlordEmail": "ridgemotorinn@gmail.com",
+          "landlordPhone": "608-742-5306",
+          "paymentRecipient": "Ridge Motor Inn / Phil (Philip Patel) - philippatel84@gmail.com",
+          "rentFrequency": "monthly",
+          "totalBeds": 16,
+          "notes": "KFI houses workers in 16 motel rooms. Two scanner snapshots merged: an older 6/9 email listing outstanding balances through 6/9 (rooms 134, 205, 305, 216, 149, 247) and a newer 6/11 plan that lists all 16 rooms with per-room catch-up amounts to bring everyone current to July 1 (total $40,808), then a flat $27,840/month for ALL rooms starting July 1. Per-room 'monthlyRent' figures below come from the older 6/9 outstanding-balance email and are pre-standardization; from July 1 the property bills a single flat $27,840/month, so unit-level rents will be superseded. AMBIGUITY: Room 205 was listed twice in the 6/9 email with two different amounts ($3,285 and $3,232) - kept as one unit at $3,285 with the conflict noted; duplicate 205 listing dropped. Follow-ups 6/11 and 6/14 chase deposit confirmation (unconfirmed). Property-level monthlyRent left empty because the per-room figures are transitional and conflict with the flat $27,840 going-forward rate - see bills[].",
+          "monthlyRent": 27840,
+          "leases": [
+            {
+              "unit": "134",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3185,
+              "needsReview": true,
+              "notes": "Outstanding/unpaid balance through 6/9/2026. Catch-up to 7/1: $4,503. Standardizes to flat $27,840/mo all-rooms from July 1. No dates/deposit."
+            },
+            {
+              "unit": "205",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3285,
+              "needsReview": true,
+              "notes": "Outstanding through 6/9. CONFLICT: 6/9 email listed 205 twice ($3,285 and $3,232). Catch-up to 7/1: $4,503. No dates/deposit."
+            },
+            {
+              "unit": "305",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3232,
+              "needsReview": true,
+              "notes": "Outstanding through 6/9. No dates/deposit."
+            },
+            {
+              "unit": "216",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3232,
+              "needsReview": true,
+              "notes": "Outstanding through 6/9. Catch-up to 7/1: $4,450. No dates/deposit."
+            },
+            {
+              "unit": "149",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3232,
+              "needsReview": true,
+              "notes": "Outstanding through 6/9. Catch-up to 7/1: $4,450. No dates/deposit."
+            },
+            {
+              "unit": "247",
+              "rateType": "room-night",
+              "status": "Active",
+              "monthlyRent": 3232,
+              "needsReview": true,
+              "notes": "Outstanding through 6/9. Catch-up to 7/1: $4,450. No dates/deposit."
+            },
+            {
+              "unit": "215",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $4,450. Rent/dates/deposit not separately stated (flat $27,840/mo all-rooms from July 1)."
+            },
+            {
+              "unit": "122",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,574. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "303",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,574. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "232",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,574. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "136",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S207",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S209",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S211",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S218",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S219",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            },
+            {
+              "unit": "S221",
+              "rateType": "room-night",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "From 6/11 list. Catch-up to 7/1: $1,160. Rent/dates/deposit not stated."
+            }
+          ],
+          "bills": [
+            {
+              "description": "Catch-up to bring all 16 rooms current to July 1, 2026",
+              "amount": 40808,
+              "source": "Payment due / ridgemotorinn@gmail.com / 2026-06-11"
+            },
+            {
+              "description": "Monthly rate for all 16 rooms starting July 1, 2026 (flat, standardized due on the 1st)",
+              "amount": 27840,
+              "source": "Payment due / ridgemotorinn@gmail.com / 2026-06-11"
+            }
+          ],
+          "sources": [
+            "payment / 2026-06-09 / ridgemotorinn@gmail.com",
+            "Re: payment / 2026-06-09 / ridgemotorinn@gmail.com",
+            "Payment due / 2026-06-11 / ridgemotorinn@gmail.com",
+            "Re: Payment due / 2026-06-11 / ridgemotorinn@gmail.com",
+            "Deposit / 2026-06-14 / ridgemotorinn@gmail.com"
+          ]
+        },
+        {
+          "name": "Virginia Manor Apartments",
+          "propertyType": "Apartment",
+          "city": "McKeesport",
+          "state": "PA",
+          "status": "Active",
+          "landlordName": "Lanyard Stays (broker)",
+          "landlordEmail": "accounts@lanyardstays.com",
+          "paymentRecipient": "Lanyard Stays",
+          "paymentMethod": "Bill.com / ACH",
+          "rentFrequency": "monthly",
+          "notes": "Housing Request #UT7ZZU. Lease for Unit 506 sent by Lanyard 6/12; executed lease forwarded 6/13 (lease PDF + utility screenshots NOT machine-readable - rent/deposit/move-in costs need manual extraction). Lease begins week of 6/15; associate was in a hotel until move-in. Portal login virginiamanor1@lanyardstays.com. KFI already has other housing in McKeesport. Lanyard manages billing via bill.com (Invoice_1110-XXXX series); a specific invoice could not be tied to this property from email bodies - see the Lanyard bill.com invoice pool for unmapped invoices.",
+          "leases": [
+            {
+              "unit": "506",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#UT7ZZU",
+              "startDate": "2026-06-15",
+              "needsReview": true,
+              "notes": "Lease executed 2026-06-13, begins week of 6/15. Rent, deposit, and move-in costs are in the lease PDF (needs manual extraction)."
+            }
+          ],
+          "sources": [
+            "Fw: Your lease is ready to sign for Housing Request #UT7ZZU in McKeesport, PA / 2026-06-12 / DWhitmore@kfi.group",
+            "Re: Your lease is ready to sign for Housing Request #UT7ZZU in McKeesport, PA / 2026-06-13 / DWhitmore@kfi.group"
+          ]
+        },
+        {
+          "name": "Beau Chateau (Service First Rentals) - 501 W Fannetta, Dexter MO",
+          "propertyType": "Apartment",
+          "address": "501 W. Fannetta St.",
+          "city": "Dexter",
+          "state": "MO",
+          "zip": "63841",
+          "status": "Active",
+          "landlordName": "Brandon Sparks (SMG MO) / Service First Rentals (Beau Chateau); coordinated via Lanyard",
+          "landlordEmail": "brandon@smgmo.com / accounts@lanyardstays.com",
+          "paymentMethod": "EFT/ACH; Lanyard / Bill.com",
+          "paymentRecipient": "Lanyard / Service First Rentals",
+          "rentFrequency": "monthly",
+          "notes": "Housing Request #FR4R5Z. THREE scanners merged into this property: (1) 'Dexter MO Property 501 W. Fannetta Unit 10' new-lease record with landlord Brandon Sparks (smgmo.com), (2) 'Beau Chateau / Service First Rentals' record listing units 10, 11, 12, 16 at 501 W Fannetta PLUS a separate Dexter Grant Apartment unit A3, (3) utility setup threads. CONFLICT/AMBIGUITY: the two scanners disagree on the unit's move-in date - Unit 10 record says move-in 2026-06-16 (key pickup/walk-through 6/16 3pm) while the Beau Chateau record says move-in 6/15/2026 for all units. Treated all #FR4R5Z Dexter units as one property since same address/request; kept both dates per-unit. Dexter Grant Apartment A3 (15974 Co Rd 612) is a different street address but billed under the same #FR4R5Z lease/insurance package - flagged for review (could be split into its own property). Insurance: min $100,000 liability required (COI uploaded by KFI); special terms re microwaves + Section B insurance. Electric via Ameren Missouri (800) 552-7583 / (800) 552-7583. Rent and deposit are in the signed lease + banking/ACH attachments which are NOT machine-readable (need manual extraction). Lanyard bill.com invoices map here but specific invoice numbers were not tied to this address in email bodies.",
+          "utilities": [
+            {
+              "type": "electric",
+              "company": "Ameren Missouri"
+            }
+          ],
+          "leases": [
+            {
+              "unit": "501 W Fannetta - 10",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#FR4R5Z",
+              "startDate": "2026-06-16",
+              "needsReview": true,
+              "notes": "CONFLICT: Unit-10 scanner says move-in 2026-06-16 (key pickup/walk-through 6/16 3pm); Beau Chateau scanner says move-in 6/15. Rent/deposit in lease PDF (needs manual extraction)."
+            },
+            {
+              "unit": "501 W Fannetta - 11",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#FR4R5Z",
+              "startDate": "2026-06-15",
+              "needsReview": true,
+              "notes": "Beau Chateau, Dexter MO 63841. Rent/deposit in lease PDF (needs manual extraction)."
+            },
+            {
+              "unit": "501 W Fannetta - 12",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#FR4R5Z",
+              "startDate": "2026-06-15",
+              "needsReview": true,
+              "notes": "Beau Chateau, Dexter MO 63841. Rent/deposit in lease PDF (needs manual extraction)."
+            },
+            {
+              "unit": "501 W Fannetta - 16",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#FR4R5Z",
+              "startDate": "2026-06-15",
+              "needsReview": true,
+              "notes": "Beau Chateau, Dexter MO 63841. Rent/deposit in lease PDF (needs manual extraction)."
+            },
+            {
+              "unit": "Dexter Grant Apartment - A3",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#FR4R5Z",
+              "startDate": "2026-06-15",
+              "needsReview": true,
+              "notes": "Different address: 15974 Co Rd 612, A3, Dexter, MO 63841. Billed under same #FR4R5Z package; consider splitting into its own property. Rent/deposit in lease PDF (needs manual extraction)."
+            }
+          ],
+          "sources": [
+            "Re: Set up your utilities and insurance for Housing Request #FR4R5Z in Dexter, MO / 2026-06-08 / accounts@lanyardstays.com",
+            "Re: Set up your utilities and insurance for Housing Request #FR4R5Z in Dexter, MO / 2026-06-08 / DWhitmore@kfistaffing.com",
+            "Re: Set up your utilities and insurance for Housing Request #FR4R5Z in Dexter, MO / 2026-06-09 / accounts@lanyardstays.com",
+            "Re: Set up your utilities and insurance for Housing Request #FR4R5Z in Dexter, MO / 2026-06-09 / DWhitmore@kfistaffing.com",
+            "Re: Set up your utilities and insurance for Housing Request #FR4R5Z in Dexter, MO / 2026-06-11 / accounts@lanyardstays.com",
+            "NEW LEASE - Utilities and Move In Cost Payment Needed - Fw: KFI Staffing Check In / 2026-06-11 / DWhitmore@kfi.group",
+            "Fw: KFI Staffing Check In / 2026-06-11 / DWhitmore@kfi.group",
+            "Your Ameren Online Registration Is Complete / 2026-06-12 / do-not-reply@alerts.ameren.com"
+          ]
+        },
+        {
+          "name": "Sunset Place Apartments",
+          "propertyType": "Apartment",
+          "address": "216 Sunset Place",
+          "city": "Neillsville",
+          "state": "WI",
+          "zip": "54456",
+          "status": "Active",
+          "landlordName": "Sunset Place Apartments (housing partner via Lanyard)",
+          "paymentRecipient": "Lanyard / Sunset Place Apartments",
+          "rentFrequency": "monthly",
+          "notes": "Housing Request #D5CYJY (referenced as both Neillsville and Thorp, WI across subjects). Lease fully executed for units 132 and 106 (Sunset Place Lease-132.pdf, Sunset Place Lease-106.pdf - rent/deposit need manual extraction). Tenant transfers: Unit 221 -> Unit 132 on 6/12/2026; Unit 148 -> Unit 106 on 7/8/2026; old leases (221, 148) become null/void on transfer (Stop electric service). Electric via Xcel Energy 800-895-4999. Building amenities: fitness center + laundry rooms (key fob access via Just Love Coffee Cafe).",
+          "utilities": [
+            {
+              "type": "electric",
+              "company": "Xcel Energy"
+            }
+          ],
+          "leases": [
+            {
+              "unit": "132",
+              "rateType": "monthly",
+              "status": "Active",
+              "housingRequestId": "#D5CYJY",
+              "startDate": "2026-06-12",
+              "endDate": "2026-11-30",
+              "needsReview": true,
+              "notes": "Transferred from Unit 221 on 6/12/2026. Xcel electric confirmation 04547646. Lease executed (Sunset Place Lease-132.pdf - rent/deposit need manual extraction)."
+            },
+            {
+              "unit": "106",
+              "rateType": "monthly",
+              "status": "Upcoming",
+              "housingRequestId": "#D5CYJY",
+              "startDate": "2026-07-08",
+              "endDate": "2026-11-30",
+              "needsReview": true,
+              "notes": "Transferred from Unit 148 on 7/8/2026 (starts in future). Xcel electric confirmation 04547679. Lease executed (Sunset Place Lease-106.pdf - rent/deposit need manual extraction)."
+            },
+            {
+              "unit": "221",
+              "rateType": "monthly",
+              "status": "Expired",
+              "endDate": "2026-06-12",
+              "needsReview": true,
+              "notes": "Existing unit; lease null/void after transfer to Unit 132 on 6/12/2026. Stop electric service. No rent/deposit captured."
+            },
+            {
+              "unit": "148",
+              "rateType": "monthly",
+              "status": "Expired",
+              "endDate": "2026-07-08",
+              "needsReview": true,
+              "notes": "Existing unit; lease null/void after transfer to Unit 106 on 7/8/2026. Stop electric service. No rent/deposit captured."
+            }
+          ],
+          "sources": [
+            "Fw: Your lease agreement for Housing Request #D5CYJY in Thorp, WI is complete / 2026-06-05 / DWhitmore@kfistaffing.com",
+            "Re: Your Move-In Instructions for Housing Request #D5CYJY in Neillsville, WI / 2026-06-05 / DWhitmore@kfistaffing.com",
+            "RE: Your Move-In Instructions for Housing Request #D5CYJY in Neillsville, WI / 2026-06-08 / ACosby@kfi.group"
+          ]
+        },
+        {
+          "name": "1341 S 8th Ave Apartments (Wausau)",
+          "propertyType": "Apartment",
+          "address": "1341 S 8th Ave, Apt 208",
+          "city": "Wausau",
+          "state": "WI",
+          "zip": "54401",
+          "status": "Active",
+          "rentFrequency": "monthly",
+          "notes": "KFI's 3rd apartment in Wausau, for the Schuette Metals client. Brad to make payment and set up auto-pay; Alex to set up electric. Rent amount not stated in email - needs manual capture.",
+          "utilities": [
+            {
+              "type": "electric"
+            }
+          ],
+          "leases": [
+            {
+              "unit": "208",
+              "rateType": "monthly",
+              "status": "Active",
+              "startDate": "2026-06-11",
+              "needsReview": true,
+              "notes": "First day of lease 06/11/2026; for Schuette Metals workers. Auto-pay being set up; electric setup pending. Rent/deposit not stated."
+            }
+          ],
+          "sources": [
+            "1341 S 8th Ave Apt 208 Wausau, WI 54401 / 2026-06-08 / LSantana@kfi.group"
+          ]
+        },
+        {
+          "name": "Hickory Haven Apartments",
+          "propertyType": "Apartment",
+          "status": "Inactive",
+          "landlordName": "Jake (property owner/manager); billed via Lanyard",
+          "paymentMethod": "Bill.com (inform.bill.com)",
+          "paymentRecipient": "Lanyard (billing@lanyardstays.com)",
+          "rentFrequency": "monthly",
+          "notes": "Employees vacating (~6/6/2026): landlord Jake entered units unannounced overnight, tenants no longer felt safe and moved out. Lanyard invoice 1110-1241 ($4,647.06, due 5/13) for full June rent; KFI debating whether to pay since moving out the same day. Status set Inactive (vacating). Per-unit breakdown in Invoice_1110-1241.pdf needs manual extraction.",
+          "leases": [
+            {
+              "unit": "unspecified",
+              "rateType": "monthly",
+              "status": "Expired",
+              "needsReview": true,
+              "notes": "Multiple employees moving out ~6/6/2026; invoice covers June rent. Per-unit breakdown in Invoice_1110-1241.pdf needs manual extraction. No deposit/dates captured."
+            }
+          ],
+          "bills": [
+            {
+              "invoiceNumber": "1110-1241",
+              "amount": 4647.06,
+              "dueDate": "2026-05-13",
+              "description": "Lanyard invoice for Hickory Haven Apartments (June rent / move-out)",
+              "source": "account-services@inform.bill.com / 2026-06-05; Re: billing@lanyardstays.com 2026-06-05"
+            }
+          ],
+          "sources": [
+            "Invoice 1110-1241 due May 13, 2026 / 2026-06-05 / account-services@inform.bill.com",
+            "Re: Invoice 1110-1241 due May 13, 2026 / 2026-06-05 / billing@lanyardstays.com",
+            "Re: Invoice 1110-1241 due May 13, 2026 / 2026-06-05 / DWhitmore@kfistaffing.com"
+          ]
+        },
+        {
+          "name": "Conley GA Property (Tindall client housing)",
+          "propertyType": "",
+          "city": "Conley",
+          "state": "GA",
+          "status": "Active",
+          "landlordName": "Lanyard Stays (broker)",
+          "landlordEmail": "accounts@lanyardstays.com",
+          "paymentRecipient": "Lanyard Stays",
+          "notes": "Housing Request #3QRIW1. New lease being set up via Lanyard portal for new client Tindall. As of 6/12 still in document-upload stage (business license, EIN, W-9, 3 months bank statements, guarantee letter requested). Portal password 5668. NO lease executed yet; no rent/deposit/unit numbers exposed. PropertyType unknown until lease issued.",
+          "leases": [
+            {
+              "unit": "TBD",
+              "status": "Upcoming",
+              "housingRequestId": "#3QRIW1",
+              "needsReview": true,
+              "notes": "Application stage - lease not issued yet. Docs uploading to Lanyard portal as of 2026-06-12. No rent/deposit/dates/unit."
+            }
+          ],
+          "sources": [
+            "Upload your documents securely for Housing Request #3QRIW1 in Conley, GA / 2026-06-12 / accounts@lanyardstays.com",
+            "Re: Upload your documents securely for Housing Request #3QRIW1 in Conley, GA / 2026-06-12 / accounts@lanyardstays.com",
+            "Your Requested Password / 2026-06-12 / accounts@lanyardstays.com"
+          ]
+        },
+        {
+          "name": "Lanyard Stays - Unmapped Rent Invoices (Bill.com)",
+          "propertyType": "",
+          "status": "Active",
+          "landlordName": "Lanyard (Lanyard Stays)",
+          "landlordEmail": "accounts@lanyardstays.com",
+          "paymentRecipient": "Lanyard (via Bill.com)",
+          "paymentMethod": "Bill.com / ACH",
+          "notes": "Holding bucket for Lanyard bill.com rent invoices whose underlying property/units are NOT identifiable from the email bodies (sent via account-services@inform.bill.com, reminders via invoice@hq.bill.com, to ap@kfistaffing.com cc Whitmore/Hubele). Each is a separate Invoice_1110-XXXX.pdf with per-unit rent line items that are NOT machine-readable - amounts/units need manual PDF extraction. Once PDFs are read, these should be re-allocated to the correct Lanyard-managed properties (Virginia Manor #UT7ZZU, Beau Chateau/Dexter #FR4R5Z, Conley #3QRIW1, Sunset Place #D5CYJY, Hickory Haven). Only 1110-1293 exposed a total ($3,870.61). Invoice 1110-1263 ($7,791.35, due 6/1, $150 late fee after 6/7 PT) also has no named property in body. Invoices 1110-1286 and 1110-1292 are past due (reminders 6/14).",
+          "leases": [
+            {
+              "unit": "unspecified (per-unit line items inside Bill.com PDFs)",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "Unit-level rent line items inside bill.com PDFs across invoices 1110-1263/1283/1285/1286/1288/1290/1292/1293/1297/1298; need manual extraction and re-mapping to properties."
+            }
+          ],
+          "bills": [
+            {
+              "invoiceNumber": "1110-1293",
+              "amount": 3870.61,
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). $150 late fee if unpaid by 2026-07-01.",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1298",
+              "dueDate": "2026-06-15",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1297",
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1292",
+              "dueDate": "2026-06-12",
+              "description": "Lanyard rent invoice (Bill.com); PAST DUE. Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13; reminder invoice@hq.bill.com 2026-06-14"
+            },
+            {
+              "invoiceNumber": "1110-1290",
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1288",
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1286",
+              "dueDate": "2026-06-12",
+              "description": "Lanyard rent invoice (Bill.com); PAST DUE. Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13; reminder invoice@hq.bill.com 2026-06-14"
+            },
+            {
+              "invoiceNumber": "1110-1285",
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1283",
+              "dueDate": "2026-06-25",
+              "description": "Lanyard rent invoice (Bill.com). Amount in PDF (needs manual extraction).",
+              "source": "account-services@inform.bill.com / 2026-06-13"
+            },
+            {
+              "invoiceNumber": "1110-1263",
+              "amount": 7791.35,
+              "dueDate": "2026-06-01",
+              "description": "Lanyard rent invoice (Bill.com); property not named in body. $150 late fee if not paid by end of day 6/7/2026 PT.",
+              "source": "account-services@inform.bill.com / 2026-06-01"
+            }
+          ],
+          "sources": [
+            "Invoice 1110-1293 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1298 due Jun 15 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1297 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1292 due Jun 12 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1290 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1288 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1286 due Jun 12 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1285 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1283 due Jun 25 / 2026-06-13 / account-services@inform.bill.com",
+            "Invoice 1110-1263 due 2026-06-01 / 2026-06-01 / account-services@inform.bill.com",
+            "Reminder: Lanyard Invoice 1110-1286 is past due / 2026-06-14 / invoice@hq.bill.com",
+            "Reminder: Lanyard Invoice 1110-1292 is past due / 2026-06-14 / invoice@hq.bill.com"
+          ]
+        },
+        {
+          "name": "St. John Properties (SJPI) - KFI Staffing leased premises (WI)",
+          "propertyType": "",
+          "state": "WI",
+          "status": "Active",
+          "landlordName": "St. John Properties, Inc (SJPI)",
+          "landlordEmail": "JTaylor@sjpi.com / LeaseAdminWI@sjpi.com",
+          "landlordPhone": "262-524-0100",
+          "paymentRecipient": "St. John Properties (SJPI), 2000 Pewaukee Rd Suite A, Waukesha, WI 53188",
+          "notes": "Rent Change/Renewal Letter to KFI Staffing finance (high importance). LIKELY KFI's own office/commercial lease in WI, NOT worker housing - included for completeness as a rent/landlord record; consider excluding from housing roster. New rent and expense figures are in 'KFI Staffing Rent Change Letter 6.4.26.pdf' (734KB, not machine-readable - needs manual extraction).",
+          "leases": [
+            {
+              "unit": "unspecified (KFI Staffing leased premises, WI)",
+              "status": "Active",
+              "needsReview": true,
+              "notes": "Rent change/renewal. New rent and expense figures in KFI Staffing Rent Change Letter 6.4.26.pdf - needs manual extraction. Likely commercial office, not housing."
+            }
+          ],
+          "sources": [
+            "Rent Change/Renewal Letter - KFI Staffing / 2026-06-04 / JTaylor@sjpi.com"
+          ]
+        },
+        {
+          "name": "Spectrum Enterprise (internet utility - unmapped)",
+          "propertyType": "",
+          "status": "Active",
+          "notes": "UTILITY LEAD ONLY (no property identified). Self-service billing portal welcome email to finance@kfistaffing.com from info@clientportal.enterprise.spectrum.com (6/14). Spectrum internet/cable likely tied to a KFI housing unit; property/unit not identified. Re-map once account is matched to a property.",
+          "utilities": [
+            {
+              "type": "internet",
+              "company": "Spectrum Enterprise"
+            }
+          ],
+          "leases": [
+            {
+              "unit": "Unknown",
+              "needsReview": true,
+              "notes": "Spectrum internet/utility account; property not specified. Utility lead - needs mapping. No rent/dates/deposit."
+            }
+          ],
+          "sources": [
+            "Welcome! It's time to access your self-service portal / 2026-06-14 / info@clientportal.enterprise.spectrum.com"
+          ]
+        }
+      ],
+      "stats": {
+        "propertyCount": 10,
+        "unitCount": 37,
+        "billCount": 13,
+        "apartmentCount": 5,
+        "motelCount": 1
+      }
+    },
+    "critic": {
+      "gaps": [
+        "DUPLICATE/MERGE RISK - Dexter Grant Apartment A3 (15974 Co Rd 612) is bundled into Beau Chateau (501 W Fannetta) only because both share Housing Request #FR4R5Z. Different street address = should likely be split into its own property. Flagged but not actioned.",
+        "DUPLICATE/DOUBLE-COUNT RISK - The 'Lanyard Unmapped Rent Invoices' bucket almost certainly contains the actual rents for Virginia Manor, Beau Chateau/Dexter, Sunset Place, Conley, and Hickory Haven. If these invoices are later mapped AND rents are also extracted from lease PDFs, the same rent could be recorded twice. Reconcile invoice totals against lease rents before booking.",
+        "DUPLICATE NOTE - Ridge room 205 was genuinely listed twice in the 6/9 email; handled (one unit kept, conflict noted). Acceptable but the conflicting amount remains unresolved.",
+        "POSSIBLY DROPPED - 'KFI already has other housing in McKeesport' (noted on Virginia Manor) and '3rd apartment in Wausau' (noted on 1341 S 8th Ave) both imply additional KFI properties that are NOT in this roster. At least one other McKeesport property and two other Wausau apartments appear to exist but are not captured.",
+        "POSSIBLY DROPPED - Sunset Place is referenced as both Neillsville AND Thorp, WI; confirm these are the same property/request #D5CYJY and not two separate locations.",
+        "UNDER-CAPTURED ARRANGEMENT TYPES: (1) Hotel stays - Virginia Manor notes 'associate was in a hotel until move-in'; that hotel is a real (if short-term) housing cost with no property/vendor/cost captured. Ridge Motor Inn is the only motel/hotel type captured. (2) Pending leases - Conley GA (#3QRIW1) is application-stage only; Sunset Place 106 is Upcoming (7/8). These pending/upcoming arrangements are thin. (3) Expired/transfer units - Sunset 221/148 and Hickory Haven are vacating/void; confirm move-out costs and final bills are captured (Hickory Haven has a disputed full-June-rent invoice that may or may not be paid).",
+        "STATUS AMBIGUITY - Hickory Haven is marked Inactive at property level but the lease is 'Expired' and there's an unresolved decision on whether to pay Invoice 1110-1241 ($4,647.06). Open liability under an 'inactive' property.",
+        "SCOPE - St. John Properties (SJPI) is flagged as likely KFI's own commercial office lease, not worker housing. It should probably be excluded from the housing roster (or tagged non-housing) so it doesn't distort housing counts/rent totals."
+      ],
+      "propertiesMissingAddress": [
+        "Ridge Motor Inn (no street address; phone/email only)",
+        "Virginia Manor Apartments (no street address; McKeesport PA only)",
+        "Hickory Haven Apartments (no address, city, or state at all)",
+        "Conley GA Property (no street address; Conley GA only)",
+        "St. John Properties SJPI (only Waukesha WI payment address; leased-premises address not stated)"
+      ],
+      "propertiesMissingRent": [
+        "Ridge Motor Inn (property field contradicts notes; per-room figures transitional/conflicting)",
+        "Virginia Manor Apartments (rent in lease PDF, unread)",
+        "Beau Chateau / Service First Rentals - Dexter MO (rent in lease PDF, unread)",
+        "Sunset Place Apartments (rent in lease PDFs, unread)",
+        "1341 S 8th Ave Apartments (Wausau) (rent not stated in email)",
+        "Hickory Haven Apartments (rent only inside Invoice 1110-1241 PDF)",
+        "Conley GA Property (no lease yet, no rent)",
+        "St. John Properties SJPI (rent in rent-change letter PDF, unread)",
+        "Lanyard Stays - Unmapped Rent Invoices (amounts in PDFs)"
+      ],
+      "leasesNeedingReview": 37,
+      "suggestedFollowups": [
+        "Extract rent + deposit from every lease PDF: Virginia Manor 506, Beau Chateau Dexter (10/11/12/16 + Grant A3), Sunset Place 132 & 106, Hickory Haven (Invoice 1110-1241), and the SJPI rent-change letter.",
+        "Read all Lanyard bill.com PDFs (1110-1263/1283/1285/1286/1288/1290/1292/1293/1297/1298) and re-allocate each per-unit line item to its property; reconcile against lease rents to avoid double-counting.",
+        "Pay/triage the two PAST DUE Lanyard invoices (1110-1286, 1110-1292) and decide on the disputed Hickory Haven invoice 1110-1241.",
+        "Resolve the three open conflicts: Ridge room 205 ($3,285 vs $3,232), Beau Chateau Unit 10 move-in (6/16 vs 6/15), and Ridge property-level rent (27840 vs 'empty').",
+        "Decide whether to split Dexter Grant Apartment A3 into its own property (different street address).",
+        "Confirm the implied missing properties: the other McKeesport housing, the 1st/2nd Wausau apartments, and whether Neillsville and Thorp are one location.",
+        "Capture the hotel/short-term stay used before Virginia Manor move-in as a cost/vendor record.",
+        "Add missing street addresses for Ridge Motor Inn, Virginia Manor, Hickory Haven, and Conley.",
+        "Map the Spectrum Enterprise internet account and the Wausau electric account to their properties.",
+        "Confirm Ridge deposit status (chased 6/11 and 6/14, still unconfirmed).",
+        "Tag/exclude SJPI as a non-housing commercial lease so housing stats stay accurate."
+      ],
+      "overallNote": "10 records / 37 leases, but the roster is structurally rent-blind: 0 of 9 housing properties have a confirmed unit rent and none have deposits, because nearly all dollar figures live in non-machine-readable lease/invoice PDFs. The biggest risks are (1) double-counting once the Lanyard bill.com invoices are mapped to the same properties whose lease PDFs also hold rents, (2) implied-but-missing properties (other McKeesport housing, the 1st/2nd Wausau apartments), and (3) under-captured arrangement types - the pre-move-in hotel stay (no cost), pending Conley lease, and the disputed/vacating Hickory Haven invoice. Ridge Motor Inn has an internal contradiction (property rent 27840 vs note saying 'left empty') and three unresolved conflicts portfolio-wide. SJPI should likely be excluded as a commercial, non-housing lease. Address coverage is also weak (4-5 properties lack a street address)."
+    },
+    "scannerStats": [
+      {
+        "slice": "0-74 (3 pages of 25)",
+        "scanned": 75,
+        "housing": 35,
+        "truncated": false
+      },
+      {
+        "slice": "75-149 (3 pages)",
+        "scanned": 75,
+        "housing": 13,
+        "truncated": false
+      },
+      {
+        "slice": "150-150 (1 email; total inbox results for the date filter = 151, so offset 175+ returned nothing)",
+        "scanned": 1,
+        "housing": 0,
+        "truncated": false
+      },
+      {
+        "slice": "225-299 (0 pages with results; totalResultCount=225 so slice is empty)",
+        "scanned": 0,
+        "housing": 0,
+        "truncated": false
+      },
+      {
+        "slice": "300-374 (0 pages with results)",
+        "scanned": 0,
+        "housing": 0,
+        "truncated": false
+      },
+      {
+        "slice": "375-449 (0 emails returned; total result set is 375, so my slice is entirely past the end)",
+        "scanned": 0,
+        "housing": 0,
+        "truncated": false
+      },
+      {
+        "slice": "450-524 (0 pages returned results; inbox has only 450 total results, offsets 0-449)",
+        "scanned": 0,
+        "housing": 0,
+        "truncated": false
+      },
+      {
+        "slice": "525-619 (empty — inbox has fewer results than this offset range; total ~525)",
+        "scanned": 0,
+        "housing": 0,
+        "truncated": false
+      }
+    ]
+  }
+}

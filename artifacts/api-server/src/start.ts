@@ -99,6 +99,11 @@ export interface StartDeps {
   // (Stonleigh, Foote Hills, College Towne, the hotels, etc.) from the
   // June 2026 Outlook + SharePoint housing harvest. Non-fatal.
   seedHarvestedPropertiesIfMissing: () => Promise<void>;
+  // Generic, additive bed-inventory materializer — gives every property
+  // at least `totalBeds` ready/vacant bed rows so it can receive a
+  // placement from the Roster. Runs after the property seeders so it
+  // sees their totalBeds. Non-fatal.
+  seedBedInventoryIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
   // Idempotent Landscape Structures / Park Place Plymouth seed
   // (Task #569). Non-fatal.
@@ -659,6 +664,21 @@ export async function start(deps: StartDeps): Promise<void> {
       deps.logger.warn(
         { err },
         "Failed to apply Penda New Pinery seed — continuing to serve",
+      );
+    }
+  }
+
+  // Materialize placeable beds LAST, after every property seeder has set
+  // its totalBeds. Additive + idempotent, and honored under
+  // FORCE_HARVEST_SEED so it can fill beds for harvested properties in
+  // production too. Non-fatal.
+  if (!autoSeedDisabled || forceHarvestSeed) {
+    try {
+      await deps.seedBedInventoryIfMissing();
+    } catch (err) {
+      deps.logger.warn(
+        { err },
+        "Failed to materialize bed inventory — continuing to serve",
       );
     }
   }

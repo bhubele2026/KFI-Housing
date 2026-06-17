@@ -64,6 +64,14 @@ type NavGroup = {
 };
 type NavEntry = NavLeaf | NavGroup;
 
+// Customer-first navigation: Properties, Beds, and Occupants are no
+// longer top-level nav items — they're reached by drilling into a
+// customer (the customer file's Properties/Beds/Occupancy tiles deep-
+// link to `/properties?customer=…` and `/beds?customer=…`). The routes
+// still exist; they're just hidden from the rail. Drop an href from
+// this set to bring its button back.
+const HIDDEN_NAV_HREFS = new Set<string>(["/properties", "/beds", "/occupants"]);
+
 const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/customers", labelKey: "nav.customers", icon: Briefcase },
   { kind: "leaf", href: "/properties", labelKey: "nav.properties", icon: Home },
@@ -78,7 +86,7 @@ const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/qbo/mapping-rules", labelKey: "nav.qboMappingRules", icon: Receipt },
   { kind: "leaf", href: "/insurance", labelKey: "nav.insurance", icon: ShieldCheck },
   { kind: "leaf", href: "/rental-companies", labelKey: "nav.rentalCompanies", icon: Building2 },
-];
+].filter((leaf) => !HIDDEN_NAV_HREFS.has(leaf.href));
 
 const TRANSPORT_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/transport/vehicles", labelKey: "nav.transport.vehicles", icon: Truck },

@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { NotFoundScreen } from "@/components/not-found-screen";
 
 function StatCard({
-  label, value, sub, icon: Icon, color = "text-foreground", testId,
+  label, value, sub, icon: Icon, color = "text-foreground", testId, onClick,
 }: {
   label: string;
   value: string | number;
@@ -37,9 +37,32 @@ function StatCard({
   icon?: React.ElementType;
   color?: string;
   testId?: string;
+  /** When provided, the whole card becomes a button that drills in. */
+  onClick?: () => void;
 }) {
+  const clickable = !!onClick;
   return (
-    <Card data-testid={testId}>
+    <Card
+      data-testid={testId}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick!();
+              }
+            }
+          : undefined
+      }
+      className={
+        clickable
+          ? "cursor-pointer transition-shadow hover:shadow-md hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          : undefined
+      }
+    >
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
@@ -53,6 +76,11 @@ function StatCard({
             </div>
           )}
         </div>
+        {clickable && (
+          <p className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-primary">
+            View <ChevronRight className="h-3 w-3" />
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -408,6 +436,7 @@ export default function CustomerDetail() {
             value={totals.propertyCount}
             icon={Building2}
             testId="stat-properties"
+            onClick={() => navigate(`/properties?customer=${encodeURIComponent(id)}`)}
           />
           <StatCard
             label={t("pages.customerDetail.summaryBeds")}
@@ -415,6 +444,7 @@ export default function CustomerDetail() {
             sub={totals.totalBeds > 0 ? t("pages.customerDetail.occupiedOverTotal") : undefined}
             icon={BedDouble}
             testId="stat-beds"
+            onClick={() => navigate(`/beds?customer=${encodeURIComponent(id)}`)}
           />
           <StatCard
             label={t("pages.customerDetail.summaryOccupancy")}
@@ -422,6 +452,7 @@ export default function CustomerDetail() {
             color={totals.totalBeds > 0 ? "text-emerald-600" : "text-muted-foreground"}
             icon={TrendingUp}
             testId="stat-occupancy"
+            onClick={() => navigate(`/beds?customer=${encodeURIComponent(id)}`)}
           />
           <StatCard
             label={t("pages.customerDetail.summaryMonthlyRevenue")}

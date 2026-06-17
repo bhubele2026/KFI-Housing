@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ChevronRight, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users, Hotel, CalendarClock } from "lucide-react";
+import { AlertTriangle, ChevronRight, ChevronDown, Calendar, CalendarPlus, Briefcase, X, Download, Rows3, Users, Hotel, CalendarClock } from "lucide-react";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
 import { getHotelRateMonthRisk, currentMonthKey } from "@/lib/hotel-rate-status";
 import {
@@ -56,6 +56,10 @@ export default function Leases() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [buyoutFilter, setBuyoutFilter] = useState<BuyoutFilter>("All");
   const [viewMode, setViewMode] = useState<ViewMode>("flat");
+  // Renewal panel + Expired bucket are collapsed by default to keep the
+  // page clean — renewal is the only alert that matters, on demand.
+  const [renewalOpen, setRenewalOpen] = useState(false);
+  const [expiredOpen, setExpiredOpen] = useState(false);
   // URL-driven so the dashboard "Needs review" tile can deep-link straight
   // to the subset of leases missing an end date (`?needsReview=1`), mirroring
   // the pattern in occupants.tsx.
@@ -562,90 +566,75 @@ export default function Leases() {
         )}
 
         {renewalAlerts.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-            <Card className="border-amber-200 bg-amber-50/40">
-              <CardContent className="p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="p-1.5 rounded-md bg-amber-100">
-                    <AlertTriangle className="h-4 w-4 text-amber-700" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold">{t("pages.leases.renewalAlerts")}</h2>
-                    <p className="text-xs text-muted-foreground">
-                      {renewalAlerts.length} lease{renewalAlerts.length !== 1 ? "s" : ""} expiring within 90 days or already past
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {renewalAlerts.map(({ lease, info }) => {
-                    const property = properties.find((p) => p.id === lease.propertyId);
-                    const customer = property ? customers.find((c) => c.id === property.customerId) : undefined;
-                    return (
-                      <motion.div
-                        key={lease.id}
-                        whileHover={{ y: -2 }}
-                        onClick={() => property && navigate(`/properties/${property.id}`)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if ((e.key === "Enter" || e.key === " ") && property) {
-                            e.preventDefault();
-                            navigate(`/properties/${property.id}`);
-                          }
-                        }}
-                        className={`cursor-pointer text-left bg-white rounded-lg border ${info.rowAccentClass.replace("border-l-4", "border-l-[3px]")} p-3 hover:shadow-md transition-all group`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-semibold text-sm truncate">{property?.name ?? t("pages.leases.unknownProperty")}</p>
-                            {customer && (
-                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">{customer.name}</p>
-                            )}
-                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <Calendar className="h-3 w-3" />
-                              ends {lease.endDate}
-                            </p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
-                        </div>
-                        <div className="flex items-center justify-between mt-2.5 gap-2">
-                          <Badge variant="outline" className={`text-[11px] font-medium ${info.badgeClass}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${info.dotClass} mr-1.5 inline-block`} />
-                            {info.label}
-                          </Badge>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-medium text-muted-foreground">{formatUsd(lease.monthlyRent)}/mo</span>
-                            <RenewLeasePopover
-                              currentEndDate={lease.endDate}
-                              currentStatus={lease.status}
-                              propertyName={property?.name}
-                              onRenew={(newEndDate, newStatus) =>
-                                updateLease(lease.id, {
-                                  endDate: newEndDate,
-                                  status: newStatus,
-                                })
-                              }
-                              trigger={
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-xs gap-1"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <CalendarPlus className="h-3 w-3" />
-                                  {t("pages.leases.renew")}
-                                </Button>
-                              }
-                            />
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          <Card className="border-amber-200 bg-amber-50/40 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setRenewalOpen((o) => !o)}
+              className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-amber-50"
+              data-testid="button-toggle-renewal-alerts"
+            >
+              <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+              <span className="text-sm font-semibold">
+                {renewalAlerts.length} lease{renewalAlerts.length !== 1 ? "s" : ""} up for renewal
+              </span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                expiring within 90 days or already past
+              </span>
+              {renewalOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />
+              )}
+            </button>
+            {renewalOpen && (
+              <div className="border-t divide-y bg-background/60">
+                {renewalAlerts.map(({ lease, info }) => {
+                  const property = properties.find((p) => p.id === lease.propertyId);
+                  const customer = property ? customers.find((c) => c.id === property.customerId) : undefined;
+                  return (
+                    <div
+                      key={lease.id}
+                      onClick={() => property && navigate(`/properties/${property.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if ((e.key === "Enter" || e.key === " ") && property) {
+                          e.preventDefault();
+                          navigate(`/properties/${property.id}`);
+                        }
+                      }}
+                      className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer hover:bg-muted/40"
+                    >
+                      <Badge variant="outline" className={`text-[10px] font-medium shrink-0 ${info.badgeClass}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${info.dotClass} mr-1 inline-block`} />
+                        {info.label}
+                      </Badge>
+                      <span className="font-medium truncate min-w-0 flex-1">
+                        {property?.name ?? t("pages.leases.unknownProperty")}
+                        {customer && <span className="text-muted-foreground font-normal"> · {customer.name}</span>}
+                      </span>
+                      <span className="text-xs text-muted-foreground hidden md:inline shrink-0">ends {lease.endDate}</span>
+                      <span className="text-xs font-medium tabular-nums shrink-0">{formatUsd(lease.monthlyRent)}/mo</span>
+                      <RenewLeasePopover
+                        currentEndDate={lease.endDate}
+                        currentStatus={lease.status}
+                        propertyName={property?.name}
+                        onRenew={(newEndDate, newStatus) =>
+                          updateLease(lease.id, { endDate: newEndDate, status: newStatus })
+                        }
+                        trigger={
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <CalendarPlus className="h-3 w-3" />
+                            {t("pages.leases.renew")}
+                          </Button>
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         )}
 
         <Card>
@@ -809,61 +798,83 @@ export default function Leases() {
               still available via the dropdown above and the "Filtered by
               customer" badge — no separate Customer column is needed here.
             */}
-            {viewMode === "flat" ? (
-              <LeasesTable
-                leases={filteredLeases}
-                properties={properties}
-                customers={customers}
-                otherCosts={otherCosts}
-                showProperty
-                onPropertyClick={(propertyId) => navigate(`/properties/${propertyId}`)}
-                onDelete={deleteLease}
-                onMarkReviewed={(leaseId) => {
+            {viewMode === "flat" ? (() => {
+              // Shared props so the main table and the Expired bucket stay
+              // in lockstep without duplicating the whole prop block.
+              const common = {
+                properties,
+                customers,
+                otherCosts,
+                showProperty: true,
+                onPropertyClick: (propertyId: string) => navigate(`/properties/${propertyId}`),
+                onDelete: deleteLease,
+                onMarkReviewed: (leaseId: string) => {
                   updateLease(leaseId, { needsReview: false });
                   toast({
                     title: t("toasts.markedAsReviewedTitle"),
                     description: t("toasts.markedAsReviewedDescription"),
                   });
-                }}
-                onUpdateLease={updateLease}
-                onBulkMarkReviewed={(ids) => {
-                  for (const id of ids) {
-                    updateLease(id, { needsReview: false });
-                  }
+                },
+                onUpdateLease: updateLease,
+                onBulkMarkReviewed: (ids: string[]) => {
+                  for (const id of ids) updateLease(id, { needsReview: false });
                   toast({
                     title: t("toasts.markedManyAsReviewedTitle", { count: ids.length }),
                     description: t("toasts.markedManyAsReviewedDescription", { count: ids.length }),
                   });
-                }}
-                placeholderProperties={visiblePlaceholderProperties}
-                roomNightLogs={roomNightLogs}
-                buildings={buildings}
-                emptyAction={
-                  leases.length === 0 ? (
-                    <AddLeaseDialog
-                      properties={properties}
-                      customers={customers}
-                      buildings={buildings}
-                      onAdd={(lease) => {
-                        addLease(lease);
-                        const property = propertyById.get(lease.propertyId);
-                        toast({
-                          title: t("toasts.leaseAddedTitle"),
-                          description: property
-                            ? t("toasts.leaseAddedDescriptionWithProperty", { property: property.name })
-                            : t("toasts.leaseAddedDescription"),
-                        });
-                      }}
-                    />
-                  ) : undefined
-                }
-                // Threaded so the lease detail back-link returns to /leases
-                // (with our customer/status filters preserved by the URL).
-                // Placeholder rows use the same value to thread `&from=`
-                // through to the create page (`/leases/new?propertyId=…`).
-                originPath="/leases"
-              />
-            ) : customerGroups.length === 0 ? (
+                },
+                roomNightLogs,
+                buildings,
+                originPath: "/leases",
+              };
+              // Expired leases drop into their own collapsed bucket so the
+              // main list stays clean (Active / Upcoming / month-to-month).
+              const mainLeases = filteredLeases.filter((l) => l.status !== "Expired");
+              const expiredLeases = filteredLeases.filter((l) => l.status === "Expired");
+              return (
+                <>
+                  <LeasesTable
+                    leases={mainLeases}
+                    {...common}
+                    placeholderProperties={visiblePlaceholderProperties}
+                    emptyAction={
+                      leases.length === 0 ? (
+                        <AddLeaseDialog
+                          properties={properties}
+                          customers={customers}
+                          buildings={buildings}
+                          onAdd={(lease) => {
+                            addLease(lease);
+                            const property = propertyById.get(lease.propertyId);
+                            toast({
+                              title: t("toasts.leaseAddedTitle"),
+                              description: property
+                                ? t("toasts.leaseAddedDescriptionWithProperty", { property: property.name })
+                                : t("toasts.leaseAddedDescription"),
+                            });
+                          }}
+                        />
+                      ) : undefined
+                    }
+                  />
+                  {expiredLeases.length > 0 && (
+                    <div className="border-t">
+                      <button
+                        type="button"
+                        onClick={() => setExpiredOpen((o) => !o)}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/30"
+                        data-testid="button-toggle-expired-leases"
+                      >
+                        {expiredOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        <span className="font-medium text-foreground">Expired</span>
+                        <Badge variant="secondary" className="text-[11px]">{expiredLeases.length}</Badge>
+                      </button>
+                      {expiredOpen && <LeasesTable leases={expiredLeases} {...common} />}
+                    </div>
+                  )}
+                </>
+              );
+            })() : customerGroups.length === 0 ? (
               <div
                 className="p-8 text-center text-sm text-muted-foreground"
                 data-testid="leases-by-customer-empty"

@@ -209,7 +209,8 @@ export function PropertyBedTable({
     }
   };
 
-  const cellProps = { rosterPeople, rosterIds, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace, onSetCleaning: handleSetCleaning, onMatch: handleMatch };
+  const handleUpdate = (o: Occupant, patch: Partial<Occupant>) => updateOccupant(o.id, patch);
+  const cellProps = { rosterPeople, rosterIds, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace, onSetCleaning: handleSetCleaning, onMatch: handleMatch, onUpdate: handleUpdate };
   const { roomRows, colCount, total, occupied } = block;
   const bedCols = Array.from({ length: colCount }, (_, i) => i);
 
@@ -455,6 +456,7 @@ interface CellHandlers {
   rosterIds: Set<string>;
   onSetCleaning: (bed: Bed, status: "ready" | "needs_cleaning") => void;
   onMatch: (occ: Occupant, person: RosterPerson) => void;
+  onUpdate: (occ: Occupant, patch: Partial<Occupant>) => void;
 }
 
 function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & CellHandlers) {
@@ -538,7 +540,7 @@ function AssignFromRosterDialog({ bed, rosterPeople, onAssign }: { bed: Bed; ros
   );
 }
 
-function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, onMove, onRemove, onReplace, onMatch }: { bed: Bed; occ: Occupant } & CellHandlers) {
+function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, onMove, onRemove, onReplace, onMatch, onUpdate }: { bed: Bed; occ: Occupant } & CellHandlers) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"menu" | "move" | "replace" | "match">("menu");
   const [moveBedId, setMoveBedId] = useState("");
@@ -547,6 +549,9 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
   const moveTargets = vacantBeds.filter((b) => b.id !== bed.id);
   const chosen = moveTargets.find((b) => b.id === moveBedId);
   const payrollDeduction = occ.chargeSource === "payroll" && occ.chargePerBed > 0 ? occ.chargePerBed : 0;
+  const freq = occ.billingFrequency ?? "Monthly";
+  const wk = occ.chargePerBed > 0 ? toWeeklyCharge(occ.chargePerBed, freq) : 0;
+  const mo = occ.chargePerBed > 0 ? toMonthlyCharge(occ.chargePerBed, freq) : 0;
   const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
@@ -555,22 +560,56 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
           <span className="block text-sm font-medium truncate group-hover/cell:text-primary group-hover/cell:underline">
             {titleCaseName(occ.name)}
           </span>
-          <span className="mt-0.5 flex items-center gap-2 text-[11px] leading-tight">
-            {payrollDeduction > 0 && (
-              <span className="text-muted-foreground">${Math.round(payrollDeduction)}/wk</span>
-            )}
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-tight">
+            {occ.employeeId && <span className="text-muted-foreground">ID {occ.employeeId}</span>}
             {matched ? (
               <span className="text-emerald-600">✓ matched</span>
             ) : (
               <span className="text-amber-600">⚠ needs match</span>
             )}
           </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-tight text-muted-foreground">
+            {payrollDeduction > 0 && <span>${Math.round(payrollDeduction)}/wk</span>}
+            {occ.shift && <span>· {occ.shift}</span>}
+            {occ.moveOutDate && <span>· out {occ.moveOutDate}</span>}
+          </span>
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>{titleCaseName(occ.name)}</DialogTitle></DialogHeader>
         {mode === "menu" && (
-          <div className="space-y-2 pt-1">
+          <div className="space-y-3 pt-1">
+            {/* Detail — editable shift + projected move-out, read-only ID,
+                move-in, and charge — so the bed section carries the full
+                picture without a separate table. */}
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Zenople ID</span>
+                <span className="font-medium">{occ.employeeId || "—"} {matched ? <span className="text-emerald-600 text-xs">✓ matched</span> : <span className="text-amber-600 text-xs">⚠ needs match</span>}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Shift</span>
+                <Select value={occ.shift ?? SHIFT_NONE} onValueChange={(v) => onUpdate(occ, { shift: v === SHIFT_NONE ? null : v })}>
+                  <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SHIFT_NONE}>—</SelectItem>
+                    {STANDARD_SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Move-in</span>
+                <span className="font-medium">{occ.moveInDate || "—"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Move-out (proj.)</span>
+                <Input type="date" value={occ.moveOutDate ?? ""} onChange={(e) => onUpdate(occ, { moveOutDate: e.target.value || null })} className="h-8 w-36" />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Charge</span>
+                <span className="font-medium">{wk > 0 ? `${formatUsdWhole(wk)}/wk · ${formatUsdWhole(mo)}/mo` : "—"}</span>
+              </div>
+            </div>
             <Button
               variant={matched ? "outline" : "default"}
               className="w-full justify-start gap-2"

@@ -2,10 +2,9 @@ import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { KfiLogo } from "@/components/kfi-logo";
-import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData } from "@/context/data-store";
 import { computeHousingAudit } from "@/components/housing-audit-panel";
-import { Briefcase, X, Settings, ClipboardList } from "lucide-react";
+import { Settings, ClipboardList } from "lucide-react";
 
 /**
  * Professional top navigation bar (navy), the primary "clicker" for the main
@@ -25,10 +24,7 @@ const PRIMARY = [
 export function TopNav() {
   const [location] = useLocation();
   const { t } = useTranslation();
-  const { customerId, setCustomerId } = useCustomerScope();
-  const { customers, properties, leases } = useData();
-  const scoped =
-    customerId !== ALL_CUSTOMERS ? customers.find((c) => c.id === customerId) : undefined;
+  const { properties, leases } = useData();
   // Open data-quality issue count for the Review badge.
   const reviewCount = useMemo(() => {
     const a = computeHousingAudit(properties, leases);
@@ -66,20 +62,6 @@ export function TopNav() {
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        {scoped && (
-          <span className="flex items-center gap-1.5 rounded-full bg-white/10 py-1 pl-2.5 pr-1 text-xs">
-            <Briefcase className="h-3.5 w-3.5 text-blue-200" />
-            <span className="max-w-[180px] truncate">{scoped.name}</span>
-            <button
-              type="button"
-              onClick={() => setCustomerId(ALL_CUSTOMERS)}
-              className="rounded-full p-0.5 hover:bg-white/15"
-              aria-label={t("nav.clearCustomerFilter", "Clear customer filter")}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </span>
-        )}
         <Link
           href="/review"
           data-testid="topnav-review"

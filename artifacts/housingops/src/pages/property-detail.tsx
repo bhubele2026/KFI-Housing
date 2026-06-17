@@ -57,6 +57,7 @@ import { computeShiftPairs, roomHasAnyShift, pairStatusLabel } from "@/lib/shift
 import { ShiftPicker } from "@/components/shift-picker";
 import { PendingPlacementBoard } from "@/components/pending-placement-board";
 import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
+import { PropertyBedTable } from "@/components/bed-grid";
 import { isPendingPlacementProperty } from "@/lib/pending-placement";
 import { useUpload } from "@workspace/object-storage-web";
 import { Upload, FileText, Loader2 } from "lucide-react";
@@ -2997,6 +2998,18 @@ export default function PropertyDetail() {
               propBeds={propBeds}
               propOccupants={propOccupants}
             />
+
+            {/* Quick bed grid — the same room×bed view as the customer Beds
+                area (assign from roster, move, match, cleaning). The detailed
+                per-room cards below keep sqft / rent / shift-coverage. */}
+            {property && <PropertyBedTable property={property} showHeaderLink={false} />}
+
+            <div className="flex items-center gap-2 pt-2">
+              <BedDouble className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Detailed room view</h3>
+              <span className="text-xs text-muted-foreground">sqft, rent, furnishings &amp; shift coverage</span>
+            </div>
+
             <div className="flex justify-between items-center gap-3 flex-wrap">
               <div className="flex gap-4 text-sm text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{t("pages.propertyDetail.bedsOccupied", { count: occupiedBeds })}</span>

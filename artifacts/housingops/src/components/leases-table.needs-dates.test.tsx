@@ -45,8 +45,11 @@ const property: Property = {
 const blankDateLease: Lease = {
   id: "l-blank",
   propertyId: "p1",
+  // Start blank but END present — the only case that now triggers the
+  // "Needs dates" badge. (A lease with no end date is month-to-month,
+  // not a date gap, so it is no longer flagged.)
   startDate: "",
-  endDate: "",
+  endDate: "2025-12-31",
   monthlyRent: 0,
   securityDeposit: 0,
   status: "Upcoming",
@@ -142,8 +145,8 @@ describe("LeasesTable — needs-dates surfaces (task #363)", () => {
     expect(href).toContain("from=%2Fleases");
   });
 
-  it("flags rows that have only one of the two dates filled in", async () => {
-    const halfDated: Lease = {
+  it("does NOT flag a month-to-month (no end date) lease as needs-dates", async () => {
+    const monthToMonth: Lease = {
       ...blankDateLease,
       id: "l-half",
       startDate: "2025-01-01",
@@ -151,14 +154,17 @@ describe("LeasesTable — needs-dates surfaces (task #363)", () => {
     };
     await render(
       <LeasesTable
-        leases={[halfDated]}
+        leases={[monthToMonth]}
         properties={[property]}
         onDelete={() => {}}
         originPath="/leases"
       />,
     );
+    // No end date = month-to-month (intentional), so the amber
+    // "Needs dates" badge must NOT appear — only a genuinely incomplete
+    // fixed-term lease (start blank + end present) is flagged.
     expect(
       container.querySelector('[data-testid="badge-lease-needs-dates-l-half"]'),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 });

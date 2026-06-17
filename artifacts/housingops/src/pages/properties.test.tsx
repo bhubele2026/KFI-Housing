@@ -614,7 +614,7 @@ describe("Properties toolbar persistence", () => {
     }
 
     const matchingCell = container.querySelector(
-      '[data-testid="inline-edit-property-name-p1"]',
+      '[data-testid="link-property-name-p1"]',
     );
     if (!matchingCell) throw new Error("matching property cell not found");
     const matchingText = matchingCell.textContent ?? "";
@@ -629,7 +629,7 @@ describe("Properties toolbar persistence", () => {
     // displayed only the formatted primary (dropping `(Baraboo, WI)`
     // for non-matching rows too) would slip through unnoticed.
     const nonMatchingCell = container.querySelector(
-      '[data-testid="inline-edit-property-name-p2"]',
+      '[data-testid="link-property-name-p2"]',
     );
     if (!nonMatchingCell) throw new Error("non-matching property cell not found");
     const nonMatchingText = nonMatchingCell.textContent ?? "";

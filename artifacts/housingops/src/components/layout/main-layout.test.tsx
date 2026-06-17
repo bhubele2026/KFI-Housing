@@ -12,6 +12,14 @@ vi.mock("wouter", () => ({
     </div>
   ),
   useLocation: () => ["/", vi.fn()] as const,
+  // The layout now renders the real <TopNav> (sidebar removed), and
+  // TopNav uses <Link> — stub it so the route-guard render doesn't blow
+  // up on an undefined Link.
+  Link: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 // MainLayout reads the active customer scope to render a chip in the

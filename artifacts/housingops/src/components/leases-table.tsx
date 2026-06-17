@@ -863,7 +863,7 @@ export function LeasesTable({
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {(!lease.startDate || !lease.endDate) && (
+                      {isBlankYMD(lease.startDate) && !isBlankYMD(lease.endDate) && (
                         // "Fix dates" shortcut for blank-date triage rows
                         // (task #363). Threads the origin path through (so
                         // the back-link returns here) and adds

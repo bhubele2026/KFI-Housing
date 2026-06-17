@@ -2303,18 +2303,59 @@ export default function Properties() {
                         </td>
                         <td className="p-4 text-center">
                           <div className="inline-flex items-center gap-1.5">
-                            <Badge variant={property.status === "Active" ? "default" : "secondary"}>
-                              {property.status === "Active" ? t("pages.properties.statusActive") : t("pages.properties.statusInactive")}
-                            </Badge>
-                            {property.propertyType ? (
+                            {/* One-click status toggle (Active <-> Inactive). */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                updateProperty(property.id, {
+                                  status: property.status === "Active" ? "Inactive" : "Active",
+                                });
+                              }}
+                              title={
+                                property.status === "Active"
+                                  ? "Click to deactivate"
+                                  : "Click to reactivate"
+                              }
+                              data-testid={`button-toggle-status-${property.id}`}
+                            >
+                              <Badge
+                                variant={property.status === "Active" ? "default" : "secondary"}
+                                className="cursor-pointer"
+                              >
+                                {property.status === "Active"
+                                  ? t("pages.properties.statusActive")
+                                  : t("pages.properties.statusInactive")}
+                              </Badge>
+                            </button>
+                            {/* One-click type cycle (Town house -> Apartment -> Motel -> ...). */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                const opts = PROPERTY_TYPE_OPTIONS;
+                                const idx = property.propertyType
+                                  ? opts.indexOf(property.propertyType)
+                                  : -1;
+                                updateProperty(property.id, {
+                                  propertyType: opts[(idx + 1) % opts.length],
+                                });
+                              }}
+                              title="Click to change type"
+                              data-testid={`button-property-type-${property.id}`}
+                            >
                               <Badge
                                 variant="outline"
-                                className="text-[11px] font-medium"
+                                className={`text-[11px] font-medium cursor-pointer ${
+                                  property.propertyType ? "" : "text-muted-foreground"
+                                }`}
                                 data-testid={`badge-property-type-${property.id}`}
                               >
-                                {property.propertyType}
+                                {property.propertyType ?? t("pages.properties.addDialog.noType")}
                               </Badge>
-                            ) : null}
+                            </button>
                           </div>
                         </td>
                         <td className="p-4" data-testid={`cell-rating-${property.id}`}>

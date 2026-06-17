@@ -21,29 +21,31 @@ import { CustomerLogo } from "@/components/customer-logo";
 import { shortPropertyName } from "@/lib/property-name";
 
 /**
- * Active Roster — the live pool of employees on assignment as of the
- * last payroll run, pulled from Zenople (`GET /roster/active`). Operators
- * search this pool and "Place in property" anyone not yet housed; that
- * creates an occupant on the chosen bed so they show up in the property.
- *
- * Replaces the old static `data/roster.ts` snapshot (which was really
- * just people with a housing *deduction*, not the active roster).
+ * Active Roster — built the way payroll thinks about it:
+ *   • Headcount = everyone on the LAST PAYROLL RUN (Zenople PayrollData).
+ *   • Each person is tagged with whether they carry a housing DEDUCTION.
+ *   • The actionable group, highlighted, is "has a housing deduction but
+ *     is NOT placed in a bed" — they're being charged for housing yet
+ *     aren't assigned anywhere.
+ * Operators place anyone into a property/bed; they then show up there.
  */
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+const money = (n: number) =>
+  `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}/wk`;
 
 export default function RosterPage() {
   const [q, setQ] = useState("");
   const [company, setCompany] = useState<string>("");
-  const [onlyOpen, setOnlyOpen] = useState(false);
+  // "all" | "deduction" | "gap" (gap = has deduction but not placed)
+  const [view, setView] = useState<"all" | "deduction" | "gap">("all");
 
   const rosterQuery = useListActiveRoster();
   const { occupants, properties, addOccupant, updateBed } = useData();
 
   const people = rosterQuery.data?.people ?? [];
 
-  // Index housed occupants so we can tell, for each active employee,
-  // whether they're already placed and where. Match on employeeId
+  // Index housed occupants to resolve placement. Match on employeeId
   // (== Zenople personId) first, then fall back to a normalized name.
   const housed = useMemo(() => {
     const byEmployeeId = new Map<string, (typeof occupants)[number]>();
@@ -70,11 +72,28 @@ export default function RosterPage() {
     [people],
   );
 
+  // Headline metrics in the user's terms.
+  const stats = useMemo(() => {
+    let withDeduction = 0;
+    let gap = 0; // has deduction but not placed
+    for (const p of people) {
+      const placed = !!matchOccupant(p.personId, p.name);
+      if (p.hasDeduction) {
+        withDeduction++;
+        if (!placed) gap++;
+      }
+    }
+    return { total: people.length, withDeduction, gap };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people, housed]);
+
   const rows = useMemo(() => {
     const needle = norm(q);
     return people.filter((r) => {
       if (company && r.company !== company) return false;
-      if (onlyOpen && matchOccupant(r.personId, r.name)) return false;
+      const placed = !!matchOccupant(r.personId, r.name);
+      if (view === "deduction" && !r.hasDeduction) return false;
+      if (view === "gap" && !(r.hasDeduction && !placed)) return false;
       if (
         needle &&
         !norm(`${r.name} ${r.company} ${r.jobTitle}`).includes(needle)
@@ -84,35 +103,62 @@ export default function RosterPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, q, company, onlyOpen, housed]);
+  }, [people, q, company, view, housed]);
 
-  const placedCount = useMemo(
-    () => people.filter((r) => matchOccupant(r.personId, r.name)).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [people, housed],
-  );
-
-  // Reconciliation: occupants marked Active in the app whose employeeId
-  // (and name) are NOT in the active roster — likely a move-out that
-  // hasn't been recorded yet.
+  // Reconciliation: occupants marked Active in the app whose personId
+  // (and name) are NOT on the last payroll — likely a move-out / term.
   const staleOccupants = useMemo(() => {
     if (people.length === 0) return [];
-    const activeIds = new Set(people.map((p) => p.personId));
-    const activeNames = new Set(people.map((p) => norm(p.name)));
+    const ids = new Set(people.map((p) => p.personId));
+    const names = new Set(people.map((p) => norm(p.name)));
     return occupants.filter(
       (o) =>
         o.status === "Active" &&
-        !(o.employeeId && activeIds.has(String(o.employeeId))) &&
-        !activeNames.has(norm(o.name)),
+        !(o.employeeId && ids.has(String(o.employeeId))) &&
+        !names.has(norm(o.name)),
     );
   }, [people, occupants]);
+
+  const StatCard = ({
+    label,
+    value,
+    tone,
+    onClick,
+    active,
+  }: {
+    label: string;
+    value: number;
+    tone?: "default" | "warn";
+    onClick?: () => void;
+    active?: boolean;
+  }) => (
+    <Card
+      onClick={onClick}
+      className={
+        (onClick ? "cursor-pointer transition-shadow hover:shadow-md " : "") +
+        (active ? "ring-2 ring-primary " : "") +
+        (tone === "warn" ? "border-amber-300" : "")
+      }
+    >
+      <CardContent className="py-4">
+        <div
+          className={
+            "text-2xl font-semibold " + (tone === "warn" ? "text-amber-600" : "")
+          }
+        >
+          {value}
+        </div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <MainLayout>
       <div className="p-8 max-w-7xl mx-auto space-y-6">
         <PageHeader
           title="Active Roster"
-          description="Employees on assignment as of the last payroll run (live from Zenople). Search the pool and place anyone into a property — they'll show up in that property."
+          description="Everyone on the last payroll run (live from Zenople). Tagged by housing deduction, so you can spot anyone being charged for housing who isn't placed in a bed — then place them."
           actions={
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -129,18 +175,18 @@ export default function RosterPage() {
         {rosterQuery.isLoading ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
-              Loading the active roster from Zenople…
+              Loading the roster from Zenople…
             </CardContent>
           </Card>
         ) : rosterQuery.isError ? (
           <Card>
             <CardContent className="py-10 text-center space-y-2">
               <AlertTriangle className="h-6 w-6 text-amber-500 mx-auto" />
-              <p className="font-medium">Couldn't load the active roster from Zenople.</p>
+              <p className="font-medium">Couldn't load the roster from Zenople.</p>
               <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                Check that <code>ZENOPLE_CLIENT_ID</code> / <code>ZENOPLE_CLIENT_SECRET</code>{" "}
-                are set on the API server. If they are, the assignment fields may need a
-                tweak — hit <code>/api/roster/active?fields=1</code> to see the field names
+                Check <code>ZENOPLE_CLIENT_ID</code> / <code>ZENOPLE_CLIENT_SECRET</code> on
+                the API server. If the headcount looks wrong, hit{" "}
+                <code>/api/roster/active?fields=1</code> to see the payroll field names
                 Zenople returned.
               </p>
               <Button variant="outline" size="sm" onClick={() => rosterQuery.refetch()}>
@@ -150,26 +196,27 @@ export default function RosterPage() {
           </Card>
         ) : (
           <>
-            {/* Summary */}
+            {/* Headline metrics — click to filter the list */}
             <div className="grid grid-cols-3 gap-3">
-              <Card>
-                <CardContent className="py-4">
-                  <div className="text-2xl font-semibold">{people.length}</div>
-                  <div className="text-xs text-muted-foreground">Active employees</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="py-4">
-                  <div className="text-2xl font-semibold">{placedCount}</div>
-                  <div className="text-xs text-muted-foreground">Currently housed</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="py-4">
-                  <div className="text-2xl font-semibold">{people.length - placedCount}</div>
-                  <div className="text-xs text-muted-foreground">Not placed</div>
-                </CardContent>
-              </Card>
+              <StatCard
+                label="On last payroll"
+                value={stats.total}
+                onClick={() => setView("all")}
+                active={view === "all"}
+              />
+              <StatCard
+                label="Have a housing deduction"
+                value={stats.withDeduction}
+                onClick={() => setView("deduction")}
+                active={view === "deduction"}
+              />
+              <StatCard
+                label="Charged but NOT placed"
+                value={stats.gap}
+                tone="warn"
+                onClick={() => setView("gap")}
+                active={view === "gap"}
+              />
             </div>
 
             {staleOccupants.length > 0 && (
@@ -179,15 +226,12 @@ export default function RosterPage() {
                   <div>
                     <span className="font-medium">
                       {staleOccupants.length} housed{" "}
-                      {staleOccupants.length === 1 ? "person is" : "people are"} no longer on
-                      the active roster
+                      {staleOccupants.length === 1 ? "person is" : "people are"} not on the
+                      last payroll
                     </span>{" "}
                     — likely move-outs to record:{" "}
                     <span className="text-muted-foreground">
-                      {staleOccupants
-                        .slice(0, 8)
-                        .map((o) => o.name)
-                        .join(", ")}
+                      {staleOccupants.slice(0, 8).map((o) => o.name).join(", ")}
                       {staleOccupants.length > 8 ? `, +${staleOccupants.length - 8} more` : ""}
                     </span>
                   </div>
@@ -218,14 +262,6 @@ export default function RosterPage() {
                   {c}
                 </button>
               ))}
-              <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={onlyOpen}
-                  onChange={(e) => setOnlyOpen(e.target.checked)}
-                />
-                Only show unplaced
-              </label>
             </div>
 
             <Card>
@@ -236,6 +272,7 @@ export default function RosterPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Company</TableHead>
                       <TableHead>Role</TableHead>
+                      <TableHead>Deduction</TableHead>
                       <TableHead>Housing</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
@@ -243,17 +280,21 @@ export default function RosterPage() {
                   <TableBody>
                     {rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           <Users className="h-5 w-5 mx-auto mb-2 opacity-50" />
-                          No employees match.
+                          No one matches.
                         </TableCell>
                       </TableRow>
                     ) : (
                       rows.map((r) => {
                         const occ = matchOccupant(r.personId, r.name);
                         const placedAt = occ?.propertyId ? propertyName.get(occ.propertyId) : null;
+                        const gap = r.hasDeduction && !occ;
                         return (
-                          <TableRow key={r.personId}>
+                          <TableRow
+                            key={r.personId}
+                            className={gap ? "bg-amber-50/70 hover:bg-amber-50" : undefined}
+                          >
                             <TableCell className="font-medium">{r.name}</TableCell>
                             <TableCell>
                               <span className="flex items-center gap-2">
@@ -265,10 +306,22 @@ export default function RosterPage() {
                               {r.jobTitle || "—"}
                             </TableCell>
                             <TableCell>
+                              {r.hasDeduction ? (
+                                <span className="text-sm font-medium">{money(r.weeklyDeduction)}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
                               {occ ? (
                                 <Badge variant="secondary" className="gap-1">
                                   <Home className="h-3 w-3" />
                                   {placedAt ?? "Housed"}
+                                </Badge>
+                              ) : gap ? (
+                                <Badge className="gap-1 bg-amber-500 hover:bg-amber-500 text-white">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Charged, no bed
                                 </Badge>
                               ) : (
                                 <span className="text-muted-foreground text-sm">Not placed</span>
@@ -283,6 +336,8 @@ export default function RosterPage() {
                                     name: r.name,
                                     employeeId: r.personId,
                                     company: r.company,
+                                    chargePerBed: r.weeklyDeduction || undefined,
+                                    billingFrequency: r.weeklyDeduction ? "Weekly" : undefined,
                                   }}
                                   onAssign={(occupant, bed) => {
                                     addOccupant(occupant);
@@ -292,7 +347,7 @@ export default function RosterPage() {
                                     });
                                   }}
                                   trigger={
-                                    <Button size="sm" variant="outline">
+                                    <Button size="sm" variant={gap ? "default" : "outline"}>
                                       Place in property
                                     </Button>
                                   }

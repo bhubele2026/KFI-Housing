@@ -277,3 +277,85 @@ export async function fetchActiveRoster(
     people,
   };
 }
+
+// ── Last-payroll roster ──────────────────────────────────────────────
+// The Roster's headcount is everyone who was ON THE LAST PAYROLL RUN
+// (≈ the company headcount, ~500), NOT just active assignments. We read
+// `PayrollData`, find the most recent AccountingPeriod present, and
+// return the distinct people paid in it. (Active assignments + housing
+// deductions are layered on top by the route.)
+const PAYROLL_ACTION = "PayrollData";
+const PAYROLL_LOOKBACK_DAYS = 21; // spans the last ~3 weekly runs
+const ACCT_PERIOD_KEYS = ["AccountingPeriod", "accountingPeriod", "PayPeriod", "payPeriod"];
+const CHECK_DATE_KEYS = ["CheckDate", "checkDate", "PayDate", "payDate"];
+
+export interface PayrollPerson {
+  personId: string;
+  name: string;
+}
+
+export interface PayrollRosterResult {
+  asOf: string;
+  source: string;
+  /** The AccountingPeriod (or check date) we scoped to, for display. */
+  payPeriod: string;
+  discoveredFields: string[];
+  people: PayrollPerson[];
+}
+
+/**
+ * Distinct people on the most recent payroll run. We pull a short
+ * modified-time window (covers the last few weekly runs), pick the
+ * latest AccountingPeriod present, and dedupe by personId. If no
+ * AccountingPeriod field is found we fall back to the union over the
+ * whole window (week-to-week payroll membership is ~stable, so the
+ * count is materially the same).
+ */
+export async function fetchLastPayrollPeople(
+  log: Logger = defaultLogger,
+): Promise<PayrollRosterResult> {
+  const cfg = getConfig();
+  const token = await getToken(cfg);
+  const now = new Date();
+  const start = new Date(now.getTime() - PAYROLL_LOOKBACK_DAYS * 86_400_000);
+  const raw = await fetchAction(cfg, token, PAYROLL_ACTION, start, now);
+
+  const discoveredFields =
+    raw.length > 0 && raw[0] && typeof raw[0] === "object" ? Object.keys(raw[0]) : [];
+  log.info(
+    { action: PAYROLL_ACTION, rows: raw.length, fields: discoveredFields },
+    "zenople last-payroll: discovered fields",
+  );
+
+  // Find the latest period marker present across the window.
+  let latestPeriod = "";
+  for (const row of raw) {
+    const p = dateOnly(pick(row, ACCT_PERIOD_KEYS)) || dateOnly(pick(row, CHECK_DATE_KEYS));
+    if (p && p > latestPeriod) latestPeriod = p;
+  }
+
+  const byPerson = new Map<string, PayrollPerson>();
+  for (const row of raw) {
+    // When we have a period marker, keep only the latest run; otherwise
+    // take everyone in the window.
+    if (latestPeriod) {
+      const p = dateOnly(pick(row, ACCT_PERIOD_KEYS)) || dateOnly(pick(row, CHECK_DATE_KEYS));
+      if (p && p !== latestPeriod) continue;
+    }
+    const personId = str(pick(row, PERSON_ID_KEYS));
+    let name = str(pick(row, NAME_KEYS));
+    if (!name) {
+      name = `${str(pick(row, FIRST_KEYS))} ${str(pick(row, LAST_KEYS))}`.trim();
+    }
+    if (!personId || !name) continue;
+    if (!byPerson.has(personId)) byPerson.set(personId, { personId, name });
+  }
+
+  return {
+    asOf: now.toISOString(),
+    source: PAYROLL_ACTION,
+    payPeriod: latestPeriod,
+    discoveredFields,
+    people: [...byPerson.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}

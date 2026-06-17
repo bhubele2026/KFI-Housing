@@ -142,7 +142,7 @@ router.post("/occupants", async (req, res): Promise<void> => {
     const roomId = await roomIdForBed(row.bedId);
     if (roomId) await demoteOtherLeads(row.id, roomId);
   }
-  res.status(201).json(UpdateOccupantResponse.parse(serializeOccupant(row)));
+  res.status(201).json(UpdateOccupantResponse.parse(serializeOccupant(normalizeOccupantRow(row))));
 });
 
 /**
@@ -337,7 +337,14 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
     if (roomId) await demoteOtherLeads(row.id, roomId);
   }
 
-  res.json(UpdateOccupantResponse.parse(serializeOccupant(row)));
+  // Normalize the returned row before the response-schema parse — same
+  // boundary coercion the GET list applies (task #416). The patched row
+  // is the *existing* occupant with the update merged in, so it can still
+  // carry a legacy off-list value (shift / billingFrequency / language /
+  // null task-500 fields) that the input validation never touched.
+  // Without this, vacating/editing such an occupant 500s on the response
+  // parse and the client reverts with "Save failed". (#bug: vacate)
+  res.json(UpdateOccupantResponse.parse(serializeOccupant(normalizeOccupantRow(row))));
 });
 
 router.delete("/occupants/:id", async (req, res): Promise<void> => {

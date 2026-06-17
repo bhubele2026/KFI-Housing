@@ -31,7 +31,7 @@ router.post("/beds", async (req, res): Promise<void> => {
     return;
   }
   const [row] = await db.insert(bedsTable).values(normalizeBedRow(body.data)).returning();
-  res.status(201).json(UpdateBedResponse.parse(row));
+  res.status(201).json(UpdateBedResponse.parse(normalizeBedRow(row)));
 });
 
 router.patch("/beds/:id", async (req, res): Promise<void> => {
@@ -126,7 +126,7 @@ router.patch("/beds/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Bed not found" });
     return;
   }
-  res.json(UpdateBedResponse.parse(row));
+  res.json(UpdateBedResponse.parse(normalizeBedRow(row)));
 });
 
 router.delete("/beds/:id", async (req, res): Promise<void> => {

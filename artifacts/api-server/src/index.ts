@@ -18,6 +18,8 @@ import { seedGreenockManorIfMissing } from "./lib/seed-greenock-manor";
 import { seedSunsetPlaceIfMissing } from "./lib/seed-sunset-place";
 import { seedHarvestedPropertiesIfMissing } from "./lib/seed-harvested-properties";
 import { seedBedInventoryIfMissing } from "./lib/seed-bed-inventory";
+import { seedLeaseFixesIfMissing } from "./lib/seed-lease-fixes";
+import { seedUtilitiesFromEmailIfMissing } from "./lib/seed-utilities-from-email";
 import { seedKolbeWausauIfMissing } from "./lib/seed-kolbe-wausau";
 import { seedPatriotBarabooIfMissing } from "./lib/seed-patriot-baraboo";
 import { seedPendaNewPineryIfMissing } from "./lib/seed-penda-new-pinery";
@@ -81,6 +83,12 @@ void start({
   },
   seedBedInventoryIfMissing: async () => {
     await seedBedInventoryIfMissing();
+  },
+  seedLeaseFixesIfMissing: async () => {
+    await seedLeaseFixesIfMissing();
+  },
+  seedUtilitiesFromEmailIfMissing: async () => {
+    await seedUtilitiesFromEmailIfMissing();
   },
   seedParkPlaceIfMissing: async () => {
     await seedParkPlaceIfMissing();

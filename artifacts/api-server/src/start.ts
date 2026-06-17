@@ -104,6 +104,11 @@ export interface StartDeps {
   // placement from the Roster. Runs after the property seeders so it
   // sees their totalBeds. Non-fatal.
   seedBedInventoryIfMissing: () => Promise<void>;
+  // Apply harvested lease rent/date fixes (fill-blanks only) + import
+  // harvested utility accounts. Both additive/idempotent; run with the
+  // FORCE_HARVEST_SEED-gated seeders.
+  seedLeaseFixesIfMissing: () => Promise<void>;
+  seedUtilitiesFromEmailIfMissing: () => Promise<void>;
   seedParkPlaceIfMissing: () => Promise<void>;
   // Idempotent Landscape Structures / Park Place Plymouth seed
   // (Task #569). Non-fatal.
@@ -680,6 +685,24 @@ export async function start(deps: StartDeps): Promise<void> {
         { err },
         "Failed to materialize bed inventory — continuing to serve",
       );
+    }
+  }
+
+  // Fill blank lease rents/dates from the SharePoint lease audit, then
+  // import harvested utility accounts. Additive/idempotent, honored under
+  // FORCE_HARVEST_SEED. Non-fatal.
+  if (!autoSeedDisabled || forceHarvestSeed) {
+    try {
+      await deps.seedLeaseFixesIfMissing();
+    } catch (err) {
+      deps.logger.warn({ err }, "Failed to apply lease fixes — continuing to serve");
+    }
+  }
+  if (!autoSeedDisabled || forceHarvestSeed) {
+    try {
+      await deps.seedUtilitiesFromEmailIfMissing();
+    } catch (err) {
+      deps.logger.warn({ err }, "Failed to import utilities from email — continuing to serve");
     }
   }
 

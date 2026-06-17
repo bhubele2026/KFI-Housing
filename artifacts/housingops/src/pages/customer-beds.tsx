@@ -1,73 +1,77 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
+import { useListActiveRoster } from "@workspace/api-client-react";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, BedDouble, Plus, X } from "lucide-react";
-import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ChevronLeft,
+  ChevronRight,
+  BedDouble,
+  Plus,
+  Search,
+  ArrowLeftRight,
+  LogOut,
+  UserPlus,
+} from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import type { Bed, Occupant } from "@/data/mockData";
 
 /**
  * Customer-scoped BED GRID — the "who's in which bed" drill-down off a
- * customer file. Laid out like the operator's spreadsheet: grouped by
- * property, ONE ROW PER ROOM, with each bed as a column (Bed 1, Bed 2,
- * …) and the occupant in the cell. Occupied / available counts sit on
- * the right. Every cell is editable in place — click a vacant bed to
- * assign, an occupant to edit, or ✕ to move them out — so it's fast to
- * scan and change without leaving the page.
+ * customer file. Grouped by property, ONE ROW PER ROOM, beds as columns.
+ * Click a person's NAME for an actions menu (Move / Remove / Replace);
+ * assign a vacant bed from the ACTIVE ROSTER (most recent payroll week).
+ * The name is never an inline rename — it only opens the menu.
  */
 
-// Cap the number of Bed columns so a high-capacity room can't blow the
-// width out (overflow beds wrap into the last cell). Real rooms are 1–2
-// beds, so this rarely bites.
 const MAX_BED_COLS = 6;
+const today = () => new Date().toISOString().split("T")[0];
+
+type RosterPerson = { personId: string; name: string; company: string };
+type VacantBed = { id: string; propertyId: string; label: string };
 
 export default function CustomerBeds() {
   const { id } = useParams<{ id: string }>();
-  const { customers, properties, rooms, beds, occupants, addOccupant, addBed, addRoom, updateBed, updateOccupant, isLoading } =
-    useData();
+  const {
+    customers, properties, rooms, beds, occupants,
+    addOccupant, addBed, addRoom, updateBed, updateOccupant, isLoading,
+  } = useData();
+  const rosterPeople: RosterPerson[] = (useListActiveRoster().data?.people ?? []).map((p) => ({
+    personId: p.personId,
+    name: p.name,
+    company: p.company,
+  }));
 
   const customer = customers.find((c) => c.id === id);
 
-  // Add one vacant bed to an existing room (manual inventory growth).
-  const handleAddBed = (propertyId: string, roomId: string, existingBeds: Bed[]) => {
-    const nextNum = existingBeds.reduce((m, b) => Math.max(m, b.bedNumber), 0) + 1;
-    addBed({
-      id: `bed-${Date.now()}`,
-      propertyId,
-      bedNumber: nextNum,
-      roomId,
-      status: "Vacant",
-      occupantId: null,
-    });
-  };
-
-  // Add a brand-new unit/room (with one vacant bed) to a property. The
-  // operator renames it on the property page. This is the manual path;
-  // lease ingestion can create units the same way server-side later.
-  const handleAddUnit = (propertyId: string, unitCount: number) => {
-    const roomId = `room-${Date.now()}`;
-    addRoom({
-      id: roomId,
-      propertyId,
-      buildingId: "",
-      name: `New Unit ${unitCount + 1}`,
-      sqft: 0,
-      bathrooms: 0,
-      monthlyRent: 0,
-    });
-    addBed({
-      id: `bed-${Date.now() + 1}`,
-      propertyId,
-      bedNumber: 1,
-      roomId,
-      status: "Vacant",
-      occupantId: null,
-    });
-  };
+  const propertyName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of properties) m.set(p.id, shortPropertyName(p.name));
+    return m;
+  }, [properties]);
+  const roomName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rooms) m.set(r.id, r.name);
+    return m;
+  }, [rooms]);
 
   const occupantByBedId = useMemo(() => {
     const m = new Map<string, Occupant>();
@@ -77,25 +81,27 @@ export default function CustomerBeds() {
     return m;
   }, [occupants]);
 
-  // Properties for this customer (primary or shared), with their rooms
-  // and beds grouped for the grid.
+  // Vacant, ready beds available as move targets.
+  const vacantBeds: VacantBed[] = useMemo(
+    () =>
+      beds
+        .filter((b) => b.status === "Vacant" && b.cleaningStatus === "ready")
+        .map((b) => ({
+          id: b.id,
+          propertyId: b.propertyId,
+          label: `${propertyName.get(b.propertyId) ?? "—"} · ${roomName.get(b.roomId) ?? "—"} · Bed ${b.bedNumber}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [beds, propertyName, roomName],
+  );
+
   const propertyBlocks = useMemo(() => {
     const scoped = properties.filter(
       (p) => p.customerId === id || (p.sharedWithCustomerIds ?? []).includes(id),
     );
-    const bedsByRoom = new Map<string, Bed[]>();
-    for (const b of beds) {
-      const arr = bedsByRoom.get(b.roomId) ?? [];
-      arr.push(b);
-      bedsByRoom.set(b.roomId, arr);
-    }
-    const roomName = new Map<string, string>();
-    for (const r of rooms) roomName.set(r.id, r.name);
-
     return scoped
       .map((p) => {
         const propBeds = beds.filter((b) => b.propertyId === p.id);
-        // Group this property's beds by room.
         const byRoom = new Map<string, Bed[]>();
         for (const b of propBeds) {
           const arr = byRoom.get(b.roomId) ?? [];
@@ -115,68 +121,70 @@ export default function CustomerBeds() {
         const occupied = propBeds.filter((b) => occupantByBedId.has(b.id)).length;
         return { property: p, roomRows, colCount, total, occupied };
       })
-      // Show properties that actually have beds first; keep empties last
-      // so the operator sees real inventory without scrolling past blanks.
       .sort((a, b) => Number(b.total > 0) - Number(a.total > 0) || a.property.name.localeCompare(b.property.name));
-  }, [properties, rooms, beds, id, occupantByBedId]);
+  }, [properties, beds, id, roomName, occupantByBedId]);
 
-  const handleVacate = (bed: Bed, occ: Occupant) => {
+  // ── Bed mutations ──────────────────────────────────────────────────
+  const makeOccupant = (person: RosterPerson, bed: Bed): Occupant => ({
+    id: `occ-${Date.now()}`,
+    propertyId: bed.propertyId,
+    bedId: bed.id,
+    name: person.name,
+    employeeId: person.personId,
+    company: person.company ?? "",
+    moveInDate: today(),
+    moveOutDate: null,
+    status: "Active",
+    chargePerBed: 0,
+    billingFrequency: "Monthly",
+    email: "",
+    phone: "",
+    chargeSource: "",
+    chargeSourceCustomer: "",
+    chargeSourcePersonId: "",
+    shift: null,
+    language: null,
+    gender: null,
+    title: null,
+    kfisAuthorizedToDrive: null,
+    createdAt: new Date().toISOString(),
+  });
+
+  const handleAssign = (bed: Bed, person: RosterPerson) => {
+    const occ = makeOccupant(person, bed);
+    addOccupant(occ);
+    updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
+  };
+  const handleMove = (occ: Occupant, bedId: string, propertyId: string) => {
+    updateOccupant(occ.id, { bedId, propertyId });
+    updateBed(bedId, { status: "Occupied", occupantId: occ.id });
+  };
+  const handleRemove = (bed: Bed, occ: Occupant) => {
     updateBed(bed.id, { status: "Vacant", occupantId: null });
     updateOccupant(occ.id, { status: "Former", bedId: null });
   };
-
-  const renderBedCell = (bed: Bed | undefined) => {
-    if (!bed) return <td className="px-3 py-2 border-l border-border/40" />;
-    const occ = occupantByBedId.get(bed.id);
-    if (occ) {
-      return (
-        <td className="px-3 py-2 border-l border-border/40 align-middle">
-          <div className="group flex items-center justify-between gap-1">
-            {/* Plain, selectable name — NOT an edit trigger. */}
-            <span className="text-sm font-medium truncate" title={occ.name}>
-              {occ.name}
-            </span>
-            {/* Move-out reveals on hover so the cell stays clean. */}
-            <button
-              type="button"
-              onClick={() => handleVacate(bed, occ)}
-              title="Move out"
-              className="shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </td>
-      );
-    }
-    // Vacant. A bed mid-turnover (needs_cleaning / in_progress) isn't
-    // assignable yet — show its state instead of an Assign affordance.
-    const ready = bed.cleaningStatus === "ready";
-    return (
-      <td className="px-3 py-2 border-l border-border/40 align-middle">
-        {ready ? (
-          <AssignOccupantDialog
-            bed={{ id: bed.id, propertyId: bed.propertyId }}
-            onAssign={(occupant, b) => {
-              addOccupant(occupant);
-              updateBed(b.id, { status: "Occupied", occupantId: occupant.id });
-            }}
-            trigger={
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                title="Assign occupant"
-              >
-                <Plus className="h-3 w-3" /> Assign
-              </button>
-            }
-          />
-        ) : (
-          <span className="text-xs text-amber-600">🧹 cleaning</span>
-        )}
-      </td>
-    );
+  const handleReplace = (bed: Bed, current: Occupant, person: RosterPerson) => {
+    // Free the bed (a replace is a correction, not a turnover, so force it
+    // back to "ready" so the new occupant isn't blocked by the cleaning
+    // gate), then place the replacement.
+    updateOccupant(current.id, { status: "Former", bedId: null });
+    updateBed(bed.id, { status: "Vacant", occupantId: null, cleaningStatus: "ready" });
+    const occ = makeOccupant(person, bed);
+    addOccupant(occ);
+    updateBed(bed.id, { status: "Occupied", occupantId: occ.id });
   };
+
+  const handleAddBed = (propertyId: string, roomId: string, existingBeds: Bed[]) => {
+    const nextNum = existingBeds.reduce((m, b) => Math.max(m, b.bedNumber), 0) + 1;
+    addBed({ id: `bed-${Date.now()}`, propertyId, bedNumber: nextNum, roomId, status: "Vacant", occupantId: null });
+  };
+  const handleAddUnit = (propertyId: string, unitCount: number) => {
+    const roomId = `room-${Date.now()}`;
+    addRoom({ id: roomId, propertyId, buildingId: "", name: `New Unit ${unitCount + 1}`, sqft: 0, bathrooms: 0, monthlyRent: 0 });
+    addBed({ id: `bed-${Date.now() + 1}`, propertyId, bedNumber: 1, roomId, status: "Vacant", occupantId: null });
+  };
+
+  const cellProps = { rosterPeople, vacantBeds, onAssign: handleAssign, onMove: handleMove, onRemove: handleRemove, onReplace: handleReplace };
 
   return (
     <MainLayout>
@@ -209,7 +217,6 @@ export default function CustomerBeds() {
             const bedCols = Array.from({ length: colCount }, (_, i) => i);
             return (
               <Card key={property.id} className="overflow-hidden">
-                {/* Property header — the whole title block opens the property */}
                 <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/60 px-4 py-3 border-b">
                   <Link href={`/properties/${property.id}`} className="group min-w-0 flex items-baseline gap-2">
                     <span className="font-semibold group-hover:text-primary group-hover:underline truncate">
@@ -224,14 +231,8 @@ export default function CustomerBeds() {
                     <Badge variant={occupied < total ? "secondary" : "default"}>
                       {occupied}/{total} beds filled
                     </Badge>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 h-7"
-                      onClick={() => handleAddUnit(property.id, roomRows.length)}
-                      title="Add a new unit / room with a bed"
-                    >
+                    <Button type="button" variant="outline" size="sm" className="gap-1 h-7"
+                      onClick={() => handleAddUnit(property.id, roomRows.length)} title="Add a new unit / room with a bed">
                       <Plus className="h-3.5 w-3.5" /> Add unit
                     </Button>
                   </div>
@@ -240,13 +241,8 @@ export default function CustomerBeds() {
                 {total === 0 ? (
                   <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground">
                     <span>No beds set up yet for this property.</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1 h-7 shrink-0"
-                      onClick={() => handleAddUnit(property.id, roomRows.length)}
-                    >
+                    <Button type="button" variant="outline" size="sm" className="gap-1 h-7 shrink-0"
+                      onClick={() => handleAddUnit(property.id, roomRows.length)}>
                       <Plus className="h-3.5 w-3.5" /> Add unit
                     </Button>
                   </div>
@@ -258,9 +254,7 @@ export default function CustomerBeds() {
                           <th className="px-3 py-2.5 text-left font-medium w-[26%]">Room / Unit</th>
                           <th className="px-2 py-2.5 text-center font-medium w-14">Cap</th>
                           {bedCols.map((i) => (
-                            <th key={i} className="px-3 py-2.5 text-left font-medium border-l border-border/40">
-                              Bed {i + 1}
-                            </th>
+                            <th key={i} className="px-3 py-2.5 text-left font-medium border-l border-border/40">Bed {i + 1}</th>
                           ))}
                           <th className="px-2 py-2.5 text-center font-medium w-16 border-l border-border/40">Open</th>
                         </tr>
@@ -275,48 +269,34 @@ export default function CustomerBeds() {
                               <td className="px-3 py-2.5">
                                 <div className="group/r flex items-center gap-2">
                                   <span className="font-medium truncate">{room.name}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddBed(property.id, room.roomId, room.beds)}
+                                  <button type="button" onClick={() => handleAddBed(property.id, room.roomId, room.beds)}
                                     title="Add a bed to this unit"
-                                    className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0"
-                                  >
+                                    className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0">
                                     <Plus className="h-3 w-3" /> bed
                                   </button>
                                 </div>
                               </td>
                               <td className="px-2 py-2.5 text-center text-muted-foreground">{cap}</td>
                               {bedCols.map((i) => {
-                                // Last visible column absorbs any overflow beds
-                                // (rooms with more beds than columns are rare).
                                 if (i === colCount - 1 && room.beds.length > colCount) {
                                   return (
-                                    <td key={i} className="px-2 py-1.5 border-l border-border/40">
-                                      <div className="space-y-1">
+                                    <td key={i} className="px-3 py-2 border-l border-border/40 align-middle">
+                                      <div className="space-y-1.5">
                                         {room.beds.slice(colCount - 1).map((b) => (
-                                          <BedInline
-                                            key={b.id}
-                                            bed={b}
-                                            occ={occupantByBedId.get(b.id)}
-                                            onAssign={(occupant, bb) => {
-                                              addOccupant(occupant);
-                                              updateBed(bb.id, { status: "Occupied", occupantId: occupant.id });
-                                            }}
-                                            onVacate={handleVacate}
-                                          />
+                                          <BedCell key={b.id} bed={b} occ={occupantByBedId.get(b.id)} {...cellProps} />
                                         ))}
                                       </div>
                                     </td>
                                   );
                                 }
-                                return <BedTd key={i} render={() => renderBedCell(room.beds[i])} />;
+                                const b = room.beds[i];
+                                return (
+                                  <td key={i} className="px-3 py-2 border-l border-border/40 align-middle">
+                                    {b ? <BedCell bed={b} occ={occupantByBedId.get(b.id)} {...cellProps} /> : null}
+                                  </td>
+                                );
                               })}
-                              <td
-                                className={
-                                  "px-2 py-2.5 text-center font-medium border-l border-border/40 " +
-                                  (open > 0 ? "text-amber-600" : "text-muted-foreground")
-                                }
-                              >
+                              <td className={"px-2 py-2.5 text-center font-medium border-l border-border/40 " + (open > 0 ? "text-amber-600" : "text-muted-foreground")}>
                                 {open}
                               </td>
                             </tr>
@@ -335,52 +315,129 @@ export default function CustomerBeds() {
   );
 }
 
-// Small wrapper so renderBedCell (which returns a <td>) can be used in the map.
-function BedTd({ render }: { render: () => React.ReactNode }) {
-  return <>{render()}</>;
+interface CellHandlers {
+  rosterPeople: RosterPerson[];
+  vacantBeds: VacantBed[];
+  onAssign: (bed: Bed, person: RosterPerson) => void;
+  onMove: (occ: Occupant, bedId: string, propertyId: string) => void;
+  onRemove: (bed: Bed, occ: Occupant) => void;
+  onReplace: (bed: Bed, current: Occupant, person: RosterPerson) => void;
 }
 
-// Inline (non-<td>) bed control used inside the overflow cell.
-function BedInline({
-  bed,
-  occ,
-  onAssign,
-  onVacate,
-}: {
-  bed: Bed;
-  occ: Occupant | undefined;
-  onAssign: (o: Occupant, b: { id: string; propertyId: string }) => void;
-  onVacate: (bed: Bed, occ: Occupant) => void;
-}) {
-  if (occ) {
-    return (
-      <div className="group flex items-center justify-between gap-1">
-        <span className="text-sm font-medium truncate" title={occ.name}>
-          {occ.name}
-        </span>
-        <button
-          type="button"
-          onClick={() => onVacate(bed, occ)}
-          title="Move out"
-          className="shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & CellHandlers) {
+  if (occ) return <ManageOccupantDialog bed={bed} occ={occ} {...h} />;
+  if (bed.cleaningStatus !== "ready") return <span className="text-xs text-amber-600">🧹 cleaning</span>;
+  return <AssignFromRosterDialog bed={bed} rosterPeople={h.rosterPeople} onAssign={h.onAssign} />;
+}
+
+// Searchable active-roster list (most recent active payroll week).
+function RosterPicker({ people, onPick }: { people: RosterPerson[]; onPick: (p: RosterPerson) => void }) {
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const filtered = needle
+    ? people.filter((p) => `${p.name} ${p.company}`.toLowerCase().includes(needle))
+    : people;
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the active roster…" className="pl-8" autoFocus />
       </div>
-    );
-  }
-  const ready = bed.cleaningStatus === "ready";
-  return ready ? (
-    <AssignOccupantDialog
-      bed={{ id: bed.id, propertyId: bed.propertyId }}
-      onAssign={onAssign}
-      trigger={
-        <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary">
+      <div className="max-h-72 overflow-y-auto rounded-md border divide-y">
+        {filtered.length === 0 ? (
+          <div className="p-3 text-sm text-muted-foreground text-center">
+            {people.length === 0 ? "Active roster not loaded." : "No matches."}
+          </div>
+        ) : (
+          filtered.slice(0, 200).map((p) => (
+            <button key={p.personId} type="button" onClick={() => onPick(p)}
+              className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center justify-between gap-3">
+              <span className="font-medium truncate">{p.name}</span>
+              <span className="text-xs text-muted-foreground truncate">{p.company}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssignFromRosterDialog({ bed, rosterPeople, onAssign }: { bed: Bed; rosterPeople: RosterPerson[]; onAssign: (bed: Bed, person: RosterPerson) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button type="button" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary" title="Assign from the active roster">
           <Plus className="h-3 w-3" /> Assign
         </button>
-      }
-    />
-  ) : (
-    <span className="text-xs text-amber-600">🧹 cleaning</span>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Assign to this bed</DialogTitle></DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-1">Pick someone from the most recent active payroll week.</p>
+        <RosterPicker people={rosterPeople} onPick={(p) => { onAssign(bed, p); setOpen(false); }} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Name → actions: Move / Replace / Remove. The name is a button, never an
+// inline rename field.
+function ManageOccupantDialog({ bed, occ, rosterPeople, vacantBeds, onMove, onRemove, onReplace }: { bed: Bed; occ: Occupant } & CellHandlers) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"menu" | "move" | "replace">("menu");
+  const [moveBedId, setMoveBedId] = useState("");
+  const reset = () => { setMode("menu"); setMoveBedId(""); };
+  const close = () => { setOpen(false); reset(); };
+  const moveTargets = vacantBeds.filter((b) => b.id !== bed.id);
+  const chosen = moveTargets.find((b) => b.id === moveBedId);
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <button type="button" className="text-sm font-medium text-left hover:text-primary hover:underline truncate w-full" title={`Manage ${occ.name}`}>
+          {occ.name}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>{occ.name}</DialogTitle></DialogHeader>
+        {mode === "menu" && (
+          <div className="space-y-2 pt-1">
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setMode("move")}>
+              <ArrowLeftRight className="h-4 w-4" /> Move to another bed
+            </Button>
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setMode("replace")}>
+              <UserPlus className="h-4 w-4" /> Replace with someone else
+            </Button>
+            <Button variant="outline" className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+              onClick={() => { onRemove(bed, occ); close(); }}>
+              <LogOut className="h-4 w-4" /> Remove from bed
+            </Button>
+          </div>
+        )}
+        {mode === "move" && (
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-muted-foreground">Move {occ.name} to a vacant, ready bed (their current bed is freed automatically).</p>
+            <Select value={moveBedId} onValueChange={setMoveBedId}>
+              <SelectTrigger><SelectValue placeholder={moveTargets.length ? "Choose a vacant bed…" : "No vacant beds available"} /></SelectTrigger>
+              <SelectContent>
+                {moveTargets.map((b) => <SelectItem key={b.id} value={b.id}>{b.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setMode("menu")}>Back</Button>
+              <Button disabled={!chosen} onClick={() => { if (chosen) { onMove(occ, chosen.id, chosen.propertyId); close(); } }}>Move</Button>
+            </div>
+          </div>
+        )}
+        {mode === "replace" && (
+          <div className="space-y-2 pt-1">
+            <p className="text-sm text-muted-foreground">Replace {occ.name} in this bed with someone from the active roster.</p>
+            <RosterPicker people={rosterPeople} onPick={(p) => { onReplace(bed, occ, p); close(); }} />
+            <div className="flex justify-end">
+              <Button variant="ghost" onClick={() => setMode("menu")}>Back</Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

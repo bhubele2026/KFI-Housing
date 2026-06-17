@@ -2235,16 +2235,18 @@ export default function Properties() {
                             const propertyBuildingCount = rowData?.buildingCount ?? 0;
                             return (
                               <div className="flex items-center gap-2">
-                                <InlineEdit
-                                  value={property.name}
-                                  displayValue={stripped ? formatted.primary : undefined}
-                                  onSave={(v) =>
-                                    updateProperty(property.id, { name: v })
-                                  }
-                                  displayClassName="font-semibold"
-                                  inputClassName="w-56"
-                                  testId={`inline-edit-property-name-${property.id}`}
-                                />
+                                {/* Plain navigating link — the row opens the
+                                    property detail; the name is NOT inline-
+                                    editable here (rename lives on the detail
+                                    page) so selecting it can't trip into edit
+                                    mode. */}
+                                <span
+                                  className="font-semibold leading-snug group-hover:text-primary group-hover:underline underline-offset-2 transition-colors"
+                                  title={`Open ${property.name}`}
+                                  data-testid={`link-property-name-${property.id}`}
+                                >
+                                  {stripped ? formatted.primary : property.name}
+                                </span>
                                 {propertyBuildingCount > 1 && (
                                   <Badge
                                     variant="outline"

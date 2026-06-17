@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Settings, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, Calculator, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Home, KeyRound, BedDouble, Users, Zap, DollarSign, LogOut, RotateCcw, Download, Upload, Briefcase, X, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen, ShieldCheck, Building2, Truck, FileText, Contact, MapPin, Wrench, Fuel, Map as MapIcon, Receipt, Calculator, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { KfiLogo } from "@/components/kfi-logo";
@@ -117,7 +117,6 @@ const NAV_ENTRIES: NavEntry[] = [
     defaultOpen: false,
     children: TRANSPORT_CHILDREN,
   },
-  { kind: "leaf", href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 /** localStorage key that holds the {[groupId]: open} map for the

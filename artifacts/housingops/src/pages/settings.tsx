@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mail, Trash2, Plus, Loader2, Users, Link2, History } from "lucide-react";
+import { Mail, Trash2, Plus, Loader2, Users, Link2, History, Landmark } from "lucide-react";
 import { QboSettings } from "@/components/qbo-settings";
 import { ActivityLogSettings } from "@/components/activity-log-settings";
 import { useToast } from "@/hooks/use-toast";
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TeamSettings } from "@/components/team-settings";
+import { PlaidSettings } from "@/components/plaid-settings";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -251,6 +252,10 @@ export default function Settings() {
               <History className="h-4 w-4 mr-2" />
               Activity log
             </TabsTrigger>
+            <TabsTrigger value="bank" data-testid="settings-tab-bank">
+              <Landmark className="h-4 w-4 mr-2" />
+              Bank connection
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="team" className="mt-4">
             <TeamSettings />
@@ -263,6 +268,9 @@ export default function Settings() {
           </TabsContent>
           <TabsContent value="activity" className="mt-4">
             <ActivityLogSettings />
+          </TabsContent>
+          <TabsContent value="bank" className="mt-4">
+            <PlaidSettings />
           </TabsContent>
         </Tabs>
       </div>

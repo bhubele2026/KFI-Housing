@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { KfiLogo } from "@/components/kfi-logo";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData } from "@/context/data-store";
-import { Briefcase, X } from "lucide-react";
+import { Briefcase, X, Settings } from "lucide-react";
 
 /**
  * Professional top navigation bar (navy), the primary "clicker" for the main
@@ -32,6 +32,16 @@ export function TopNav() {
     <header className="hidden md:flex h-14 items-center gap-6 bg-[#0b1f3a] px-6 text-white">
       <Link href="/dashboard" className="flex items-center" aria-label="KFI Workforce Deployment">
         <KfiLogo variant="mark" className="h-8 text-white" />
+      </Link>
+
+      <Link
+        href="/settings"
+        data-testid="topnav-settings"
+        aria-label={t("nav.settings", "Settings")}
+        title={t("nav.settings", "Settings")}
+        className="rounded-md p-2 text-blue-100/70 transition-colors hover:bg-white/5 hover:text-white"
+      >
+        <Settings className="h-5 w-5" />
       </Link>
 
       <nav className="flex items-center gap-1">

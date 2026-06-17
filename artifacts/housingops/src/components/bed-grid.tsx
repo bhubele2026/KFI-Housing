@@ -28,6 +28,7 @@ import {
   LogOut,
   UserPlus,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { titleCaseName } from "@/lib/name-format";
@@ -68,7 +69,7 @@ export function PropertyBedTable({
 }) {
   const {
     properties, rooms, beds, occupants,
-    addOccupant, addBed, addRoom, updateBed, updateOccupant, deleteBed, deleteRoom,
+    addOccupant, addBed, addRoom, updateRoom, updateBed, updateOccupant, deleteBed, deleteRoom,
   } = useData();
 
   const rosterPeople: RosterPerson[] = (useListActiveRoster().data?.people ?? []).map((p) => ({
@@ -195,10 +196,12 @@ export function PropertyBedTable({
     const nextNum = existingBeds.reduce((m, b) => Math.max(m, b.bedNumber), 0) + 1;
     addBed({ id: `bed-${Date.now()}`, propertyId: property.id, bedNumber: nextNum, roomId, status: "Vacant", occupantId: null });
   };
-  const handleAddUnit = (unitCount: number) => {
+  const handleAddUnit = (name: string, bedCount: number) => {
     const roomId = `room-${Date.now()}`;
-    addRoom({ id: roomId, propertyId: property.id, buildingId: "", name: `New Unit ${unitCount + 1}`, sqft: 0, bathrooms: 0, monthlyRent: 0 });
-    addBed({ id: `bed-${Date.now() + 1}`, propertyId: property.id, bedNumber: 1, roomId, status: "Vacant", occupantId: null });
+    addRoom({ id: roomId, propertyId: property.id, buildingId: "", name: name.trim() || "New Unit", sqft: 0, bathrooms: 0, monthlyRent: 0 });
+    for (let i = 0; i < Math.max(1, bedCount); i++) {
+      addBed({ id: `bed-${Date.now() + 1 + i}`, propertyId: property.id, bedNumber: i + 1, roomId, status: "Vacant", occupantId: null });
+    }
   };
   const handleRemoveUnit = async (roomId: string, roomBeds: Bed[]) => {
     for (const b of roomBeds) deleteBed(b.id);
@@ -234,20 +237,14 @@ export function PropertyBedTable({
           <Badge variant={occupied < total ? "secondary" : "default"}>
             {occupied}/{total} beds filled
           </Badge>
-          <Button type="button" variant="outline" size="sm" className="gap-1 h-7"
-            onClick={() => handleAddUnit(roomRows.length)} title="Add a new unit / room with a bed">
-            <Plus className="h-3.5 w-3.5" /> Add unit
-          </Button>
+          <AddUnitDialog count={roomRows.length} onCreate={handleAddUnit} />
         </div>
       </div>
 
       {total === 0 ? (
         <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground">
           <span>No beds set up yet for this property.</span>
-          <Button type="button" variant="outline" size="sm" className="gap-1 h-7 shrink-0"
-            onClick={() => handleAddUnit(roomRows.length)}>
-            <Plus className="h-3.5 w-3.5" /> Add unit
-          </Button>
+          <AddUnitDialog count={roomRows.length} onCreate={handleAddUnit} />
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -271,7 +268,7 @@ export function PropertyBedTable({
                   <tr key={room.roomId} className="border-t hover:bg-muted/20">
                     <td className="px-3 py-2.5">
                       <div className="group/r flex items-center gap-2">
-                        <span className="font-medium truncate">{room.name}</span>
+                        <RenameUnitName name={room.name} onRename={(v) => updateRoom(room.roomId, { name: v })} />
                         <button type="button" onClick={() => handleAddBed(room.roomId, room.beds)}
                           title="Add a bed to this unit"
                           className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0">
@@ -484,6 +481,78 @@ function BedCell({ bed, occ, ...h }: { bed: Bed; occ: Occupant | undefined } & C
         🧹
       </button>
     </div>
+  );
+}
+
+// Add a unit/room with a name + a chosen number of beds in one step,
+// instead of dropping a generically-named "New Unit" with a single bed.
+function AddUnitDialog({ count, onCreate }: { count: number; onCreate: (name: string, beds: number) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [beds, setBeds] = useState("2");
+  const reset = () => { setName(""); setBeds("2"); };
+  const create = () => {
+    const n = Math.min(12, Math.max(1, parseInt(beds, 10) || 1));
+    onCreate(name.trim() || `Unit ${count + 1}`, n);
+    setOpen(false);
+    reset();
+  };
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="gap-1 h-7 shrink-0">
+          <Plus className="h-3.5 w-3.5" /> Add unit
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>Add a unit</DialogTitle></DialogHeader>
+        <div className="space-y-3 pt-1">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Unit / room name</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={`e.g. Room ${count + 1}, Apt 2B`} autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") create(); }} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Number of beds</label>
+            <Input type="number" min={1} max={12} value={beds} onChange={(e) => setBeds(e.target.value)} className="w-24"
+              onKeyDown={(e) => { if (e.key === "Enter") create(); }} />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" onClick={() => { setOpen(false); reset(); }}>Cancel</Button>
+            <Button onClick={create}>Add unit</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Inline rename for a unit/room name — a hover pencil flips to an input so
+// the generic "New Unit" label is easy to correct without a trap-click.
+function RenameUnitName({ name, onRename }: { name: string; onRename: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(name);
+  if (editing) {
+    const save = () => { const v = val.trim(); if (v && v !== name) onRename(v); setEditing(false); };
+    return (
+      <Input
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setVal(name); setEditing(false); } }}
+        className="h-7 w-40 text-sm font-medium"
+      />
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 min-w-0">
+      <span className="font-medium truncate">{name}</span>
+      <button type="button" onClick={() => { setVal(name); setEditing(true); }} title="Rename unit"
+        className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-primary shrink-0">
+        <Pencil className="h-3 w-3" />
+      </button>
+    </span>
   );
 }
 

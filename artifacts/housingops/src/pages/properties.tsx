@@ -6,7 +6,6 @@ import { formatPropertyName } from "@/lib/property-name";
 import { InlineEdit } from "@/pages/property-detail";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
-import { HousingAuditPanel } from "@/components/housing-audit-panel";
 import { useData } from "@/context/data-store";
 import { RenewLeasePopover } from "@/components/renew-lease-popover";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
@@ -23,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Plus, ChevronRight, ChevronDown, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Download, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Search, Plus, ChevronRight, ChevronDown, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, Briefcase, X, Home, Map as MapIcon, Table as TableIcon, MapPinOff, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { PortfolioMap, type MappableProperty } from "@/components/portfolio-map";
 import { EmptyStateRow } from "@/components/empty-state";
 import {
@@ -33,7 +32,6 @@ import { motion } from "framer-motion";
 import { StarRating } from "@/components/star-rating";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { toCsv, downloadCsv, timestampedCsvName } from "@/lib/csv";
 import {
   dismissGeocodeFailure,
   formatGeocodeAddress,
@@ -1348,43 +1346,6 @@ export default function Properties() {
     [updateProperty],
   );
 
-  const handleDownloadCsv = () => {
-    const rows = filtered.map((property) => {
-      const propBeds = beds.filter((b) => b.propertyId === property.id);
-      const occupied = propBeds.filter((b) => b.status === "Occupied").length;
-      const vacant = propBeds.length - occupied;
-      const activeLease = leases.find((l) => l.propertyId === property.id && l.status === "Active");
-      const renewal = activeLease ? getRenewalInfo(activeLease.endDate) : null;
-      const overallRating = computeOverallRating(property.ratings);
-      const customer = customerById.get(property.customerId);
-      return { property, customer, occupied, vacant, propBeds, activeLease, renewal, overallRating };
-    });
-    const csv = toCsv(rows, [
-      { header: "Property",        value: (r) => r.property.name },
-      { header: "Customer",        value: (r) => r.customer?.name ?? "" },
-      { header: "Address",         value: (r) => r.property.address },
-      { header: "City",            value: (r) => r.property.city },
-      { header: "State",           value: (r) => r.property.state },
-      { header: "ZIP",             value: (r) => r.property.zip },
-      { header: "Total Beds",      value: (r) => r.propBeds.length },
-      { header: "Occupied",        value: (r) => r.occupied },
-      { header: "Vacant",          value: (r) => r.vacant },
-      { header: "Monthly Rent",    value: (r) => r.property.monthlyRent },
-      { header: "Status",          value: (r) => r.property.status },
-      { header: "Overall Rating",  value: (r) => (r.overallRating === null ? "" : r.overallRating) },
-      { header: "Lease End Date",  value: (r) => r.activeLease?.endDate ?? "" },
-      { header: "Days to Renewal", value: (r) => (r.renewal ? r.renewal.days : "") },
-      { header: "Landlord",        value: (r) => r.property.landlordName },
-      { header: "Landlord Email",  value: (r) => r.property.landlordEmail },
-      { header: "Landlord Phone",  value: (r) => r.property.landlordPhone },
-    ]);
-    downloadCsv(timestampedCsvName("housingops-properties"), csv);
-    toast({
-      title: t("toasts.propertiesExportedTitle"),
-      description: t("toasts.propertiesExportedDescription", { count: filtered.length }),
-    });
-  };
-
   return (
     <MainLayout>
       <motion.div
@@ -1431,23 +1392,12 @@ export default function Properties() {
                 {t("pages.properties.mapView")}
               </Button>
             </div>
-            <Button
-              variant="outline"
-              onClick={handleDownloadCsv}
-              disabled={isLoading || filtered.length === 0}
-              data-testid="button-download-properties-csv"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {t("pages.properties.downloadCsv")}
-            </Button>
             <Button onClick={openAdd} data-testid="button-add-property">
               <Plus className="mr-2 h-4 w-4" />
               {t("pages.properties.addProperty")}
             </Button>
           </>}
         />
-
-        <HousingAuditPanel properties={properties} leases={leases} />
 
         {(activeCustomerName || needsReviewFilter === "NeedsReview") && (
           <div className="flex items-center gap-2 flex-wrap">

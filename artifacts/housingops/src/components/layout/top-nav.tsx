@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { KfiLogo } from "@/components/kfi-logo";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { useData } from "@/context/data-store";
-import { Briefcase, X, Settings } from "lucide-react";
+import { computeHousingAudit } from "@/components/housing-audit-panel";
+import { Briefcase, X, Settings, ClipboardList } from "lucide-react";
 
 /**
  * Professional top navigation bar (navy), the primary "clicker" for the main
@@ -24,9 +26,14 @@ export function TopNav() {
   const [location] = useLocation();
   const { t } = useTranslation();
   const { customerId, setCustomerId } = useCustomerScope();
-  const { customers } = useData();
+  const { customers, properties, leases } = useData();
   const scoped =
     customerId !== ALL_CUSTOMERS ? customers.find((c) => c.id === customerId) : undefined;
+  // Open data-quality issue count for the Review badge.
+  const reviewCount = useMemo(() => {
+    const a = computeHousingAudit(properties, leases);
+    return a.missingRent.length + a.missingDates.length + a.duplicates.length;
+  }, [properties, leases]);
 
   return (
     <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 bg-[#0b1f3a] px-4 py-2 text-white sm:px-6">
@@ -73,6 +80,23 @@ export function TopNav() {
             </button>
           </span>
         )}
+        <Link
+          href="/review"
+          data-testid="topnav-review"
+          aria-label="Review"
+          title="Review — data to clean up"
+          className={
+            "relative rounded-md p-2 transition-colors hover:bg-white/5 hover:text-white " +
+            (location === "/review" ? "text-white" : "text-blue-100/70")
+          }
+        >
+          <ClipboardList className="h-5 w-5" />
+          {reviewCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-amber-500 px-1 text-center text-[10px] font-semibold leading-4 text-white">
+              {reviewCount > 99 ? "99+" : reviewCount}
+            </span>
+          )}
+        </Link>
         <Link
           href="/settings"
           data-testid="topnav-settings"

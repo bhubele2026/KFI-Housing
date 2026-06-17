@@ -42,6 +42,7 @@ const Customers = lazyWithReload(() => import("@/pages/customers"));
 const CustomerDetail = lazyWithReload(() => import("@/pages/customer-detail"));
 const CustomerBeds = lazyWithReload(() => import("@/pages/customer-beds"));
 const Properties = lazyWithReload(() => import("@/pages/properties"));
+const Review = lazyWithReload(() => import("@/pages/review"));
 const PropertyDetail = lazyWithReload(() => import("@/pages/property-detail"));
 const Leases = lazyWithReload(() => import("@/pages/leases"));
 const LeaseDetail = lazyWithReload(() => import("@/pages/lease-detail"));
@@ -168,6 +169,7 @@ function AppRoutes() {
         <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/qbo/mapping-rules" component={QboMappingRules} />
         <Route path="/insurance" component={InsuranceCertificates} />
+        <Route path="/review" component={Review} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/assistant/changelog" component={AssistantChangelog} />
         <Route path="/transport/vehicles" component={Vehicles} />

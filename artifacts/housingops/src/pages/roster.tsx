@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useListActiveRoster } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,14 +49,46 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const money = (n: number) =>
   `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}/wk`;
 
+type RosterRow = {
+  personId: string;
+  name: string;
+  company: string;
+  jobTitle: string;
+  hasDeduction: boolean;
+  weeklyDeduction: number;
+};
+type RosterResponse = {
+  asOf: string;
+  payPeriod: string;
+  periods: string[];
+  count: number;
+  withDeduction: number;
+  people: RosterRow[];
+};
+
 export default function RosterPage() {
   const [q, setQ] = useState("");
   const [company, setCompany] = useState<string>("");
   // "all" | "deduction" | "gap" (gap = has deduction but not placed)
   const [view, setView] = useState<"all" | "deduction" | "gap">("all");
   const [showStale, setShowStale] = useState(false);
+  const [period, setPeriod] = useState<string>(""); // "" = latest payroll period
 
-  const rosterQuery = useListActiveRoster();
+  // Roster for the selected payroll period (period="" → latest). Fetched
+  // directly (not the generated hook) so we can pass ?period=; the API is
+  // open same-origin. Cached/keyed by period server-side.
+  const rosterQuery = useQuery({
+    queryKey: ["roster-active", period],
+    queryFn: async (): Promise<RosterResponse> => {
+      const res = await fetch(
+        `/api/roster/active${period ? `?period=${encodeURIComponent(period)}` : ""}`,
+      );
+      if (!res.ok) throw new Error(`roster ${res.status}`);
+      return res.json();
+    },
+  });
+  const periods = rosterQuery.data?.periods ?? [];
+  const payPeriod = rosterQuery.data?.payPeriod ?? "";
   const { occupants, properties, rooms, beds, addOccupant, updateBed, updateOccupant } = useData();
 
   const people = rosterQuery.data?.people ?? [];
@@ -222,14 +254,31 @@ export default function RosterPage() {
           title="Active Roster"
           description="Everyone on the last payroll run (live from Zenople). Tagged by housing deduction, so you can spot anyone being charged for housing who isn't placed in a bed — then place them."
           actions={
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search name, company, role…"
-                className="w-72 pl-8"
-              />
+            <div className="flex items-center gap-2">
+              {periods.length > 0 && (
+                <Select value={period || payPeriod} onValueChange={setPeriod}>
+                  <SelectTrigger className="w-44" data-testid="select-roster-period">
+                    <SelectValue placeholder="Pay period" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {periods.map((p, i) => (
+                      <SelectItem key={p} value={p}>
+                        Pay period {p}
+                        {i === 0 ? " (latest)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search name, company, role…"
+                  className="w-72 pl-8"
+                />
+              </div>
             </div>
           }
         />

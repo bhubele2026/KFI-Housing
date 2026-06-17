@@ -287,7 +287,13 @@ export async function fetchActiveRoster(
 // return the distinct people paid in it. (Active assignments + housing
 // deductions are layered on top by the route.)
 const PAYROLL_ACTION = "PayrollData";
-const PAYROLL_LOOKBACK_DAYS = 21; // spans the last ~3 weekly runs
+// The app went live June 2026, so all payroll worth showing is within a
+// couple months — a 60-day modified-time window covers every period back
+// to go-live with margin while staying well under the "Large data set"
+// ceiling (which a multi-year window would trip).
+const PAYROLL_LOOKBACK_DAYS = 60;
+// Hard floor: never expose payroll periods before the app's go-live.
+export const PAYROLL_GO_LIVE_FLOOR = "2026-06-01";
 const ACCT_PERIOD_KEYS = ["AccountingPeriod", "accountingPeriod", "PayPeriod", "payPeriod"];
 const CHECK_DATE_KEYS = ["CheckDate", "checkDate", "PayDate", "payDate"];
 
@@ -299,8 +305,10 @@ export interface PayrollPerson {
 export interface PayrollRosterResult {
   asOf: string;
   source: string;
-  /** The AccountingPeriod (or check date) we scoped to, for display. */
+  /** The AccountingPeriod we scoped to (the selected period), for display. */
   payPeriod: string;
+  /** Distinct AccountingPeriods present (>= go-live floor), newest first. */
+  periods: string[];
   discoveredFields: string[];
   people: PayrollPerson[];
 }
@@ -315,6 +323,7 @@ export interface PayrollRosterResult {
  */
 export async function fetchLastPayrollPeople(
   log: Logger = defaultLogger,
+  opts: { period?: string } = {},
 ): Promise<PayrollRosterResult> {
   const cfg = getConfig();
   const token = await getToken(cfg);
@@ -329,21 +338,31 @@ export async function fetchLastPayrollPeople(
     "zenople last-payroll: discovered fields",
   );
 
-  // Find the latest period marker present across the window.
-  let latestPeriod = "";
-  for (const row of raw) {
-    const p = dateOnly(pick(row, ACCT_PERIOD_KEYS)) || dateOnly(pick(row, CHECK_DATE_KEYS));
-    if (p && p > latestPeriod) latestPeriod = p;
-  }
+  const periodOf = (row: Record<string, unknown>): string =>
+    dateOnly(pick(row, ACCT_PERIOD_KEYS)) || dateOnly(pick(row, CHECK_DATE_KEYS));
+
+  // Distinct periods present, floored at go-live, newest first.
+  const periods = [
+    ...new Set(
+      raw
+        .map(periodOf)
+        .filter((p): p is string => !!p && p >= PAYROLL_GO_LIVE_FLOOR),
+    ),
+  ].sort((a, b) => b.localeCompare(a));
+
+  // Target period: the requested one (if present + on/after the floor and
+  // actually in the data), else the latest. Empty when no periods at all.
+  const requested =
+    opts.period && opts.period >= PAYROLL_GO_LIVE_FLOOR && periods.includes(opts.period)
+      ? opts.period
+      : "";
+  const targetPeriod = requested || periods[0] || "";
 
   const byPerson = new Map<string, PayrollPerson>();
   for (const row of raw) {
-    // When we have a period marker, keep only the latest run; otherwise
-    // take everyone in the window.
-    if (latestPeriod) {
-      const p = dateOnly(pick(row, ACCT_PERIOD_KEYS)) || dateOnly(pick(row, CHECK_DATE_KEYS));
-      if (p && p !== latestPeriod) continue;
-    }
+    // Scope to the target period when we have one; otherwise (no period
+    // markers at all) take everyone in the window.
+    if (targetPeriod && periodOf(row) !== targetPeriod) continue;
     const personId = str(pick(row, PERSON_ID_KEYS));
     let name = str(pick(row, NAME_KEYS));
     if (!name) {
@@ -356,7 +375,8 @@ export async function fetchLastPayrollPeople(
   return {
     asOf: now.toISOString(),
     source: PAYROLL_ACTION,
-    payPeriod: latestPeriod,
+    payPeriod: targetPeriod,
+    periods,
     discoveredFields,
     people: [...byPerson.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };

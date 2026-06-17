@@ -24,6 +24,8 @@ interface RosterResult {
   asOf: string;
   source: string;
   payPeriod: string;
+  /** Available payroll periods (>= go-live floor), newest first. */
+  periods: string[];
   count: number;
   withDeduction: number;
   excludedCorp: number;
@@ -31,7 +33,9 @@ interface RosterResult {
   payrollFields: string[];
   people: RosterPerson[];
 }
-let cache: { at: number; result: RosterResult } | null = null;
+// Cache per selected period ("" = latest/default). Zenople re-auth is
+// capped at 20/hr, so we keep each period's composed roster ~15 min.
+const cache = new Map<string, { at: number; result: RosterResult }>();
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -65,8 +69,8 @@ function isCorpCompany(company: string): boolean {
  * The client then computes placement from occupants and highlights the
  * key group: has a housing deduction but is NOT placed in a bed.
  */
-async function buildRoster(): Promise<RosterResult> {
-  const payroll = await fetchLastPayrollPeople(logger);
+async function buildRoster(period?: string): Promise<RosterResult> {
+  const payroll = await fetchLastPayrollPeople(logger, { period });
 
   // Company + role per person from active assignments. Non-fatal: if it
   // fails we still return the payroll headcount, just without company.
@@ -142,6 +146,7 @@ async function buildRoster(): Promise<RosterResult> {
     asOf: payroll.asOf,
     source: "PayrollData + AssignmentData + DeductionData",
     payPeriod: payroll.payPeriod,
+    periods: payroll.periods,
     count: people.length,
     withDeduction: people.filter((p) => p.hasDeduction).length,
     excludedCorp,
@@ -160,18 +165,23 @@ async function buildRoster(): Promise<RosterResult> {
 router.get("/roster/active", async (req, res): Promise<void> => {
   const wantFields = req.query.fields === "1" || req.query.fields === "true";
   const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+  // ?period=YYYY-MM-DD selects a prior payroll period (AccountingPeriod).
+  // Anything blank/invalid falls back to the latest in buildRoster.
+  const period = typeof req.query.period === "string" ? req.query.period : "";
 
   try {
     const now = Date.now();
-    if (forceRefresh || !cache || now - cache.at > CACHE_TTL_MS) {
-      cache = { at: now, result: await buildRoster() };
+    const cached = cache.get(period);
+    if (forceRefresh || !cached || now - cached.at > CACHE_TTL_MS) {
+      cache.set(period, { at: now, result: await buildRoster(period || undefined) });
     }
-    const r = cache.result;
+    const r = cache.get(period)!.result;
     if (wantFields) {
       res.json({
         asOf: r.asOf,
         source: r.source,
         payPeriod: r.payPeriod,
+        periods: r.periods,
         count: r.count,
         withDeduction: r.withDeduction,
         excludedCorp: r.excludedCorp,
@@ -184,6 +194,7 @@ router.get("/roster/active", async (req, res): Promise<void> => {
       asOf: r.asOf,
       source: r.source,
       payPeriod: r.payPeriod,
+      periods: r.periods,
       count: r.count,
       withDeduction: r.withDeduction,
       people: r.people,
@@ -196,6 +207,7 @@ router.get("/roster/active", async (req, res): Promise<void> => {
       asOf: new Date().toISOString(),
       source: "PayrollData",
       payPeriod: "",
+      periods: [],
       count: 0,
       withDeduction: 0,
       people: [],

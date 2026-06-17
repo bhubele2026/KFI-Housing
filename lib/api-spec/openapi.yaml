@@ -2921,6 +2921,10 @@ components:
         payPeriod:
           type: string
           description: The last payroll period (AccountingPeriod) the headcount is scoped to.
+        periods:
+          type: array
+          items: { type: string }
+          description: Available payroll periods (>= the June go-live floor), newest first.
         count:
           type: integer
           description: Total people on the last payroll run.

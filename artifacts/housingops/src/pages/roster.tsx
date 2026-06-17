@@ -14,11 +14,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Users, AlertTriangle, Home } from "lucide-react";
+import { Search, Users, AlertTriangle, Home, ChevronDown, ChevronRight, ArrowLeftRight, LogOut } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useData } from "@/context/data-store";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { CustomerLogo } from "@/components/customer-logo";
 import { shortPropertyName } from "@/lib/property-name";
+import type { Occupant } from "@/data/mockData";
 
 /**
  * Active Roster — built the way payroll thinks about it:
@@ -39,9 +54,10 @@ export default function RosterPage() {
   const [company, setCompany] = useState<string>("");
   // "all" | "deduction" | "gap" (gap = has deduction but not placed)
   const [view, setView] = useState<"all" | "deduction" | "gap">("all");
+  const [showStale, setShowStale] = useState(false);
 
   const rosterQuery = useListActiveRoster();
-  const { occupants, properties, addOccupant, updateBed } = useData();
+  const { occupants, properties, rooms, beds, addOccupant, updateBed, updateOccupant } = useData();
 
   const people = rosterQuery.data?.people ?? [];
 
@@ -118,6 +134,52 @@ export default function RosterPage() {
         !names.has(norm(o.name)),
     );
   }, [people, occupants]);
+
+  const roomName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rooms) m.set(r.id, r.name);
+    return m;
+  }, [rooms]);
+
+  // Where an occupant currently sits: "Property · Room · Bed N".
+  const locationOf = (o: Occupant): string => {
+    const parts: string[] = [];
+    if (o.propertyId) parts.push(propertyName.get(o.propertyId) ?? "—");
+    const bed = o.bedId ? beds.find((b) => b.id === o.bedId) : undefined;
+    if (bed) {
+      const rn = roomName.get(bed.roomId);
+      if (rn) parts.push(rn);
+      parts.push(`Bed ${bed.bedNumber}`);
+    }
+    return parts.join(" · ") || "—";
+  };
+
+  // Vacant, ready beds an occupant can be moved into (labelled).
+  const vacantBeds = useMemo(() => {
+    return beds
+      .filter((b) => b.status === "Vacant" && b.cleaningStatus === "ready")
+      .map((b) => ({
+        id: b.id,
+        propertyId: b.propertyId,
+        label: `${propertyName.get(b.propertyId) ?? "—"} · ${roomName.get(b.roomId) ?? "—"} · Bed ${b.bedNumber}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [beds, propertyName, roomName]);
+
+  // Remove someone from their bed (records the move-out): free the bed +
+  // mark the occupant Former. Server frees the prior bed too — belt &
+  // braces here keeps the UI instant.
+  const handleMoveOut = (o: Occupant) => {
+    if (o.bedId) updateBed(o.bedId, { status: "Vacant", occupantId: null });
+    updateOccupant(o.id, { status: "Former", bedId: null });
+  };
+
+  // Move someone to a different vacant bed. The occupant PATCH frees the
+  // prior bed automatically; we mark the destination occupied here.
+  const handleMove = (o: Occupant, bedId: string, propertyId: string) => {
+    updateOccupant(o.id, { bedId, propertyId });
+    updateBed(bedId, { status: "Occupied", occupantId: o.id });
+  };
 
   const StatCard = ({
     label,
@@ -220,22 +282,78 @@ export default function RosterPage() {
             </div>
 
             {staleOccupants.length > 0 && (
-              <Card className="border-amber-300">
-                <CardContent className="py-3 flex items-start gap-2 text-sm">
+              <Card className="border-amber-300 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowStale((v) => !v)}
+                  className="w-full flex items-start gap-2 text-sm text-left py-3 px-4 hover:bg-amber-50/50"
+                  data-testid="button-toggle-stale-occupants"
+                >
                   <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                  <div>
+                  <span className="flex-1">
                     <span className="font-medium">
                       {staleOccupants.length} housed{" "}
                       {staleOccupants.length === 1 ? "person is" : "people are"} not on the
                       last payroll
                     </span>{" "}
-                    — likely move-outs to record:{" "}
-                    <span className="text-muted-foreground">
-                      {staleOccupants.slice(0, 8).map((o) => o.name).join(", ")}
-                      {staleOccupants.length > 8 ? `, +${staleOccupants.length - 8} more` : ""}
-                    </span>
+                    — likely move-outs. Click to review, move, or move them out.
+                  </span>
+                  {showStale ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  )}
+                </button>
+                {showStale && (
+                  <div className="border-t">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Works for</TableHead>
+                          <TableHead>Current bed</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {staleOccupants.map((o) => (
+                          <TableRow key={o.id}>
+                            <TableCell className="font-medium">{o.name}</TableCell>
+                            <TableCell>
+                              {o.company ? (
+                                <span className="flex items-center gap-2">
+                                  <CustomerLogo name={o.company} size={16} />
+                                  {o.company}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{locationOf(o)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <MoveBedDialog
+                                  occupant={o}
+                                  vacantBeds={vacantBeds}
+                                  onMove={handleMove}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="gap-1 h-7 text-destructive hover:text-destructive"
+                                  onClick={() => handleMoveOut(o)}
+                                  data-testid={`button-stale-moveout-${o.id}`}
+                                >
+                                  <LogOut className="h-3.5 w-3.5" /> Move out
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                </CardContent>
+                )}
               </Card>
             )}
 
@@ -366,5 +484,84 @@ export default function RosterPage() {
         )}
       </div>
     </MainLayout>
+  );
+}
+
+// Move an existing occupant into a different vacant bed. Their current
+// bed is freed by the occupant PATCH server-side; we mark the new bed
+// occupied. Used from the "not on payroll" review table.
+function MoveBedDialog({
+  occupant,
+  vacantBeds,
+  onMove,
+}: {
+  occupant: Occupant;
+  vacantBeds: { id: string; propertyId: string; label: string }[];
+  onMove: (o: Occupant, bedId: string, propertyId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [bedId, setBedId] = useState("");
+  const chosen = vacantBeds.find((b) => b.id === bedId);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setBedId("");
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1 h-7"
+          data-testid={`button-stale-move-${occupant.id}`}
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" /> Move
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Move {occupant.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-1">
+          <p className="text-sm text-muted-foreground">
+            Pick a vacant, ready bed to move them into. Their current bed is freed
+            automatically.
+          </p>
+          <Select value={bedId} onValueChange={setBedId}>
+            <SelectTrigger data-testid={`select-stale-move-bed-${occupant.id}`}>
+              <SelectValue
+                placeholder={vacantBeds.length ? "Choose a vacant bed…" : "No vacant beds available"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {vacantBeds.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!chosen}
+              onClick={() => {
+                if (chosen) {
+                  onMove(occupant, chosen.id, chosen.propertyId);
+                  setOpen(false);
+                }
+              }}
+              data-testid={`button-stale-move-confirm-${occupant.id}`}
+            >
+              Move
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

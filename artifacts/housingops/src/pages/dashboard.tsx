@@ -141,9 +141,9 @@ export default function Dashboard() {
   }, [deductions, occupants, effectivePeriod]);
 
   const gapPositive = summary.totalRecoveryGap > 0;
-  // Every under-recovering property this period (no top-N cap) — the card
+  // All properties this period (recovered or not), worst gap first — the card
   // body scrolls so a long list never blows up the dashboard layout.
-  const losing = rows.filter((r) => r.recoveryGap > 0);
+  const losing = [...rows].sort((a, b) => b.recoveryGap - a.recoveryGap);
   const occPct = summary.totalBeds > 0 ? Math.round((summary.totalOccupied / summary.totalBeds) * 100) : null;
 
   const QUICK = [
@@ -198,11 +198,11 @@ export default function Dashboard() {
         )}
 
         <div className="grid lg:grid-cols-3 gap-5">
-          {/* Under-recovering properties */}
+          {/* Properties — all of them, worst gap first */}
           <Card className="lg:col-span-2 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b">
               <h2 className="font-semibold text-sm flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-muted-foreground" /> Under-recovering properties
+                <DollarSign className="h-4 w-4 text-muted-foreground" /> Properties
               </h2>
               <Link href="/economics" className="text-xs text-primary hover:underline">Rent Recovery →</Link>
             </div>
@@ -222,7 +222,7 @@ export default function Dashboard() {
                   {losing.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        No under-recovering properties this period.
+                        No properties yet.
                       </TableCell>
                     </TableRow>
                   ) : (

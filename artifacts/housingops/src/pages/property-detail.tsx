@@ -1802,6 +1802,7 @@ export default function PropertyDetail() {
           <StatCard label={t("pages.propertyDetail.statMonthlyRevenue")} value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
           <StatCard
             testId="stat-lease-rent"
+            onClick={() => { setActiveTab("leases"); scrollToSection("section-tabs"); }}
             label={property.rentFree ? t("pages.propertyDetail.statOtherCosts") : t("pages.propertyDetail.statLeaseRent")}
             value={
               property.rentFree
@@ -1851,7 +1852,7 @@ export default function PropertyDetail() {
               </span>
             }
           />
-          <StatCard label={t("pages.propertyDetail.statUtilityCost")} value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={t("pages.propertyDetail.statServicesCount", { count: propUtils.length })} />
+          <StatCard label={t("pages.propertyDetail.statUtilityCost")} value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={t("pages.propertyDetail.statServicesCount", { count: propUtils.length })} onClick={() => { setActiveTab("utilities"); scrollToSection("section-tabs"); }} />
           <StatCard
             testId="stat-rent-per-bed"
             label={t("pages.propertyDetail.statRentPerBed")}
@@ -1901,7 +1902,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs id="section-tabs" value={activeTab} onValueChange={setActiveTab} className="space-y-4 scroll-mt-20">
           <TabsList
             className={`grid w-full max-w-4xl ${propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"}`}
           >

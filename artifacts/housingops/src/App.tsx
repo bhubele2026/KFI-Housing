@@ -53,6 +53,7 @@ const OccupantDetail = lazyWithReload(() => import("@/pages/occupant-detail"));
 const Utilities = lazyWithReload(() => import("@/pages/utilities"));
 const Finance = lazyWithReload(() => import("@/pages/finance"));
 const Economics = lazyWithReload(() => import("@/pages/economics"));
+const Accounting = lazyWithReload(() => import("@/pages/accounting"));
 const RentalCompanies = lazyWithReload(() => import("@/pages/rental-companies"));
 const Roster = lazyWithReload(() => import("@/pages/roster"));
 const Reconciliation = lazyWithReload(() => import("@/pages/reconciliation"));
@@ -164,6 +165,7 @@ function AppRoutes() {
         <Route path="/utilities" component={Utilities} />
         <Route path="/finance" component={Finance} />
         <Route path="/economics" component={Economics} />
+        <Route path="/accounting" component={Accounting} />
         <Route path="/rental-companies" component={RentalCompanies} />
         <Route path="/roster" component={Roster} />
         <Route path="/reconciliation" component={Reconciliation} />

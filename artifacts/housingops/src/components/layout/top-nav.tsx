@@ -18,6 +18,7 @@ const PRIMARY = [
   { href: "/customers", key: "nav.customers", fallback: "Customers" },
   { href: "/roster", key: "nav.roster", fallback: "Roster" },
   { href: "/economics", key: "nav.economics", fallback: "Economics" },
+  { href: "/accounting", key: "nav.accounting", fallback: "Accounting" },
   { href: "/finance", key: "nav.finance", fallback: "Finance" },
 ];
 

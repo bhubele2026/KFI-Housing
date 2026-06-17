@@ -75,7 +75,10 @@ export function PropertyBedTable({
     personId: p.personId,
     name: p.name,
     company: p.company,
-    aliases: p.aliases ?? [],
+    // Cast-safe: the generated client may not carry `aliases` until codegen
+    // re-runs on deploy; reading it defensively keeps `pnpm build` typecheck
+    // green either way.
+    aliases: (p as { aliases?: string[] }).aliases ?? [],
   }));
   const rosterIds = new Set(rosterPeople.map((p) => p.personId));
 

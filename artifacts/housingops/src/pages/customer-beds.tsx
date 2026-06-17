@@ -33,6 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
+import { titleCaseName } from "@/lib/name-format";
 import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
 import type { Bed, Occupant } from "@/data/mockData";
 
@@ -100,6 +101,26 @@ export default function CustomerBeds() {
     };
   }, [properties, rooms, beds, occupants, id]);
 
+  // Which property the move-in/out scheduler is pointed at. "" = the
+  // read-only customer-wide overview; pick a property to actually schedule
+  // (the per-property add form is enabled then).
+  const [moveProp, setMoveProp] = useState<string>("");
+  const scopedProperties = useMemo(
+    () =>
+      properties.filter(
+        (p) => p.customerId === id || (p.sharedWithCustomerIds ?? []).includes(id),
+      ),
+    [properties, id],
+  );
+  const moveScope = useMemo(() => {
+    if (!moveProp) return null;
+    return {
+      propRooms: rooms.filter((r) => r.propertyId === moveProp),
+      propBeds: beds.filter((b) => b.propertyId === moveProp),
+      propOccupants: occupants.filter((o) => o.propertyId === moveProp),
+    };
+  }, [moveProp, rooms, beds, occupants]);
+
   const occupantByBedId = useMemo(() => {
     const m = new Map<string, Occupant>();
     for (const o of occupants) {
@@ -156,7 +177,7 @@ export default function CustomerBeds() {
     id: `occ-${Date.now()}`,
     propertyId: bed.propertyId,
     bedId: bed.id,
-    name: person.name,
+    name: titleCaseName(person.name),
     employeeId: person.personId,
     company: person.company ?? "",
     moveInDate: today(),
@@ -247,16 +268,43 @@ export default function CustomerBeds() {
           </h1>
         </div>
 
-        {/* Upcoming arrivals & departures across this customer's properties. */}
-        <ProjectedMoveInsSection
-          propertyId=""
-          propRooms={scopedForMoves.propRooms}
-          propBeds={scopedForMoves.propBeds}
-          propOccupants={scopedForMoves.propOccupants}
-          propertyNameById={scopedForMoves.propertyNameById}
-          readOnly
-          defaultView="out"
-        />
+        {/* Upcoming arrivals & departures. Pick a property to schedule a
+            move-in / move-out there; leave on "All" for the read-only
+            customer-wide overview. */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="text-xs text-muted-foreground">Schedule move-ins / move-outs for</span>
+            <Select value={moveProp || "__all"} onValueChange={(v) => setMoveProp(v === "__all" ? "" : v)}>
+              <SelectTrigger className="h-8 w-60" data-testid="select-move-property">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="__all">All properties (overview)</SelectItem>
+                {scopedProperties.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{shortPropertyName(p.name)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {moveProp && moveScope ? (
+            <ProjectedMoveInsSection
+              propertyId={moveProp}
+              propRooms={moveScope.propRooms}
+              propBeds={moveScope.propBeds}
+              propOccupants={moveScope.propOccupants}
+            />
+          ) : (
+            <ProjectedMoveInsSection
+              propertyId=""
+              propRooms={scopedForMoves.propRooms}
+              propBeds={scopedForMoves.propBeds}
+              propOccupants={scopedForMoves.propOccupants}
+              propertyNameById={scopedForMoves.propertyNameById}
+              readOnly
+              defaultView="out"
+            />
+          )}
+        </div>
 
         {isLoading ? (
           <Card>
@@ -445,8 +493,8 @@ function RosterPicker({ people, onPick }: { people: RosterPerson[]; onPick: (p: 
         ) : (
           filtered.slice(0, 200).map((p) => (
             <button key={p.personId} type="button" onClick={() => onPick(p)}
-              className="w-full text-left px-3 py-2.5 hover:bg-muted/50 flex items-center justify-between gap-3">
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+              className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center justify-between gap-3">
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{titleCaseName(p.name)}</span>
               <span className="shrink-0 max-w-[45%] truncate text-xs text-muted-foreground">{p.company}</span>
             </button>
           ))
@@ -492,7 +540,7 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
       <DialogTrigger asChild>
         <button type="button" className="block w-full text-left group/cell" title={`Manage ${occ.name}`}>
           <span className="block text-sm font-medium truncate group-hover/cell:text-primary group-hover/cell:underline">
-            {occ.name}
+            {titleCaseName(occ.name)}
           </span>
           <span className="mt-0.5 flex items-center gap-2 text-[11px] leading-tight">
             {payrollDeduction > 0 && (

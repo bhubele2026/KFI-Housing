@@ -41,6 +41,30 @@ function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Zenople returns names in ALL CAPS ("ANGEL G GONGORA"). Present them as
+// proper Title Case ("Angel G Gongora") at the source so every consumer
+// (roster page, bed pickers, occupant records) gets clean names. Names that
+// already carry lowercase are left alone (already cased / hand-corrected).
+function titleCaseName(raw: string): string {
+  const s = (raw ?? "").trim();
+  if (!s || /[a-z]/.test(s)) return s;
+  const capWord = (w: string): string => {
+    if (!w) return w;
+    if (w.length === 1) return w.toUpperCase(); // middle initial
+    if (w.includes("'"))
+      return w
+        .split("'")
+        .map((p) => (p ? p[0]!.toUpperCase() + p.slice(1) : p))
+        .join("'");
+    return w[0]!.toUpperCase() + w.slice(1);
+  };
+  return s
+    .toLowerCase()
+    .split(/\s+/)
+    .map((tok) => tok.split("-").map(capWord).join("-"))
+    .join(" ");
+}
+
 // PRIVACY: corp/internal employees must NEVER appear in the roster. Their
 // assignment "company" is the internal corporate entity, so we exclude by
 // company name. Tunable via env (comma-separated, case-insensitive
@@ -104,7 +128,7 @@ async function buildRoster(period?: string): Promise<RosterResult> {
     const weekly = deduction.get(p.personId) ?? 0;
     return {
       personId: p.personId,
-      name: p.name,
+      name: titleCaseName(p.name),
       company: (m?.company ?? "").trim(),
       jobTitle: m?.jobTitle ?? "",
       hasDeduction: weekly > 0,

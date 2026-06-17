@@ -28,7 +28,7 @@ export function TopNav() {
   // Open data-quality issue count for the Review badge.
   const reviewCount = useMemo(() => {
     const a = computeHousingAudit(properties, leases);
-    return a.missingRent.length + a.missingDates.length + a.duplicates.length;
+    return a.missingRent.length + a.missingDates.length + a.rentAnomalies.length + a.duplicates.length;
   }, [properties, leases]);
 
   return (

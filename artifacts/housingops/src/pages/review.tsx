@@ -70,6 +70,7 @@ function LeaseIssueSection({
               <span className="truncate">
                 <span className="font-medium">{r.propertyName}</span>
                 {r.unit ? <span className="text-muted-foreground"> · {r.unit}</span> : null}
+                {r.note ? <span className="text-muted-foreground"> — {r.note}</span> : null}
               </span>
               <span className="flex items-center gap-1 text-xs font-medium text-primary shrink-0">
                 Fix <ChevronRight className="h-3 w-3" />
@@ -89,7 +90,10 @@ export default function Review() {
     [properties, leases],
   );
   const total =
-    audit.missingRent.length + audit.missingDates.length + audit.duplicates.length;
+    audit.missingRent.length +
+    audit.missingDates.length +
+    audit.rentAnomalies.length +
+    audit.duplicates.length;
 
   return (
     <MainLayout>
@@ -137,6 +141,14 @@ export default function Review() {
               hrefFor={(r) =>
                 `/leases/${r.leaseId}?focus=dates&from=${encodeURIComponent("/review")}`
               }
+            />
+            <LeaseIssueSection
+              title="Rent looks wrong"
+              hint="Far higher than the other units in the same property — likely a typo."
+              icon={<span className="text-lg leading-none">⚠️</span>}
+              accent="border-l-red-500"
+              refs={audit.rentAnomalies}
+              hrefFor={(r) => `/leases/${r.leaseId}?from=${encodeURIComponent("/review")}`}
             />
 
             {audit.duplicates.length > 0 && (

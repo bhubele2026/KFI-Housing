@@ -35,6 +35,8 @@ export interface AuditLeaseRef {
   propertyId: string;
   propertyName: string;
   unit: string;
+  /** Optional inline detail (e.g. the suspicious rent amount). */
+  note?: string;
 }
 
 export interface DuplicateGroup {
@@ -45,8 +47,20 @@ export interface DuplicateGroup {
 export interface HousingAudit {
   missingRent: AuditLeaseRef[];
   missingDates: AuditLeaseRef[];
+  rentAnomalies: AuditLeaseRef[];
   duplicates: DuplicateGroup[];
   clear: boolean;
+}
+
+function median(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+}
+
+function usd(n: number): string {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
 function normalizeAddress(addr: string | undefined | null): string {
@@ -82,6 +96,35 @@ export function computeHousingAudit(
     if (isBlank(l.startDate) || isBlank(l.endDate)) missingDates.push(ref(l));
   }
 
+  // Rent anomalies: a per-unit monthly rent that's wildly out of line with
+  // the OTHER units in the same property (e.g. one unit at $10,000/mo when
+  // its siblings are all $995 — a clear data-entry slip, like a deposit or
+  // annual figure pasted into the monthly field). We compare within a
+  // property so legitimately-pricier whole-property leases (Siren at $7k for
+  // a 13-bed house) aren't false-flagged — those have no siblings to skew.
+  const rentAnomalies: AuditLeaseRef[] = [];
+  const monthlyByProp = new Map<string, Lease[]>();
+  for (const l of leases) {
+    if ((l.rateType ?? "monthly") !== "monthly") continue;
+    if (!l.monthlyRent || l.monthlyRent <= 0) continue;
+    const arr = monthlyByProp.get(l.propertyId) ?? [];
+    arr.push(l);
+    monthlyByProp.set(l.propertyId, arr);
+  }
+  for (const [, group] of monthlyByProp) {
+    if (group.length < 2) continue; // need siblings to compare against
+    for (const l of group) {
+      const others = group.filter((x) => x.id !== l.id).map((x) => x.monthlyRent!);
+      const med = median(others);
+      if (med > 0 && l.monthlyRent! >= 2000 && l.monthlyRent! >= med * 3) {
+        rentAnomalies.push({
+          ...ref(l),
+          note: `${usd(l.monthlyRent!)}/mo vs ${usd(med)} typical here`,
+        });
+      }
+    }
+  }
+
   // Possible duplicates: 2+ properties sharing the same non-blank street
   // address (normalized).
   const byAddress = new Map<string, { id: string; name: string }[]>();
@@ -102,10 +145,12 @@ export function computeHousingAudit(
   return {
     missingRent,
     missingDates,
+    rentAnomalies,
     duplicates,
     clear:
       missingRent.length === 0 &&
       missingDates.length === 0 &&
+      rentAnomalies.length === 0 &&
       duplicates.length === 0,
   };
 }

@@ -32,6 +32,8 @@ import {
 import { useData } from "@/context/data-store";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { shortPropertyName } from "@/lib/property-name";
+import { titleCaseName } from "@/lib/name-format";
+import { Sparkles } from "lucide-react";
 import type { Occupant } from "@/data/mockData";
 
 /**
@@ -47,6 +49,45 @@ import type { Occupant } from "@/data/mockData";
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 const money = (n: number) =>
   `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}/wk`;
+
+// ── Fuzzy name matching ──────────────────────────────────────────────
+// Lightweight similarity used to SUGGEST who a housed-but-not-on-payroll
+// person actually is on the live payroll (names drift: "Devin M. Law" vs
+// "Devin Law"). Dice coefficient over character bigrams + a last-name
+// token boost. Runs client-side over the few-hundred payroll names — no
+// external service needed.
+function bigrams(s: string): string[] {
+  const t = norm(s).replace(/[^a-z0-9 ]/g, "");
+  const grams: string[] = [];
+  for (let i = 0; i < t.length - 1; i++) grams.push(t.slice(i, i + 2));
+  return grams;
+}
+function dice(a: string, b: string): number {
+  const A = bigrams(a);
+  const B = bigrams(b);
+  if (A.length === 0 || B.length === 0) return 0;
+  const counts = new Map<string, number>();
+  for (const g of A) counts.set(g, (counts.get(g) ?? 0) + 1);
+  let overlap = 0;
+  for (const g of B) {
+    const c = counts.get(g) ?? 0;
+    if (c > 0) {
+      overlap++;
+      counts.set(g, c - 1);
+    }
+  }
+  return (2 * overlap) / (A.length + B.length);
+}
+function lastToken(s: string): string {
+  const parts = norm(s).replace(/[^a-z ]/g, "").split(" ").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+function nameScore(a: string, b: string): number {
+  let s = dice(a, b);
+  const la = lastToken(a);
+  if (la && la === lastToken(b)) s = Math.min(1, s + 0.15);
+  return s;
+}
 
 type RosterRow = {
   personId: string;
@@ -179,6 +220,38 @@ export default function RosterPage() {
         !names.has(norm(o.name)),
     );
   }, [people, occupants]);
+
+  // Suggested match: for each housed person NOT on the live payroll, find
+  // the closest name still on payroll (names drift between systems). Above
+  // a confidence floor we offer a one-click "Link" that ties the occupant
+  // to that Zenople person — resolving the mismatch.
+  const staleSuggestions = useMemo(() => {
+    const m = new Map<string, { personId: string; name: string; company: string; score: number }>();
+    for (const o of staleOccupants) {
+      let best: { personId: string; name: string; company: string; score: number } | null = null;
+      for (const p of people) {
+        const score = nameScore(o.name, p.name);
+        if (!best || score > best.score) {
+          best = { personId: p.personId, name: p.name, company: p.company, score };
+        }
+      }
+      if (best && best.score >= 0.55) m.set(o.id, best);
+    }
+    return m;
+  }, [staleOccupants, people]);
+
+  // Link a housed occupant to the suggested payroll person (adopts the
+  // Zenople id, canonical name + company) — they drop off the stale list.
+  const handleLinkToPayroll = (
+    o: Occupant,
+    s: { personId: string; name: string; company: string },
+  ) => {
+    updateOccupant(o.id, {
+      employeeId: s.personId,
+      name: s.name,
+      company: s.company || o.company,
+    });
+  };
 
   const roomName = useMemo(() => {
     const m = new Map<string, string>();
@@ -381,17 +454,37 @@ export default function RosterPage() {
                           <TableHead>Name</TableHead>
                           <TableHead>Works for</TableHead>
                           <TableHead>Current bed</TableHead>
+                          <TableHead>Suggested payroll match</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {staleOccupants.map((o) => (
+                        {staleOccupants.map((o) => {
+                          const sug = staleSuggestions.get(o.id);
+                          return (
                           <TableRow key={o.id}>
-                            <TableCell className="font-medium">{o.name}</TableCell>
+                            <TableCell className="font-medium">{titleCaseName(o.name)}</TableCell>
                             <TableCell>
                               {o.company || <span className="text-muted-foreground">—</span>}
                             </TableCell>
                             <TableCell className="text-muted-foreground">{locationOf(o)}</TableCell>
+                            <TableCell>
+                              {sug ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleLinkToPayroll(o, sug)}
+                                  title={`Link to ${titleCaseName(sug.name)} on payroll (${Math.round(sug.score * 100)}% name match)`}
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-xs hover:bg-primary/10"
+                                  data-testid={`button-stale-link-${o.id}`}
+                                >
+                                  <Sparkles className="h-3 w-3 text-primary" />
+                                  <span className="font-medium">{titleCaseName(sug.name)}</span>
+                                  <span className="text-muted-foreground">· Link</span>
+                                </button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No close match</span>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right">
                               <div className="inline-flex items-center gap-1.5">
                                 <MoveBedDialog
@@ -411,7 +504,8 @@ export default function RosterPage() {
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -419,29 +513,23 @@ export default function RosterPage() {
               </Card>
             )}
 
-            {/* Company filter chips */}
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setCompany("")}
-                className={
-                  "rounded-full border px-3 py-1 text-sm " +
-                  (company === "" ? "bg-primary text-primary-foreground border-primary" : "bg-card")
-                }
-              >
-                All ({people.length})
-              </button>
-              {companies.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCompany(c)}
-                  className={
-                    "rounded-full border px-3 py-1 text-sm " +
-                    (company === c ? "bg-primary text-primary-foreground border-primary" : "bg-card")
-                  }
-                >
-                  {c}
-                </button>
-              ))}
+            {/* Filters — a compact Company dropdown (replacing the old chip
+                wall) + Sort, kept on one tidy row. */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Company</span>
+                <Select value={company || "__all"} onValueChange={(v) => setCompany(v === "__all" ? "" : v)}>
+                  <SelectTrigger className="h-8 w-64" data-testid="select-roster-company">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="__all">All companies ({people.length})</SelectItem>
+                    {companies.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Sort</span>
                 <Select value={sort} onValueChange={(v) => setSort(v as typeof sort)}>
@@ -488,7 +576,7 @@ export default function RosterPage() {
                             key={r.personId}
                             className={gap ? "bg-amber-50/70 hover:bg-amber-50" : undefined}
                           >
-                            <TableCell className="font-medium">{r.name}</TableCell>
+                            <TableCell className="font-medium">{titleCaseName(r.name)}</TableCell>
                             <TableCell>
                               {r.company || <span className="text-muted-foreground">—</span>}
                             </TableCell>
@@ -523,7 +611,7 @@ export default function RosterPage() {
                               ) : (
                                 <AssignOccupantDialog
                                   initial={{
-                                    name: r.name,
+                                    name: titleCaseName(r.name),
                                     employeeId: r.personId,
                                     company: r.company,
                                     chargePerBed: r.weeklyDeduction || undefined,

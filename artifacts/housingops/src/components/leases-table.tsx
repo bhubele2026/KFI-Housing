@@ -161,6 +161,49 @@ function formatMoney(n: number): string {
 }
 
 /**
+ * Inline-editable monthly rent. Click the amount to type a new one; Enter or
+ * blur saves via `onSave`. Surfaces a clear "Set rent" affordance when rent
+ * is $0 (the top lease-cleanup task — 50+ leases imported with no rent).
+ */
+function EditableRent({ value, onSave }: { value: number; onSave: (n: number) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(value || ""));
+  if (editing) {
+    const save = () => {
+      const n = Math.round(parseFloat(val) || 0);
+      if (n !== value) onSave(n);
+      setEditing(false);
+    };
+    return (
+      <input
+        autoFocus
+        type="number"
+        min={0}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") { setVal(String(value || "")); setEditing(false); }
+        }}
+        className="h-7 w-24 rounded-md border bg-background px-2 text-right text-sm tabular-nums"
+        data-testid="input-lease-rent"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => { setVal(String(value || "")); setEditing(true); }}
+      className="rounded px-1 hover:bg-muted/60 hover:underline"
+      title="Click to edit rent"
+    >
+      {value > 0 ? formatMoney(value) : <span className="text-amber-600">Set rent</span>}
+    </button>
+  );
+}
+
+/**
  * Compact "Building X" label that renders beneath the property name on
  * each lease row when the lease's parent property has more than one
  * building (Task #587). For single-building properties — by far the
@@ -683,6 +726,19 @@ export function LeasesTable({
                       if (property?.rentFree) {
                         const total = otherCostsByPropertyId.get(lease.propertyId) ?? 0;
                         return total > 0 ? formatMoney(total) : "—";
+                      }
+                      // Inline rent editing for monthly leases when the data
+                      // store is wired (room-night leases price by nightly
+                      // rate, so leave those read-only here).
+                      if (onUpdateLease && (lease.rateType ?? "monthly") === "monthly") {
+                        return (
+                          <EditableRent
+                            value={lease.monthlyRent}
+                            onSave={(n) =>
+                              onUpdateLease(lease.id, n > 0 ? { monthlyRent: n, needsReview: false } : { monthlyRent: n })
+                            }
+                          />
+                        );
                       }
                       return formatMoney(lease.monthlyRent);
                     })()}

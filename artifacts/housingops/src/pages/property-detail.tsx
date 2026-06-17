@@ -3068,9 +3068,22 @@ export default function PropertyDetail() {
                     ) : propUtils.map(u => (
                       <TableRow key={u.id}>
                         <TableCell>
-                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}>
-                            <Zap className="h-3 w-3" />{t(`common.utilityTypes.${u.type}`)}
-                          </span>
+                          {/* Type is now inline-editable (was a read-only badge) so the
+                              whole utility row can be updated in place. */}
+                          <Select value={u.type} onValueChange={(v) => updateUtility(u.id, { type: v as typeof u.type })}>
+                            <SelectTrigger
+                              className={`h-7 w-32 gap-1.5 rounded-full border-0 px-2.5 text-xs font-medium ${TYPE_COLORS[u.type] ?? "bg-gray-100 text-gray-700"}`}
+                              data-testid={`select-utility-type-${u.id}`}
+                            >
+                              <Zap className="h-3 w-3" />
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {UTILITY_TYPES.map((tp) => (
+                                <SelectItem key={tp} value={tp}>{t(`common.utilityTypes.${tp}`)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </TableCell>
                         <TableCell><InlineEdit value={u.company} onSave={v => updateUtility(u.id, { company: v })} /></TableCell>
                         <TableCell className="font-mono text-sm"><InlineEdit value={u.accountNumber} onSave={v => updateUtility(u.id, { accountNumber: v })} /></TableCell>

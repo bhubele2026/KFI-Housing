@@ -31,6 +31,12 @@ import {
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { titleCaseName } from "@/lib/name-format";
+import {
+  STANDARD_SHIFTS,
+  toWeeklyCharge,
+  toMonthlyCharge,
+  formatUsdWhole,
+} from "@/data/mockData";
 import type { Bed, Occupant, Property } from "@/data/mockData";
 
 /**
@@ -309,6 +315,128 @@ export function PropertyBedTable({
           </table>
         </div>
       )}
+    </Card>
+  );
+}
+
+const SHIFT_NONE = "__none";
+
+/**
+ * Clean, grid-style occupant detail for one property — the same flat look
+ * as the bed grid, one row per housed person, showing the info the old
+ * per-room table carried (minus Company): Zenople ID + match status, shift
+ * (editable), move-in, projected move-out (editable — ties the bed back to
+ * the move-out plan), and the weekly/monthly charge.
+ */
+export function PropertyOccupantDetail({ property }: { property: Property }) {
+  const { rooms, beds, occupants, updateOccupant } = useData();
+  const rosterIds = new Set((useListActiveRoster().data?.people ?? []).map((p) => p.personId));
+
+  const roomName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rooms) m.set(r.id, r.name);
+    return m;
+  }, [rooms]);
+  const bedById = useMemo(() => {
+    const m = new Map<string, Bed>();
+    for (const b of beds) m.set(b.id, b);
+    return m;
+  }, [beds]);
+
+  const rows = useMemo(() => {
+    return occupants
+      .filter((o) => o.status === "Active" && o.propertyId === property.id && o.bedId)
+      .map((o) => {
+        const bed = o.bedId ? bedById.get(o.bedId) : undefined;
+        return {
+          occ: o,
+          room: bed ? roomName.get(bed.roomId) ?? "—" : "—",
+          bedNum: bed?.bedNumber ?? 0,
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.room.localeCompare(b.room, undefined, { numeric: true }) || a.bedNum - b.bedNum,
+      );
+  }, [occupants, property.id, bedById, roomName]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-center gap-2 bg-muted/60 px-4 py-3 border-b">
+        <span className="font-semibold text-sm">Occupant detail</span>
+        <span className="text-xs text-muted-foreground">{rows.length} housed · move-in / move-out / charge</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-wide text-muted-foreground bg-muted/30">
+              <th className="px-3 py-2.5 text-left font-medium">Room · Bed</th>
+              <th className="px-3 py-2.5 text-left font-medium">Occupant</th>
+              <th className="px-3 py-2.5 text-left font-medium">Shift</th>
+              <th className="px-3 py-2.5 text-left font-medium">Move-in</th>
+              <th className="px-3 py-2.5 text-left font-medium">Move-out (proj.)</th>
+              <th className="px-3 py-2.5 text-right font-medium">Charge</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ occ, room, bedNum }) => {
+              const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
+              const freq = occ.billingFrequency ?? "Monthly";
+              const wk = occ.chargePerBed > 0 ? toWeeklyCharge(occ.chargePerBed, freq) : 0;
+              const mo = occ.chargePerBed > 0 ? toMonthlyCharge(occ.chargePerBed, freq) : 0;
+              return (
+                <tr key={occ.id} className="border-t hover:bg-muted/20">
+                  <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">{room} · Bed {bedNum}</td>
+                  <td className="px-3 py-2.5">
+                    <div className="font-medium">{titleCaseName(occ.name)}</div>
+                    <div className="mt-0.5 flex items-center gap-2 text-[11px]">
+                      {occ.employeeId ? <span className="text-muted-foreground">ID {occ.employeeId}</span> : null}
+                      {matched ? (
+                        <span className="text-emerald-600">✓ matched</span>
+                      ) : (
+                        <span className="text-amber-600">⚠ needs match</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Select
+                      value={occ.shift ?? SHIFT_NONE}
+                      onValueChange={(v) => updateOccupant(occ.id, { shift: v === SHIFT_NONE ? null : v })}
+                    >
+                      <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SHIFT_NONE}>—</SelectItem>
+                        {STANDARD_SHIFTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">{occ.moveInDate || "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <Input
+                      type="date"
+                      value={occ.moveOutDate ?? ""}
+                      onChange={(e) => updateOccupant(occ.id, { moveOutDate: e.target.value || null })}
+                      className="h-7 w-36 text-xs"
+                    />
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    {wk > 0 ? (
+                      <>
+                        <span className="font-medium">{formatUsdWhole(wk)}/wk</span>
+                        <span className="block text-[11px] text-muted-foreground">{formatUsdWhole(mo)}/mo</span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

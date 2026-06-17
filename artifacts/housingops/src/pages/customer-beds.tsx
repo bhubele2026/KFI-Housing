@@ -5,7 +5,7 @@ import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, BedDouble, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, BedDouble, Plus, X } from "lucide-react";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { shortPropertyName } from "@/lib/property-name";
 import type { Bed, Occupant } from "@/data/mockData";
@@ -27,10 +27,47 @@ const MAX_BED_COLS = 6;
 
 export default function CustomerBeds() {
   const { id } = useParams<{ id: string }>();
-  const { customers, properties, rooms, beds, occupants, addOccupant, updateBed, updateOccupant, isLoading } =
+  const { customers, properties, rooms, beds, occupants, addOccupant, addBed, addRoom, updateBed, updateOccupant, isLoading } =
     useData();
 
   const customer = customers.find((c) => c.id === id);
+
+  // Add one vacant bed to an existing room (manual inventory growth).
+  const handleAddBed = (propertyId: string, roomId: string, existingBeds: Bed[]) => {
+    const nextNum = existingBeds.reduce((m, b) => Math.max(m, b.bedNumber), 0) + 1;
+    addBed({
+      id: `bed-${Date.now()}`,
+      propertyId,
+      bedNumber: nextNum,
+      roomId,
+      status: "Vacant",
+      occupantId: null,
+    });
+  };
+
+  // Add a brand-new unit/room (with one vacant bed) to a property. The
+  // operator renames it on the property page. This is the manual path;
+  // lease ingestion can create units the same way server-side later.
+  const handleAddUnit = (propertyId: string, unitCount: number) => {
+    const roomId = `room-${Date.now()}`;
+    addRoom({
+      id: roomId,
+      propertyId,
+      buildingId: "",
+      name: `New Unit ${unitCount + 1}`,
+      sqft: 0,
+      bathrooms: 0,
+      monthlyRent: 0,
+    });
+    addBed({
+      id: `bed-${Date.now() + 1}`,
+      propertyId,
+      bedNumber: 1,
+      roomId,
+      status: "Vacant",
+      occupantId: null,
+    });
+  };
 
   const occupantByBedId = useMemo(() => {
     const m = new Map<string, Occupant>();
@@ -89,11 +126,11 @@ export default function CustomerBeds() {
   };
 
   const renderBedCell = (bed: Bed | undefined) => {
-    if (!bed) return <td className="px-2 py-1.5 border-l border-border/40" />;
+    if (!bed) return <td className="px-3 py-2 border-l border-border/40" />;
     const occ = occupantByBedId.get(bed.id);
     if (occ) {
       return (
-        <td className="px-2 py-1.5 border-l border-border/40 align-middle">
+        <td className="px-3 py-2 border-l border-border/40 align-middle">
           <div className="group flex items-center justify-between gap-1">
             {/* Plain, selectable name — NOT an edit trigger. */}
             <span className="text-sm font-medium truncate" title={occ.name}>
@@ -116,7 +153,7 @@ export default function CustomerBeds() {
     // assignable yet — show its state instead of an Assign affordance.
     const ready = bed.cleaningStatus === "ready";
     return (
-      <td className="px-2 py-1.5 border-l border-border/40 align-middle">
+      <td className="px-3 py-2 border-l border-border/40 align-middle">
         {ready ? (
           <AssignOccupantDialog
             bed={{ id: bed.id, propertyId: bed.propertyId }}
@@ -172,38 +209,60 @@ export default function CustomerBeds() {
             const bedCols = Array.from({ length: colCount }, (_, i) => i);
             return (
               <Card key={property.id} className="overflow-hidden">
-                {/* Property header */}
-                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/60 px-4 py-2.5 border-b">
-                  <div className="min-w-0">
-                    <Link href={`/properties/${property.id}`}>
-                      <span className="font-semibold hover:underline">{shortPropertyName(property.name)}</span>
-                    </Link>
-                    <span className="ml-2 text-xs text-muted-foreground">
+                {/* Property header — the whole title block opens the property */}
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/60 px-4 py-3 border-b">
+                  <Link href={`/properties/${property.id}`} className="group min-w-0 flex items-baseline gap-2">
+                    <span className="font-semibold group-hover:text-primary group-hover:underline truncate">
+                      {shortPropertyName(property.name)}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 self-center" />
+                    <span className="text-xs text-muted-foreground truncate">
                       {[property.address, property.city, property.state].filter(Boolean).join(", ")}
                     </span>
+                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant={occupied < total ? "secondary" : "default"}>
+                      {occupied}/{total} beds filled
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 h-7"
+                      onClick={() => handleAddUnit(property.id, roomRows.length)}
+                      title="Add a new unit / room with a bed"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add unit
+                    </Button>
                   </div>
-                  <Badge variant={occupied < total ? "secondary" : "default"} className="shrink-0">
-                    {occupied}/{total} beds filled
-                  </Badge>
                 </div>
 
                 {total === 0 ? (
-                  <div className="px-4 py-3 text-sm text-muted-foreground">
-                    No beds set up yet for this property.
+                  <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground">
+                    <span>No beds set up yet for this property.</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 h-7 shrink-0"
+                      onClick={() => handleAddUnit(property.id, roomRows.length)}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add unit
+                    </Button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full table-fixed text-sm">
                       <thead>
                         <tr className="text-[11px] uppercase tracking-wide text-muted-foreground bg-muted/30">
-                          <th className="px-3 py-1.5 text-left font-medium">Room / Unit</th>
-                          <th className="px-2 py-1.5 text-center font-medium w-12">Cap</th>
+                          <th className="px-3 py-2.5 text-left font-medium w-[26%]">Room / Unit</th>
+                          <th className="px-2 py-2.5 text-center font-medium w-14">Cap</th>
                           {bedCols.map((i) => (
-                            <th key={i} className="px-2 py-1.5 text-left font-medium border-l border-border/40">
+                            <th key={i} className="px-3 py-2.5 text-left font-medium border-l border-border/40">
                               Bed {i + 1}
                             </th>
                           ))}
-                          <th className="px-2 py-1.5 text-center font-medium w-14 border-l border-border/40">Open</th>
+                          <th className="px-2 py-2.5 text-center font-medium w-16 border-l border-border/40">Open</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -213,8 +272,20 @@ export default function CustomerBeds() {
                           const open = cap - occ;
                           return (
                             <tr key={room.roomId} className="border-t hover:bg-muted/20">
-                              <td className="px-3 py-1.5 font-medium">{room.name}</td>
-                              <td className="px-2 py-1.5 text-center text-muted-foreground">{cap}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="group/r flex items-center gap-2">
+                                  <span className="font-medium truncate">{room.name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddBed(property.id, room.roomId, room.beds)}
+                                    title="Add a bed to this unit"
+                                    className="opacity-0 group-hover/r:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-primary shrink-0"
+                                  >
+                                    <Plus className="h-3 w-3" /> bed
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 text-center text-muted-foreground">{cap}</td>
                               {bedCols.map((i) => {
                                 // Last visible column absorbs any overflow beds
                                 // (rooms with more beds than columns are rare).
@@ -242,7 +313,7 @@ export default function CustomerBeds() {
                               })}
                               <td
                                 className={
-                                  "px-2 py-1.5 text-center font-medium border-l border-border/40 " +
+                                  "px-2 py-2.5 text-center font-medium border-l border-border/40 " +
                                   (open > 0 ? "text-amber-600" : "text-muted-foreground")
                                 }
                               >

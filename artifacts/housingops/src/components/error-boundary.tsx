@@ -1,7 +1,8 @@
 import { Component, type ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { withTranslation, type WithTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { isChunkLoadError, attemptChunkReload } from "@/lib/lazy-with-reload";
 
 interface Props extends WithTranslation {
   /**
@@ -34,6 +35,12 @@ class ErrorBoundaryInner extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack?: string }) {
+    // A stale-deploy chunk error that slipped past the lazyWithReload
+    // wrapper (e.g. surfaced during render) gets the same one-shot
+    // recovery: reload onto the fresh build instead of stranding the
+    // user on an error card. attemptChunkReload no-ops for non-chunk
+    // errors and is guarded against reload loops.
+    if (attemptChunkReload(error)) return;
     // Surface the failure in the dev console so engineers debugging the
     // demo can pinpoint the offending component without instrumenting
     // a full reporter.
@@ -45,6 +52,19 @@ class ErrorBoundaryInner extends Component<Props, State> {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    // Chunk-load failure (new version deployed under an open tab): show a
+    // brief "updating" state instead of a scary error card — the page is
+    // already reloading onto the fresh build (see componentDidCatch).
+    if (isChunkLoadError(error)) {
+      return (
+        <div className="flex min-h-[60vh] w-full items-center justify-center p-8">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground" role="status">
+            <RefreshCw className="h-4 w-4 animate-spin" aria-hidden />
+            Loading the latest version…
+          </div>
+        </div>
+      );
+    }
     if (this.props.fallback) return this.props.fallback(this.reset, error);
     const { t } = this.props;
 

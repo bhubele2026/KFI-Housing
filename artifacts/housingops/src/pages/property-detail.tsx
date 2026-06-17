@@ -253,9 +253,17 @@ const TYPE_COLORS: Record<string, string> = {
   Other:    "bg-gray-100 text-gray-700",
 };
 
-function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", testId }: { label: string; value: string | number; sub?: React.ReactNode; icon?: React.ElementType; color?: string; testId?: string }) {
+function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", testId, onClick }: { label: string; value: string | number; sub?: React.ReactNode; icon?: React.ElementType; color?: string; testId?: string; onClick?: () => void }) {
+  const clickable = !!onClick;
   return (
-    <Card data-testid={testId}>
+    <Card
+      data-testid={testId}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick!(); } } : undefined}
+      className={clickable ? "cursor-pointer transition-all hover:shadow-md hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : undefined}
+    >
       <CardContent className="p-3">
         <div className="flex items-start justify-between gap-1.5">
           <div className="min-w-0 flex-1">
@@ -270,7 +278,15 @@ function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", te
   );
 }
 
-function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onBedClick, onAssignOccupant, onUpdateOccupant }: {
+// Smooth-scroll to an on-page section by id (used by the clickable stat
+// cards to jump to the relevant detail).
+function scrollToSection(sectionId: string) {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById(sectionId);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onBedClick, onAssignOccupant, onVacateBed }: {
   beds: Bed[];
   occupants: Occupant[];
   rooms: Room[];
@@ -279,7 +295,8 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
   onDeleteBed: (id: string) => void;
   onBedClick?: (bedId: string) => void;
   onAssignOccupant?: (occupant: Occupant, bed: { id: string; propertyId: string }) => void;
-  onUpdateOccupant?: (id: string, patch: Partial<Occupant>) => void;
+  /** Move the occupant out of this bed (frees the bed + marks them Former). */
+  onVacateBed?: (bed: Bed) => void;
 }) {
   const { t } = useTranslation();
   const occupied = beds.filter(b => b.status === "Occupied").length;
@@ -356,9 +373,8 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
             ...roomOrder.filter(id => bedsByRoom.has(id)),
             ...(bedsByRoom.has("__orphan") ? ["__orphan"] : []),
           ];
-          let globalIdx = 0;
           return (
-            <div className="flex flex-wrap gap-x-5 gap-y-3">
+            <div className="flex flex-wrap gap-x-6 gap-y-4">
               {orderedKeys.map(roomKey => {
                 const roomBeds = (bedsByRoom.get(roomKey) ?? []).sort(
                   (a, b) => a.bedNumber - b.bedNumber,
@@ -371,51 +387,69 @@ function BedMap({ beds, occupants, rooms, propertyId, onAddBed, onDeleteBed, onB
                     <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
                       {label}
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {roomBeds.map(bed => {
-                        const i = globalIdx++;
                         const occ = bed.occupantId ? occupants.find(o => o.id === bed.occupantId) : null;
-                        const isOccupied = bed.status === "Occupied";
-                        const tileButton = (
-                          <motion.button
+                        // Occupied bed: a readable name chip. The name is plain
+                        // selectable text (NOT an edit trigger); moving someone
+                        // out is an explicit ✕ that frees the bed.
+                        if (bed.status === "Occupied" && occ) {
+                          return (
+                            <div
+                              key={bed.id}
+                              data-testid={`bedmap-tile-${bed.id}`}
+                              className="group flex items-center gap-2 rounded-md border border-border bg-background pl-2 pr-1 py-1 min-w-[150px] max-w-[210px]"
+                            >
+                              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+                              <span className="flex flex-col min-w-0 leading-tight">
+                                <span className="text-[10px] text-muted-foreground tabular-nums">
+                                  {`Bed ${bed.bedNumber}`}
+                                </span>
+                                <span className="text-xs font-medium truncate" title={occ.name}>{occ.name}</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => onVacateBed?.(bed)}
+                                title={`Move ${occ.name} out`}
+                                aria-label={t("pages.propertyDetail.bedAriaLabelOccupied", { number: bed.bedNumber, name: occ.name })}
+                                className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-destructive transition-opacity focus:outline-none"
+                                data-testid={`bedmap-vacate-${bed.id}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          );
+                        }
+                        // Vacant bed: click to assign. A bed mid-turnover
+                        // (needs_cleaning / in_progress) isn't assignable yet.
+                        const ready = bed.cleaningStatus === "ready";
+                        const vacantChip = (
+                          <button
                             type="button"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: i * 0.015, duration: 0.15 }}
                             data-testid={`bedmap-tile-${bed.id}`}
-                            aria-label={isOccupied && occ ? t("pages.propertyDetail.bedAriaLabelOccupied", { number: bed.bedNumber, name: occ.name }) : t("pages.propertyDetail.bedAriaLabelVacant", { number: bed.bedNumber })}
-                            className={`relative flex items-center justify-center rounded-md border cursor-pointer select-none transition-colors hover:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 tabular-nums text-[11px] font-medium
-                              ${isOccupied
-                                ? "border-border bg-background text-foreground"
-                                : "border-dashed border-border/70 bg-muted/30 text-muted-foreground"
-                              }`}
-                            style={{ width: 32, height: 32 }}
+                            aria-label={t("pages.propertyDetail.bedAriaLabelVacant", { number: bed.bedNumber })}
+                            className="flex items-center gap-1.5 rounded-md border border-dashed border-border/70 bg-muted/30 px-2 py-1 min-w-[150px] text-xs text-muted-foreground hover:bg-muted/60 hover:text-primary focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
                           >
-                            <span
-                              aria-hidden="true"
-                              className={`absolute top-1 right-1 h-1.5 w-1.5 rounded-full ${isOccupied ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
-                            />
-                            {bed.bedNumber}
-                          </motion.button>
+                            <span className="text-[10px] tabular-nums">
+                              {`Bed ${bed.bedNumber}`}
+                            </span>
+                            {ready ? (
+                              <span className="ml-auto inline-flex items-center gap-0.5"><Plus className="h-3 w-3" />{t("dialogs.assignOccupant.triggerDefault", { defaultValue: "Assign" })}</span>
+                            ) : (
+                              <span className="ml-auto text-amber-600">🧹</span>
+                            )}
+                          </button>
                         );
-                        return isOccupied && occ ? (
-                          <AssignOccupantDialog
-                            key={bed.id}
-                            occupant={occ}
-                            onUpdate={onUpdateOccupant}
-                            trigger={tileButton}
-                            testIdSuffix={`bed-${bed.id}`}
-                          />
-                        ) : onAssignOccupant ? (
+                        return ready && onAssignOccupant ? (
                           <AssignOccupantDialog
                             key={bed.id}
                             bed={{ id: bed.id, propertyId }}
                             onAssign={onAssignOccupant}
                             onDeleteBed={onDeleteBed}
-                            trigger={tileButton}
+                            trigger={vacantChip}
                           />
                         ) : (
-                          <span key={bed.id} onClick={() => onBedClick?.(bed.id)}>{tileButton}</span>
+                          <span key={bed.id} onClick={() => onBedClick?.(bed.id)}>{vacantChip}</span>
                         );
                       })}
                     </div>
@@ -1742,10 +1776,11 @@ export default function PropertyDetail() {
 
           {statsExpanded && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
-          <StatCard label={t("pages.propertyDetail.statTotalBeds")} value={propBeds.length} icon={BedDouble} />
-          <StatCard label={t("pages.propertyDetail.statOccupied")} value={occupiedBeds} icon={Users} color="text-green-600" />
+          <StatCard label={t("pages.propertyDetail.statTotalBeds")} value={propBeds.length} icon={BedDouble} onClick={() => scrollToSection("section-bed-occupancy")} />
+          <StatCard label={t("pages.propertyDetail.statOccupied")} value={occupiedBeds} icon={Users} color="text-green-600" onClick={() => scrollToSection("section-bed-occupancy")} />
           <StatCard
             testId="stat-available-beds"
+            onClick={() => scrollToSection("section-bed-occupancy")}
             label={t("pages.propertyDetail.statAvailable")}
             value={availableBeds}
             icon={BedDouble}
@@ -1844,6 +1879,7 @@ export default function PropertyDetail() {
         </div>
 
         {/* Bed Map */}
+        <div id="section-bed-occupancy" className="scroll-mt-20">
         <BedMap
           beds={propBeds}
           occupants={propOccupants}
@@ -1856,8 +1892,13 @@ export default function PropertyDetail() {
             addOccupant(occ);
             updateBed(b.id, { status: "Occupied", occupantId: occ.id });
           }}
-          onUpdateOccupant={updateOccupant}
+          onVacateBed={(bed) => {
+            updateBed(bed.id, { status: "Vacant", occupantId: null });
+            const o = propOccupants.find((x) => x.bedId === bed.id && x.status === "Active");
+            if (o) updateOccupant(o.id, { status: "Former", bedId: null });
+          }}
         />
+        </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">

@@ -480,12 +480,12 @@ function RosterPicker({ people, onPick }: { people: RosterPerson[]; onPick: (p: 
     ? people.filter((p) => `${p.name} ${p.company}`.toLowerCase().includes(needle))
     : people;
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the active roster…" className="pl-8" autoFocus />
       </div>
-      <div className="max-h-72 overflow-y-auto rounded-md border divide-y">
+      <div className="max-h-72 w-full overflow-y-auto overflow-x-hidden rounded-md border divide-y">
         {filtered.length === 0 ? (
           <div className="p-3 text-sm text-muted-foreground text-center">
             {people.length === 0 ? "Active roster not loaded." : "No matches."}
@@ -493,9 +493,9 @@ function RosterPicker({ people, onPick }: { people: RosterPerson[]; onPick: (p: 
         ) : (
           filtered.slice(0, 200).map((p) => (
             <button key={p.personId} type="button" onClick={() => onPick(p)}
-              className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center justify-between gap-3">
+              className="flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/50">
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{titleCaseName(p.name)}</span>
-              <span className="shrink-0 max-w-[45%] truncate text-xs text-muted-foreground">{p.company}</span>
+              <span className="min-w-0 shrink truncate text-right text-xs text-muted-foreground">{p.company}</span>
             </button>
           ))
         )}

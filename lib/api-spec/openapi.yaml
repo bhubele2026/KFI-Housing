@@ -2892,6 +2892,13 @@ components:
           type: string
           description: Zenople PersonId — equals occupant.employeeId.
         name: { type: string }
+        aliases:
+          type: array
+          items: { type: string }
+          description: >-
+            Other distinct names Zenople has shown for this personId
+            (payroll / assignment / deduction) — for lookup when an occupant
+            was entered under a different spelling or nickname. Excludes name.
         company:
           type: string
           description: Staffing client/customer from the active assignment ("" if none).

@@ -92,6 +92,7 @@ function nameScore(a: string, b: string): number {
 type RosterRow = {
   personId: string;
   name: string;
+  aliases: string[];
   company: string;
   jobTitle: string;
   hasDeduction: boolean;
@@ -189,7 +190,7 @@ export default function RosterPage() {
       if (view === "placed-no-ded" && !(placed && !r.hasDeduction)) return false;
       if (
         needle &&
-        !norm(`${r.name} ${r.company} ${r.jobTitle}`).includes(needle)
+        !norm(`${r.name} ${(r.aliases ?? []).join(" ")} ${r.company} ${r.jobTitle} ${r.personId}`).includes(needle)
       ) {
         return false;
       }
@@ -230,7 +231,12 @@ export default function RosterPage() {
     for (const o of staleOccupants) {
       let best: { personId: string; name: string; company: string; score: number } | null = null;
       for (const p of people) {
-        const score = nameScore(o.name, p.name);
+        // Score against the payroll name AND every known alias — catches a
+        // person entered under a different spelling/nickname.
+        const score = Math.max(
+          nameScore(o.name, p.name),
+          ...(p.aliases ?? []).map((a) => nameScore(o.name, a)),
+        );
         if (!best || score > best.score) {
           best = { personId: p.personId, name: p.name, company: p.company, score };
         }
@@ -576,7 +582,19 @@ export default function RosterPage() {
                             key={r.personId}
                             className={gap ? "bg-amber-50/70 hover:bg-amber-50" : undefined}
                           >
-                            <TableCell className="font-medium">{titleCaseName(r.name)}</TableCell>
+                            <TableCell className="font-medium">
+                              <div>{titleCaseName(r.name)}</div>
+                              <div className="text-[11px] font-normal text-muted-foreground">
+                                ID {r.personId}
+                                {(r.aliases ?? []).length > 0 && (
+                                  <span title={`Also known as: ${r.aliases.join(", ")}`}>
+                                    {" · aka "}
+                                    {r.aliases.slice(0, 2).join(", ")}
+                                    {r.aliases.length > 2 ? "…" : ""}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               {r.company || <span className="text-muted-foreground">—</span>}
                             </TableCell>

@@ -15,6 +15,10 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 interface RosterPerson {
   personId: string;
   name: string;
+  /** Every distinct name Zenople has shown for this personId across
+   *  payroll / assignment / deduction — for lookup when an occupant was
+   *  entered under a different spelling or nickname. Excludes `name`. */
+  aliases: string[];
   company: string;
   jobTitle: string;
   hasDeduction: boolean;
@@ -99,10 +103,21 @@ async function buildRoster(period?: string): Promise<RosterResult> {
   // Company + role per person from active assignments. Non-fatal: if it
   // fails we still return the payroll headcount, just without company.
   const meta = new Map<string, { company: string; jobTitle: string }>();
+  // personId -> every distinct (title-cased) name seen across sources, so
+  // an occupant entered under a different spelling can still be matched.
+  const aliasMap = new Map<string, Set<string>>();
+  const addAlias = (personId: string, raw: string) => {
+    const n = titleCaseName((raw ?? "").trim());
+    if (!personId || !n) return;
+    const set = aliasMap.get(personId) ?? new Set<string>();
+    set.add(n);
+    aliasMap.set(personId, set);
+  };
   try {
     const active = await fetchActiveRoster(logger);
     for (const p of active.people) {
       meta.set(p.personId, { company: p.company, jobTitle: p.jobTitle });
+      addAlias(p.personId, p.name);
     }
   } catch (err) {
     logger.warn({ err }, "roster: assignment enrichment failed — continuing without company/role");
@@ -117,7 +132,10 @@ async function buildRoster(period?: string): Promise<RosterResult> {
     const until = ymd(new Date(now.getTime() + 7 * 86_400_000));
     const buckets = await fetchHousingDeductionsByWeek(since, until);
     for (const b of buckets) {
-      for (const r of b.rows) deduction.set(r.personId, r.weekly);
+      for (const r of b.rows) {
+        deduction.set(r.personId, r.weekly);
+        addAlias(r.personId, r.name);
+      }
     }
   } catch (err) {
     logger.warn({ err }, "roster: deduction enrichment failed — continuing without deductions");
@@ -126,9 +144,15 @@ async function buildRoster(period?: string): Promise<RosterResult> {
   const all: RosterPerson[] = payroll.people.map((p) => {
     const m = meta.get(p.personId);
     const weekly = deduction.get(p.personId) ?? 0;
+    const primary = titleCaseName(p.name);
+    addAlias(p.personId, p.name);
+    const aliases = [...(aliasMap.get(p.personId) ?? [])]
+      .filter((n) => n.toLowerCase() !== primary.toLowerCase())
+      .sort();
     return {
       personId: p.personId,
-      name: titleCaseName(p.name),
+      name: primary,
+      aliases,
       company: (m?.company ?? "").trim(),
       jobTitle: m?.jobTitle ?? "",
       hasDeduction: weekly > 0,

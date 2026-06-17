@@ -55,7 +55,7 @@ import type { Bed, Occupant, Property } from "@/data/mockData";
 const MAX_BED_COLS = 6;
 const today = () => new Date().toISOString().split("T")[0];
 
-type RosterPerson = { personId: string; name: string; company: string };
+type RosterPerson = { personId: string; name: string; company: string; aliases: string[] };
 type VacantBed = { id: string; propertyId: string; label: string };
 
 export function PropertyBedTable({
@@ -75,6 +75,7 @@ export function PropertyBedTable({
     personId: p.personId,
     name: p.name,
     company: p.company,
+    aliases: p.aliases ?? [],
   }));
   const rosterIds = new Set(rosterPeople.map((p) => p.personId));
 
@@ -485,7 +486,11 @@ function RosterPicker({ people, onPick }: { people: RosterPerson[]; onPick: (p: 
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const filtered = needle
-    ? people.filter((p) => `${p.name} ${p.company}`.toLowerCase().includes(needle))
+    ? people.filter((p) =>
+        `${p.name} ${(p.aliases ?? []).join(" ")} ${p.company} ${p.personId}`
+          .toLowerCase()
+          .includes(needle),
+      )
     : people;
   return (
     <div className="min-w-0 space-y-2">

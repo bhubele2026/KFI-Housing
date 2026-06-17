@@ -46,6 +46,9 @@ import {
 
 type SortDir = "asc" | "desc" | null;
 type SortKey = "properties" | "occupancy" | "revenue";
+// How the customer list is arranged: grouped by state (default, with
+// section headers) or a single flat list sorted by name / property count.
+type ArrangeBy = "state" | "az" | "za" | "properties";
 
 const EMPTY_DRAFT: Customer = {
   id: "",
@@ -83,6 +86,7 @@ export default function Customers() {
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [arrangeBy, setArrangeBy] = useState<ArrangeBy>("state");
 
   // Per-customer roll-ups: property count, total/occupied beds, occupancy %, and
   // monthly revenue (summed from each occupant's normalized monthly charge).
@@ -247,6 +251,24 @@ export default function Customers() {
   // to the bottom. Within each bucket we preserve the order produced by
   // `activeFiltered` so any active sort/search still applies.
   const grouped = useMemo(() => {
+    // Non-state arrangements render a single flat, sorted list (one
+    // pseudo-bucket keyed "__all__") with no per-state section headers —
+    // so the operator can scan straight A→Z, Z→A, or by portfolio size.
+    if (arrangeBy !== "state") {
+      const rows = activeFiltered.slice();
+      if (arrangeBy === "az") {
+        rows.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (arrangeBy === "za") {
+        rows.sort((a, b) => b.name.localeCompare(a.name));
+      } else if (arrangeBy === "properties") {
+        rows.sort((a, b) => {
+          const ca = statsByCustomer.get(a.id)?.propertyCount ?? 0;
+          const cb = statsByCustomer.get(b.id)?.propertyCount ?? 0;
+          return cb - ca || a.name.localeCompare(b.name);
+        });
+      }
+      return [{ state: "__all__", rows }];
+    }
     const buckets = new Map<string, Customer[]>();
     for (const c of activeFiltered) {
       const key = stateBucketKey(c.state);
@@ -261,7 +283,7 @@ export default function Customers() {
         return a.localeCompare(b);
       })
       .map(([state, rows]) => ({ state, rows }));
-  }, [activeFiltered]);
+  }, [activeFiltered, arrangeBy, statsByCustomer]);
 
   // Tri-state cycle: unsorted -> asc -> desc -> unsorted. Switching to a new
   // column always restarts at ascending, matching the Properties page UX.
@@ -492,15 +514,28 @@ export default function Customers() {
         <Card>
           <CardContent className="p-0">
             <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder={t("pages.customers.searchPlaceholder")}
-                  className="pl-9"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  data-testid="input-search-customers"
-                />
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center">
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder={t("pages.customers.searchPlaceholder")}
+                    className="pl-9"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    data-testid="input-search-customers"
+                  />
+                </div>
+                <Select value={arrangeBy} onValueChange={(v) => setArrangeBy(v as ArrangeBy)}>
+                  <SelectTrigger className="w-full sm:w-48" data-testid="select-arrange-customers" aria-label="Arrange customers">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="state">By state</SelectItem>
+                    <SelectItem value="az">Name A–Z</SelectItem>
+                    <SelectItem value="za">Name Z–A</SelectItem>
+                    <SelectItem value="properties">Most properties</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <span className="text-xs text-muted-foreground" data-testid="text-customers-count">
                 {`${activeFiltered.length} active of ${customers.length} customers${
@@ -617,9 +652,15 @@ export default function Customers() {
                         >
                           <span className="inline-flex items-center gap-2">
                             <span data-testid={`text-state-group-label-${group.state}`}>
-                              {group.state === UNASSIGNED_STATE_KEY
-                                ? t("pages.customers.unassignedStateLabel")
-                                : group.state}
+                              {group.state === "__all__"
+                                ? arrangeBy === "az"
+                                  ? "All customers · A–Z"
+                                  : arrangeBy === "za"
+                                    ? "All customers · Z–A"
+                                    : "All customers · Most properties"
+                                : group.state === UNASSIGNED_STATE_KEY
+                                  ? t("pages.customers.unassignedStateLabel")
+                                  : group.state}
                             </span>
                             <span className="text-muted-foreground/70 normal-case font-normal">
                               {t("pages.customers.groupCustomerCount", { count: group.rows.length })}

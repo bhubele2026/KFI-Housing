@@ -50,6 +50,14 @@ interface ProjectedMoveInsSectionProps {
   propRooms: Room[];
   propBeds: Bed[];
   propOccupants: Occupant[];
+  /** Property-name lookup for the move-out list when this section spans
+   *  more than one property (customer-scoped bed area). Optional. */
+  propertyNameById?: Record<string, string>;
+  /** Read-only mode (no move-in add/convert/edit) for the customer-scoped
+   *  bed area, where projected move-ins are managed per property. */
+  readOnly?: boolean;
+  /** Which subsection to open first. Defaults to "in". */
+  defaultView?: "in" | "out";
 }
 
 /**
@@ -75,6 +83,9 @@ export function ProjectedMoveInsSection({
   propRooms,
   propBeds,
   propOccupants,
+  propertyNameById,
+  readOnly = false,
+  defaultView = "in",
 }: ProjectedMoveInsSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -143,6 +154,45 @@ export function ProjectedMoveInsSection({
     }
     return { total: moveIns.length, next7, overdue };
   }, [moveIns]);
+
+  const [view, setView] = useState<"in" | "out">(defaultView);
+
+  // ----- Move-outs (read-only, derived from occupants) -----
+  // Active occupants with a move-out date on the books — who's leaving so
+  // beds can be planned. Includes past-due dates (still Active = should
+  // have left) flagged as overdue. No backend; pure derivation.
+  const moveOuts = useMemo(() => {
+    const bedById = new Map(propBeds.map((b) => [b.id, b] as const));
+    return propOccupants
+      .filter((o) => o.status === "Active" && !isBlankYMD(o.moveOutDate ?? ""))
+      .map((o) => {
+        const bed = o.bedId ? bedById.get(o.bedId) : undefined;
+        const room = bed ? propRooms.find((r) => r.id === bed.roomId) : undefined;
+        const where = [
+          propertyNameById?.[o.propertyId ?? ""] ?? "",
+          room?.name ?? "",
+          bed ? `Bed ${bed.bedNumber}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return { id: o.id, name: o.name || "(no name)", date: o.moveOutDate as string, where };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [propOccupants, propBeds, propRooms, propertyNameById]);
+
+  const moveOutSummary = useMemo(() => {
+    let next7 = 0;
+    let overdue = 0;
+    for (const o of moveOuts) {
+      const d = projectedMoveInDaysFromToday(o.date);
+      if (d === null) continue;
+      if (d < 0) overdue++;
+      else if (d <= 7) next7++;
+    }
+    return { total: moveOuts.length, next7, overdue };
+  }, [moveOuts]);
+
+  const activeSummary = view === "in" ? summary : moveOutSummary;
 
   const handleAdd = () => {
     const trimmed = addName.trim();
@@ -319,50 +369,105 @@ export function ProjectedMoveInsSection({
 
   return (
     <Card data-testid="card-projected-move-ins">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarClock className="w-4 h-4 text-blue-600" />
-              Projected Move-Ins
-            </CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Pre-stage upcoming arrivals here. Once they show up,
-              click "Move them in" to create the real occupant and
-              link the bed in one step.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant="secondary" data-testid="badge-projected-total">
-              {summary.total} planned
-            </Badge>
-            <Badge
-              className={
-                summary.next7 > 0
-                  ? "bg-amber-100 text-amber-900 border-amber-200"
-                  : "bg-muted text-muted-foreground border-transparent"
-              }
-              data-testid="badge-projected-next7"
-            >
-              <CalendarCheck2 className="w-3 h-3 mr-1" />
-              {summary.next7} in next 7 days
-            </Badge>
-            <Badge
-              className={
-                summary.overdue > 0
-                  ? "bg-rose-100 text-rose-900 border-rose-200"
-                  : "bg-muted text-muted-foreground border-transparent"
-              }
-              data-testid="badge-projected-overdue"
-            >
-              <AlertCircle className="w-3 h-3 mr-1" />
-              {summary.overdue} overdue
-            </Badge>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <CalendarClock className="w-4 h-4 text-blue-600" />
+            Move-ins &amp; Move-outs
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-md border p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setView("in")}
+                data-testid="toggle-moveins"
+                className={
+                  "rounded px-2 py-1 font-medium " +
+                  (view === "in"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                Move-ins ({summary.total})
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("out")}
+                data-testid="toggle-moveouts"
+                className={
+                  "rounded px-2 py-1 font-medium " +
+                  (view === "out"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                Move-outs ({moveOutSummary.total})
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs">
+              <Badge
+                className={
+                  activeSummary.next7 > 0
+                    ? "bg-amber-100 text-amber-900 border-amber-200"
+                    : "bg-muted text-muted-foreground border-transparent"
+                }
+                data-testid="badge-pmi-next7"
+              >
+                <CalendarCheck2 className="w-3 h-3 mr-1" />
+                {activeSummary.next7} in 7d
+              </Badge>
+              <Badge
+                className={
+                  activeSummary.overdue > 0
+                    ? "bg-rose-100 text-rose-900 border-rose-200"
+                    : "bg-muted text-muted-foreground border-transparent"
+                }
+                data-testid="badge-pmi-overdue"
+              >
+                <AlertCircle className="w-3 h-3 mr-1" />
+                {activeSummary.overdue} overdue
+              </Badge>
+            </div>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* ── Add row ── */}
+      <CardContent className="space-y-3">
+        {view === "out" ? (
+          moveOuts.length === 0 ? (
+            <p
+              className="text-sm text-muted-foreground italic"
+              data-testid="text-moveouts-empty"
+            >
+              No move-outs on the books.
+            </p>
+          ) : (
+            <ul className="space-y-2" data-testid="list-moveouts">
+              {moveOuts.map((o) => {
+                const flag = projectedMoveInFlag(o.date);
+                return (
+                  <li
+                    key={o.id}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-md border bg-background"
+                    data-testid={`row-moveout-${o.id}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium truncate">{o.name}</span>
+                        {flag && <Badge className={flag.cls}>{flag.label}</Badge>}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {formatYMDPretty(o.date)}
+                        {o.where ? ` · ${o.where}` : ""}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
+        ) : (
+          <>
+        {!readOnly && (
         <div className="grid gap-2 md:grid-cols-[1.4fr_0.9fr_1.6fr_1.4fr_auto] items-end p-3 rounded-md border bg-muted/20">
           <div className="space-y-1">
             <Label htmlFor="pmi-add-name" className="text-xs">
@@ -431,6 +536,7 @@ export function ProjectedMoveInsSection({
             <Plus className="w-4 h-4 mr-1" /> Add
           </Button>
         </div>
+        )}
 
         {/* ── List ── */}
         {moveIns.length === 0 ? (
@@ -438,7 +544,9 @@ export function ProjectedMoveInsSection({
             className="text-sm text-muted-foreground italic"
             data-testid="text-projected-empty"
           >
-            No upcoming move-ins planned for this property yet.
+            {readOnly
+              ? "Plan move-ins from each property's Beds tab."
+              : "No upcoming move-ins planned for this property yet."}
           </p>
         ) : (
           <ul className="space-y-2" data-testid="list-projected-move-ins">
@@ -458,6 +566,8 @@ export function ProjectedMoveInsSection({
                 />
               ))}
           </ul>
+        )}
+        </>
         )}
       </CardContent>
     </Card>

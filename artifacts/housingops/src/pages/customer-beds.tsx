@@ -32,6 +32,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
+import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
 import type { Bed, Occupant } from "@/data/mockData";
 
 /**
@@ -72,6 +73,28 @@ export default function CustomerBeds() {
     for (const r of rooms) m.set(r.id, r.name);
     return m;
   }, [rooms]);
+
+  // Customer-scoped data for the Move-ins & Move-outs section (spans all
+  // of this customer's properties). Read-only here — move-in pre-staging
+  // is managed per property; the value in the bed area is seeing upcoming
+  // move-OUTS so beds can be planned.
+  const scopedForMoves = useMemo(() => {
+    const scopedIds = new Set(
+      properties
+        .filter((p) => p.customerId === id || (p.sharedWithCustomerIds ?? []).includes(id))
+        .map((p) => p.id),
+    );
+    const propertyNameById: Record<string, string> = {};
+    for (const p of properties) {
+      if (scopedIds.has(p.id)) propertyNameById[p.id] = shortPropertyName(p.name);
+    }
+    return {
+      propRooms: rooms.filter((r) => scopedIds.has(r.propertyId)),
+      propBeds: beds.filter((b) => scopedIds.has(b.propertyId)),
+      propOccupants: occupants.filter((o) => o.propertyId && scopedIds.has(o.propertyId)),
+      propertyNameById,
+    };
+  }, [properties, rooms, beds, occupants, id]);
 
   const occupantByBedId = useMemo(() => {
     const m = new Map<string, Occupant>();
@@ -201,6 +224,17 @@ export default function CustomerBeds() {
             Beds
           </h1>
         </div>
+
+        {/* Upcoming arrivals & departures across this customer's properties. */}
+        <ProjectedMoveInsSection
+          propertyId=""
+          propRooms={scopedForMoves.propRooms}
+          propBeds={scopedForMoves.propBeds}
+          propOccupants={scopedForMoves.propOccupants}
+          propertyNameById={scopedForMoves.propertyNameById}
+          readOnly
+          defaultView="out"
+        />
 
         {isLoading ? (
           <Card>

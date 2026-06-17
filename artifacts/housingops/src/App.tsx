@@ -40,6 +40,7 @@ import SignUpPage from "@/pages/sign-up";
 const Dashboard = lazyWithReload(() => import("@/pages/dashboard"));
 const Customers = lazyWithReload(() => import("@/pages/customers"));
 const CustomerDetail = lazyWithReload(() => import("@/pages/customer-detail"));
+const CustomerBeds = lazyWithReload(() => import("@/pages/customer-beds"));
 const Properties = lazyWithReload(() => import("@/pages/properties"));
 const PropertyDetail = lazyWithReload(() => import("@/pages/property-detail"));
 const Leases = lazyWithReload(() => import("@/pages/leases"));
@@ -143,10 +144,11 @@ function AppRoutes() {
           and remounts fresh on the next navigation. */}
       <ErrorBoundary key={loc}>
       <Switch>
-        <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/dashboard"} />} />
+        <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/customers"} />} />
         <Route path="/login" component={Login} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/customers" component={Customers} />
+        <Route path="/customers/:id/beds" component={CustomerBeds} />
         <Route path="/customers/:id" component={CustomerDetail} />
         <Route path="/properties" component={Properties} />
         <Route path="/properties/:id" component={PropertyDetail} />

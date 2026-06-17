@@ -444,7 +444,7 @@ export default function CustomerDetail() {
             sub={totals.totalBeds > 0 ? t("pages.customerDetail.occupiedOverTotal") : undefined}
             icon={BedDouble}
             testId="stat-beds"
-            onClick={() => navigate(`/beds?customer=${encodeURIComponent(id)}`)}
+            onClick={() => navigate(`/customers/${encodeURIComponent(id)}/beds`)}
           />
           <StatCard
             label={t("pages.customerDetail.summaryOccupancy")}
@@ -452,7 +452,7 @@ export default function CustomerDetail() {
             color={totals.totalBeds > 0 ? "text-emerald-600" : "text-muted-foreground"}
             icon={TrendingUp}
             testId="stat-occupancy"
-            onClick={() => navigate(`/beds?customer=${encodeURIComponent(id)}`)}
+            onClick={() => navigate(`/customers/${encodeURIComponent(id)}/beds`)}
           />
           <StatCard
             label={t("pages.customerDetail.summaryMonthlyRevenue")}

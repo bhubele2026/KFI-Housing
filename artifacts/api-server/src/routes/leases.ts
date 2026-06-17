@@ -1,6 +1,15 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, leasesTable, type LeaseRow } from "@workspace/db";
+import {
+  db,
+  leasesTable,
+  propertiesTable,
+  roomsTable,
+  bedsTable,
+  type LeaseRow,
+  type InsertRoomRow,
+  type InsertBedRow,
+} from "@workspace/db";
 import {
   ListLeasesResponse,
   ListLeasesResponseItem,
@@ -12,8 +21,81 @@ import {
 } from "@workspace/api-zod";
 import { deriveLeaseStatus } from "../lib/lease-status";
 import { normalizeLeaseRow } from "../lib/db-row-normalizers";
+import { planBedsToCreate } from "../lib/seed-bed-inventory";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+/**
+ * Ensure a freshly-leased property has placeable bed rows so it can
+ * immediately receive a placement from the Roster. Reuses the
+ * seed-bed-inventory planner (deterministic auto ids → idempotent, never
+ * duplicates), filling up to the property's `totalBeds` — or at least one
+ * bed when capacity isn't set yet, so a brand-new lease never lands on a
+ * property with zero assignable beds. Additive only (never touches
+ * existing/occupied beds) and non-fatal: a hiccup here must not fail the
+ * lease create.
+ */
+async function ensureBedsForProperty(propertyId: string): Promise<void> {
+  if (!propertyId) return;
+  try {
+    const [prop] = await db
+      .select({ totalBeds: propertiesTable.totalBeds })
+      .from(propertiesTable)
+      .where(eq(propertiesTable.id, propertyId));
+    if (!prop) return; // unknown property — nothing to materialize against
+
+    const existing = await db
+      .select({ id: bedsTable.id })
+      .from(bedsTable)
+      .where(eq(bedsTable.propertyId, propertyId));
+
+    const target = prop.totalBeds && prop.totalBeds > 0 ? prop.totalBeds : 1;
+    const plan = planBedsToCreate(
+      propertyId,
+      existing.map((b) => b.id),
+      target,
+    );
+    if (plan.beds.length === 0) return;
+
+    // Auto room (idempotent — created once, reused thereafter).
+    const room = await db
+      .select({ id: roomsTable.id })
+      .from(roomsTable)
+      .where(eq(roomsTable.id, plan.roomId));
+    if (room.length === 0) {
+      const roomRow: InsertRoomRow = {
+        id: plan.roomId,
+        propertyId,
+        buildingId: "",
+        name: "Unassigned (auto)",
+        sqft: 0,
+        bathrooms: 0,
+        monthlyRent: 0,
+      };
+      await db.insert(roomsTable).values(roomRow);
+    }
+
+    const bedRows: InsertBedRow[] = plan.beds.map((b) => ({
+      id: b.id,
+      propertyId,
+      bedNumber: b.bedNumber,
+      roomId: plan.roomId,
+      status: "Vacant",
+      occupantId: null,
+    }));
+    await db.insert(bedsTable).values(bedRows);
+    logger.info(
+      { propertyId, created: bedRows.length },
+      "leases: auto-materialized beds on lease create",
+    );
+  } catch (err) {
+    logger.warn(
+      { err, propertyId },
+      "leases: bed auto-materialize failed (non-fatal)",
+    );
+  }
+}
 
 // Lease status (Active / Expired / Upcoming) is derived from term dates
 // against today's date on read, so a lease seeded as "Active"
@@ -67,6 +149,9 @@ router.post("/leases", async (req, res): Promise<void> => {
   // hand-crafted curl) is coerced rather than persisted as-is.
   const normalized = normalizeLeaseRow(body.data);
   const [row] = await db.insert(leasesTable).values(normalized).returning();
+  // A new lease means the property is now in use — make sure it has
+  // placeable beds so an operator can assign someone right away.
+  await ensureBedsForProperty(row.propertyId);
   res.status(201).json(UpdateLeaseResponse.parse(withDerivedStatus(row)));
 });
 

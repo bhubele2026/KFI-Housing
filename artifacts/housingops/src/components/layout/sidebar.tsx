@@ -70,7 +70,7 @@ type NavEntry = NavLeaf | NavGroup;
 // link to `/properties?customer=…` and `/beds?customer=…`). The routes
 // still exist; they're just hidden from the rail. Drop an href from
 // this set to bring its button back.
-const HIDDEN_NAV_HREFS = new Set<string>(["/properties", "/beds", "/occupants"]);
+const HIDDEN_NAV_HREFS = new Set<string>(["/properties", "/beds", "/occupants", "/rental-companies", "/insurance", "/utilities"]);
 
 const HOUSING_CHILDREN: NavLeaf[] = [
   { kind: "leaf", href: "/customers", labelKey: "nav.customers", icon: Briefcase },

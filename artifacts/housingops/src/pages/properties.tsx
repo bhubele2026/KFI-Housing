@@ -2241,7 +2241,7 @@ export default function Properties() {
                                     page) so selecting it can't trip into edit
                                     mode. */}
                                 <span
-                                  className="font-semibold leading-snug group-hover:text-primary group-hover:underline underline-offset-2 transition-colors"
+                                  className="font-semibold leading-snug line-clamp-2 group-hover:text-primary group-hover:underline underline-offset-2 transition-colors"
                                   title={`Open ${property.name}`}
                                   data-testid={`link-property-name-${property.id}`}
                                 >

@@ -220,6 +220,24 @@
     @apply border-border;
   }
 
+  /* Whole-app auto-scale. Tailwind's sizing is rem-based, so stepping the
+     root font-size down on smaller viewports shrinks type AND spacing
+     together — the app stays flat and readable on small laptops instead
+     of squishing columns and overflowing. One global lever, no per-page
+     work. */
+  html {
+    font-size: 16px;
+  }
+  @media (max-width: 1440px) {
+    html { font-size: 15px; }
+  }
+  @media (max-width: 1180px) {
+    html { font-size: 14px; }
+  }
+  @media (max-width: 960px) {
+    html { font-size: 13px; }
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }

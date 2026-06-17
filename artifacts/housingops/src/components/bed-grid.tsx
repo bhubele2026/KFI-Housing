@@ -57,8 +57,27 @@ import type { Bed, Occupant, Property } from "@/data/mockData";
 const MAX_BED_COLS = 6;
 const today = () => new Date().toISOString().split("T")[0];
 
-type RosterPerson = { personId: string; name: string; company: string; aliases: string[] };
+type RosterPerson = {
+  personId: string;
+  name: string;
+  company: string;
+  aliases: string[];
+  weeklyDeduction: number;
+  jobTitle: string;
+};
 type VacantBed = { id: string; propertyId: string; label: string };
+
+// Strip crew/role tags that get appended to imported names ("Jonathan P
+// Wheeler - T5", "Felix Arroyo - KFI Sup.", "Bucky Lee Gonzalez -T4") so the
+// fuzzy matcher compares the real name. Hyphenated surnames (Smith-Jones)
+// are left intact — only short trailing codes / known role words are cut.
+function stripNameTag(s: string): string {
+  return s
+    .replace(/\s*-\s*(t\d+|p\d+|c\d+)\.?$/i, "")
+    .replace(/\s*-\s*kfi\b.*$/i, "")
+    .replace(/\s*-\s*(sup|supv|lead|driver|temp|crew)\.?$/i, "")
+    .trim();
+}
 
 // Name-similarity (Dice over char bigrams + last-name boost) used to
 // SUGGEST the roster person a needs-match occupant most likely is, so one
@@ -94,9 +113,11 @@ function lastTok(s: string): string {
 // over the full strings, plus boosts when the first names match and when the
 // last names match (so "Ryan Fiegen" ↔ "Fiegen, Ryan J" still scores high).
 function matchScore(a: string, b: string): number {
-  let s = diceScore(a, b);
-  if (lastTok(a) && lastTok(a) === lastTok(b)) s = Math.min(1, s + 0.18);
-  if (firstTok(a) && firstTok(a) === firstTok(b)) s = Math.min(1, s + 0.12);
+  const na = stripNameTag(a);
+  const nb = stripNameTag(b);
+  let s = diceScore(na, nb);
+  if (lastTok(na) && lastTok(na) === lastTok(nb)) s = Math.min(1, s + 0.18);
+  if (firstTok(na) && firstTok(na) === firstTok(nb)) s = Math.min(1, s + 0.12);
   return s;
 }
 function bestRosterMatch(name: string, people: RosterPerson[]): { person: RosterPerson; score: number } | null {
@@ -129,6 +150,8 @@ export function PropertyBedTable({
     // re-runs on deploy; reading it defensively keeps `pnpm build` typecheck
     // green either way.
     aliases: (p as { aliases?: string[] }).aliases ?? [],
+    weeklyDeduction: p.weeklyDeduction ?? 0,
+    jobTitle: p.jobTitle ?? "",
   }));
   const rosterIds = new Set(rosterPeople.map((p) => p.personId));
 
@@ -197,17 +220,19 @@ export function PropertyBedTable({
     moveInDate: today(),
     moveOutDate: null,
     status: "Active",
-    chargePerBed: 0,
-    billingFrequency: "Monthly",
+    // Bring in the Zenople housing deduction + role when the matched roster
+    // person carries one, so assigning/matching populates the charge.
+    chargePerBed: person.weeklyDeduction > 0 ? person.weeklyDeduction : 0,
+    billingFrequency: person.weeklyDeduction > 0 ? "Weekly" : "Monthly",
     email: "",
     phone: "",
-    chargeSource: "",
+    chargeSource: person.weeklyDeduction > 0 ? "payroll" : "",
     chargeSourceCustomer: "",
-    chargeSourcePersonId: "",
+    chargeSourcePersonId: person.weeklyDeduction > 0 ? person.personId : "",
     shift: null,
     language: null,
     gender: null,
-    title: null,
+    title: person.jobTitle || null,
     kfisAuthorizedToDrive: null,
     createdAt: new Date().toISOString(),
   });
@@ -239,6 +264,17 @@ export function PropertyBedTable({
       employeeId: person.personId,
       name: titleCaseName(person.name),
       company: person.company || occ.company,
+      // Matching also brings in the Zenople deduction + role (employee
+      // details) when the roster person has them.
+      ...(person.weeklyDeduction > 0
+        ? {
+            chargePerBed: person.weeklyDeduction,
+            billingFrequency: "Weekly" as const,
+            chargeSource: "payroll",
+            chargeSourcePersonId: person.personId,
+          }
+        : {}),
+      ...(person.jobTitle ? { title: person.jobTitle } : {}),
     });
 
   const handleAddBed = (roomId: string, existingBeds: Bed[]) => {

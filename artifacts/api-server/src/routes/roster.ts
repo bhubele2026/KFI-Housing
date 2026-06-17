@@ -26,6 +26,8 @@ interface RosterResult {
   payPeriod: string;
   count: number;
   withDeduction: number;
+  excludedCorp: number;
+  excludedNoCompany: number;
   payrollFields: string[];
   people: RosterPerson[];
 }
@@ -33,6 +35,25 @@ let cache: { at: number; result: RosterResult } | null = null;
 
 function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+// PRIVACY: corp/internal employees must NEVER appear in the roster. Their
+// assignment "company" is the internal corporate entity, so we exclude by
+// company name. Tunable via env (comma-separated, case-insensitive
+// substring match) WITHOUT a deploy. Deliberately does NOT pattern on a
+// bare "corp" — that would wrongly drop real clients like "Penda Corp".
+const CORP_COMPANY_PATTERNS = (
+  process.env.ROSTER_CORP_COMPANY_PATTERNS ||
+  "internal corporate,kfi staffing internal,kfi internal,corporate office,corporate hq"
+)
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+function isCorpCompany(company: string): boolean {
+  const c = company.trim().toLowerCase();
+  if (!c) return false;
+  return CORP_COMPANY_PATTERNS.some((p) => c.includes(p));
 }
 
 /**
@@ -74,18 +95,48 @@ async function buildRoster(): Promise<RosterResult> {
     logger.warn({ err }, "roster: deduction enrichment failed — continuing without deductions");
   }
 
-  const people: RosterPerson[] = payroll.people.map((p) => {
+  const all: RosterPerson[] = payroll.people.map((p) => {
     const m = meta.get(p.personId);
     const weekly = deduction.get(p.personId) ?? 0;
     return {
       personId: p.personId,
       name: p.name,
-      company: m?.company ?? "",
+      company: (m?.company ?? "").trim(),
       jobTitle: m?.jobTitle ?? "",
       hasDeduction: weekly > 0,
       weeklyDeduction: weekly,
     };
   });
+
+  // The roster shows client-assigned associates ONLY. Per the operator's
+  // rule: every visible person must carry a (non-corp) company, and corp/
+  // internal employees must never appear. So we drop (a) corp/internal
+  // companies and (b) anyone whose client company didn't resolve at all
+  // (treated as internal/non-client). Counts are surfaced via ?fields=1
+  // and logged so we can tell corp exclusions apart from unresolved-company
+  // gaps and tune the widened AssignmentData window if needed.
+  let excludedCorp = 0;
+  let excludedNoCompany = 0;
+  const people = all.filter((p) => {
+    if (isCorpCompany(p.company)) {
+      excludedCorp++;
+      return false;
+    }
+    if (!p.company) {
+      excludedNoCompany++;
+      return false;
+    }
+    return true;
+  });
+  logger.info(
+    {
+      onPayroll: all.length,
+      shown: people.length,
+      excludedCorp,
+      excludedNoCompany,
+    },
+    "roster: built (corp + no-company excluded)",
+  );
 
   return {
     asOf: payroll.asOf,
@@ -93,6 +144,8 @@ async function buildRoster(): Promise<RosterResult> {
     payPeriod: payroll.payPeriod,
     count: people.length,
     withDeduction: people.filter((p) => p.hasDeduction).length,
+    excludedCorp,
+    excludedNoCompany,
     payrollFields: payroll.discoveredFields,
     people,
   };
@@ -121,6 +174,8 @@ router.get("/roster/active", async (req, res): Promise<void> => {
         payPeriod: r.payPeriod,
         count: r.count,
         withDeduction: r.withDeduction,
+        excludedCorp: r.excludedCorp,
+        excludedNoCompany: r.excludedNoCompany,
         payrollFields: r.payrollFields,
       });
       return;

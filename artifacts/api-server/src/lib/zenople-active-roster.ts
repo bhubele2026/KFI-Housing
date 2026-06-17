@@ -29,10 +29,12 @@ import { logger as defaultLogger } from "./logger";
 import type { Logger } from "pino";
 
 const ASSIGNMENT_ACTION = "AssignmentData";
-// A recent modified-time window returns the full *current* assignment
-// set in one call (same behaviour as DeductionData). 45 days comfortably
-// spans several weekly payroll runs.
-const LOOKBACK_DAYS = 45;
+// The modified-time window must be wide enough to return EVERY current
+// assignment, not just those touched recently — otherwise people whose
+// assignment row hasn't changed in weeks come back with no company. A
+// 45-day window only resolved ~195 of ~500; widen to ~13 months so the
+// client/company resolves for the whole active roster.
+const LOOKBACK_DAYS = 400;
 
 interface ZenopleConfig {
   baseUrl: string;

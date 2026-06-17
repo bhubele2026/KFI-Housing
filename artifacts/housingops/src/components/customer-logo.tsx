@@ -16,18 +16,14 @@ export function CustomerLogo({
   size?: number;
   className?: string;
 }) {
-  // Source ladder: Clearbit brand logo -> Google favicon -> colored
-  // initials. Clearbit's logo CDN has gotten flaky/deprecated (everything
-  // was falling straight to initials), so on error we step down to the
-  // keyless, reliable favicon service before giving up to initials.
-  const [stage, setStage] = useState(0);
+  // Source ladder: Clearbit brand logo -> clean colored-initials monogram.
+  // We deliberately do NOT use the Google favicon service: for domains
+  // without a real favicon it returns a generic blurry globe (looks cheap),
+  // and it never 404s so it never falls through. Clearbit 404s cleanly when
+  // there's no logo, so a miss lands on a sharp initials mark instead.
+  const [failed, setFailed] = useState(false);
   const domain = domainForCustomer(name);
-  const src =
-    domain && stage === 0
-      ? `https://logo.clearbit.com/${domain}?size=${size * 2}`
-      : domain && stage === 1
-        ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
-        : null;
+  const src = domain && !failed ? `https://logo.clearbit.com/${domain}?size=${size * 2}` : null;
 
   if (src) {
     return (
@@ -37,7 +33,7 @@ export function CustomerLogo({
         width={size}
         height={size}
         loading="lazy"
-        onError={() => setStage((s) => s + 1)}
+        onError={() => setFailed(true)}
         className={cn("shrink-0 rounded-md object-contain bg-white p-0.5 ring-1 ring-border", className)}
         style={{ width: size, height: size }}
         data-testid="customer-logo"

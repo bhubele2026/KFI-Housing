@@ -1879,27 +1879,11 @@ export default function PropertyDetail() {
           )}
         </div>
 
-        {/* Bed Map */}
-        <div id="section-bed-occupancy" className="scroll-mt-20">
-        <BedMap
-          beds={propBeds}
-          occupants={propOccupants}
-          rooms={propRooms}
-          propertyId={id}
-          onAddBed={addBed}
-          onDeleteBed={deleteBed}
-          onBedClick={focusBed}
-          onAssignOccupant={(occ, b) => {
-            addOccupant(occ);
-            updateBed(b.id, { status: "Occupied", occupantId: occ.id });
-          }}
-          onVacateBed={(bed) => {
-            updateBed(bed.id, { status: "Vacant", occupantId: null });
-            const o = propOccupants.find((x) => x.bedId === bed.id && x.status === "Active");
-            if (o) updateOccupant(o.id, { status: "Former", bedId: null });
-          }}
-        />
-        </div>
+        {/* The chip-grid "Bed Occupancy" card was scrapped (operator
+            request) — bed management lives in the Beds tab below. The
+            anchor stays so the Total Beds / Occupied / Available stat-card
+            deep-links still land here, just above the tabs. */}
+        <div id="section-bed-occupancy" className="scroll-mt-20" />
 
         {/* Tabs */}
         <Tabs id="section-tabs" value={activeTab} onValueChange={setActiveTab} className="space-y-4 scroll-mt-20">

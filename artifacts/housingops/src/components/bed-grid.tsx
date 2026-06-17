@@ -80,14 +80,23 @@ function diceScore(a: string, b: string): number {
   for (const x of B) { const c = m.get(x) ?? 0; if (c > 0) { o++; m.set(x, c - 1); } }
   return (2 * o) / (A.length + B.length);
 }
+function toks(s: string): string[] {
+  return s.trim().toLowerCase().replace(/[^a-z ]/g, "").split(/\s+/).filter(Boolean);
+}
+function firstTok(s: string): string {
+  return toks(s)[0] ?? "";
+}
 function lastTok(s: string): string {
-  const p = s.trim().toLowerCase().replace(/[^a-z ]/g, "").split(/\s+/).filter(Boolean);
+  const p = toks(s);
   return p[p.length - 1] ?? "";
 }
+// Fuzzy similarity that weighs BOTH first and last name: a base Dice score
+// over the full strings, plus boosts when the first names match and when the
+// last names match (so "Ryan Fiegen" ↔ "Fiegen, Ryan J" still scores high).
 function matchScore(a: string, b: string): number {
   let s = diceScore(a, b);
-  const la = lastTok(a);
-  if (la && la === lastTok(b)) s = Math.min(1, s + 0.15);
+  if (lastTok(a) && lastTok(a) === lastTok(b)) s = Math.min(1, s + 0.18);
+  if (firstTok(a) && firstTok(a) === firstTok(b)) s = Math.min(1, s + 0.12);
   return s;
 }
 function bestRosterMatch(name: string, people: RosterPerson[]): { person: RosterPerson; score: number } | null {

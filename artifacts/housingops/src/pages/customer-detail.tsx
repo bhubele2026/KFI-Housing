@@ -13,7 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Briefcase, ChevronLeft, ChevronRight, Building2, BedDouble,
+  ChevronLeft, ChevronRight, Building2, BedDouble,
   TrendingUp, Mail, Phone, FileText, User, Receipt, Truck, Users,
 } from "lucide-react";
 import {
@@ -27,6 +27,7 @@ import {
 import { InlineEdit, NotesEditor } from "./property-detail";
 import { useToast } from "@/hooks/use-toast";
 import { NotFoundScreen } from "@/components/not-found-screen";
+import { CustomerLogo } from "@/components/customer-logo";
 
 function StatCard({
   label, value, sub, icon: Icon, color = "text-foreground", testId, onClick,
@@ -402,9 +403,7 @@ export default function CustomerDetail() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10">
-              <Briefcase className="h-6 w-6 text-primary" />
-            </div>
+            <CustomerLogo name={customer.name} size={56} />
             <div>
               <h1
                 className="text-2xl font-bold tracking-tight"

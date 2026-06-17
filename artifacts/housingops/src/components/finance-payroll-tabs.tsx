@@ -48,7 +48,8 @@ import {
   YAxis,
   Legend,
 } from "recharts";
-import { formatUsd } from "@/data/mockData";
+import { formatUsd, sumActiveRent } from "@/data/mockData";
+import { useData } from "@/context/data-store";
 import { ALL_CUSTOMERS } from "@/context/customer-scope";
 import {
   formatMonthBucketLabel,
@@ -689,10 +690,11 @@ export function FinancePayrollMonthlyTab(props: SharedProps) {
 type ByCustomerKey =
   | "customerName"
   | "activeOccupants"
-  | "monthlyRentKfiPays"
-  | "mostRecentWeekRecovered"
+  | "allocatedCost"
   | "monthToDateRecovered"
-  | "net";
+  | "recoveryGap"
+  | "recoveryRate"
+  | "occupancyPct";
 
 export function FinancePayrollByCustomerTab(props: SharedProps) {
   const { t } = useTranslation();
@@ -701,40 +703,95 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
     () => (data as ByCustomerResult | undefined) ?? null,
     [data],
   );
+  const { properties, beds, leases } = useData();
+
+  // Allocation mode (spec §3): "total" charges a customer for the empty
+  // beds in their footprint (vacancy loss stays visible); "occupied"
+  // scales each property's lease cost by its occupancy so the customer
+  // only carries beds actually in use.
+  const [allocMode, setAllocMode] = useState<"total" | "occupied">("total");
+
+  // Per (primary) customer: total lease cost, occupancy-weighted cost,
+  // and bed counts — from live properties/beds/leases. This app assigns a
+  // whole property to its primary customer, so allocation is by property.
+  const costByCustomer = useMemo(() => {
+    const m = new Map<
+      string,
+      { costTotal: number; costOcc: number; beds: number; occ: number }
+    >();
+    for (const p of properties) {
+      const cid = p.customerId;
+      if (!cid) continue;
+      const pBeds = beds.filter((b) => b.propertyId === p.id);
+      const total = pBeds.length || p.totalBeds || 0;
+      const occ = pBeds.filter((b) => b.status === "Occupied").length;
+      const activeRent = sumActiveRent(leases, p.id);
+      const leaseCost = activeRent > 0 ? activeRent : p.monthlyRent || 0;
+      const costOcc = total > 0 ? leaseCost * (occ / total) : leaseCost;
+      const e = m.get(cid) ?? { costTotal: 0, costOcc: 0, beds: 0, occ: 0 };
+      e.costTotal += leaseCost;
+      e.costOcc += costOcc;
+      e.beds += total;
+      e.occ += occ;
+      m.set(cid, e);
+    }
+    return m;
+  }, [properties, beds, leases]);
 
   const rawRows = useMemo(() => result?.rows ?? [], [result]);
+
+  // Enrich each customer row with allocated_cost / recovery_gap /
+  // recovery_rate / occupancy (recovered = ACTUAL deductions = the
+  // endpoint's monthToDateRecovered).
+  const enriched = useMemo(
+    () =>
+      rawRows.map((r) => {
+        const cd = costByCustomer.get(r.customerId);
+        const allocatedCost =
+          allocMode === "occupied"
+            ? cd?.costOcc ?? r.monthlyRentKfiPays
+            : cd?.costTotal ?? r.monthlyRentKfiPays;
+        const recovered = r.monthToDateRecovered;
+        const recoveryGap = allocatedCost - recovered;
+        const recoveryRate =
+          allocatedCost > 0 ? (recovered / allocatedCost) * 100 : null;
+        const occupancyPct =
+          cd && cd.beds > 0 ? (cd.occ / cd.beds) * 100 : null;
+        return { ...r, allocatedCost, recovered, recoveryGap, recoveryRate, occupancyPct };
+      }),
+    [rawRows, costByCustomer, allocMode],
+  );
+
   const [sort, setSort] = useState<SortState<ByCustomerKey>>({
-    key: "customerName",
-    dir: "asc",
+    key: "recoveryGap",
+    dir: "desc",
   });
   const rows = useMemo(
     () =>
-      sortRows(rawRows, sort, {
+      sortRows(enriched, sort, {
         customerName: (r) => r.customerName,
         activeOccupants: (r) => r.activeOccupants,
-        monthlyRentKfiPays: (r) => r.monthlyRentKfiPays,
-        mostRecentWeekRecovered: (r) => r.mostRecentWeekRecovered,
+        allocatedCost: (r) => r.allocatedCost,
         monthToDateRecovered: (r) => r.monthToDateRecovered,
-        net: (r) => r.net,
+        recoveryGap: (r) => r.recoveryGap,
+        recoveryRate: (r) => r.recoveryRate ?? -1,
+        occupancyPct: (r) => r.occupancyPct ?? -1,
       }),
-    [rawRows, sort],
+    [enriched, sort],
   );
 
   const totals = rows.reduce(
     (acc, r) => ({
       activeOccupants: acc.activeOccupants + r.activeOccupants,
-      monthlyRentKfiPays: acc.monthlyRentKfiPays + r.monthlyRentKfiPays,
-      mostRecentWeekRecovered:
-        acc.mostRecentWeekRecovered + r.mostRecentWeekRecovered,
+      allocatedCost: acc.allocatedCost + r.allocatedCost,
       monthToDateRecovered: acc.monthToDateRecovered + r.monthToDateRecovered,
-      net: acc.net + r.net,
+      recoveryGap: acc.recoveryGap + r.recoveryGap,
     }),
     {
       activeOccupants: 0,
-      monthlyRentKfiPays: 0,
-      mostRecentWeekRecovered: 0,
+      allocatedCost: 0,
       monthToDateRecovered: 0,
-      net: 0,
+      recoveryGap: 0,
     },
   );
 
@@ -778,17 +835,45 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
               <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
             )}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={rows.length === 0}
-            data-testid="button-finance-by-customer-export"
-          >
-            <Download className="h-3 w-3 mr-1" />
-            {t("pages.finance.payroll.exportCsv")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="inline-flex items-center rounded-md border p-0.5 text-xs"
+              data-testid="toggle-alloc-mode"
+              title="How a property's lease cost is allocated to its customer"
+            >
+              <button
+                type="button"
+                onClick={() => setAllocMode("total")}
+                className={
+                  "rounded px-2 py-1 " +
+                  (allocMode === "total" ? "bg-primary text-primary-foreground" : "text-muted-foreground")
+                }
+              >
+                By total beds
+              </button>
+              <button
+                type="button"
+                onClick={() => setAllocMode("occupied")}
+                className={
+                  "rounded px-2 py-1 " +
+                  (allocMode === "occupied" ? "bg-primary text-primary-foreground" : "text-muted-foreground")
+                }
+              >
+                By occupied beds
+              </button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={rows.length === 0}
+              data-testid="button-finance-by-customer-export"
+            >
+              <Download className="h-3 w-3 mr-1" />
+              {t("pages.finance.payroll.exportCsv")}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -852,40 +937,19 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
                   />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortHeader
-                    label={t("pages.finance.payroll.monthlyRentKfiPays")}
-                    sortKey="monthlyRentKfiPays"
-                    state={sort}
-                    setState={setSort}
-                    align="right"
-                  />
+                  <SortHeader label="Allocated cost" sortKey="allocatedCost" state={sort} setState={setSort} align="right" />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortHeader
-                    label={t("pages.finance.payroll.mostRecentWeek")}
-                    sortKey="mostRecentWeekRecovered"
-                    state={sort}
-                    setState={setSort}
-                    align="right"
-                  />
+                  <SortHeader label="Recovered" sortKey="monthToDateRecovered" state={sort} setState={setSort} align="right" />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortHeader
-                    label={t("pages.finance.payroll.monthToDate")}
-                    sortKey="monthToDateRecovered"
-                    state={sort}
-                    setState={setSort}
-                    align="right"
-                  />
+                  <SortHeader label="Recovery gap" sortKey="recoveryGap" state={sort} setState={setSort} align="right" />
                 </TableHead>
                 <TableHead className="text-right">
-                  <SortHeader
-                    label={t("pages.finance.payroll.net")}
-                    sortKey="net"
-                    state={sort}
-                    setState={setSort}
-                    align="right"
-                  />
+                  <SortHeader label="Rate %" sortKey="recoveryRate" state={sort} setState={setSort} align="right" />
+                </TableHead>
+                <TableHead className="text-right">
+                  <SortHeader label="Occ %" sortKey="occupancyPct" state={sort} setState={setSort} align="right" />
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -914,18 +978,21 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
                     {r.activeOccupants}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {formatUsd(r.monthlyRentKfiPays)}
+                    {formatUsd(r.allocatedCost)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatUsd(r.mostRecentWeekRecovered)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatUsd(r.monthToDateRecovered)}
+                    {formatUsd(r.recovered)}
                   </TableCell>
                   <TableCell
-                    className={`text-right tabular-nums ${deltaCellClass(r.net)}`}
+                    className={`text-right tabular-nums font-medium ${r.recoveryGap > 0 ? "text-red-600" : "text-emerald-600"}`}
                   >
-                    {formatUsd(r.net)}
+                    {formatUsd(r.recoveryGap)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {r.recoveryRate == null ? "—" : `${r.recoveryRate.toFixed(0)}%`}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {r.occupancyPct == null ? "—" : `${r.occupancyPct.toFixed(0)}%`}
                   </TableCell>
                 </TableRow>
               ))}
@@ -935,19 +1002,18 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
                   {totals.activeOccupants}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatUsd(totals.monthlyRentKfiPays)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatUsd(totals.mostRecentWeekRecovered)}
+                  {formatUsd(totals.allocatedCost)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatUsd(totals.monthToDateRecovered)}
                 </TableCell>
                 <TableCell
-                  className={`text-right tabular-nums ${deltaCellClass(totals.net)}`}
+                  className={`text-right tabular-nums font-medium ${totals.recoveryGap > 0 ? "text-red-600" : "text-emerald-600"}`}
                 >
-                  {formatUsd(totals.net)}
+                  {formatUsd(totals.recoveryGap)}
                 </TableCell>
+                <TableCell className="text-right tabular-nums" />
+                <TableCell className="text-right tabular-nums" />
               </TableRow>
             </TableBody>
           </Table>

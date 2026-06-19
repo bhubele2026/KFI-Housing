@@ -17,13 +17,8 @@ import {
 } from "@/components/ui/select";
 import {
   ChevronLeft, ChevronRight, Building2, BedDouble,
-  TrendingUp, Mail, Phone, FileText, User, Receipt, Truck, Users, MapPin,
+  TrendingUp, Mail, Phone, FileText, User, Receipt, Users, MapPin,
 } from "lucide-react";
-import {
-  useListVehicles,
-  useListVehicleRiders,
-  useListVehicleFuelCharges,
-} from "@workspace/api-client-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -97,48 +92,6 @@ export default function CustomerDetail() {
   const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer, updateProperty } = useData();
   const { toast } = useToast();
 
-  // Transportation rollup (Task: per-client transport list). Vans served by
-  // this customer, each with its driver and rider roster. Read directly from
-  // the vehicles API hooks since vehicles aren't part of the data-store.
-  const { data: allVehicles } = useListVehicles();
-  const { data: allVehicleRiders } = useListVehicleRiders();
-  const { data: allVehicleFuel } = useListVehicleFuelCharges();
-  const transportRollup = useMemo(() => {
-    const occName = new Map<string, string>();
-    for (const o of occupants) occName.set(o.id, o.name || o.id);
-    const ridersByVehicle = new Map<string, string[]>();
-    for (const r of allVehicleRiders ?? []) {
-      const list = ridersByVehicle.get(r.vehicleId) ?? [];
-      list.push(occName.get(r.occupantId) ?? r.occupantId);
-      ridersByVehicle.set(r.vehicleId, list);
-    }
-    const fuelByVehicle = new Map<string, number>();
-    for (const c of allVehicleFuel ?? []) {
-      fuelByVehicle.set(
-        c.vehicleId,
-        (fuelByVehicle.get(c.vehicleId) ?? 0) + Number(c.amount ?? 0),
-      );
-    }
-    const vans = (allVehicles ?? [])
-      .filter((v) => v.customerId === id)
-      .map((v) => ({
-        id: v.id,
-        label:
-          v.merchantUnit ||
-          [v.year, v.make, v.model].filter(Boolean).join(" ") ||
-          v.id,
-        status: v.status,
-        driver: v.driverOccupantId
-          ? occName.get(v.driverOccupantId) ?? v.driverOccupantId
-          : "",
-        riders: ridersByVehicle.get(v.id) ?? [],
-        monthly: Number(v.monthlyCost ?? 0),
-        fuel: fuelByVehicle.get(v.id) ?? 0,
-      }));
-    const monthlyTotal = vans.reduce((s, v) => s + v.monthly, 0);
-    const fuelTotal = vans.reduce((s, v) => s + v.fuel, 0);
-    return { vans, monthlyTotal, fuelTotal };
-  }, [allVehicles, allVehicleRiders, allVehicleFuel, occupants, id]);
   const [trendMonths, setTrendMonths] = useState<3 | 6 | 12 | 24>(() => {
     if (typeof window === "undefined") return 12;
     try {
@@ -822,98 +775,6 @@ export default function CustomerDetail() {
           </Card>
         </div>
 
-        <Card data-testid="card-customer-transport">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                <Truck className="h-4 w-4" />
-                Transportation
-              </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {transportRollup.vans.length === 1
-                  ? "1 van"
-                  : `${transportRollup.vans.length} vans`}
-                {transportRollup.monthlyTotal > 0 &&
-                  ` · ${formatUsd(transportRollup.monthlyTotal)}/mo`}
-                {transportRollup.fuelTotal > 0 &&
-                  ` · ${formatUsd(transportRollup.fuelTotal)} fuel`}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {transportRollup.vans.length === 0 ? (
-              <p
-                className="px-6 pb-6 text-sm text-muted-foreground"
-                data-testid="empty-transport"
-              >
-                No vans assigned to this client yet.
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Van</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Driver</TableHead>
-                    <TableHead className="text-center">Riders</TableHead>
-                    <TableHead>Associates transported</TableHead>
-                    <TableHead className="w-8" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transportRollup.vans.map((v) => (
-                    <tr
-                      key={v.id}
-                      className="cursor-pointer hover:bg-muted/50 border-b transition-colors group"
-                      onClick={() => navigate("/transport/vehicles")}
-                      data-testid={`row-customer-van-${v.id}`}
-                    >
-                      <td className="p-4 font-semibold">{v.label}</td>
-                      <td className="p-4">
-                        <Badge
-                          variant={
-                            v.status === "In use"
-                              ? "default"
-                              : v.status === "In shop"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className="text-[10px] px-1.5 py-0"
-                        >
-                          {v.status}
-                        </Badge>
-                      </td>
-                      <td className="p-4 text-sm">
-                        {v.driver ? (
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3 text-muted-foreground" />
-                            {v.driver}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            No driver
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-center text-sm tabular-nums">
-                        <span className="flex items-center justify-center gap-1">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          {v.riders.length}
-                        </span>
-                      </td>
-                      <td className="p-4 text-sm text-muted-foreground max-w-[20rem] truncate">
-                        {v.riders.length > 0 ? v.riders.join(", ") : "—"}
-                      </td>
-                      <td className="p-4">
-                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </td>
-                    </tr>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
       </motion.div>
     </MainLayout>
   );

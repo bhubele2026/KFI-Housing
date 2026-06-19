@@ -49,6 +49,9 @@ vi.mock("@workspace/integrations-anthropic-ai", () => ({
       },
     },
   },
+  ASSISTANT_MODEL: "test-model",
+  ASSISTANT_EFFORT: "high",
+  EXTRACTION_EFFORT: "low",
 }));
 
 const dbModule = await import("@workspace/db");

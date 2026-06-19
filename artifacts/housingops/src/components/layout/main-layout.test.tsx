@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 
-vi.mock("./sidebar", () => ({
-  Sidebar: () => <div data-testid="sidebar" />,
-}));
-
 vi.mock("wouter", () => ({
   Redirect: ({ to }: { to: string }) => (
     <div data-testid="redirect" data-redirect-to={to}>

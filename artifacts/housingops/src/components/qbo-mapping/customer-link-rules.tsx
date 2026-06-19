@@ -175,7 +175,7 @@ export function CustomerLinkRules({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>HousingOps customer</TableHead>
+              <TableHead>KFI Staffing customer</TableHead>
               <TableHead>QBO customer id</TableHead>
               <TableHead className="w-24" />
             </TableRow>
@@ -255,7 +255,7 @@ export function CustomerLinkRules({
             <TableRow>
               <TableHead>QBO display name</TableHead>
               <TableHead>QBO id</TableHead>
-              <TableHead>Link to HousingOps customer</TableHead>
+              <TableHead>Link to KFI Staffing customer</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>

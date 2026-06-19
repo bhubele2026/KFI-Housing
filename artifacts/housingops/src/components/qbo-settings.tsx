@@ -99,7 +99,7 @@ export function QboSettings() {
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
               Connect a QuickBooks Online company to mirror invoices, bills, and
-              payments into HousingOps and reconcile them against expected rent
+              payments into KFI Staffing and reconcile them against expected rent
               and utility costs.
             </p>
             <Button onClick={handleConnect} data-testid="qbo-connect">
@@ -144,7 +144,7 @@ export function QboSettings() {
               <p className="text-xs text-muted-foreground mb-2">
                 Author customer links, memo → property rules, and account
                 classifications that QuickBooks sync uses to attach mirrored
-                transactions to the right HousingOps records.
+                transactions to the right KFI Staffing records.
               </p>
               <Button asChild variant="outline" size="sm" data-testid="qbo-open-mapping-rules">
                 <Link href="/qbo/mapping-rules">Open Mapping Rules</Link>

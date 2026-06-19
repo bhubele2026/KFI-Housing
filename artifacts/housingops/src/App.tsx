@@ -61,9 +61,10 @@ const QboMappingRules = lazyWithReload(() => import("@/pages/qbo-mapping-rules")
 const InsuranceCertificates = lazyWithReload(() => import("@/pages/insurance-certificates"));
 const SettingsPage = lazyWithReload(() => import("@/pages/settings"));
 const AssistantChangelog = lazyWithReload(() => import("@/pages/assistant-changelog"));
-const TransportStub = lazyWithReload(() => import("@/pages/transport-stub"));
-const Vehicles = lazyWithReload(() => import("@/pages/vehicles"));
-const VehicleLeases = lazyWithReload(() => import("@/pages/vehicle-leases"));
+// Transportation is out of scope — the app is a pure housing product. The
+// vehicle pages/stub remain parked on disk (and the vehicle-* API + tables are
+// untouched), but nothing routes to them: every /transport/* path redirects to
+// the housing landing page. See Phase 3 of the polish plan.
 
 const CLERK_PUBLISHABLE_KEY = publishableKeyFromHost(
   window.location.hostname,
@@ -174,26 +175,8 @@ function AppRoutes() {
         <Route path="/review" component={Review} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/assistant/changelog" component={AssistantChangelog} />
-        <Route path="/transport/vehicles" component={Vehicles} />
-        <Route path="/transport/vehicle-leases" component={VehicleLeases} />
-        <Route path="/transport/drivers">
-          <TransportStub titleKey="nav.transport.drivers" />
-        </Route>
-        <Route path="/transport/trips">
-          <TransportStub titleKey="nav.transport.trips" />
-        </Route>
-        <Route path="/transport/maintenance">
-          <TransportStub titleKey="nav.transport.maintenance" />
-        </Route>
-        <Route path="/transport/fuel-logs">
-          <TransportStub titleKey="nav.transport.fuelLogs" />
-        </Route>
-        <Route path="/transport/routes">
-          <TransportStub titleKey="nav.transport.routes" />
-        </Route>
-        <Route path="/transport/charges">
-          <TransportStub titleKey="nav.transport.charges" />
-        </Route>
+        {/* Transportation is out of scope: redirect any parked /transport/* path home. */}
+        <Route path="/transport/*" component={() => <Redirect to="/customers" />} />
         <Route component={NotFound} />
       </Switch>
       </ErrorBoundary>

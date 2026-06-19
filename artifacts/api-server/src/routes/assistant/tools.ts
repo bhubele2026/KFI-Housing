@@ -36,6 +36,14 @@ import {
   rankPropertyCandidates,
 } from "../../lib/lease-pdf-import";
 import { isSaturdayDate } from "../../lib/pay-week";
+import { computeBriefing } from "../../lib/assistant-briefing";
+import {
+  computeDataHealth,
+  listLeasesNeedingReview,
+  listRentAnomalies,
+  listPropertiesMissingInsurance,
+  reconcileOccupancy,
+} from "../../lib/data-health";
 import { logger } from "../../lib/logger";
 import { PDFParse } from "pdf-parse";
 
@@ -152,6 +160,78 @@ tools.push({
   input_schema: obj({}),
   summarize: () => "Listing customers",
   execute: async () => ({ customers: await listAll(customersTable) }),
+});
+
+tools.push({
+  name: "get_daily_briefing",
+  kind: "read",
+  description:
+    "Get the 'what needs you today' briefing — the highest-dollar housing issues ranked by money at risk: properties under-recovering rent, people paying a housing deduction but not placed in a bed, and leases expiring within 30 days. Returns real computed figures (period month, total monthly dollars at risk, and a plain-English headline). ALWAYS call this when the operator asks what needs attention / what's wrong / where they're losing money, and cite ONLY these numbers — never invent a dollar figure.",
+  input_schema: obj({}),
+  summarize: () => "Pulling today's briefing",
+  execute: async () => await computeBriefing(),
+});
+
+// ── Data health / cleanup (Phase 7) — READ tools that surface the known
+// housing-data gaps. Corrections route through the EXISTING proposal-gated
+// write tools (update_lease, assign_occupant_to_bed, move_occupant_to_bed).
+tools.push({
+  name: "get_data_health",
+  kind: "read",
+  description:
+    "Answer 'is my housing data trustworthy?' — returns real counts of every open data-quality gap: leases needing review (rent/dates from scanned or ambiguous sources), rent anomalies (monthly rent ≥ $10,000), active properties with no insurance certificate, people charged a housing deduction but not placed in a bed, people placed in a bed but not being charged, vacant beds, and active properties with no beds set up. Includes a plain-English headline. Call this whenever the operator asks whether the data is complete/trustworthy or what needs cleaning up, and cite ONLY these counts — never invent one.",
+  input_schema: obj({}),
+  summarize: () => "Checking housing data health",
+  execute: async () => await computeDataHealth(),
+});
+
+tools.push({
+  name: "list_leases_needing_review",
+  kind: "read",
+  description:
+    "List every lease flagged needsReview (rent/dates came from a scanned or ambiguous source and an operator must confirm them). Returns id, property name, unit, current monthlyRent/weeklyCost, vendor. Use this to run the 'clear my review queue' workflow: walk the operator through each one and commit the confirmed/corrected rent via the update_lease tool (which goes through the normal confirm-before-write proposal path). For an image/scanned lease the operator can't recall, ask them to upload the lease PDF in this chat — extract_lease_pdf will re-read it with the upgraded model and suggest the rent.",
+  input_schema: obj({}),
+  summarize: () => "Listing leases needing review",
+  execute: async () => {
+    const leases = await listLeasesNeedingReview();
+    return { count: leases.length, leases };
+  },
+});
+
+tools.push({
+  name: "list_rent_anomalies",
+  kind: "read",
+  description:
+    "List leases whose monthlyRent is ≥ $10,000 — the rent-anomaly flag that usually means a data-entry or extraction error (e.g. a weekly or annual figure landed in the monthly field). Returns id, property name, unit, monthlyRent. Triage one at a time: confirm it's correct or fix it via update_lease (confirm-before-write proposal path).",
+  input_schema: obj({}),
+  summarize: () => "Listing rent anomalies (≥ $10k/mo)",
+  execute: async () => {
+    const leases = await listRentAnomalies();
+    return { count: leases.length, thresholdUsd: 10000, leases };
+  },
+});
+
+tools.push({
+  name: "list_properties_missing_insurance",
+  kind: "read",
+  description:
+    "List active properties that have NO insurance certificate on file. Returns id + name. Ask the operator to upload the property's ACORD 25 certificate PDF directly in this chat (the paperclip / file upload) so it can be attached — never invent coverage details (carrier, policy number, dates).",
+  input_schema: obj({}),
+  summarize: () => "Finding properties missing insurance",
+  execute: async () => {
+    const properties = await listPropertiesMissingInsurance();
+    return { count: properties.length, properties };
+  },
+});
+
+tools.push({
+  name: "reconcile_occupancy",
+  kind: "read",
+  description:
+    "Reconcile who's housed vs who's charged, for the latest payroll week. Returns: people charged a housing deduction but NOT placed in a bed (the money-leak gap), people placed in a bed but NOT being charged (the revenue gap), and the vacant-bed count. Narrate the deltas in plain words and offer to fix them via the placement tools (assign_occupant_to_bed / move_occupant_to_bed) or by correcting a deduction — all through the confirm-before-write proposal path. NOTE: this reconciles the app's own records (beds ↔ occupants ↔ deductions); it does NOT compare against the external Housing Master spreadsheet, which was a one-time import, not a live feed.",
+  input_schema: obj({}),
+  summarize: () => "Reconciling occupancy vs charges",
+  execute: async () => await reconcileOccupancy(),
 });
 
 tools.push({

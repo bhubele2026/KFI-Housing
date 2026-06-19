@@ -4,10 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { Router, Switch, Route } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
-vi.mock("./sidebar", () => ({
-  Sidebar: () => <div data-testid="sidebar-stub" />,
-}));
-
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;

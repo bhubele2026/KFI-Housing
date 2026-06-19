@@ -18,6 +18,9 @@ vi.mock("@workspace/integrations-anthropic-ai", () => ({
   anthropic: {
     messages: { create: vi.fn() },
   },
+  ASSISTANT_MODEL: "test-model",
+  ASSISTANT_EFFORT: "high",
+  EXTRACTION_EFFORT: "low",
 }));
 
 const dbSelectMock = vi.fn();

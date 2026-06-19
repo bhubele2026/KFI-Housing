@@ -100,8 +100,8 @@ export function buildRoomNightReminderEmail(input: {
 
   const subject =
     count === 0
-      ? `HousingOps room-night reminder (${month}) — all logs recorded`
-      : `HousingOps room-night reminder (${month}) — ${count} hotel-rate lease${count === 1 ? "" : "s"} missing a room-night log`;
+      ? `KFI Staffing room-night reminder (${month}) — all logs recorded`
+      : `KFI Staffing room-night reminder (${month}) — ${count} hotel-rate lease${count === 1 ? "" : "s"} missing a room-night log`;
 
   const textLines: string[] = [
     `Room-night log reminder for ${month}.`,

@@ -247,7 +247,7 @@ describe("inspectImportPayload", () => {
     expect(preview.data.rooms).toEqual([]);
   });
 
-  it("throws a friendly error for a payload that isn't a HousingOps export", () => {
+  it("throws a friendly error for a payload that isn't a KFI Staffing export", () => {
     expect(() => inspectImportPayload({ hello: "world" })).toThrow(
       UnsupportedImportError,
     );
@@ -256,7 +256,7 @@ describe("inspectImportPayload", () => {
       inspectImportPayload({ hello: "world" });
     } catch (err) {
       expect(err).toBeInstanceOf(UnsupportedImportError);
-      expect((err as Error).message).toMatch(/doesn't look like a HousingOps export/i);
+      expect((err as Error).message).toMatch(/doesn't look like a KFI Staffing export/i);
     }
   });
 

@@ -349,7 +349,7 @@ function customerLink(baseUrl: string, customerId: string): string {
  * both a plain-text and an HTML body so the receiving mailer can
  * pick whichever its template engine prefers; deep-links use the
  * provided `appBaseUrl` so the click lands on the lease detail page
- * in HousingOps regardless of which environment sent the digest.
+ * in KFI Staffing regardless of which environment sent the digest.
  *
  * The optional `noticeDeadlines` and `lowOccupancyCustomers` sections
  * (Task #492) render only when non-empty so legacy callers that don't
@@ -395,8 +395,8 @@ export function buildLeaseDigestEmail(input: {
   }
   const subject =
     headlineParts.length === 0
-      ? `HousingOps weekly lease digest (${today}) — no leases expiring soon`
-      : `HousingOps weekly lease digest (${today}) — ${headlineParts.join(", ")}`;
+      ? `KFI Staffing weekly lease digest (${today}) — no leases expiring soon`
+      : `KFI Staffing weekly lease digest (${today}) — ${headlineParts.join(", ")}`;
 
   const order: ExpiryBucket[] = ["critical", "warning", "soon"];
   const textLines: string[] = [

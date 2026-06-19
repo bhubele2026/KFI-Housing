@@ -103,7 +103,50 @@ export default function EconomicsPage() {
           }
         />
 
-        {/* Headline: recovery gap */}
+        {/* Lead with the answer: one dominant recovery-gap verdict an
+            operator can read in two seconds, before the supporting cards. */}
+        <Card
+          className={
+            "border-l-4 " +
+            (summary.totalRecoveryGap > 0
+              ? "border-l-red-500 bg-red-50/50 dark:bg-red-950/10"
+              : "border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/10")
+          }
+          data-testid="recovery-verdict"
+        >
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                {summary.totalRecoveryGap > 0 ? "Housing loss this month" : "Fully recovered this month"}
+              </div>
+              <div
+                className={
+                  "mt-1 text-4xl font-bold tabular-nums sm:text-5xl " +
+                  (summary.totalRecoveryGap > 0 ? "text-red-600" : "text-emerald-700")
+                }
+              >
+                {usd(summary.totalRecoveryGap)}
+              </div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {summary.totalRecoveryGap > 0
+                  ? `Recovering ${pct(summary.blendedRecoveryRate)} of rent · ${summary.propertiesLosing} ${summary.propertiesLosing === 1 ? "property" : "properties"} under-recovering`
+                  : `Recovering ${pct(summary.blendedRecoveryRate)} of the rent you pay out — nothing leaking right now.`}
+              </div>
+            </div>
+            <div className="flex gap-6 text-right">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Empty beds</div>
+                <div className="text-lg font-semibold tabular-nums text-amber-700">{usd(summary.totalVacancyLoss)}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Under-charged</div>
+                <div className="text-lg font-semibold tabular-nums text-amber-700">{usd(summary.totalCollectionLoss)}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Supporting breakdown */}
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Card>
             <CardContent className="p-4">

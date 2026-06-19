@@ -26,6 +26,18 @@ All three blocking issues fixed; full branding swap complete; e2e smoke test acr
 - **No code change needed:** the existing config is correct; `strictPort: true` is the right behavior here (the platform expects the artifact to bind to its assigned port — silently picking another one would break preview routing).
 
 ## Branding swap (KFI Staffing → HousingOps)
+
+> **⚠️ SUPERSEDED (2026-06-18).** This HousingOps swap was reverted. The
+> canonical brand is **KFI Staffing** — see `REVIEW_REPORT.md` and the
+> Phase 2 brand sweep. The shipped logo is `kfi-staffing-logo.png`, the
+> Slack schema-drift alert says "KFI Staffing", and all user-visible
+> strings (titles, manifest, login, assistant, email subjects, import/
+> export toasts, export filenames) were unified to **KFI Staffing**.
+> Do NOT re-fork the brand back to HousingOps. The `housingops` token
+> only survives as a directory/package name, the `"housingops-export"`
+> file-format literal, and internal code identifiers — those are
+> intentional and must stay.
+
 - New logo asset: `artifacts/housingops/src/assets/housingops-logo.svg` (house icon + "HousingOps" wordmark).
 - Rewrote `public/favicon.svg` (house glyph on brand-navy background).
 - Updated `index.html`: title, OG/Twitter meta, theme-color, apple-mobile-web-app-title.

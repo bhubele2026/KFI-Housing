@@ -99,17 +99,6 @@
     "insurance": "Insurance",
     "rentalCompanies": "Rental Companies",
     "housing": "Housing",
-    "transportation": "Transportation",
-    "transport": {
-      "vehicles": "Vehicles",
-      "vehicleLeases": "Vehicle Leases",
-      "drivers": "Drivers",
-      "trips": "Trips",
-      "maintenance": "Maintenance",
-      "fuelLogs": "Fuel Logs",
-      "routes": "Routes",
-      "charges": "Transport Charges"
-    },
     "settings": "Settings",
     "logout": "Sign out",
     "expandSidebar": "Expand sidebar",
@@ -127,17 +116,11 @@
   },
   "auth": {
     "welcomeBack": "Welcome back",
-    "signInDescription": "Sign in to HousingOps to manage your properties, leases, beds, and occupants.",
+    "signInDescription": "Sign in to KFI Staffing to manage your properties, leases, beds, and occupants.",
     "email": "Email",
     "emailPlaceholder": "name@company.com",
     "signIn": "Sign in",
     "demoNote": "Any email will work for the demo — no password required."
-  },
-  "transport": {
-    "stub": {
-      "description": "Placeholder for the upcoming Transportation sub-section.",
-      "comingSoon": "Coming soon — placeholder."
-    }
   },
   "pages": {
     "dashboard": {
@@ -545,7 +528,7 @@
         "emailPlaceholder": "contact@company.com",
         "noHousingReason": "No-housing reason",
         "noHousingNoneOption": "— No reason recorded",
-        "noHousingHint": "Only meaningful for customers with no properties managed in HousingOps.",
+        "noHousingHint": "Only meaningful for customers with no properties managed in KFI Staffing.",
         "notes": "Notes",
         "notesPlaceholder": "Billing terms, preferences, etc.",
         "cancel": "Cancel",
@@ -1749,9 +1732,9 @@
     "dataExportedTitle": "Data exported",
     "dataExportedDescription": "Saved {{file}} with {{customers}} customers, {{properties}} properties, {{leases}} leases, {{beds}} beds, {{occupants}} occupants, {{utilities}} utilities.",
     "couldNotReadFileTitle": "Could not read file",
-    "couldNotReadFileDescription": "That file is not valid JSON. Please choose a HousingOps export file.",
+    "couldNotReadFileDescription": "That file is not valid JSON. Please choose a KFI Staffing export file.",
     "cantImportTitle": "Can't import this file",
-    "cantImportFallback": "That file doesn't look like a HousingOps export. No changes were made.",
+    "cantImportFallback": "That file doesn't look like a KFI Staffing export. No changes were made.",
     "importFailedTitle": "Import failed",
     "importFailedFallback": "Something went wrong while importing. No changes were made.",
     "dataMergedTitle": "Data merged",

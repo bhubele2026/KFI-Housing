@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import {
+  anthropic,
+  ASSISTANT_MODEL,
+  EXTRACTION_EFFORT,
+} from "@workspace/integrations-anthropic-ai";
 import type { PropertyRow, CustomerRow } from "@workspace/db";
 import {
   normalizeLeaseRow,
@@ -161,12 +165,21 @@ export async function extractLeaseFromPdfBuffer(
 async function extractLeaseFromMessages(
   messages: Parameters<typeof anthropic.messages.create>[0]["messages"],
 ): Promise<ExtractLeaseResult> {
-  const resp = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+  // Lease-PDF extraction is a narrow structured-output task → LOW reasoning
+  // effort to stay cheap/fast (the interactive assistant uses HIGH). `effort`
+  // is attached on a plain object passed `as any` so typecheck stays green
+  // whether or not @anthropic-ai/sdk ^0.78.0's types include it yet — confirm
+  // the field name against the SDK version on Replit.
+  const createParams = {
+    model: ASSISTANT_MODEL,
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages,
-  });
+    effort: EXTRACTION_EFFORT,
+  };
+  const resp = await anthropic.messages.create(
+    createParams as Parameters<typeof anthropic.messages.create>[0],
+  );
 
   // Pull the first text block.
   const textBlock = resp.content.find(

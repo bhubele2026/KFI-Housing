@@ -99,17 +99,6 @@
     "insurance": "Seguros",
     "rentalCompanies": "Empresas de alquiler",
     "housing": "Vivienda",
-    "transportation": "Transporte",
-    "transport": {
-      "vehicles": "Vehículos",
-      "vehicleLeases": "Contratos de vehículos",
-      "drivers": "Conductores",
-      "trips": "Viajes",
-      "maintenance": "Mantenimiento",
-      "fuelLogs": "Registros de combustible",
-      "routes": "Rutas",
-      "charges": "Cobros de transporte"
-    },
     "settings": "Ajustes",
     "logout": "Cerrar sesión",
     "expandSidebar": "Expandir barra lateral",
@@ -127,17 +116,11 @@
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",
-    "signInDescription": "Inicia sesión en HousingOps para gestionar tus propiedades, contratos, camas y ocupantes.",
+    "signInDescription": "Inicia sesión en KFI Staffing para gestionar tus propiedades, contratos, camas y ocupantes.",
     "email": "Correo electrónico",
     "emailPlaceholder": "nombre@empresa.com",
     "signIn": "Iniciar sesión",
     "demoNote": "Cualquier correo sirve para la demo — no se requiere contraseña."
-  },
-  "transport": {
-    "stub": {
-      "description": "Marcador de posición para la próxima subsección de Transporte.",
-      "comingSoon": "Próximamente — marcador de posición."
-    }
   },
   "pages": {
     "dashboard": {
@@ -534,7 +517,7 @@
         "emailPlaceholder": "contacto@empresa.com",
         "noHousingReason": "Motivo de sin vivienda",
         "noHousingNoneOption": "— Sin motivo registrado",
-        "noHousingHint": "Solo es relevante para clientes sin propiedades gestionadas en HousingOps.",
+        "noHousingHint": "Solo es relevante para clientes sin propiedades gestionadas en KFI Staffing.",
         "notes": "Notas",
         "notesPlaceholder": "Términos de facturación, preferencias, etc.",
         "cancel": "Cancelar",
@@ -1736,9 +1719,9 @@
     "dataExportedTitle": "Datos exportados",
     "dataExportedDescription": "Se guardó {{file}} con {{customers}} clientes, {{properties}} propiedades, {{leases}} contratos, {{beds}} camas, {{occupants}} ocupantes, {{utilities}} servicios.",
     "couldNotReadFileTitle": "No se pudo leer el archivo",
-    "couldNotReadFileDescription": "Ese archivo no es JSON válido. Por favor elige un archivo de exportación de HousingOps.",
+    "couldNotReadFileDescription": "Ese archivo no es JSON válido. Por favor elige un archivo de exportación de KFI Staffing.",
     "cantImportTitle": "No se puede importar este archivo",
-    "cantImportFallback": "Ese archivo no parece una exportación de HousingOps. No se hicieron cambios.",
+    "cantImportFallback": "Ese archivo no parece una exportación de KFI Staffing. No se hicieron cambios.",
     "importFailedTitle": "Error al importar",
     "importFailedFallback": "Algo salió mal durante la importación. No se hicieron cambios.",
     "dataMergedTitle": "Datos combinados",

@@ -60,6 +60,13 @@
 - `notify-schema-drift.test.ts` and `start.test.ts` confirm the Slack alert fires on schema-out-of-date startup and that prod no longer auto-pushes schema. All green.
 
 ### Rebrand consistency (Step 15)
+
+> **CANONICAL BRAND = KFI Staffing (confirmed 2026-06-18, Phase 2).** A later
+> pass (`QA_REPORT_TASK_257.md`) briefly swapped the brand back to "HousingOps";
+> that was superseded. All user-visible strings are now KFI Staffing. The
+> `housingops` token only persists as dir/package names, the
+> `"housingops-export"` format literal, and internal identifiers — leave those.
+
 - Walked every user-visible "HousingOps" / "Housing Ops" string. Only 4 leftover user-visible mentions found and fixed (see below). Brand chrome (sidebar logo, login screen tagline, browser tab title, theme color tokens) was already consistent from task #137.
 
 ---

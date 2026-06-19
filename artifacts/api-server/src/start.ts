@@ -281,6 +281,21 @@ export async function start(deps: StartDeps): Promise<void> {
     return;
   }
 
+  // NOTE (Phase 9): the assistant's Anthropic secrets —
+  // AI_INTEGRATIONS_ANTHROPIC_API_KEY and
+  // AI_INTEGRATIONS_ANTHROPIC_BASE_URL — are NOT re-checked here on
+  // purpose. They are already hard-required at MODULE LOAD in
+  // `lib/integrations-anthropic-ai/src/client.ts`, which `throw`s if
+  // either is unset. Because `index.ts` statically `import`s `./app`
+  // (which transitively imports the assistant route → that client)
+  // BEFORE it ever calls `start()`, a missing key crashes the process
+  // during import — before `listen()` — so the autoscale health check
+  // fails and the bad revision is never promoted. That is a stricter
+  // fast-fail than this Maps check (it is fatal in dev too, which is
+  // correct now that the assistant is the primary interface). Adding a
+  // check here would be unreachable dead code — do not add one; fix the
+  // message in client.ts instead if you need to change the wording.
+
   // Pre-boot database snapshot (Task #640). Runs BEFORE
   // `pushSchemaIfNeeded` so an unexpected schema change can be rolled
   // back from the most recent snapshot. Best-effort: a failure logs

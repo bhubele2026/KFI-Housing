@@ -720,17 +720,17 @@ export function inspectImportPayload(payload: unknown): ImportPreview {
   const version = obj?.version;
   if (format !== "housingops-export") {
     throw new UnsupportedImportError(
-      "That file doesn't look like a HousingOps export. No changes were made.",
+      "That file doesn't look like a KFI Staffing export. No changes were made.",
     );
   }
   if (typeof version === "number" && version > EXPORT_FORMAT_VERSION) {
     throw new UnsupportedImportError(
       `This backup uses a newer format (v${version}) than this app supports ` +
-        `(v${EXPORT_FORMAT_VERSION}). Please update HousingOps and try again.`,
+        `(v${EXPORT_FORMAT_VERSION}). Please update KFI Staffing and try again.`,
     );
   }
   throw new UnsupportedImportError(
-    "This HousingOps backup is missing required fields and can't be imported.",
+    "This KFI Staffing backup is missing required fields and can't be imported.",
   );
 }
 

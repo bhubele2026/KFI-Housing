@@ -1,1 +1,6 @@
-export { anthropic } from "./client";
+export {
+  anthropic,
+  ASSISTANT_MODEL,
+  ASSISTANT_EFFORT,
+  EXTRACTION_EFFORT,
+} from "./client";

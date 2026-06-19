@@ -24,8 +24,13 @@ import { emitNudge } from "../../lib/assistant-nudges";
 import { runAssistantScan } from "../../jobs/assistant-scanner";
 import { parseScannerRecipientUserIds } from "../../lib/assistant-nudges";
 import { mostRecentSaturday } from "../../lib/pay-week";
+import { computeBriefing } from "../../lib/assistant-briefing";
 import { logger as serverLogger } from "../../lib/logger";
-import { anthropic } from "@workspace/integrations-anthropic-ai";
+import {
+  anthropic,
+  ASSISTANT_MODEL,
+  ASSISTANT_EFFORT,
+} from "@workspace/integrations-anthropic-ai";
 import { customersTable } from "@workspace/db";
 import {
   anthropicToolDefs,
@@ -53,12 +58,13 @@ const router: IRouter = Router();
 // router (in routes/index.ts) covers it without further wiring.
 router.use(exportsRouter);
 
-const MODEL = "claude-sonnet-4-5";
+// Model id is centralized in @workspace/integrations-anthropic-ai
+// (ASSISTANT_MODEL = Claude Opus 4.8). Do not inline a model string here.
 // Raised from 8 → 20 in Task #668 so multi-step write flows (look up by
 // name → batch update) don't hit the cap before the model can finish.
 const MAX_TURNS = 20;
 
-const SYSTEM_PROMPT_BASE = `You are the HousingOps assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
+const SYSTEM_PROMPT_BASE = `You are the KFI Staffing assistant — an in-app copilot for an operator who manages corporate housing (customers → properties → buildings → rooms → beds → occupants, plus leases, utilities, insurance certificates, and payroll deductions).
 
 You have read-only and write tools. READ tools (list_*, get_*, find_*, extract_*) execute immediately. WRITE tools (create_*, update_*, delete_*, assign_*, move_*, unassign_*, bulk_*, import_*, log_*, record_*) are PROPOSALS — the user must confirm each one before it executes.
 
@@ -82,6 +88,35 @@ Guidelines:
 - The operator can export any list-style data to Excel (.xlsx with live formulas) or PDF via export_leases / export_occupants / export_beds / export_properties / export_payroll_deductions / export_utilities / export_insurance_certificates / export_room_nights. These are READ tools — they execute immediately (no confirm card) and return a download chip the operator clicks. When the operator says "export", "download", "give me a spreadsheet/PDF", "send me this in a file" — reach for the matching export_* tool. Don't suggest copy/paste or offer a CSV-in-chat — the export tool IS the answer.
 - Default the export format to "xlsx" unless the operator asks for "PDF" explicitly. Apply the same filters they'd ask about — e.g. "export the active leases at Burnett Hinckley" → resolve via find_property_by_name, then call export_leases with that propertyId and status="Active".
 - When the operator says things like "any future bill from X for memo Y should land on property Z" or "always map invoices that mention <phrase> to <property>", FIRST call list_qbo_mapping_rules to check whether a similar rule already exists, THEN call propose_qbo_mapping_rule (read-only — returns a draft + dry-run match count, never writes). Show the operator the draft and the count, and ONLY after they explicitly approve do you call confirm_qbo_mapping_rule with that draft to persist + reclassify. Never call confirm_qbo_mapping_rule without a preceding propose + operator approval, and never invent the draft fields yourself.
+
+You are talking to a NON-TECHNICAL operator — never make them think in the data model:
+- Never show, ask for, or mention internal ids (property/bed/room/occupant/lease ids). Resolve every name with find_*_by_name and refer to people and places by their human names ("Maria Lopez", "Greenock Manor", "Bed 1"). If a tool result contains a raw id, translate it to the human label before you reply.
+- When a request is ambiguous (which property, which person, which of several matches), ask ONE short clarifying question and offer the concrete choices as a brief list the operator can pick from — e.g. "Which Ridge did you mean — Ridge Motor Inn, or Penda at 2900 New Pinery?" Do not guess and do not proceed on a coin-flip.
+- Phrase every confirmation in plain English — say exactly who/what/where changes ("This moves Maria Lopez from Bed 3 at Greenock Manor to Bed 1 at Hickory Haven"), never field names or JSON.
+
+Lead with the money:
+- This app exists to answer one question: are we recovering the rent we pay out from the staff we house? When you report, lead with the recovery gap in dollars and plain words ("Schuette housing is $1,240/wk underwater — you're paying for 4 empty beds"), then offer detail only if useful. Don't dump a table when a one-sentence dollar answer is what they need.
+- Every dollar figure or count you state must come from a tool result you called this turn — never estimate or recall a number from memory. If you don't have it yet, say "let me pull that" and call the read tool first.
+
+Proactive and explainable:
+- When the operator asks what needs attention, what's wrong, where they're losing money, or "what should I do today", call get_daily_briefing and open with its plain-English headline, then the top items by dollars at risk. Offer to act on the biggest one. Cite only the briefing's figures.
+- When asked WHY a recovery number is what it is, break the gap into its plain-English parts using tool data: vacancy loss (empty beds you're still paying rent on), collection loss (people who are in a bed but aren't being deducted enough), and charged-but-not-placed (housing deductions that can't be tied to a bed). Give the dollars for each part, not just the total — that's the "explain it like I'm not an accountant" answer.
+
+Keep the data trustworthy (smart answers need complete data):
+- When the operator asks "is my housing data trustworthy / complete?" or what needs cleaning up, call get_data_health and report its counts and headline — never guess these.
+- Review queue: when there are leases needing review, offer to clear them ("You have N leases I couldn't read confidently — want to go through them?"). Call list_leases_needing_review and walk them ONE at a time: show the property/unit and current rent, ask the operator to confirm or correct it, then commit via update_lease (a normal confirm-before-write proposal). If they don't know a scanned lease's rent, ask them to upload the PDF here and use extract_lease_pdf to suggest it — never invent a rent.
+- Rent anomalies: list_rent_anomalies surfaces leases with monthly rent ≥ $10k (usually a weekly/annual figure in the wrong field). Triage one at a time; confirm or fix via update_lease.
+- Occupancy reconcile: reconcile_occupancy shows people charged but not in a bed, people in a bed but not charged, and vacant beds. Explain the gaps plainly and offer to fix via assign_occupant_to_bed / move_occupant_to_bed (proposal path).
+- Insurance: list_properties_missing_insurance finds active properties with no certificate; ask the operator to upload the ACORD 25 PDF in this chat — never fabricate coverage details.
+
+Destructive changes — slow down and be explicit:
+- Before any delete_*, unassign_*, or bulk_* write, restate the blast radius in human terms AND numbers ("This deletes all 3 leases at Greenock Manor — their rent, dates and notes"), name every record affected, and require an explicit yes. Never bundle a destructive change into a larger action without calling it out.
+- After the change runs, remind the operator it can be undone with one tap if it wasn't what they wanted.
+
+Teach as you go (the app has no manual — you are it):
+- When the operator asks "how do I …", "where is …", "can this app …", or seems unsure how to do something, answer in 2–4 plain numbered steps in operator language (no menus-deep jargon, no ids), THEN offer to just do it for them ("Want me to do that now?"). Explaining and doing are one motion — never leave them to hunt through screens.
+- If what they describe maps to a tool you have, prefer doing it over describing a manual path. If it's something only they can do in the UI (e.g. uploading a PDF, connecting QuickBooks), give the shortest concrete path and offer to handle every part you can.
+- If they ask for something the app genuinely can't do, say so plainly in one sentence and suggest the closest thing it can.
 
 Naming conventions:
 - Bed labels typically combine building code + room number + bed letter (e.g. "MG-04B" = building MG, room 04, bed B).
@@ -828,13 +863,22 @@ async function runLoop(
 
     let finalMessage: any;
     try {
-      const stream = anthropic.messages.stream({
-        model: MODEL,
+      // Opus 4.8 reasoning effort = high so multi-step housing-ops planning
+      // (resolve-by-name → batch write) gets full deliberation. `effort` may
+      // not be in @anthropic-ai/sdk ^0.78.0's request types yet, so it's
+      // attached on a plain object passed `as any` — keeps typecheck green
+      // whether or not the installed SDK types include it. Confirm the field
+      // name against the SDK version on Replit. (Sampling/thinking/prefill
+      // params are intentionally absent — Opus 4.8 rejects them.)
+      const streamParams = {
+        model: ASSISTANT_MODEL,
         max_tokens: 4096,
         system: systemPrompt,
         tools: anthropicToolDefs() as any,
         messages: messages as any,
-      });
+        effort: ASSISTANT_EFFORT,
+      };
+      const stream = anthropic.messages.stream(streamParams as any);
 
       stream.on("text", (delta: string) => {
         assistantText += delta;
@@ -1709,6 +1753,24 @@ function rowToNudgeDTO(row: typeof assistantNudgesTable.$inferSelect) {
     snoozedUntil: row.snoozedUntil,
   };
 }
+
+/**
+ * GET /assistant/briefing — the proactive "what needs you today"
+ * summary, ranked by dollars at risk. The dock fetches this on first
+ * load so the operator is told what to do before they ask. Same numbers
+ * the `get_daily_briefing` tool returns, so the assistant's narration
+ * and the dock card never disagree. Best-effort: on any compute error
+ * it returns an empty briefing rather than failing the dock.
+ */
+router.get("/assistant/briefing", async (_req, res): Promise<void> => {
+  try {
+    const briefing = await computeBriefing();
+    res.json(briefing);
+  } catch (err) {
+    serverLogger.warn({ err }, "assistant-briefing: compute failed");
+    res.json({ periodMonth: "", totalAtRisk: 0, items: [], headline: "" });
+  }
+});
 
 /**
  * GET /assistant/nudges — returns active nudges for the calling user,

@@ -10,6 +10,7 @@ import {
   type ExportChip,
 } from "./use-assistant";
 import { useAssistantChips, type PageChip } from "./use-assistant-chips";
+import { useAssistantBriefing, type BriefingItem } from "./use-assistant-briefing";
 import { renderPreview } from "./proposal-preview";
 import {
   useAssistantNudges,
@@ -55,6 +56,10 @@ export function AssistantBubble() {
     enabled: open && !busy && !hasPendingProposal,
   });
   const nudgesQuery = useAssistantNudges();
+  // Proactive daily briefing — fetched only while the dock is open, shown
+  // in the standing/empty state so the operator is told what needs them
+  // today before they ask. Every figure is server-computed (grounded).
+  const briefingQuery = useAssistantBriefing({ enabled: open });
   const recentExportsQuery = useRecentExports({
     enabled: open && recentExportsOpen,
   });
@@ -67,16 +72,18 @@ export function AssistantBubble() {
   useEffect(() => {
     if (!busy) setChipsSuppressedForTurn(false);
   }, [busy]);
-  // Only the *most recent* approved & reversible change can be undone
-  // from the bubble — older approved changes might have been built on
-  // top of by newer edits, so we hide the Undo button to keep the
-  // interaction safe and intentional.
-  const undoableId = useMemo(() => {
-    for (let i = proposals.length - 1; i >= 0; i--) {
-      const p = proposals[i];
-      if (p.status === "approved" && p.reversible) return p.id;
+  // EVERY approved & reversible change gets a one-tap Undo affordance
+  // (Task #671 Phase 6) — not just the most recent. It's safe to offer
+  // them all: the server's /undo route refuses to reverse a change when
+  // a more recent approved change touched the same record ("undo that
+  // one first"), so an out-of-order tap fails cleanly with a clear
+  // message instead of corrupting data.
+  const undoableIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of proposals) {
+      if (p.status === "approved" && p.reversible) ids.add(p.id);
     }
-    return null;
+    return ids;
   }, [proposals]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +110,14 @@ export function AssistantBubble() {
     setInput("");
     setChipsSuppressedForTurn(true);
     void send(chip.prompt, attachments);
+    setAttachments([]);
+  };
+
+  // Tapping a briefing item asks the assistant to act on that finding.
+  const handleBriefingTap = (item: BriefingItem) => {
+    if (busy || uploading) return;
+    setInput("");
+    void send(item.ctaPrompt, attachments);
     setAttachments([]);
   };
 
@@ -148,11 +163,12 @@ export function AssistantBubble() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open HousingOps assistant"
+          aria-label="Open KFI Staffing assistant"
           data-testid="button-open-assistant"
-          className="fixed bottom-5 right-5 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-primary-foreground shadow-lg hover:bg-primary/90 transition-all"
         >
-          <Bot className="h-5 w-5" />
+          <Bot className="h-5 w-5 shrink-0" />
+          <span className="text-sm font-semibold whitespace-nowrap">Ask me anything</span>
           {activeNudgeCount > 0 && (
             <span
               data-testid="assistant-nudge-badge"
@@ -173,7 +189,7 @@ export function AssistantBubble() {
           <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="flex items-center gap-2 min-w-0">
               <Bot className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-semibold shrink-0">HousingOps Assistant</span>
+              <span className="text-sm font-semibold shrink-0">KFI Staffing Assistant</span>
               {pageFocusCustomer && (
                 <span
                   data-testid="assistant-page-focus-badge"
@@ -247,18 +263,63 @@ export function AssistantBubble() {
           >
             {messages.length === 0 && proposals.length === 0 && (
               <div className="text-muted-foreground text-xs space-y-2 mt-2">
-                <p>Ask me anything about your portfolio. Examples:</p>
+                <p className="text-sm font-medium text-foreground">
+                  Ask me anything — in plain English.
+                </p>
+                <p>For example:</p>
                 <ul className="list-disc pl-5 space-y-1">
-                  <li>"Which properties have vacant beds?"</li>
+                  <li>"Are we losing money on any client's housing?"</li>
+                  <li>"Who's paying a housing deduction but isn't in a bed?"</li>
                   <li>"Move Sarah Jones to bed 3 at Penda."</li>
-                  <li>"Add a $1200 monthly utility for property p-7 (Internet)."</li>
-                  <li>"Show me all leases expiring in the next 60 days."</li>
+                  <li>"Which leases expire in the next 60 days?"</li>
                 </ul>
                 <p className="pt-1 italic">
-                  Any change (create / update / delete) will ask you to confirm first.
+                  I'll always show you exactly what changes and ask you to confirm
+                  first — and any change can be undone.
                 </p>
               </div>
             )}
+
+            {/* Proactive daily briefing — "here's what needs you today",
+                ranked by dollars at risk. Each row is tappable to act. */}
+            {messages.length === 0 &&
+              proposals.length === 0 &&
+              briefingQuery.isSuccess &&
+              (briefingQuery.data?.items.length ?? 0) > 0 && (
+                <div
+                  className="rounded-lg border border-border bg-muted/40 p-3 space-y-2"
+                  data-testid="assistant-briefing"
+                  data-count={briefingQuery.data!.items.length}
+                >
+                  <p className="text-sm font-semibold text-foreground">
+                    Here's what needs you today
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {briefingQuery.data!.headline}
+                  </p>
+                  <div className="space-y-1.5 pt-1">
+                    {briefingQuery.data!.items.slice(0, 6).map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => handleBriefingTap(item)}
+                        disabled={busy || uploading}
+                        data-testid="assistant-briefing-item"
+                        className="flex w-full items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-50 transition-colors"
+                      >
+                        <span
+                          className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+                            item.severity === "warn" || item.severity === "critical"
+                              ? "bg-amber-500"
+                              : "bg-muted-foreground/50"
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1">{item.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             {messages.map((m) => {
               // Task #681: render any export chips produced while THIS
@@ -346,7 +407,7 @@ export function AssistantBubble() {
             {proposals.some((p) => p.status !== "pending") && (
               <ChangesList
                 proposals={proposals.filter((p) => p.status !== "pending")}
-                undoableId={undoableId}
+                undoableIds={undoableIds}
                 onUndo={undoProposal}
                 disabled={busy}
               />
@@ -802,7 +863,9 @@ function ProposalCard({
       }`}
     >
       <div className="text-xs font-medium">
-        {isDestructive ? "Destructive change — confirm:" : "Pending change — confirm:"}
+        {isDestructive
+          ? "Please confirm — this removes data:"
+          : "Here's exactly what I'll do — confirm:"}
       </div>
       <div className="text-sm">{proposal.summary}</div>
       {proposal.preview !== undefined && proposal.preview !== null && (
@@ -810,7 +873,7 @@ function ProposalCard({
           className="rounded border border-border bg-background/60 p-1.5 text-[11px] space-y-1"
           data-testid={`proposal-preview-${proposal.id}`}
         >
-          <div className="font-medium text-muted-foreground">What will change:</div>
+          <div className="font-medium text-muted-foreground">Here's what changes:</div>
           {renderPreview(proposal.tool, proposal.preview)}
         </div>
       )}
@@ -884,12 +947,12 @@ function statusColor(status: PendingProposal["status"]): string {
 
 function ChangesList({
   proposals,
-  undoableId,
+  undoableIds,
   onUndo,
   disabled,
 }: {
   proposals: PendingProposal[];
-  undoableId: string | null;
+  undoableIds: Set<string>;
   onUndo: (id: string) => void;
   disabled: boolean;
 }) {
@@ -937,7 +1000,7 @@ function ChangesList({
               </span>
             )}
           </span>
-          {p.id === undoableId && (
+          {undoableIds.has(p.id) && (
             <Button
               type="button"
               size="sm"

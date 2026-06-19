@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-vi.mock("./sidebar", () => ({
-  Sidebar: () => <div data-testid="sidebar-stub" />,
-}));
-
 const mockData: {
   customers: { id: string; name: string }[];
   isLoading: boolean;

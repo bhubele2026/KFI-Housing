@@ -262,7 +262,7 @@ export default function QboMappingRulesPage() {
             </ol>
             <p className="pt-1 italic">
               Customer links (above) feed step 2 by telling the engine which
-              HousingOps customer each QBO customer maps to.
+              KFI Staffing customer each QBO customer maps to.
             </p>
           </CardContent>
         </Card>

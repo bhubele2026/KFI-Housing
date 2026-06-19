@@ -63,6 +63,9 @@ vi.mock("@workspace/integrations-anthropic-ai", () => ({
       },
     },
   },
+  ASSISTANT_MODEL: "test-model",
+  ASSISTANT_EFFORT: "high",
+  EXTRACTION_EFFORT: "low",
 }));
 
 // Imports happen AFTER the mocks above so the mocked modules are

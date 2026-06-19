@@ -239,6 +239,11 @@
   @media (max-width: 960px) {
     html { font-size: 13px; }
   }
+  /* Phones: one more step down so cards/tables don't overflow the
+     viewport on a real handset. */
+  @media (max-width: 640px) {
+    html { font-size: 12px; }
+  }
 
   body {
     @apply font-sans antialiased bg-background text-foreground;

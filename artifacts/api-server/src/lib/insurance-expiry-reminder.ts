@@ -130,7 +130,7 @@ export function buildInsuranceExpiryEmail(input: {
   ].filter(Boolean);
   const summary = summaryParts.join(", ");
 
-  const subject = `HousingOps insurance alert — ${count} certificate${count === 1 ? "" : "s"} expiring within 30 days`;
+  const subject = `KFI Staffing insurance alert — ${count} certificate${count === 1 ? "" : "s"} expiring within 30 days`;
 
   const textLines: string[] = [
     `Insurance certificate expiry alert.`,

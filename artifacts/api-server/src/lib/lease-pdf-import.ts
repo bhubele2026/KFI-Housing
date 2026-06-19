@@ -166,20 +166,20 @@ async function extractLeaseFromMessages(
   messages: Parameters<typeof anthropic.messages.create>[0]["messages"],
 ): Promise<ExtractLeaseResult> {
   // Lease-PDF extraction is a narrow structured-output task → LOW reasoning
-  // effort to stay cheap/fast (the interactive assistant uses HIGH). `effort`
-  // is attached on a plain object passed `as any` so typecheck stays green
-  // whether or not @anthropic-ai/sdk ^0.78.0's types include it yet — confirm
-  // the field name against the SDK version on Replit.
+  // effort to stay cheap/fast (the interactive assistant uses HIGH). We keep
+  // the params object as a clean NON-streaming literal (no `stream`, no
+  // `effort` in its static type) so the create() overload still resolves to
+  // the `Message` return — that's what makes `resp.content` typed below.
+  // `effort` (supported by Opus 4.8 but not yet in @anthropic-ai/sdk ^0.78.0
+  // types) is attached at runtime only; confirm the field name on Replit.
   const createParams = {
     model: ASSISTANT_MODEL,
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages,
-    effort: EXTRACTION_EFFORT,
   };
-  const resp = await anthropic.messages.create(
-    createParams as Parameters<typeof anthropic.messages.create>[0],
-  );
+  (createParams as Record<string, unknown>).effort = EXTRACTION_EFFORT;
+  const resp = await anthropic.messages.create(createParams);
 
   // Pull the first text block.
   const textBlock = resp.content.find(

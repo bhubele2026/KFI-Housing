@@ -118,7 +118,7 @@ export default function VehicleLeases() {
   const vehicleLabel = useMemo(() => {
     const map = new Map<string, string>();
     for (const v of vehicles ?? []) {
-      const vv = v as Record<string, unknown>;
+      const vv = v as unknown as Record<string, unknown>;
       map.set(
         String(vv.id),
         String(vv.merchantUnit || "") ||
@@ -262,7 +262,7 @@ export default function VehicleLeases() {
               </TableHeader>
               <TableBody>
                 {rows.map((l) => {
-                  const ll = l as Record<string, unknown>;
+                  const ll = l as unknown as Record<string, unknown>;
                   const id = String(ll.id);
                   return (
                     <TableRow key={id} data-testid="vlease-row">
@@ -336,7 +336,7 @@ export default function VehicleLeases() {
                 <SelectContent>
                   <SelectItem value={NONE}>Unassigned</SelectItem>
                   {(vehicles ?? []).map((v) => {
-                    const vv = v as Record<string, unknown>;
+                    const vv = v as unknown as Record<string, unknown>;
                     return (
                       <SelectItem key={String(vv.id)} value={String(vv.id)}>
                         {vehicleLabel.get(String(vv.id))}

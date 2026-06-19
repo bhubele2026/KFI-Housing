@@ -1177,7 +1177,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addProperty = async (property: Property): Promise<Property> => {
     pushToList<Property>(propertiesKey, property);
     try {
-      const saved = await createPropertyMut.mutateAsync({ data: property });
+      const saved = await createPropertyMut.mutateAsync({
+        data: { ...property, updatedAt: property.updatedAt ?? undefined },
+      });
       return saved as Property;
     } catch (err) {
       removeFromList<Property>(propertiesKey, property.id);
@@ -1501,7 +1503,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     queryClient.setQueryData<RoomNightLog[]>(roomNightLogsKey, dataToWrite.roomNightLogs);
 
     importMut.mutate(
-      { data: dataToWrite },
+      {
+        data: {
+          ...dataToWrite,
+          properties: dataToWrite.properties.map((p) => ({
+            ...p,
+            updatedAt: p.updatedAt ?? undefined,
+          })),
+        },
+      },
       {
         onError: () => notifySaveError("save the imported data"),
         onSettled: invalidateAll,

@@ -232,7 +232,7 @@ export function PropertyBedTable({
     shift: null,
     language: null,
     gender: null,
-    title: person.jobTitle || null,
+    title: (person.jobTitle || null) as Occupant["title"],
     kfisAuthorizedToDrive: null,
     createdAt: new Date().toISOString(),
   });
@@ -274,7 +274,7 @@ export function PropertyBedTable({
             chargeSourcePersonId: person.personId,
           }
         : {}),
-      ...(person.jobTitle ? { title: person.jobTitle } : {}),
+      ...(person.jobTitle ? { title: person.jobTitle as Occupant["title"] } : {}),
     });
 
   const handleAddBed = (roomId: string, existingBeds: Bed[]) => {

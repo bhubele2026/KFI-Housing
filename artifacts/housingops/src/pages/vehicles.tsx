@@ -243,7 +243,7 @@ export default function Vehicles() {
     const insSoon: string[] = [];
     const labelById = new Map<string, string>();
     for (const v of vehicles ?? []) {
-      const vv = v as Record<string, unknown>;
+      const vv = v as unknown as Record<string, unknown>;
       const label = vehicleLabelOf(vv);
       labelById.set(String(vv.id), label);
       const loc = String(vv.currentLocationNote ?? "").trim();
@@ -281,7 +281,7 @@ export default function Vehicles() {
   // plus all fuel and maintenance logged to date.
   const fleetCost = useMemo(() => {
     const monthly = (vehicles ?? []).reduce(
-      (s, v) => s + Number((v as Record<string, unknown>).monthlyCost ?? 0),
+      (s, v) => s + Number((v as unknown as Record<string, unknown>).monthlyCost ?? 0),
       0,
     );
     const fuel = (allFuel ?? []).reduce((s, c) => s + Number(c.amount ?? 0), 0);
@@ -447,7 +447,7 @@ export default function Vehicles() {
     const cell = (vv: Record<string, unknown>, k: string) =>
       vv[k] == null ? "" : String(vv[k]);
     const csv = toCsv(
-      data.map((v) => v as Record<string, unknown>),
+      data.map((v) => v as unknown as Record<string, unknown>),
       [
         { header: "Unit", value: (v) => cell(v, "merchantUnit") },
         { header: "Year", value: (v) => cell(v, "year") },
@@ -622,7 +622,7 @@ export default function Vehicles() {
               </TableHeader>
               <TableBody>
                 {rows.map((v) => {
-                  const vv = v as Record<string, unknown>;
+                  const vv = v as unknown as Record<string, unknown>;
                   const id = String(vv.id);
                   const offWi =
                     String(vv.status) === "Available" &&
@@ -1080,8 +1080,8 @@ export default function Vehicles() {
           vehicleId={ridersVehicleId}
           label={(() => {
             const v = rows.find(
-              (r) => String((r as Record<string, unknown>).id) === ridersVehicleId,
-            ) as Record<string, unknown> | undefined;
+              (r) => String((r as unknown as Record<string, unknown>).id) === ridersVehicleId,
+            ) as unknown as Record<string, unknown> | undefined;
             if (!v) return "vehicle";
             return (
               String(v.merchantUnit || "") ||
@@ -1099,8 +1099,8 @@ export default function Vehicles() {
           vehicleId={fuelVehicleId}
           label={(() => {
             const v = rows.find(
-              (r) => String((r as Record<string, unknown>).id) === fuelVehicleId,
-            ) as Record<string, unknown> | undefined;
+              (r) => String((r as unknown as Record<string, unknown>).id) === fuelVehicleId,
+            ) as unknown as Record<string, unknown> | undefined;
             if (!v) return "vehicle";
             return (
               String(v.merchantUnit || "") ||
@@ -1118,8 +1118,8 @@ export default function Vehicles() {
           label={(() => {
             const v = rows.find(
               (r) =>
-                String((r as Record<string, unknown>).id) === maintVehicleId,
-            ) as Record<string, unknown> | undefined;
+                String((r as unknown as Record<string, unknown>).id) === maintVehicleId,
+            ) as unknown as Record<string, unknown> | undefined;
             if (!v) return "vehicle";
             return (
               String(v.merchantUnit || "") ||
@@ -1136,8 +1136,8 @@ export default function Vehicles() {
           vehicleId={insVehicleId}
           label={(() => {
             const v = rows.find(
-              (r) => String((r as Record<string, unknown>).id) === insVehicleId,
-            ) as Record<string, unknown> | undefined;
+              (r) => String((r as unknown as Record<string, unknown>).id) === insVehicleId,
+            ) as unknown as Record<string, unknown> | undefined;
             return v ? vehicleLabelOf(v) : "vehicle";
           })()}
           onClose={() => setInsVehicleId(null)}
@@ -1601,7 +1601,9 @@ function MaintenanceDialog({
       {
         id,
         data: {
-          status: next,
+          status: next as NonNullable<
+            Parameters<typeof updateRec.mutate>[0]["data"]
+          >["status"],
           completedDate: next === "Completed" ? todayYMD() : "",
         },
       },

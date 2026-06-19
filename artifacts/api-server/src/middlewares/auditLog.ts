@@ -4,17 +4,6 @@ import { activityLogTable } from "@workspace/db/schema";
 import { logger } from "../lib/logger";
 import type { AuthedRequest } from "./requireAuth";
 
-// Per-user throttle window for read (GET) requests. We only need to know a
-// user was active, not log every poll — so we record at most one "viewed"
-// entry per user per window. Mutating requests bypass this entirely.
-const GET_THROTTLE_MS = 10 * 60 * 1000;
-
-// In-memory map of userId -> last time we recorded a GET for them. Process-
-// local on purpose: it's a best-effort noise filter, not a correctness
-// guarantee, so it's fine that it resets on restart or isn't shared across
-// instances.
-const lastGetLoggedAt = new Map<string, number>();
-
 // Paths we never want in the audit log: the audit log's own endpoints (would
 // be self-referential noise) and the health/config probes.
 const SKIP_PREFIXES = ["/activity", "/healthz", "/config", "/__clerk"];
@@ -55,8 +44,10 @@ function humanizeAction(method: string, path: string): string {
  * Records an audit-log entry for authenticated requests. Mount AFTER
  * `requireAuth` (so `req.appUser` is populated) and BEFORE the router.
  *
- * - Mutating requests (POST/PUT/PATCH/DELETE) are always recorded.
- * - GET requests are throttled to one entry per user per window.
+ * - Only mutating requests (POST/PUT/PATCH/DELETE) are recorded — the log is
+ *   a history of what CHANGED, not every page a user opened. (Read activity
+ *   is still reflected in each user's `last_seen_at` for the "who's active"
+ *   summary, so nothing is lost by not logging GETs here.)
  * - Only successful responses (status < 400) are recorded.
  * - Writes are fire-and-forget so the audit log can never slow down or
  *   fail a real request.
@@ -87,26 +78,16 @@ export function auditLog(
     method === "PATCH" ||
     method === "DELETE";
 
+  // Reads are never recorded — only changes belong in the activity log.
   if (!isMutation) {
-    // Throttle reads per user — but only *check* the window here. We advance
-    // the throttle timestamp later, after a successful response, so a GET
-    // that ends in an error doesn't suppress the next 10 minutes of reads.
-    const last = lastGetLoggedAt.get(user.id) ?? 0;
-    if (Date.now() - last < GET_THROTTLE_MS) {
-      next();
-      return;
-    }
+    next();
+    return;
   }
 
   // Record only once the response completes successfully so we don't log
   // requests that were rejected (validation errors, 404s, etc.).
   _res.on("finish", () => {
     if (_res.statusCode >= 400) return;
-    // Advance the read throttle only on success, so failed reads remain
-    // eligible to be logged on the user's next attempt.
-    if (!isMutation) {
-      lastGetLoggedAt.set(user.id, Date.now());
-    }
     void db
       .insert(activityLogTable)
       .values({

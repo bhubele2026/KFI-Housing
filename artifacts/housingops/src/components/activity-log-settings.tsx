@@ -201,7 +201,7 @@ export function ActivityLogSettings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <History className="h-5 w-5" />
-            Recent activity
+            Recent changes
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -209,12 +209,12 @@ export function ActivityLogSettings() {
             {entryCount > 0
               ? `${
                   isTruncated
-                    ? `Showing the ${ENTRY_LIMIT.toLocaleString()} most recent entries`
+                    ? `Showing the ${ENTRY_LIMIT.toLocaleString()} most recent changes`
                     : `Showing all ${entryCount} ${
-                        entryCount === 1 ? "entry" : "entries"
+                        entryCount === 1 ? "change" : "changes"
                       }`
-                } from the last ${rangeLabel}. Scroll to see them all. Activity is recorded from when this log was turned on, so earlier history isn't listed here.`
-              : `Every recorded change and visit will appear here. Activity is recorded from when this log was turned on, so earlier history isn't listed here.`}
+                } from the last ${rangeLabel}. Scroll to see them all. Only changes are shown (views aren't logged), and changes are recorded from when this log was turned on, so earlier history isn't listed here.`
+              : `Every change will appear here. Changes are recorded from when this log was turned on, so earlier history isn't listed here.`}
           </p>
           {entriesQuery.isLoading ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -227,7 +227,7 @@ export function ActivityLogSettings() {
             </div>
           ) : !entriesQuery.data || entriesQuery.data.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              No activity recorded in this period yet.
+              No changes recorded in this period yet.
             </div>
           ) : (
             <div className="max-h-[28rem] overflow-y-auto rounded-md border">

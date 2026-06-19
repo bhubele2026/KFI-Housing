@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { gte, desc, sql } from "drizzle-orm";
+import { gte, desc, sql, and, ne } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { activityLogTable, appUsersTable } from "@workspace/db/schema";
 
@@ -29,7 +29,9 @@ function latestIso(
   return new Date(Math.max(ta, tb)).toISOString();
 }
 
-// Recent activity entries (most recent first), limited to the last N days.
+// Recent CHANGE entries (most recent first), limited to the last N days.
+// Read/"Viewed" requests (GET) are excluded — operators only want to see
+// what actually changed, not every page they opened.
 router.get("/activity", async (req, res) => {
   const days = parseDays(req.query.days);
   const rawLimit =
@@ -41,7 +43,12 @@ router.get("/activity", async (req, res) => {
   const rows = await db
     .select()
     .from(activityLogTable)
-    .where(gte(activityLogTable.createdAt, sinceDate(days)))
+    .where(
+      and(
+        gte(activityLogTable.createdAt, sinceDate(days)),
+        ne(activityLogTable.method, "GET"),
+      ),
+    )
     .orderBy(desc(activityLogTable.createdAt))
     .limit(limit);
 

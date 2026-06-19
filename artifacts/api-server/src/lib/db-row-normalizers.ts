@@ -391,7 +391,7 @@ export function normalizeCustomerRow<
     // Coerce truthy/falsy values (e.g. "true", 1, "1") into a strict
     // boolean so older callers / loose payloads land on a clean column
     // value. Anything genuinely missing stays missing.
-    const raw = row.isInactive;
+    const raw: unknown = row.isInactive;
     const after =
       raw === true ||
       raw === "true" ||

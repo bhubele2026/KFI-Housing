@@ -98,10 +98,16 @@ const ctx = {
 
 describe("export_leases tool", () => {
   it("filters by customerId, uploads bytes to object storage, persists metadata, and returns a download envelope", async () => {
-    const result = await exportLeasesTool.execute(
+    const result = (await exportLeasesTool.execute(
       { format: "xlsx", customerId: "custA" },
       ctx,
-    );
+    )) as {
+      format: string;
+      rowCount: number;
+      sizeBytes: number;
+      filename: string;
+      exportId: string;
+    };
     expect(result.format).toBe("xlsx");
     expect(result.rowCount).toBe(2);
     expect(result.sizeBytes).toBeGreaterThan(500);

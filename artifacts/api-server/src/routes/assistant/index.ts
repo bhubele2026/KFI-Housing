@@ -1183,7 +1183,7 @@ async function autoCancelPendingProposals(
       .set({
         status: "rejected",
         result: { error: errMsg },
-        updatedAt: new Date(),
+        resolvedAt: new Date(),
       })
       .where(eq(assistantProposalsTable.id, p.id));
     // Build a balanced user-message: a tool_result for the proposal's

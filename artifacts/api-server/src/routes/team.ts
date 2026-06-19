@@ -144,7 +144,7 @@ router.delete(
   "/team/invites/:id",
   requireAdmin,
   async (req: AuthedRequest, res) => {
-    await db.delete(appInvitesTable).where(eq(appInvitesTable.id, req.params.id));
+    await db.delete(appInvitesTable).where(eq(appInvitesTable.id, String(req.params.id)));
     res.json({ status: "ok" });
   },
 );
@@ -153,7 +153,7 @@ router.delete(
   "/team/members/:id",
   requireAdmin,
   async (req: AuthedRequest, res) => {
-    if (req.params.id === req.appUser?.id) {
+    if (String(req.params.id) === req.appUser?.id) {
       res.status(400).json({ error: "You can't remove your own account." });
       return;
     }
@@ -167,7 +167,7 @@ router.delete(
       const target = await tx
         .select()
         .from(appUsersTable)
-        .where(eq(appUsersTable.id, req.params.id))
+        .where(eq(appUsersTable.id, String(req.params.id)))
         .limit(1);
       if (target.length === 0) {
         return { status: 404 as const, body: { error: "Member not found." } };
@@ -179,7 +179,7 @@ router.delete(
           .where(
             and(
               eq(appUsersTable.role, "admin"),
-              ne(appUsersTable.id, req.params.id),
+              ne(appUsersTable.id, String(req.params.id)),
             ),
           )) as Array<{ n: number }>;
         if (n === 0) {
@@ -189,7 +189,7 @@ router.delete(
           };
         }
       }
-      await tx.delete(appUsersTable).where(eq(appUsersTable.id, req.params.id));
+      await tx.delete(appUsersTable).where(eq(appUsersTable.id, String(req.params.id)));
       return { status: 200 as const, body: { status: "ok" } };
     });
     res.status(result.status).json(result.body);

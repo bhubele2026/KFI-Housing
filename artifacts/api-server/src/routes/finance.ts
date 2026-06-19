@@ -733,7 +733,7 @@ router.post(
   "/finance/snapshots/:yyyymm",
   requireAdmin,
   async (req: AuthedRequest, res): Promise<void> => {
-    const yyyymm = req.params.yyyymm;
+    const yyyymm = String(req.params.yyyymm);
     if (!YYYYMM_RE.test(yyyymm)) {
       res.status(400).json({ error: "Invalid month key" });
       return;
@@ -790,7 +790,7 @@ router.delete(
   "/finance/snapshots/:yyyymm",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const yyyymm = req.params.yyyymm;
+    const yyyymm = String(req.params.yyyymm);
     if (!YYYYMM_RE.test(yyyymm)) {
       res.status(400).json({ error: "Invalid month key" });
       return;

@@ -53,6 +53,7 @@ function makeProperty(overrides: Partial<PropertyRow> = {}): PropertyRow {
     rentFree: false,
     defaultNoticePeriodDays: null,
     propertyType: null,
+    updatedAt: new Date(),
     ...overrides,
   };
 }

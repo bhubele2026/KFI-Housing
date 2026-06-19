@@ -24,7 +24,8 @@ interface BedRow {
 
 const bedStore = new Map<string, BedRow>();
 
-const fakeDb = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- self-referential test stub (transaction passes itself); `any` breaks the TS7022 inference cycle
+const fakeDb: any = {
   select: () => ({
     from: (_t: unknown) => ({
       orderBy: () => Array.from(bedStore.values()),
@@ -109,6 +110,10 @@ function tool(name: string) {
   return t;
 }
 
+// Minimal ToolCtx for execute(input, ctx). update_bed routes through the
+// HTTP handler and doesn't read ctx, but the signature requires it.
+const ctx = { userId: "test-user" };
+
 beforeEach(() => {
   bedStore.clear();
 });
@@ -130,7 +135,7 @@ describe("Task #646 — assistant write tools route through the HTTP handlers", 
         id: "bed-1",
         status: "Occupied",
         occupantId: "o-new",
-      }),
+      }, ctx),
     ).rejects.toThrow(/cleaning workflow/i);
 
     // Importantly, the bed wasn't mutated — direct db.update would
@@ -165,7 +170,7 @@ describe("Task #646 — assistant write tools route through the HTTP handlers", 
       status: "Occupied",
       occupantId: "o-1",
       cleaningStatus: "occupied",
-    })) as { bed: BedRow };
+    }, ctx)) as { bed: BedRow };
     expect(occupied.bed.status).toBe("Occupied");
     expect(occupied.bed.occupantId).toBe("o-1");
 
@@ -176,7 +181,7 @@ describe("Task #646 — assistant write tools route through the HTTP handlers", 
       id: "bed-occupied",
       status: "Vacant",
       occupantId: null,
-    })) as { bed: BedRow };
+    }, ctx)) as { bed: BedRow };
     expect(vacated.bed.status).toBe("Vacant");
     expect(vacated.bed.cleaningStatus).toBe("needs_cleaning");
   });

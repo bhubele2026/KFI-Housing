@@ -1,0 +1,774 @@
+{
+ "prop-shusters-900-seneca-mckeesport": {
+  "name": "Greenock Manor \u2013 McKeesport, PA",
+  "totalBeds": 28,
+  "units": [
+   {
+    "unit": "Apt 45",
+    "bed": 1,
+    "masterName": "Harold Covington"
+   },
+   {
+    "unit": "Apt 45",
+    "bed": 2,
+    "masterName": "Alfonso A. Garcia"
+   },
+   {
+    "unit": "Apt 45",
+    "bed": 3,
+    "masterName": "Ernesto Garcia"
+   },
+   {
+    "unit": "Apt 45",
+    "bed": 4,
+    "masterName": "Akniel A. Garcia"
+   },
+   {
+    "unit": "Apt 36",
+    "bed": 1,
+    "masterName": "Justin Martinez"
+   },
+   {
+    "unit": "Apt 36",
+    "bed": 2,
+    "masterName": "Derrick Black"
+   },
+   {
+    "unit": "Apt 48",
+    "bed": 1,
+    "masterName": "Tony Perry"
+   },
+   {
+    "unit": "Apt 48",
+    "bed": 2,
+    "masterName": "Christopher Hill"
+   },
+   {
+    "unit": "Apt 48",
+    "bed": 3,
+    "masterName": "Tyler Smith"
+   },
+   {
+    "unit": "Apt 48",
+    "bed": 4,
+    "masterName": "Jared Lemert"
+   },
+   {
+    "unit": "Apt 49",
+    "bed": 1,
+    "masterName": "Mandrell Coretz"
+   },
+   {
+    "unit": "Apt 49",
+    "bed": 2,
+    "masterName": "Joy Doran"
+   },
+   {
+    "unit": "Apt 49",
+    "bed": 3,
+    "masterName": "David D. Navarro"
+   },
+   {
+    "unit": "Apt 49",
+    "bed": 4,
+    "masterName": "Navarro Gabriel"
+   },
+   {
+    "unit": "Apt 32",
+    "bed": 2,
+    "masterName": "Sam Houston"
+   },
+   {
+    "unit": "Apt 32",
+    "bed": 3,
+    "masterName": "Christian Decuire"
+   },
+   {
+    "unit": "Apt 42",
+    "bed": 1,
+    "masterName": "Timothy Rouse"
+   },
+   {
+    "unit": "Apt 42",
+    "bed": 2,
+    "masterName": "Jacob Mullinax"
+   },
+   {
+    "unit": "Apt 42",
+    "bed": 3,
+    "masterName": "Richard Russell"
+   },
+   {
+    "unit": "Apt 52",
+    "bed": 1,
+    "masterName": "Lucas J Young"
+   },
+   {
+    "unit": "Apt 52",
+    "bed": 2,
+    "masterName": "Michael J Wilson"
+   }
+  ]
+ },
+ "prop-prairie-hill-village": {
+  "name": "Prairie Hill Village",
+  "totalBeds": 20,
+  "units": [
+   {
+    "unit": "509 rm1",
+    "bed": 1,
+    "masterName": "Eladio Ramos Jr"
+   },
+   {
+    "unit": "509 rm1",
+    "bed": 2,
+    "masterName": "Pedro Garcia"
+   },
+   {
+    "unit": "509 rm2",
+    "bed": 1,
+    "masterName": "Lawrence Cortez"
+   },
+   {
+    "unit": "509 rm2",
+    "bed": 2,
+    "masterName": "Jonathan Ariola"
+   },
+   {
+    "unit": "510 rm1",
+    "bed": 1,
+    "masterName": "Carlos Galvez Garcia"
+   },
+   {
+    "unit": "510 rm2",
+    "bed": 1,
+    "masterName": "Jacob Zepeda"
+   },
+   {
+    "unit": "512 rm1",
+    "bed": 1,
+    "masterName": "Alexander A Marrero"
+   },
+   {
+    "unit": "512 rm1",
+    "bed": 2,
+    "masterName": "Xavior R Robinson"
+   },
+   {
+    "unit": "512 rm2",
+    "bed": 1,
+    "masterName": "Alexis Perez"
+   },
+   {
+    "unit": "512 rm2",
+    "bed": 2,
+    "masterName": "Dorian Kyles"
+   },
+   {
+    "unit": "811 rm1",
+    "bed": 1,
+    "masterName": "Moices Bernal"
+   },
+   {
+    "unit": "811 rm1",
+    "bed": 2,
+    "masterName": "Gabriel Romero"
+   },
+   {
+    "unit": "811 rm2",
+    "bed": 1,
+    "masterName": "Jacob C Ferguson"
+   },
+   {
+    "unit": "812 rm1",
+    "bed": 1,
+    "masterName": "Abein Flores"
+   },
+   {
+    "unit": "812 rm1",
+    "bed": 2,
+    "masterName": "Jose Castro"
+   },
+   {
+    "unit": "812 rm2",
+    "bed": 1,
+    "masterName": "Antonio Hernandez"
+   },
+   {
+    "unit": "812 rm2",
+    "bed": 2,
+    "masterName": "Ismael Meza"
+   }
+  ]
+ },
+ "prop-burnett-siren-7666-south-shore": {
+  "name": "Siren \u2013 7666 South Shore Drive",
+  "totalBeds": 13,
+  "units": [
+   {
+    "unit": "Apt #1-1",
+    "bed": 1,
+    "masterName": "Andres Ayala"
+   },
+   {
+    "unit": "Apt #2-1",
+    "bed": 1,
+    "masterName": "Felix A. Baez Caballero"
+   },
+   {
+    "unit": "Apt #2-1",
+    "bed": 2,
+    "masterName": "Orlando Moreno"
+   },
+   {
+    "unit": "Apt #2-2",
+    "bed": 1,
+    "masterName": "Ricardo Mondragon"
+   },
+   {
+    "unit": "Apt #2-2",
+    "bed": 2,
+    "masterName": "Luis E Ceballos Martinez"
+   },
+   {
+    "unit": "Apt #3-1",
+    "bed": 1,
+    "masterName": "Cory Banuelos"
+   },
+   {
+    "unit": "Apt #3-1",
+    "bed": 2,
+    "masterName": "Albert Garcia"
+   },
+   {
+    "unit": "Apt #3-2",
+    "bed": 1,
+    "masterName": "Brandon Didonato"
+   },
+   {
+    "unit": "Apt #3-2",
+    "bed": 2,
+    "masterName": "Miguel Mata"
+   }
+  ]
+ },
+ "prop-burnett-webster-7112-zielsdorf": {
+  "name": "Webster \u2013 7112 Zielsdorf Drive",
+  "totalBeds": 8,
+  "units": [
+   {
+    "unit": "West rm1",
+    "bed": 1,
+    "masterName": "Willie A. Medina Jr"
+   },
+   {
+    "unit": "West rm1",
+    "bed": 2,
+    "masterName": "Ramon Almeida Ruiz"
+   },
+   {
+    "unit": "West rm2",
+    "bed": 1,
+    "masterName": "Cody S. Ogden"
+   },
+   {
+    "unit": "West rm2",
+    "bed": 2,
+    "masterName": "Johnathan M. Reynolds"
+   },
+   {
+    "unit": "East rm1",
+    "bed": 1,
+    "masterName": "Jordan A. Sanders"
+   },
+   {
+    "unit": "East rm1",
+    "bed": 2,
+    "masterName": "Jordan Doyle"
+   },
+   {
+    "unit": "East rm2",
+    "bed": 1,
+    "masterName": "Fernando D. Reyes"
+   },
+   {
+    "unit": "East rm2",
+    "bed": 2,
+    "masterName": "Gabriel M. Vega"
+   }
+  ]
+ },
+ "prop-burnett-hinckley-7th-st-se": {
+  "name": "Burnett Hinckley \u2013 7th St SE",
+  "totalBeds": 24,
+  "note": "Master grid and master employee-roster disagree heavily for Hinckley; grid reading used.",
+  "units": [
+   {
+    "unit": "404-304",
+    "bed": 1,
+    "masterName": "Jayden Robertson"
+   },
+   {
+    "unit": "404-304",
+    "bed": 2,
+    "masterName": "Devin M. Law"
+   },
+   {
+    "unit": "406-205",
+    "bed": 1,
+    "masterName": "Felix Arroyo"
+   },
+   {
+    "unit": "406-205",
+    "bed": 2,
+    "masterName": "Isidro Guerrero"
+   },
+   {
+    "unit": "406-302",
+    "bed": 1,
+    "masterName": "Jose Gallegos"
+   },
+   {
+    "unit": "406-302",
+    "bed": 2,
+    "masterName": "Luis A. Hernandez"
+   }
+  ]
+ },
+ "prop-hickory-haven-gilman": {
+  "name": "Hickory Haven Apartments \u2013 Gilman, WI",
+  "totalBeds": 10,
+  "units": [
+   {
+    "unit": "Apt 6",
+    "bed": 1,
+    "masterName": "Gilberto Lara"
+   },
+   {
+    "unit": "Apt 6",
+    "bed": 2,
+    "masterName": "Francisco (CHOFER)"
+   },
+   {
+    "unit": "Apt 8",
+    "bed": 1,
+    "masterName": "Andrew Castaneda"
+   },
+   {
+    "unit": "Apt 8",
+    "bed": 2,
+    "masterName": "Dennis Jordan"
+   },
+   {
+    "unit": "Apt 11",
+    "bed": 1,
+    "masterName": "Dustin Laslie"
+   },
+   {
+    "unit": "Apt 11",
+    "bed": 2,
+    "masterName": "Martin Hust"
+   },
+   {
+    "unit": "Apt 12",
+    "bed": 1,
+    "masterName": "Isaiah Young"
+   },
+   {
+    "unit": "Apt 12",
+    "bed": 2,
+    "masterName": "Jacob Novak"
+   },
+   {
+    "unit": "Apt 12 (2)",
+    "bed": 1,
+    "masterName": "Sterlin Adams"
+   }
+  ]
+ },
+ "prop-park-place-plymouth": {
+  "name": "Park Place Apartments \u2013 Plymouth, MN",
+  "totalBeds": 24,
+  "note": "Master file lists Park Place at unit level (no bed numbers); master subtotals internally inconsistent (16 vs 24).",
+  "units": [
+   {
+    "unit": "Apt 118",
+    "bed": null,
+    "masterName": "Julio Orgonez"
+   },
+   {
+    "unit": "Apt 118",
+    "bed": null,
+    "masterName": "Raymundo Leija"
+   },
+   {
+    "unit": "Apt 118",
+    "bed": null,
+    "masterName": "Ethan Davis"
+   },
+   {
+    "unit": "Apt 127",
+    "bed": null,
+    "masterName": "Alfred A Beserra"
+   },
+   {
+    "unit": "Apt 127",
+    "bed": null,
+    "masterName": "David Davis"
+   },
+   {
+    "unit": "Apt 127",
+    "bed": null,
+    "masterName": "Erasmo Garza"
+   },
+   {
+    "unit": "Apt 315",
+    "bed": null,
+    "masterName": "Abel A Guzman"
+   },
+   {
+    "unit": "Apt 315",
+    "bed": null,
+    "masterName": "Luis Rodriguez Rivera"
+   },
+   {
+    "unit": "Apt 315",
+    "bed": null,
+    "masterName": "Nicholas R Franklin"
+   },
+   {
+    "unit": "Apt 342",
+    "bed": null,
+    "masterName": "Jordan Torres"
+   },
+   {
+    "unit": "Apt 342",
+    "bed": null,
+    "masterName": "Jose Molina"
+   },
+   {
+    "unit": "Apt 342",
+    "bed": null,
+    "masterName": "Marcos Antonio Lara"
+   },
+   {
+    "unit": "Apt 201",
+    "bed": null,
+    "masterName": "Evarado Delgado"
+   },
+   {
+    "unit": "Apt 201",
+    "bed": null,
+    "masterName": "Jonathan Reynosa"
+   },
+   {
+    "unit": "Apt 201",
+    "bed": null,
+    "masterName": "Sebastian Villarreal"
+   },
+   {
+    "unit": "Apt 201",
+    "bed": null,
+    "masterName": "Tyrek J Patterson"
+   },
+   {
+    "unit": "Apt 218",
+    "bed": null,
+    "masterName": "Eduardo Campos"
+   },
+   {
+    "unit": "Apt 218",
+    "bed": null,
+    "masterName": "Gabriel J Womack"
+   },
+   {
+    "unit": "Apt 218",
+    "bed": null,
+    "masterName": "Gilbert Bustos Jr"
+   },
+   {
+    "unit": "Apt 218",
+    "bed": null,
+    "masterName": "Justin Deangelis"
+   }
+  ]
+ },
+ "prop-penda-2900-new-pinery": {
+  "name": "2900 New Pinery Rd \u2013 Portage, WI",
+  "totalBeds": 28,
+  "note": "Master 'Portage' tab used (newer than standalone ridge roster). Master adds S8-series rooms (~30 cap) not in app.",
+  "units": [
+   {
+    "unit": "205",
+    "bed": 1,
+    "masterName": "Ryan Fiegen"
+   },
+   {
+    "unit": "205",
+    "bed": 2,
+    "masterName": "Brandon Johnson"
+   },
+   {
+    "unit": "134",
+    "bed": 1,
+    "masterName": "Claudia M Ramirez"
+   },
+   {
+    "unit": "149",
+    "bed": 1,
+    "masterName": "Zabdi X Rodriguez"
+   },
+   {
+    "unit": "149",
+    "bed": 2,
+    "masterName": "John Tyler Clark"
+   },
+   {
+    "unit": "216",
+    "bed": 1,
+    "masterName": "Brandon Morgan"
+   },
+   {
+    "unit": "216",
+    "bed": 2,
+    "masterName": "Diego Martinez"
+   },
+   {
+    "unit": "215",
+    "bed": 1,
+    "masterName": "Evian D Napier"
+   },
+   {
+    "unit": "215",
+    "bed": 2,
+    "masterName": "Stephen Archambo"
+   },
+   {
+    "unit": "247",
+    "bed": 1,
+    "masterName": "Jordan T. Smith"
+   },
+   {
+    "unit": "247",
+    "bed": 2,
+    "masterName": "Trey Grant"
+   },
+   {
+    "unit": "122",
+    "bed": 1,
+    "masterName": "Javien Robinson"
+   },
+   {
+    "unit": "122",
+    "bed": 2,
+    "masterName": "Zion Glover"
+   },
+   {
+    "unit": "303",
+    "bed": 1,
+    "masterName": "Ryan Thomas"
+   },
+   {
+    "unit": "303",
+    "bed": 2,
+    "masterName": "Dario Munoz"
+   },
+   {
+    "unit": "232",
+    "bed": 1,
+    "masterName": "Noah Vaughn"
+   },
+   {
+    "unit": "232",
+    "bed": 2,
+    "masterName": "Felix M. Rivera"
+   },
+   {
+    "unit": "136",
+    "bed": 1,
+    "masterName": "Sybella Sandoval"
+   },
+   {
+    "unit": "136",
+    "bed": 2,
+    "masterName": "Dalida M Diaz"
+   },
+   {
+    "unit": "S8-207",
+    "bed": 1,
+    "masterName": "Jason Allen Mills"
+   },
+   {
+    "unit": "S8-207",
+    "bed": 2,
+    "masterName": "Cristian A Jackson"
+   },
+   {
+    "unit": "S8-209",
+    "bed": 1,
+    "masterName": "Logan J Rogers"
+   },
+   {
+    "unit": "S8-209",
+    "bed": 2,
+    "masterName": "Josue D Martinez Garza"
+   },
+   {
+    "unit": "S8-211",
+    "bed": 1,
+    "masterName": "Christian Quinones"
+   },
+   {
+    "unit": "S8-211",
+    "bed": 2,
+    "masterName": "Ethan Hasty"
+   },
+   {
+    "unit": "S8-218",
+    "bed": 1,
+    "masterName": "Trevor Jermaine Horne"
+   },
+   {
+    "unit": "S8-218",
+    "bed": 2,
+    "masterName": "Eric A Brunson"
+   },
+   {
+    "unit": "S8-219",
+    "bed": 1,
+    "masterName": "Alberto Lee Monnar"
+   },
+   {
+    "unit": "S8-219",
+    "bed": 2,
+    "masterName": "Daniel Young"
+   },
+   {
+    "unit": "S8-221",
+    "bed": 1,
+    "masterName": "Jonathan Isaiah Spears"
+   }
+  ]
+ },
+ "prop-schuette-1331-s-8th-apt-200": {
+  "name": "1331 S 8th Ave Apt 200 \u2013 Wausau, WI",
+  "totalBeds": 6,
+  "note": "Master merges Apt200/108/208 in one block; Apt 200 names clean. Master had no bed numbers per person.",
+  "units": [
+   {
+    "unit": "Apt 200 rm1",
+    "bed": 1,
+    "masterName": "Cole C Hayek"
+   },
+   {
+    "unit": "Apt 200 rm1",
+    "bed": 2,
+    "masterName": "Erin B Miller"
+   },
+   {
+    "unit": "Apt 200 rm2",
+    "bed": 1,
+    "masterName": "Joshua B Allen"
+   },
+   {
+    "unit": "Apt 200 rm2",
+    "bed": 2,
+    "masterName": "William Johnson"
+   },
+   {
+    "unit": "Apt 200 rm3",
+    "bed": 1,
+    "masterName": "Julian T Lewis"
+   },
+   {
+    "unit": "Apt 200 rm3",
+    "bed": 2,
+    "masterName": "Elijah Patterson"
+   }
+  ]
+ },
+ "prop-schuette-1341-s-8th-apt-108": {
+  "name": "1341 S 8th Ave Apt 108 \u2013 Wausau, WI",
+  "totalBeds": 4,
+  "note": "Master 108 names are the 6/12/2026 move-in group; entirely different from app's current occupants.",
+  "units": [
+   {
+    "unit": "Apt 108 rmA",
+    "bed": 1,
+    "masterName": "Eduardo Solano Rios"
+   },
+   {
+    "unit": "Apt 108 rmA",
+    "bed": 2,
+    "masterName": "Jacob Slade Brown"
+   },
+   {
+    "unit": "Apt 108 rmB",
+    "bed": 1,
+    "masterName": "Ethan Long"
+   },
+   {
+    "unit": "Apt 108 rmB",
+    "bed": 2,
+    "masterName": "James W Hart"
+   },
+   {
+    "unit": "Apt 108 rmC",
+    "bed": 1,
+    "masterName": "Andrew B Sweet"
+   },
+   {
+    "unit": "Apt 108 rmC",
+    "bed": 2,
+    "masterName": "Austin Crawford"
+   }
+  ]
+ },
+ "prop-iwg-bloomfield-st": {
+  "name": "E. Bloomfield St Apartments",
+  "totalBeds": 28,
+  "note": "Master Bloomfield grid truncated/misaligned; per-bed mapping not recoverable. Only 414-3 reliable; other master names recorded with unit unknown.",
+  "units": [
+   {
+    "unit": "414-3",
+    "bed": 1,
+    "masterName": "George Cardoso"
+   },
+   {
+    "unit": "414-3",
+    "bed": 2,
+    "masterName": "Kristian W Ordiales"
+   },
+   {
+    "unit": "512-3",
+    "bed": 1,
+    "masterName": "Richard Balderas"
+   },
+   {
+    "unit": "512-3",
+    "bed": 2,
+    "masterName": "Santiago Coello"
+   },
+   {
+    "unit": "322-2",
+    "bed": 1,
+    "masterName": "Marcos Garza"
+   },
+   {
+    "unit": "322-2",
+    "bed": 2,
+    "masterName": "Jose A. Garcia"
+   },
+   {
+    "unit": "(unit unknown)",
+    "bed": null,
+    "masterName": "Stive Pimentel Diaz"
+   },
+   {
+    "unit": "(unit unknown)",
+    "bed": null,
+    "masterName": "Jonathan Cedeno"
+   }
+  ]
+ }
+}

@@ -1,0 +1,2656 @@
+{
+  "generatedFrom": "SharePoint per-property master occupancy sheets vs kfi-housing.replit.app",
+  "summary": {
+    "masterOccupied": 140,
+    "match": 96,
+    "noRosterMatch": 40,
+    "appMissing": 42,
+    "name-diff": 2,
+    "masterMissing": 23
+  },
+  "properties": {
+    "prop-shusters-900-seneca-mckeesport": {
+      "property": "Greenock Manor \u2013 McKeesport, PA",
+      "masterTotalBeds": 28,
+      "appTotalBeds": 28,
+      "rows": [
+        {
+          "unit": "Apt 45",
+          "bed": 1,
+          "masterName": "Harold Covington",
+          "appName": "Harold Covington",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt45-r1-b1",
+          "matchToRoster": {
+            "personId": "2004797",
+            "name": "HAROLD COVINGTON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 45",
+          "bed": 2,
+          "masterName": "Alfonso A. Garcia",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002150",
+              "name": "ALBERT GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001115",
+              "name": "CRISTAL GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005293",
+              "name": "ERICK F GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 45",
+          "bed": 3,
+          "masterName": "Ernesto Garcia",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002150",
+              "name": "ALBERT GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001115",
+              "name": "CRISTAL GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005293",
+              "name": "ERICK F GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 45",
+          "bed": 4,
+          "masterName": "Akniel A. Garcia",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002150",
+              "name": "ALBERT GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001115",
+              "name": "CRISTAL GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005293",
+              "name": "ERICK F GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 36",
+          "bed": 1,
+          "masterName": "Justin Martinez",
+          "appName": "Justin Martinez",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt36-r1-b1",
+          "matchToRoster": {
+            "personId": "2002254",
+            "name": "JUSTIN MARTINEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 36",
+          "bed": 2,
+          "masterName": "Derrick Black",
+          "appName": "Derrick Black",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt36-r2-b1",
+          "matchToRoster": {
+            "personId": "2004750",
+            "name": "DERRICK L BLACK"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 48",
+          "bed": 1,
+          "masterName": "Tony Perry",
+          "appName": "Tony Perry",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt48-r1-b1",
+          "matchToRoster": {
+            "personId": "2005084",
+            "name": "TONY A PERRY"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 48",
+          "bed": 2,
+          "masterName": "Christopher Hill",
+          "appName": "Christopher Hopson",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt32-r2-b2",
+          "matchToRoster": {
+            "personId": "2004747",
+            "name": "CHRISTOPHER HILL"
+          },
+          "rosterCandidates": null,
+          "status": "name-diff"
+        },
+        {
+          "unit": "Apt 48",
+          "bed": 3,
+          "masterName": "Tyler Smith",
+          "appName": "Tyler Smith",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt48-r2-b1",
+          "matchToRoster": {
+            "personId": "2005083",
+            "name": "TYLER SMITH"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 48",
+          "bed": 4,
+          "masterName": "Jared Lemert",
+          "appName": "Jared Lemert",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt48-r2-b2",
+          "matchToRoster": {
+            "personId": "2004749",
+            "name": "JARED LEMERT"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 49",
+          "bed": 1,
+          "masterName": "Mandrell Coretz",
+          "appName": "Mandrell Coretz",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt49-r1-b1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002420",
+              "name": "MANDRELL CORTEZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 49",
+          "bed": 2,
+          "masterName": "Joy Doran",
+          "appName": "Joy Doran",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt49-r1-b2",
+          "matchToRoster": {
+            "personId": "2003771",
+            "name": "JOY DORAN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 49",
+          "bed": 3,
+          "masterName": "David D. Navarro",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005029",
+              "name": "DAVID A BEASLEY",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001597",
+              "name": "DAVID ARROYO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2002138",
+              "name": "DAVID CASTILLO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 49",
+          "bed": 4,
+          "masterName": "Navarro Gabriel",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002873",
+              "name": "GABRIEL GARCIA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001583",
+              "name": "GABRIEL GARZA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005111",
+              "name": "GABRIEL J WOMACK",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 32",
+          "bed": 2,
+          "masterName": "Sam Houston",
+          "appName": "Sam Houston",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt32-r2-b1",
+          "matchToRoster": {
+            "personId": "2004768",
+            "name": "SAM D HOUSTON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 32",
+          "bed": 3,
+          "masterName": "Christian Decuire",
+          "appName": "Christian Decuire",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt32-r1-b1",
+          "matchToRoster": {
+            "personId": "2004767",
+            "name": "CHRISTIAN M DECUIRE"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 42",
+          "bed": 1,
+          "masterName": "Timothy Rouse",
+          "appName": "Timothy Rouse",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt42-r1-b1",
+          "matchToRoster": {
+            "personId": "2005114",
+            "name": "TIMOTHY N ROUSE"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 42",
+          "bed": 2,
+          "masterName": "Jacob Mullinax",
+          "appName": "Jacob Mullinax",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt42-r1-b2",
+          "matchToRoster": {
+            "personId": "2005115",
+            "name": "JACOB MULLINAX"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 42",
+          "bed": 3,
+          "masterName": "Richard Russell",
+          "appName": "Richard Russell",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt42-r2-b1",
+          "matchToRoster": {
+            "personId": "2005113",
+            "name": "RICHARD R RUSSELL"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 52",
+          "bed": 1,
+          "masterName": "Lucas J Young",
+          "appName": "Lucas J Young",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt45-r1-b2",
+          "matchToRoster": {
+            "personId": "2005216",
+            "name": "LUCAS J YOUNG"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 52",
+          "bed": 2,
+          "masterName": "Michael J Wilson",
+          "appName": "Michael J Wilson",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt52-r2-b2",
+          "matchToRoster": {
+            "personId": "2005215",
+            "name": "MICHAEL J WILSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "ABEL PEREZ",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt32-r1-b2",
+          "matchToRoster": {
+            "personId": "2005130",
+            "name": "ABEL PEREZ"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Robert Bradford",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt36-r2-b2",
+          "matchToRoster": {
+            "personId": "2004866",
+            "name": "ROBERT BRADFORD"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Jerry Rivas",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt42-r2-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005512",
+              "name": "JERRY FLORES",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005326",
+              "name": "JERRY SEGURA NUNEZ",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Gage",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt45-r2-b1",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Richard Fuller",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt45-r2-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004992",
+              "name": "RICHARD BALDERAS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005113",
+              "name": "RICHARD R RUSSELL",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Richard Balderas",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt49-r2-b1",
+          "matchToRoster": {
+            "personId": "2004992",
+            "name": "RICHARD BALDERAS"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Xavier Aaron Addison",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt52-r1-b1",
+          "matchToRoster": {
+            "personId": "2005214",
+            "name": "XAVIER A ADDISON"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Rolando Rene Avitia",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt52-r1-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2001238",
+              "name": "RENE MARTINEZ JR",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2003133",
+              "name": "EDGAR RENE LOPEZ",
+              "cover": 0.33,
+              "jaccard": 0.2
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Benjamin Zacatzontle",
+          "appBedId": "bed-prop-shusters-900-seneca-mckeesport-apt52-r2-b1",
+          "matchToRoster": {
+            "personId": "2005217",
+            "name": "BENJAMIN ZACATZONTLE"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        }
+      ]
+    },
+    "prop-prairie-hill-village": {
+      "property": "Prairie Hill Village",
+      "masterTotalBeds": 20,
+      "appTotalBeds": 20,
+      "rows": [
+        {
+          "unit": "509 rm1",
+          "bed": 1,
+          "masterName": "Eladio Ramos Jr",
+          "appName": "Eladio Ramos Jr",
+          "appBedId": "bed-prop-prairie-hill-village-509-1-1",
+          "matchToRoster": {
+            "personId": "2001255",
+            "name": "ELADIO RAMOS JR"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "509 rm1",
+          "bed": 2,
+          "masterName": "Pedro Garcia",
+          "appName": "Pedro Garcia",
+          "appBedId": "bed-prop-prairie-hill-village-509-1-2",
+          "matchToRoster": {
+            "personId": "2002202",
+            "name": "PEDRO GARCIA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "509 rm2",
+          "bed": 1,
+          "masterName": "Lawrence Cortez",
+          "appName": "Lawrence Cortez",
+          "appBedId": "bed-prop-prairie-hill-village-509-2-1",
+          "matchToRoster": {
+            "personId": "2002187",
+            "name": "LAWRENCE CORTEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "509 rm2",
+          "bed": 2,
+          "masterName": "Jonathan Ariola",
+          "appName": "Jonathan Ariola",
+          "appBedId": "bed-prop-prairie-hill-village-509-2-2",
+          "matchToRoster": {
+            "personId": "2002201",
+            "name": "JONATHAN ARIOLA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "510 rm1",
+          "bed": 1,
+          "masterName": "Carlos Galvez Garcia",
+          "appName": "Carlos Galvez Garcia",
+          "appBedId": "bed-prop-prairie-hill-village-510-1-2",
+          "matchToRoster": {
+            "personId": "2001261",
+            "name": "CARLOS GALVEZ GARCIA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "510 rm2",
+          "bed": 1,
+          "masterName": "Jacob Zepeda",
+          "appName": "Jacob Zepeda",
+          "appBedId": "bed-prop-prairie-hill-village-510-2-2",
+          "matchToRoster": {
+            "personId": "2001252",
+            "name": "JACOB ZEPEDA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "512 rm1",
+          "bed": 1,
+          "masterName": "Alexander A Marrero",
+          "appName": "Alexander A Marrero",
+          "appBedId": "bed-prop-prairie-hill-village-512-1-1",
+          "matchToRoster": {
+            "personId": "2002780",
+            "name": "ALEXANDER A MARRERO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "512 rm1",
+          "bed": 2,
+          "masterName": "Xavior R Robinson",
+          "appName": "Xavior R Robinson",
+          "appBedId": "bed-prop-prairie-hill-village-512-1-2",
+          "matchToRoster": {
+            "personId": "2004678",
+            "name": "XAVIOR R ROBINSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "512 rm2",
+          "bed": 1,
+          "masterName": "Alexis Perez",
+          "appName": "Alexis Perez",
+          "appBedId": "bed-prop-prairie-hill-village-512-2-1",
+          "matchToRoster": {
+            "personId": "2002739",
+            "name": "ALEXIS PEREZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "512 rm2",
+          "bed": 2,
+          "masterName": "Dorian Kyles",
+          "appName": "Dorian Kyles",
+          "appBedId": "bed-prop-prairie-hill-village-512-2-2",
+          "matchToRoster": {
+            "personId": "2004679",
+            "name": "DORIAN KYLES"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "811 rm1",
+          "bed": 1,
+          "masterName": "Moices Bernal",
+          "appName": "Moices Bernal",
+          "appBedId": "bed-prop-prairie-hill-village-811-1-1",
+          "matchToRoster": {
+            "personId": "2004681",
+            "name": "MOICES BERNAL"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "811 rm1",
+          "bed": 2,
+          "masterName": "Gabriel Romero",
+          "appName": "Gabriel Romero",
+          "appBedId": "bed-prop-prairie-hill-village-811-1-2",
+          "matchToRoster": {
+            "personId": "2004677",
+            "name": "GABRIEL ROMERO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "811 rm2",
+          "bed": 1,
+          "masterName": "Jacob C Ferguson",
+          "appName": "Jacob C Ferguson",
+          "appBedId": "bed-prop-prairie-hill-village-811-2-1",
+          "matchToRoster": {
+            "personId": "2004676",
+            "name": "JACOB C FERGUSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "812 rm1",
+          "bed": 1,
+          "masterName": "Abein Flores",
+          "appName": "Abein Flores",
+          "appBedId": "bed-prop-prairie-hill-village-812-1-1",
+          "matchToRoster": {
+            "personId": "2002424",
+            "name": "ABEIN FLORES"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "812 rm1",
+          "bed": 2,
+          "masterName": "Jose Castro",
+          "appName": "Jose Castro",
+          "appBedId": "bed-prop-prairie-hill-village-812-1-2",
+          "matchToRoster": {
+            "personId": "2001690",
+            "name": "JOSE CASTRO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "812 rm2",
+          "bed": 1,
+          "masterName": "Antonio Hernandez",
+          "appName": "Antonio Hernandez",
+          "appBedId": "bed-prop-prairie-hill-village-812-2-1",
+          "matchToRoster": {
+            "personId": "2001265",
+            "name": "ANTONIO HERNANDEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "812 rm2",
+          "bed": 2,
+          "masterName": "Ismael Meza",
+          "appName": "Ismael Meza",
+          "appBedId": "bed-prop-prairie-hill-village-812-2-2",
+          "matchToRoster": {
+            "personId": "2001257",
+            "name": "ISMAEL MEZA CACERES"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        }
+      ]
+    },
+    "prop-burnett-siren-7666-south-shore": {
+      "property": "Siren \u2013 7666 South Shore Drive",
+      "masterTotalBeds": 13,
+      "appTotalBeds": 13,
+      "rows": [
+        {
+          "unit": "Apt #1-1",
+          "bed": 1,
+          "masterName": "Andres Ayala",
+          "appName": "Andres Ayala",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-1-1",
+          "matchToRoster": {
+            "personId": "2002152",
+            "name": "ANDRES AYALA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #2-1",
+          "bed": 1,
+          "masterName": "Felix A. Baez Caballero",
+          "appName": "Felix A. Baez Caballero",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-3-1",
+          "matchToRoster": {
+            "personId": "2003283",
+            "name": "FELIX ANDRES BAEZ CABALLERO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #2-1",
+          "bed": 2,
+          "masterName": "Orlando Moreno",
+          "appName": "Orlando Moreno",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-3-2",
+          "matchToRoster": {
+            "personId": "2003075",
+            "name": "ORLANDO MORENO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #2-2",
+          "bed": 1,
+          "masterName": "Ricardo Mondragon",
+          "appName": "Ricardo Mondragon",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-4-1",
+          "matchToRoster": {
+            "personId": "2002688",
+            "name": "RICARDO MONDRAGON MERCADO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #2-2",
+          "bed": 2,
+          "masterName": "Luis E Ceballos Martinez",
+          "appName": "Luis E Ceballos Martinez - Basement",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-4-2",
+          "matchToRoster": {
+            "personId": "2003301",
+            "name": "LUIS E CEBALLOS MARTINEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #3-1",
+          "bed": 1,
+          "masterName": "Cory Banuelos",
+          "appName": "Cory Banuelos",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-5-1",
+          "matchToRoster": {
+            "personId": "2002162",
+            "name": "CORY BANUELOS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #3-1",
+          "bed": 2,
+          "masterName": "Albert Garcia",
+          "appName": "Albert Garcia",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-5-2",
+          "matchToRoster": {
+            "personId": "2002150",
+            "name": "ALBERT GARCIA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #3-2",
+          "bed": 1,
+          "masterName": "Brandon Didonato",
+          "appName": "Brandon Didonato",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-6-1",
+          "matchToRoster": {
+            "personId": "2002818",
+            "name": "BRANDON DIDONATO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt #3-2",
+          "bed": 2,
+          "masterName": "Miguel Mata",
+          "appName": "Miguel Mata",
+          "appBedId": "bed-prop-burnett-siren-7666-south-shore-6-2",
+          "matchToRoster": {
+            "personId": "2002151",
+            "name": "MIGUEL MATA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        }
+      ]
+    },
+    "prop-burnett-webster-7112-zielsdorf": {
+      "property": "Webster \u2013 7112 Zielsdorf Drive",
+      "masterTotalBeds": 8,
+      "appTotalBeds": 8,
+      "rows": [
+        {
+          "unit": "West rm1",
+          "bed": 1,
+          "masterName": "Willie A. Medina Jr",
+          "appName": "Willie A. Medina Jr",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-1-1",
+          "matchToRoster": {
+            "personId": "2004792",
+            "name": "WILLIE A MEDINA JR"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "West rm1",
+          "bed": 2,
+          "masterName": "Ramon Almeida Ruiz",
+          "appName": "Ramon Almeida Ruiz",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-1-2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002680",
+              "name": "ANTHONY RUIZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "West rm2",
+          "bed": 1,
+          "masterName": "Cody S. Ogden",
+          "appName": "Cody S. Ogden",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-2-1",
+          "matchToRoster": {
+            "personId": "2004594",
+            "name": "CODY S OGDEN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "West rm2",
+          "bed": 2,
+          "masterName": "Johnathan M. Reynolds",
+          "appName": "Johnathan M. Reynolds",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-2-2",
+          "matchToRoster": {
+            "personId": "2004593",
+            "name": "JOHNATHAN M REYNOLDS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "East rm1",
+          "bed": 1,
+          "masterName": "Jordan A. Sanders",
+          "appName": "Jordan A. Sanders",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-3-1",
+          "matchToRoster": {
+            "personId": "2004596",
+            "name": "JORDAN A SANDERS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "East rm1",
+          "bed": 2,
+          "masterName": "Jordan Doyle",
+          "appName": "Jordan Doyle",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-3-2",
+          "matchToRoster": {
+            "personId": "2004595",
+            "name": "JORDAN DOYLE"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "East rm2",
+          "bed": 1,
+          "masterName": "Fernando D. Reyes",
+          "appName": "Fernando D. Reyes",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-4-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2001989",
+              "name": "ANTONIO REYES",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005503",
+              "name": "ERICA D SILVERIO REYES",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "East rm2",
+          "bed": 2,
+          "masterName": "Gabriel M. Vega",
+          "appName": "Gabriel M. Vega",
+          "appBedId": "bed-prop-burnett-webster-7112-zielsdorf-4-2",
+          "matchToRoster": {
+            "personId": "2004606",
+            "name": "GABRIEL M VEGA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        }
+      ]
+    },
+    "prop-burnett-hinckley-7th-st-se": {
+      "property": "Burnett Hinckley \u2013 7th St SE",
+      "masterTotalBeds": 24,
+      "appTotalBeds": 24,
+      "rows": [
+        {
+          "unit": "404-304",
+          "bed": 1,
+          "masterName": "Jayden Robertson",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2004690",
+            "name": "JAYDEN ROBERTSON"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "404-304",
+          "bed": 2,
+          "masterName": "Devin M. Law",
+          "appName": "Devin M. Law",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-2-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005042",
+              "name": "DEVIN R NEAL",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "406-205",
+          "bed": 1,
+          "masterName": "Felix Arroyo",
+          "appName": "Felix Arroyo - KFI Sup.",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-9-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2001597",
+              "name": "DAVID ARROYO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2000657",
+              "name": "FELIX MOYA JR",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005601",
+              "name": "FELIX MIGUEL RIVERA",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "406-205",
+          "bed": 2,
+          "masterName": "Isidro Guerrero",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2000843",
+              "name": "ISIDRO GUTIERREZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2002179",
+              "name": "TYLER GUERRERO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "406-302",
+          "bed": 1,
+          "masterName": "Jose Gallegos",
+          "appName": "Jose Gallegos",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-11-1",
+          "matchToRoster": {
+            "personId": "2002374",
+            "name": "JOSE GALLEGOS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "406-302",
+          "bed": 2,
+          "masterName": "Luis A. Hernandez",
+          "appName": "Luis A. Hernandez",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-12-1",
+          "matchToRoster": {
+            "personId": "2004372",
+            "name": "LUIS ALBERTO HERNANDEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Devin (last name TBD)",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-11-2",
+          "matchToRoster": {
+            "personId": "2005042",
+            "name": "DEVIN R NEAL"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Frank Quinones",
+          "appBedId": "bed-prop-burnett-hinckley-7th-st-se-12-2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004847",
+              "name": "FRANK MEZA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2002829",
+              "name": "RICARDO QUINONES ARROYO",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "master-missing"
+        }
+      ]
+    },
+    "prop-hickory-haven-gilman": {
+      "property": "Hickory Haven Apartments \u2013 Gilman, WI",
+      "masterTotalBeds": 10,
+      "appTotalBeds": 10,
+      "rows": [
+        {
+          "unit": "Apt 6",
+          "bed": 1,
+          "masterName": "Gilberto Lara",
+          "appName": "Gilberto Lara",
+          "appBedId": "bed-prop-hickory-haven-gilman-6-1-1",
+          "matchToRoster": {
+            "personId": "2004959",
+            "name": "GILBERTO LARA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 6",
+          "bed": 2,
+          "masterName": "Francisco (CHOFER)",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2004757",
+            "name": "FRANCISCO BENSON"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 8",
+          "bed": 1,
+          "masterName": "Andrew Castaneda",
+          "appName": "Andrew Castaneda",
+          "appBedId": "bed-prop-hickory-haven-gilman-8-1-1",
+          "matchToRoster": {
+            "personId": "2004961",
+            "name": "ANDREW J CASTANEDA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 8",
+          "bed": 2,
+          "masterName": "Dennis Jordan",
+          "appName": "Dennis Jordan",
+          "appBedId": "bed-prop-hickory-haven-gilman-8-1-2",
+          "matchToRoster": {
+            "personId": "2004960",
+            "name": "DENNIS G JORDAN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 11",
+          "bed": 1,
+          "masterName": "Dustin Laslie",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 11",
+          "bed": 2,
+          "masterName": "Martin Hust",
+          "appName": "Martin Hust",
+          "appBedId": "bed-prop-hickory-haven-gilman-11-1-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002245",
+              "name": "MARTIN CAMACHO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001677",
+              "name": "MARTIN LEAL",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2000963",
+              "name": "RICARDO MENDEZ MARTIN",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 12",
+          "bed": 1,
+          "masterName": "Isaiah Young",
+          "appName": "Isaiah Young",
+          "appBedId": "bed-prop-hickory-haven-gilman-12-1-1",
+          "matchToRoster": {
+            "personId": "2005032",
+            "name": "ISAIAH H YOUNG"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 12",
+          "bed": 2,
+          "masterName": "Jacob Novak",
+          "appName": "Jacob Novak",
+          "appBedId": "bed-prop-hickory-haven-gilman-12-1-2",
+          "matchToRoster": {
+            "personId": "2005031",
+            "name": "JACOB M NOVAK"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 12 (2)",
+          "bed": 1,
+          "masterName": "Sterlin Adams",
+          "appName": "Sterlin Adams",
+          "appBedId": "bed-prop-hickory-haven-gilman-12-2-1",
+          "matchToRoster": {
+            "personId": "2005036",
+            "name": "STERLIN C ADAMS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        }
+      ]
+    },
+    "prop-park-place-plymouth": {
+      "property": "Park Place Apartments \u2013 Plymouth, MN",
+      "masterTotalBeds": 24,
+      "appTotalBeds": 24,
+      "rows": [
+        {
+          "unit": "Apt 118",
+          "bed": null,
+          "masterName": "Julio Orgonez",
+          "appName": "Julio Orgonez",
+          "appBedId": "bed-prop-park-place-plymouth-118-r1-b1",
+          "matchToRoster": {
+            "personId": "2002940",
+            "name": "JULIO ORGONEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 118",
+          "bed": null,
+          "masterName": "Raymundo Leija",
+          "appName": "Raymundo Leija",
+          "appBedId": "bed-prop-park-place-plymouth-118-r1-b2",
+          "matchToRoster": {
+            "personId": "2002939",
+            "name": "RAYMUNDO LEIJA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 118",
+          "bed": null,
+          "masterName": "Ethan Davis",
+          "appName": "Ethan Davis",
+          "appBedId": "bed-prop-park-place-plymouth-118-r2-b1",
+          "matchToRoster": {
+            "personId": "2002636",
+            "name": "ETHAN DAVIS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 127",
+          "bed": null,
+          "masterName": "Alfred A Beserra",
+          "appName": "Alfred A Beserra",
+          "appBedId": "bed-prop-park-place-plymouth-127-r1-b1",
+          "matchToRoster": {
+            "personId": "2004710",
+            "name": "ALFRED A BESERRA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 127",
+          "bed": null,
+          "masterName": "David Davis",
+          "appName": "David Davis - 127",
+          "appBedId": "bed-prop-park-place-plymouth-342-r1-b2",
+          "matchToRoster": {
+            "personId": "2002373",
+            "name": "DAVID DAVIS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 127",
+          "bed": null,
+          "masterName": "Erasmo Garza",
+          "appName": "Erasmo Garza",
+          "appBedId": "bed-prop-park-place-plymouth-127-r2-b1",
+          "matchToRoster": {
+            "personId": "2002379",
+            "name": "ERASMO GARZA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 315",
+          "bed": null,
+          "masterName": "Abel A Guzman",
+          "appName": "Abel A Guzman",
+          "appBedId": "bed-prop-park-place-plymouth-315-r1-b1",
+          "matchToRoster": {
+            "personId": "2005096",
+            "name": "ABEL A GUZMAN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 315",
+          "bed": null,
+          "masterName": "Luis Rodriguez Rivera",
+          "appName": "Luis Rodriguez Rivera",
+          "appBedId": "bed-prop-park-place-plymouth-315-r1-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004226",
+              "name": "LUIS YADIEL RIVERA LA PUERTA",
+              "cover": 0.67,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004086",
+              "name": "DANIEL  RODRIGUEZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2001117",
+              "name": "ESEQUIEL RODRIGUEZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 315",
+          "bed": null,
+          "masterName": "Nicholas R Franklin",
+          "appName": "Nicholas R Franklin",
+          "appBedId": "bed-prop-park-place-plymouth-315-r2-b1",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 342",
+          "bed": null,
+          "masterName": "Jordan Torres",
+          "appName": "Jordan Torres",
+          "appBedId": "bed-prop-park-place-plymouth-127-r1-b2",
+          "matchToRoster": {
+            "personId": "2002938",
+            "name": "JORDAN TORRES"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 342",
+          "bed": null,
+          "masterName": "Jose Molina",
+          "appName": "Jose Molina",
+          "appBedId": "bed-prop-park-place-plymouth-342-r1-b1",
+          "matchToRoster": {
+            "personId": "2002031",
+            "name": "JOSE MOLINA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 342",
+          "bed": null,
+          "masterName": "Marcos Antonio Lara",
+          "appName": "Marcos Antonio Lara",
+          "appBedId": "bed-prop-park-place-plymouth-342-r2-b2",
+          "matchToRoster": {
+            "personId": "2002820",
+            "name": "MARCOS ANTONIO LARA"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 201",
+          "bed": null,
+          "masterName": "Evarado Delgado",
+          "appName": "Evarado Delgado",
+          "appBedId": "bed-prop-park-place-plymouth-201-r1-b1",
+          "matchToRoster": {
+            "personId": "2004070",
+            "name": "EVARADO DELGADO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 201",
+          "bed": null,
+          "masterName": "Jonathan Reynosa",
+          "appName": "Jonathan Reynosa",
+          "appBedId": "bed-prop-park-place-plymouth-201-r1-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002201",
+              "name": "JONATHAN ARIOLA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005212",
+              "name": "JONATHAN D CEDENO MENDOZA",
+              "cover": 0.5,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2002019",
+              "name": "JONATHAN LARA LOPEZ",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 201",
+          "bed": null,
+          "masterName": "Sebastian Villarreal",
+          "appName": "Sebastian Villarreal",
+          "appBedId": "bed-prop-park-place-plymouth-201-r2-b1",
+          "matchToRoster": {
+            "personId": "2005166",
+            "name": "SEBASTIAN VILLARREAL"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 201",
+          "bed": null,
+          "masterName": "Tyrek J Patterson",
+          "appName": "Tyrek J Patterson",
+          "appBedId": "bed-prop-park-place-plymouth-201-r2-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005108",
+              "name": "ELIJAH PATTERSON",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 218",
+          "bed": null,
+          "masterName": "Eduardo Campos",
+          "appName": "Eduardo Campos",
+          "appBedId": "bed-prop-park-place-plymouth-218-r1-b1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005024",
+              "name": "EDUARDO ALVAREZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005283",
+              "name": "RUBEN CAMPOS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004405",
+              "name": "MIGUEL EDUARDO ORTEGA",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "Apt 218",
+          "bed": null,
+          "masterName": "Gabriel J Womack",
+          "appName": "Gabriel J Womack",
+          "appBedId": "bed-prop-park-place-plymouth-218-r1-b2",
+          "matchToRoster": {
+            "personId": "2005111",
+            "name": "GABRIEL J WOMACK"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 218",
+          "bed": null,
+          "masterName": "Gilbert Bustos Jr",
+          "appName": "Gilbert Bustos JR",
+          "appBedId": "bed-prop-park-place-plymouth-218-r2-b1",
+          "matchToRoster": {
+            "personId": "2002861",
+            "name": "GILBERT BUSTOS JR"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 218",
+          "bed": null,
+          "masterName": "Justin Deangelis",
+          "appName": "Justin Deangelis",
+          "appBedId": "bed-prop-park-place-plymouth-218-r2-b2",
+          "matchToRoster": {
+            "personId": "2005110",
+            "name": "JUSTIN DEANGELIS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Joseph Bullock",
+          "appBedId": "bed-prop-park-place-plymouth-118-r2-b2",
+          "matchToRoster": {
+            "personId": "2005400",
+            "name": "JOSEPH BULLOCK"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Noe Morales",
+          "appBedId": "bed-prop-park-place-plymouth-127-r2-b2",
+          "matchToRoster": {
+            "personId": "2005399",
+            "name": "NOE MORALES"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        }
+      ]
+    },
+    "prop-penda-2900-new-pinery": {
+      "property": "2900 New Pinery Rd \u2013 Portage, WI",
+      "masterTotalBeds": 28,
+      "appTotalBeds": 28,
+      "rows": [
+        {
+          "unit": "205",
+          "bed": 1,
+          "masterName": "Ryan Fiegen",
+          "appName": "Ryan Fiegen",
+          "appBedId": "bed-prop-penda-2900-new-pinery-205-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2003086",
+              "name": "RYAN  HALL",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005587",
+              "name": "RYAN THOMAS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2005557",
+              "name": "ANTHONY RYAN ALI",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "match"
+        },
+        {
+          "unit": "205",
+          "bed": 2,
+          "masterName": "Brandon Johnson",
+          "appName": "Brandon Johnson",
+          "appBedId": "bed-prop-penda-2900-new-pinery-205-2",
+          "matchToRoster": {
+            "personId": "2005395",
+            "name": "BRANDON M JOHNSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "134",
+          "bed": 1,
+          "masterName": "Claudia M Ramirez",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005292",
+              "name": "CLAUDIA Y VILLALOBOS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2003120",
+              "name": "ANDDY  RAMIREZ PEDRAZA",
+              "cover": 0.5,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004524",
+              "name": "CESAR O MARQUEZ RAMIREZ",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "149",
+          "bed": 1,
+          "masterName": "Zabdi X Rodriguez",
+          "appName": "Zabdi X Rodriguez - P6",
+          "appBedId": "bed-prop-penda-2900-new-pinery-149-1",
+          "matchToRoster": {
+            "personId": "2004956",
+            "name": "ZABDI X RODRIGUEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "149",
+          "bed": 2,
+          "masterName": "John Tyler Clark",
+          "appName": "John Tyler Clark - P6",
+          "appBedId": "bed-prop-penda-2900-new-pinery-149-2",
+          "matchToRoster": {
+            "personId": "2004954",
+            "name": "JOHN T CLARK"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "216",
+          "bed": 1,
+          "masterName": "Brandon Morgan",
+          "appName": "Brandon Morgan",
+          "appBedId": "bed-prop-penda-2900-new-pinery-216-1",
+          "matchToRoster": {
+            "personId": "2004539",
+            "name": "BRANDON A MORGAN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "216",
+          "bed": 2,
+          "masterName": "Diego Martinez",
+          "appName": "Diego Martinez",
+          "appBedId": "bed-prop-penda-2900-new-pinery-216-2",
+          "matchToRoster": {
+            "personId": "2005364",
+            "name": "DIEGO MARTINEZ"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "215",
+          "bed": 1,
+          "masterName": "Evian D Napier",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2004989",
+            "name": "EVIAN D NAPIER"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "215",
+          "bed": 2,
+          "masterName": "Stephen Archambo",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "247",
+          "bed": 1,
+          "masterName": "Jordan T. Smith",
+          "appName": "Jordan T. Smith-T7",
+          "appBedId": "bed-prop-penda-2900-new-pinery-247-1",
+          "matchToRoster": {
+            "personId": "2004574",
+            "name": "JORDAN T SMITH"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "247",
+          "bed": 2,
+          "masterName": "Trey Grant",
+          "appName": "Trey Grant-T7",
+          "appBedId": "bed-prop-penda-2900-new-pinery-247-2",
+          "matchToRoster": {
+            "personId": "2004572",
+            "name": "TREY GRANT"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "122",
+          "bed": 1,
+          "masterName": "Javien Robinson",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005586",
+            "name": "JAVIEN ROBINSON"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "122",
+          "bed": 2,
+          "masterName": "Zion Glover",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005593",
+            "name": "ZION GLOVER"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "303",
+          "bed": 1,
+          "masterName": "Ryan Thomas",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005587",
+            "name": "RYAN THOMAS"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "303",
+          "bed": 2,
+          "masterName": "Dario Munoz",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005588",
+            "name": "DARIO MUNOZ"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "232",
+          "bed": 1,
+          "masterName": "Noah Vaughn",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005590",
+            "name": "NOAH VAUGHN"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "232",
+          "bed": 2,
+          "masterName": "Felix M. Rivera",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005601",
+            "name": "FELIX MIGUEL RIVERA"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "136",
+          "bed": 1,
+          "masterName": "Sybella Sandoval",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "136",
+          "bed": 2,
+          "masterName": "Dalida M Diaz",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002864",
+              "name": "JAKE DIAZ GUZMAN",
+              "cover": 0.5,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2005411",
+              "name": "STIVE PIMENTEL DIAZ",
+              "cover": 0.5,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-207",
+          "bed": 1,
+          "masterName": "Jason Allen Mills",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002038",
+              "name": "JASON ROMERO",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2005112",
+              "name": "JOSHUA B ALLEN",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-207",
+          "bed": 2,
+          "masterName": "Cristian A Jackson",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-209",
+          "bed": 1,
+          "masterName": "Logan J Rogers",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-209",
+          "bed": 2,
+          "masterName": "Josue D Martinez Garza",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2001984",
+              "name": "AGUSTINA GARZA",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2001611",
+              "name": "CARLOS MARTINEZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2005364",
+              "name": "DIEGO MARTINEZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-211",
+          "bed": 1,
+          "masterName": "Christian Quinones",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004643",
+              "name": "CHRISTIAN BURTON",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004688",
+              "name": "CHRISTIAN FRIAS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004618",
+              "name": "CHRISTIAN HUNTER",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-211",
+          "bed": 2,
+          "masterName": "Ethan Hasty",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002636",
+              "name": "ETHAN DAVIS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-218",
+          "bed": 1,
+          "masterName": "Trevor Jermaine Horne",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-218",
+          "bed": 2,
+          "masterName": "Eric A Brunson",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005264",
+              "name": "ERIC C BROWN",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004687",
+              "name": "ERIC D MOORE",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001504",
+              "name": "ERIC VICENT",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-219",
+          "bed": 1,
+          "masterName": "Alberto Lee Monnar",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004379",
+              "name": "BRANDON LEE",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004528",
+              "name": "CEDRIC T LEE",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004418",
+              "name": "ELIJAH M LEE",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-219",
+          "bed": 2,
+          "masterName": "Daniel Young",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004086",
+              "name": "DANIEL  RODRIGUEZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001850",
+              "name": "DANIEL CISNEROS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001613",
+              "name": "DANIEL HERRERA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "S8-221",
+          "bed": 1,
+          "masterName": "Jonathan Isaiah Spears",
+          "appName": "Jonathan P Wheeler - T5",
+          "appBedId": "bed-prop-penda-2900-new-pinery-122-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005032",
+              "name": "ISAIAH H YOUNG",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2002422",
+              "name": "ISAIAH HALL",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2002201",
+              "name": "JONATHAN ARIOLA",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "name-diff"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Cody Troy Smith - T5",
+          "appBedId": "bed-prop-penda-2900-new-pinery-122-2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004756",
+              "name": "BRIAN C SMITH",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004594",
+              "name": "CODY S OGDEN",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004574",
+              "name": "JORDAN T SMITH",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Jasmine Arce -T4",
+          "appBedId": "bed-prop-penda-2900-new-pinery-134-1",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004307",
+              "name": "JASMIN ARCE",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2001862",
+              "name": "JASMINE RODRIGUEZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Thalia Romero",
+          "appBedId": "bed-prop-penda-2900-new-pinery-134-2",
+          "matchToRoster": {
+            "personId": "2005367",
+            "name": "THALIA MERIAM ROMERO"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Jared Novak",
+          "appBedId": "bed-prop-penda-2900-new-pinery-215-1",
+          "matchToRoster": {
+            "personId": "2005365",
+            "name": "JARED M NOVAK"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Bucky Lee Gonzalez -T4",
+          "appBedId": "bed-prop-penda-2900-new-pinery-305-1",
+          "matchToRoster": {
+            "personId": "2004381",
+            "name": "BUCKY LEE GONZALEZ"
+          },
+          "rosterCandidates": null,
+          "status": "master-missing"
+        }
+      ]
+    },
+    "prop-schuette-1331-s-8th-apt-200": {
+      "property": "1331 S 8th Ave Apt 200 \u2013 Wausau, WI",
+      "masterTotalBeds": 6,
+      "appTotalBeds": 6,
+      "rows": [
+        {
+          "unit": "Apt 200 rm1",
+          "bed": 1,
+          "masterName": "Cole C Hayek",
+          "appName": "Cole C Hayek",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-1-1",
+          "matchToRoster": {
+            "personId": "2005106",
+            "name": "COLE C HAYEK"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 200 rm1",
+          "bed": 2,
+          "masterName": "Erin B Miller",
+          "appName": "Erin B Miller",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-1-2",
+          "matchToRoster": {
+            "personId": "2005107",
+            "name": "ERIN B MILLER"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 200 rm2",
+          "bed": 1,
+          "masterName": "Joshua B Allen",
+          "appName": "Joshua B Allen",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-2-1",
+          "matchToRoster": {
+            "personId": "2005112",
+            "name": "JOSHUA B ALLEN"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 200 rm2",
+          "bed": 2,
+          "masterName": "William Johnson",
+          "appName": "William Johnson",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-2-2",
+          "matchToRoster": {
+            "personId": "2005306",
+            "name": "WILLIAM W JOHNSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 200 rm3",
+          "bed": 1,
+          "masterName": "Julian T Lewis",
+          "appName": "Julian T Lewis",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-3-1",
+          "matchToRoster": {
+            "personId": "2005109",
+            "name": "JULIAN T LEWIS"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "Apt 200 rm3",
+          "bed": 2,
+          "masterName": "Elijah Patterson",
+          "appName": "Elijah Patterson",
+          "appBedId": "bed-prop-schuette-1331-s-8th-apt-200-3-2",
+          "matchToRoster": {
+            "personId": "2005108",
+            "name": "ELIJAH PATTERSON"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        }
+      ]
+    },
+    "prop-schuette-1341-s-8th-apt-108": {
+      "property": "1341 S 8th Ave Apt 108 \u2013 Wausau, WI",
+      "masterTotalBeds": 4,
+      "appTotalBeds": 4,
+      "rows": [
+        {
+          "unit": "Apt 108 rmA",
+          "bed": 1,
+          "masterName": "Eduardo Solano Rios",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2005024",
+              "name": "EDUARDO ALVAREZ",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004305",
+              "name": "FRANCISCO J RIOS JR",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2004405",
+              "name": "MIGUEL EDUARDO ORTEGA",
+              "cover": 0.33,
+              "jaccard": 0.2
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 108 rmA",
+          "bed": 2,
+          "masterName": "Jacob Slade Brown",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004376",
+              "name": "ALEXIS BROWN",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2005264",
+              "name": "ERIC C BROWN",
+              "cover": 0.33,
+              "jaccard": 0.25
+            },
+            {
+              "personId": "2005021",
+              "name": "JACOB BUSH",
+              "cover": 0.33,
+              "jaccard": 0.25
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 108 rmB",
+          "bed": 1,
+          "masterName": "Ethan Long",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2002636",
+              "name": "ETHAN DAVIS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 108 rmB",
+          "bed": 2,
+          "masterName": "James W Hart",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2001240",
+              "name": "JAMES ALVARADO",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2002632",
+              "name": "JAMES MURRAY JR",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 108 rmC",
+          "bed": 1,
+          "masterName": "Andrew B Sweet",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2000816",
+              "name": "ANDREW CRUZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004810",
+              "name": "ANDREW GRANVILLE",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2003072",
+              "name": "ANDREW HERNANDEZ",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "app-missing"
+        },
+        {
+          "unit": "Apt 108 rmC",
+          "bed": 2,
+          "masterName": "Austin Crawford",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "app-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Giovanni",
+          "appBedId": "bed-prop-schuette-1341-s-8th-apt-108-1-1",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Jaylon",
+          "appBedId": "bed-prop-schuette-1341-s-8th-apt-108-1-2",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Marquis",
+          "appBedId": "bed-prop-schuette-1341-s-8th-apt-108-2-1",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "master-missing"
+        }
+      ]
+    },
+    "prop-iwg-bloomfield-st": {
+      "property": "E. Bloomfield St Apartments",
+      "masterTotalBeds": 28,
+      "appTotalBeds": 28,
+      "rows": [
+        {
+          "unit": "414-3",
+          "bed": 1,
+          "masterName": "George Cardoso",
+          "appName": "George Cardoso",
+          "appBedId": "bed-prop-iwg-bloomfield-st-414-3-r1-b1",
+          "matchToRoster": {
+            "personId": "2005266",
+            "name": "GEORGE CARDOSO"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "414-3",
+          "bed": 2,
+          "masterName": "Kristian W Ordiales",
+          "appName": "Kristian W Ordiales",
+          "appBedId": "bed-prop-iwg-bloomfield-st-414-3-r2-b2",
+          "matchToRoster": {
+            "personId": "2005265",
+            "name": "KRISTIAN W ORDIALES"
+          },
+          "rosterCandidates": null,
+          "status": "match"
+        },
+        {
+          "unit": "512-3",
+          "bed": 1,
+          "masterName": "Richard Balderas",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2004992",
+            "name": "RICHARD BALDERAS"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "512-3",
+          "bed": 2,
+          "masterName": "Santiago Coello",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005441",
+            "name": "SANTIAGO COELLO"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "322-2",
+          "bed": 1,
+          "masterName": "Marcos Garza",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005440",
+            "name": "MARCOS D GARZA"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "322-2",
+          "bed": 2,
+          "masterName": "Jose A. Garcia",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005439",
+            "name": "JOSE ANTONIO GARCIA"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "(unit unknown)",
+          "bed": null,
+          "masterName": "Stive Pimentel Diaz",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005411",
+            "name": "STIVE PIMENTEL DIAZ"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": "(unit unknown)",
+          "bed": null,
+          "masterName": "Jonathan Cedeno",
+          "appName": null,
+          "appBedId": null,
+          "matchToRoster": {
+            "personId": "2005212",
+            "name": "JONATHAN D CEDENO MENDOZA"
+          },
+          "rosterCandidates": null,
+          "status": "app-missing"
+        },
+        {
+          "unit": null,
+          "bed": 2,
+          "masterName": null,
+          "appName": "Gilberto Frias",
+          "appBedId": "bed-prop-iwg-bloomfield-st-414-3-r1-b2",
+          "matchToRoster": null,
+          "rosterCandidates": [
+            {
+              "personId": "2004688",
+              "name": "CHRISTIAN FRIAS",
+              "cover": 0.5,
+              "jaccard": 0.33
+            },
+            {
+              "personId": "2004959",
+              "name": "GILBERTO LARA",
+              "cover": 0.5,
+              "jaccard": 0.33
+            }
+          ],
+          "status": "master-missing"
+        },
+        {
+          "unit": null,
+          "bed": 1,
+          "masterName": null,
+          "appName": "Paul L Jackson",
+          "appBedId": "bed-prop-iwg-bloomfield-st-414-3-r2-b1",
+          "matchToRoster": null,
+          "rosterCandidates": [],
+          "status": "master-missing"
+        }
+      ]
+    }
+  }
+}

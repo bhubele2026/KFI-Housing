@@ -1,0 +1,203 @@
+[
+  {
+    "propertyId": "prop-sunset-place-neillsville",
+    "propertyName": "Sunset Place Apartments – Neillsville, WI",
+    "customerId": "cust-wb-manufacturing",
+    "utilityType": "Electric",
+    "provider": "Xcel Energy",
+    "providerPhone": "800-895-4999",
+    "accountNumber": "",
+    "serviceAddress": "216 Sunset Place, Units 148, 221, 132, 106, Neillsville, WI 54456",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2026-05-28",
+    "notes": "Electric in KFI's name. Units 148 & 221 set up for 5/28/2026 move-in; mid-transfer to Units 132 (6/12/2026) and 106 (7/8/2026). Xcel confirmation numbers: Unit 132 = 04547646, Unit 106 = 04547679. Stop service on 221 (6/12) and 148 (7/8) after transfer. Tenant must have utilities on before keys released.",
+    "sourceEmail": {
+      "subject": "RE: Your Move-In Instructions for Housing Request #D5CYJY in Neillsville, WI",
+      "date": "2026-06-08",
+      "from": "ACosby@kfi.group"
+    },
+    "matchConfidence": "high"
+  },
+  {
+    "propertyId": "prop-park-place-plymouth",
+    "propertyName": "Park Place Apartments – Plymouth, MN",
+    "customerId": "cust-landscape-structures",
+    "utilityType": "Electric",
+    "provider": "Xcel Energy",
+    "providerPhone": "800-895-4999",
+    "accountNumber": "",
+    "serviceAddress": "14500 / 14600 / 14605 34th Ave N, Plymouth, MN 55447 (per-unit accounts incl. units 118, 218, 127, 216, 315, 342, 102, 201; disconnect was on 605-102)",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "",
+    "notes": "Per-unit Xcel electric accounts in KFI's name, on autopay. Sept 2025 a unit (605-102) was disconnected for past due (~$1k); paid via phone to Xcel (800-895-4999). Tenants on electric heat. Each occupied apartment has its own meter/account; account numbers not in email.",
+    "sourceEmail": {
+      "subject": "Re: Park Place - 605-102 - Past Due Electric Bill (Xcel Energy) - Disconnected Power",
+      "date": "2025-09-10",
+      "from": "BHubele@kfistaffing.com"
+    },
+    "matchConfidence": "high"
+  },
+  {
+    "propertyId": "prop-burnett-siren-7666-south-shore",
+    "propertyName": "Siren – 7666 South Shore Drive",
+    "customerId": "cust-burnett-dairy-grantsburg",
+    "utilityType": "Electric",
+    "provider": "Polk-Burnett Electric Cooperative (referred to as \"Polk\")",
+    "providerPhone": "",
+    "accountNumber": "",
+    "serviceAddress": "7666 South Shore Drive, Siren, WI 54872",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "",
+    "notes": "Siren house electricity is via Polk(-Burnett). Confirmed Nov 2025 during a heating issue.",
+    "sourceEmail": {
+      "subject": "Re: Siren House",
+      "date": "2025-11-06",
+      "from": "BHubele@kfistaffing.com"
+    },
+    "matchConfidence": "high"
+  },
+  {
+    "propertyId": "prop-burnett-siren-7666-south-shore",
+    "propertyName": "Siren – 7666 South Shore Drive",
+    "customerId": "cust-burnett-dairy-grantsburg",
+    "utilityType": "Heat (Propane / LP gas)",
+    "provider": "Burnett Dairy (propane fill); tank owned by landlord (Kyle/Brent Johnson)",
+    "providerPhone": "",
+    "accountNumber": "",
+    "serviceAddress": "7666 South Shore Drive, Siren, WI 54872",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2025-11",
+    "notes": "Heat is propane. KFI set up an account with Burnett Dairy to fill the tank. Landlord (Kyle) owns the tank. Existing tanks are 100lb; delivery trucks won't fill under 120lb, so a new larger tank may be needed (~$500 placement fee). Recurring refill cost, not a metered utility.",
+    "sourceEmail": {
+      "subject": "Re: Siren House",
+      "date": "2025-11-14",
+      "from": "BHubele@kfistaffing.com"
+    },
+    "matchConfidence": "high"
+  },
+  {
+    "propertyId": "prop-prairie-hill-village",
+    "propertyName": "Prairie Hill Village – Baraboo, WI",
+    "customerId": "cust-milwaukee-valve",
+    "utilityType": "Internet / WiFi",
+    "provider": "Spectrum",
+    "providerPhone": "",
+    "accountNumber": "",
+    "serviceAddress": "1850 W Pine St, Baraboo, WI 53913",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2025-10",
+    "notes": "Apartments equipped with Spectrum. Lanyard confirmed WiFi is NOT included in rent; KFI to contact Spectrum to set up service and pay them directly. Set up Oct 2025 for Milwaukee Valve crew.",
+    "sourceEmail": {
+      "subject": "Re: FW: Milwaukee Valve leases signed - need Sec Dep paid",
+      "date": "2025-10-06",
+      "from": "accounts@lanyardstays.com"
+    },
+    "matchConfidence": "high"
+  },
+  {
+    "propertyId": "prop-shusters-900-seneca-mckeesport",
+    "propertyName": "1300 Virginia Ave, Apt 506, McKeesport/Elizabeth, PA 15135 (Shuster's area — NEW address, NOT Greenock Manor)",
+    "customerId": "cust-shuster-s-building-components",
+    "utilityType": "Electric",
+    "provider": "West Penn Power (FirstEnergy)",
+    "providerPhone": "1-800-686-0021",
+    "accountNumber": "100168176640",
+    "confirmationNumber": "830979004",
+    "serviceAddress": "1300 Virginia Ave, Apt 506, McKeesport, PA 15135 (a.k.a. Elizabeth Township / Elizabeth, PA 15135) — Virginia Manor Apartments",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2026-06-15",
+    "notes": "Housing Request #UT7ZZU (Lanyard 'Virginia Manor Apartments'). Electric = West Penn Power, account 100168176640, confirmation 830979004, service started 6/15/2026. NEEDS REVIEW: address (1300 Virginia Ave) differs from the Shuster's Greenock Manor record (900 Seneca Ct); likely a new unit/property under Shuster's. Confirm property mapping.",
+    "sourceEmail": {
+      "subject": "RE: Set up your utilities and insurance for Housing Request #UT7ZZU in Irwin, PA",
+      "date": "2026-06-15",
+      "from": "ACosby@kfi.group"
+    },
+    "matchConfidence": "low"
+  },
+  {
+    "propertyId": "prop-shusters-900-seneca-mckeesport",
+    "propertyName": "1300 Virginia Ave, Apt 506, McKeesport/Elizabeth, PA 15135 (Shuster's area — NEW address, NOT Greenock Manor)",
+    "customerId": "cust-shuster-s-building-components",
+    "utilityType": "Natural Gas",
+    "provider": "Peoples Gas (Peoples Natural Gas)",
+    "providerPhone": "1-800-764-0111",
+    "accountNumber": "200021023086",
+    "serviceAddress": "1300 Virginia Ave, Apt 506, Elizabeth Township / McKeesport, PA 15135",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2026-06-16",
+    "notes": "Housing Request #UT7ZZU. Gas = Peoples Gas, account 200021023086, service started 6/16/2026; meter reading 6/17/2026. NEEDS REVIEW: same address-mapping caveat as the electric account above.",
+    "sourceEmail": {
+      "subject": "RE: Set up your utilities and insurance for Housing Request #UT7ZZU in Irwin, PA",
+      "date": "2026-06-16",
+      "from": "ACosby@kfi.group"
+    },
+    "matchConfidence": "low"
+  },
+  {
+    "propertyId": "prop-shusters-900-seneca-mckeesport",
+    "propertyName": "1300 Virginia Ave, Apt 506, McKeesport/Elizabeth, PA 15135 (Shuster's area — NEW address, NOT Greenock Manor)",
+    "customerId": "cust-shuster-s-building-components",
+    "utilityType": "Internet / Cable",
+    "provider": "Comcast / Xfinity",
+    "providerPhone": "412-639-413x (Corey Schildkamp — number appears truncated in source)",
+    "accountNumber": "",
+    "serviceAddress": "1300 Virginia Ave, Apt 506, McKeesport, PA 15135",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "",
+    "notes": "Lanyard move-in instructions list Internet/Cable = Comcast/Xfinity, contact Corey Schildkamp 412-639-413 (phone truncated). Not confirmed as set up. NEEDS REVIEW: address mapping + confirm setup.",
+    "sourceEmail": {
+      "subject": "RE: Set up your utilities and insurance for Housing Request #UT7ZZU in Irwin, PA",
+      "date": "2026-06-15",
+      "from": "ACosby@kfi.group"
+    },
+    "matchConfidence": "low"
+  },
+  {
+    "propertyId": "prop-beau-chateau-dexter",
+    "propertyName": "Beau Chateau / TB Rentals (Orgill MO housing) — Ameren Missouri electric (property unconfirmed)",
+    "customerId": "cust-orgill",
+    "utilityType": "Electric",
+    "provider": "Ameren Missouri",
+    "providerPhone": "",
+    "accountNumber": "",
+    "serviceAddress": "",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2026-06-12",
+    "notes": "Ameren online account registration completed 6/12/2026 (confirmation email to finance@kfistaffing.com). Ameren Missouri serves the Orgill MO housing (Beau Chateau/Dexter and/or TB Rentals/Sikeston) per property notes (electric via Ameren Missouri). NEEDS REVIEW: registration email contained no account number or service address — confirm which Orgill MO property this account is for.",
+    "sourceEmail": {
+      "subject": "Your Ameren Online Registration Is Complete",
+      "date": "2026-06-12",
+      "from": "do-not-reply@alerts.ameren.com"
+    },
+    "matchConfidence": "low"
+  },
+  {
+    "propertyId": "prop-cady-1402-8th-menomonie",
+    "propertyName": "1402 8th Street – Menomonie, WI",
+    "customerId": "cust-cady-cheese",
+    "utilityType": "All utilities (landlord-provided)",
+    "provider": "Landlord-billed (MA Properties / American Edge Real Estate Services)",
+    "providerPhone": "",
+    "accountNumber": "",
+    "serviceAddress": "1402 8th Street, Menomonie, WI 54751",
+    "monthlyAmount": null,
+    "deposit": null,
+    "startDate": "2026-05",
+    "notes": "Per the executed Cady Cheese lease (May 2026), utilities appear to be included and billed by the landlord — no separate KFI utility account to set up. Informational only.",
+    "sourceEmail": {
+      "subject": "CADY CHEESE HOUSING LEASE - Fw: Lease Agreement",
+      "date": "2026-05-15",
+      "from": "DWhitmore@kfistaffing.com"
+    },
+    "matchConfidence": "medium"
+  }
+]

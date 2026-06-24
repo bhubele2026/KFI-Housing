@@ -165,6 +165,18 @@ vi.mock("@tanstack/react-query", async () => {
   return {
     ...actual,
     useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+    // Dashboard makes ambient `useQuery` calls (roster headcount + the
+    // "not in payroll" tray). Neither drives this suite's assertions
+    // (needs-dates count + lease-row parity); stub them so the bare
+    // useQuery doesn't reach an unmocked QueryClient and throw
+    // "No QueryClient set" on mount — mirrors dashboard.test.tsx.
+    useQuery: () => ({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
   };
 });
 

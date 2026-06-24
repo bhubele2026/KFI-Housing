@@ -172,6 +172,16 @@ vi.mock("@tanstack/react-query", async () => {
   return {
     ...actual,
     useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+    // Dashboard makes ambient bare useQuery calls (roster headcount + the
+    // "not in payroll" tray); stub them so they don't reach an unmocked
+    // QueryClient and throw "No QueryClient set" on mount (cf. dashboard.test.tsx).
+    useQuery: () => ({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    }),
   };
 });
 

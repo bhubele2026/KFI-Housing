@@ -34,6 +34,24 @@ vi.mock("@workspace/api-client-react", () => ({
   getListOccupantsQueryKey: () => [],
 }));
 
+// PropertyDetail calls useQueryClient() directly (added 2026-05-07) for the
+// optimistic violations mutations. This harness doesn't stand up a real
+// QueryClientProvider, so stub the client — mirrors the canonical pattern in
+// dashboard.test.tsx / the dashboard integration tests.
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query",
+  );
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      getQueryData: () => undefined,
+      setQueryData: vi.fn(),
+      invalidateQueries: vi.fn(),
+    }),
+  };
+});
+
 vi.mock("@/components/property-location-map", () => ({
   PropertyLocationMap: () => <div data-testid="mock-property-location-map" />,
 }));

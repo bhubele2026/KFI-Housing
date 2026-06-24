@@ -23,6 +23,9 @@ import { createVehicleFuelChargesTableIfNeeded } from "./migrations/create-vehic
 import { createVehicleMaintenanceTableIfNeeded } from "./migrations/create-vehicle-maintenance-table";
 import { createVehicleLeasesTableIfNeeded } from "./migrations/create-vehicle-leases-table";
 import { createVehicleInsuranceTableIfNeeded } from "./migrations/create-vehicle-insurance-table";
+import { addOccupantZenopleFieldsIfNeeded } from "./migrations/add-occupant-zenople-fields";
+import { addOccupantShiftTimeIfNeeded } from "./migrations/add-occupant-shift-time";
+import { addVehicleColorIfNeeded } from "./migrations/add-vehicle-color";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -161,6 +164,19 @@ export async function pushSchemaIfNeeded(
 
   // Transportation vehicle insurance.
   await createVehicleInsuranceTableIfNeeded(pool, log);
+
+  // Stage 3b: add the three Zenople link-status columns to `occupants`
+  // (zenople_person_id / zenople_status / zenople_checked_at) BEFORE
+  // drizzle's pushSchema so a deployed DB catches them up at boot.
+  // Idempotent — no-op once all three exist.
+  await addOccupantZenopleFieldsIfNeeded(pool, log);
+
+  // Stage 5: add `occupants.shift_time` (the shift *time window*, distinct
+  // from the `shift` label column). Idempotent, runs before pushSchema.
+  await addOccupantShiftTimeIfNeeded(pool, log);
+
+  // Stage 5: add `vehicles.color`. Idempotent, runs before pushSchema.
+  await addVehicleColorIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

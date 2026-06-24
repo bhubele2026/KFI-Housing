@@ -34,6 +34,9 @@ export const vehiclesTable = pgTable("vehicles", {
   year: integer("year"),
   make: text("make").notNull().default(""),
   model: text("model").notNull().default(""),
+  // Exterior color (e.g. "White", "Silver"). Empty when unknown. The only
+  // field on the managers' transport sheet not already modelled. (Stage 5.)
+  color: text("color").notNull().default(""),
   // Passenger capacity (number of seats). Compared against
   // `associatesTransported` to surface idle / under-utilised vans.
   seats: integer("seats").notNull().default(0),

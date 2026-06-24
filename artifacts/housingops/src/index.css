@@ -39,6 +39,28 @@
   --color-destructive-foreground: hsl(var(--destructive-foreground));
   --color-destructive-border: var(--destructive-border);
 
+  /* HousingOps warm operations palette (Master Build Brief, Design System).
+     Added additively alongside the shadcn tokens — status colors carry one
+     fixed meaning each (see Design System). Enables bg-ok / text-risk /
+     border-line / bg-surface utilities etc. Existing pages keep the old
+     tokens until the Stage 6 design rollout re-skins them. */
+  --color-ink: hsl(var(--ink));
+  --color-surface: hsl(var(--surface));
+  --color-panel: hsl(var(--panel));
+  --color-line: hsl(var(--line));
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
+  --color-brand-warm: hsl(var(--brand-warm));
+  --color-ok: hsl(var(--ok));
+  --color-ok-foreground: hsl(var(--ok-foreground));
+  --color-ok-soft: hsl(var(--ok-soft));
+  --color-warn: hsl(var(--warn));
+  --color-warn-foreground: hsl(var(--warn-foreground));
+  --color-warn-soft: hsl(var(--warn-soft));
+  --color-risk: hsl(var(--risk));
+  --color-risk-foreground: hsl(var(--risk-foreground));
+  --color-risk-soft: hsl(var(--risk-soft));
+
   --color-chart-1: hsl(var(--chart-1));
   --color-chart-2: hsl(var(--chart-2));
   --color-chart-3: hsl(var(--chart-3));
@@ -109,6 +131,25 @@
   --destructive-foreground: 210 40% 98%;
   --input: 214 32% 91%;
   --ring: 217 65% 22%;
+
+  /* --- HousingOps warm operations palette (light) --- */
+  --ink: 213 28% 17%;          /* #1F2A37 text / headers */
+  --surface: 45 33% 98%;       /* #FBFAF7 warm paper page bg */
+  --panel: 0 0% 100%;          /* #FFFFFF cards / grid */
+  --line: 40 24% 88%;          /* #E7E2D8 warm hairline */
+  --brand: 214 51% 25%;        /* #1F3A5F navy */
+  --brand-foreground: 0 0% 100%;
+  --brand-warm: 26 90% 37%;    /* #B45309 amber accent */
+  --ok: 146 61% 30%;           /* #1E7A46 full / paid / linked */
+  --ok-foreground: 0 0% 100%;
+  --ok-soft: 146 50% 94%;
+  --warn: 26 90% 37%;          /* #B45309 needs a look / partial */
+  --warn-foreground: 0 0% 100%;
+  --warn-soft: 38 90% 93%;
+  --risk: 358 64% 37%;         /* #9B2226 money leak / $0 / not in payroll */
+  --risk-foreground: 0 0% 100%;
+  --risk-soft: 358 70% 95%;
+
   --chart-1: 217 71% 21%;
   --chart-2: 217 75% 45%;
   --chart-3: 200 80% 42%;
@@ -200,6 +241,25 @@
   --destructive-foreground: 210 40% 98%;
   --input: 217 33% 17%;
   --ring: 217 75% 55%;
+
+  /* --- HousingOps warm operations palette (dark) --- */
+  --ink: 210 40% 96%;
+  --surface: 222 47% 11%;
+  --panel: 222 40% 15%;
+  --line: 217 33% 22%;
+  --brand: 214 70% 60%;
+  --brand-foreground: 0 0% 100%;
+  --brand-warm: 30 85% 58%;
+  --ok: 146 48% 52%;
+  --ok-foreground: 0 0% 100%;
+  --ok-soft: 146 38% 18%;
+  --warn: 34 85% 58%;
+  --warn-foreground: 0 0% 100%;
+  --warn-soft: 34 50% 20%;
+  --risk: 358 68% 62%;
+  --risk-foreground: 0 0% 100%;
+  --risk-soft: 358 45% 22%;
+
   --chart-1: 217 75% 65%;
   --chart-2: 200 80% 60%;
   --chart-3: 180 55% 55%;
@@ -360,4 +420,19 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+}
+
+/* Print / Export (PrintView kit component). When printing, drop the app
+   chrome (anything tagged .print-hide) and let the .print-sheet fill the page
+   so a property exports looking like the manager's old spreadsheet tab. */
+@media print {
+  .print-hide { display: none !important; }
+  body { background: #fff !important; }
+  .print-sheet {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    width: 100% !important;
+  }
+  @page { margin: 0.5in; }
 }

@@ -67,6 +67,23 @@ export const occupantsTable = pgTable("occupants", {
   isLead: boolean("is_lead").notNull().default(false),
   // Number of physical keys this occupant has been issued (task #500).
   keysIssued: integer("keys_issued").notNull().default(0),
+  // Human-readable shift time window the manager types on their tab
+  // (e.g. "6:00 AM – 2:30 PM"). Distinct from `shift` above, which holds
+  // the crew/shift *label* ("Days"/"Nights"/a custom client title); this
+  // is the *time*. Empty string when not recorded. (Stage 5.)
+  shiftTime: text("shift_time").notNull().default(""),
+  // --- Zenople payroll link (Stage 3b) ---
+  // The Zenople person id this occupant is linked to. "" = not yet linked.
+  zenoplePersonId: text("zenople_person_id").notNull().default(""),
+  // Link status against the Zenople payroll roster. One of "pending"
+  // (never checked), "linked" (matched), "not_in_zenople" (housed but not
+  // on payroll), or "needs_review" (ambiguous — routed to the AI-assisted
+  // match queue). Plain text (not an enum) so a new status can be added
+  // without a destructive migration; normalised at the API boundary.
+  zenopleStatus: text("zenople_status").notNull().default("pending"),
+  // When the matcher last evaluated this occupant against the roster.
+  // Null until the first sync touches the row.
+  zenopleCheckedAt: timestamp("zenople_checked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

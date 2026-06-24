@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
+import { useListAllProjectedMoveIns } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { StatCard, Seg, accentFor, initialsOf, PrintView } from "@/components/kit-v2";
@@ -7,6 +8,7 @@ import { Bed, RoomCard } from "@/components/kit-v2";
 import { toWeeklyCharge, formatUsdWhole, type Property, type Occupant } from "@/data/mockData";
 
 const apiBase = (): string => (import.meta.env.BASE_URL ?? "/") as string;
+const CHARGE_MODE_KEY = "kfi.xprop.chargeMode"; // remembered session choice (#26)
 const MONTH_WK = 52 / 12;
 
 type ColorBy = "shift" | "payroll" | "deduction";
@@ -84,6 +86,11 @@ export function BedBoardV2({ property }: { property: Property }) {
   const [xprop, setXprop] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
   const [clickMove, setClickMove] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
   const [suggested, setSuggested] = useState<Set<string>>(new Set());
+  // #26 charge-mode prompt, #22 bulk select, #21 move-in queue
+  const [chargePick, setChargePick] = useState<{ occ: Occupant; fromBedId: string; toBedId: string } | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // selected occupied bedIds
+  const [dragMoveIn, setDragMoveIn] = useState<{ id: string; name: string } | null>(null);
 
   const propBeds = useMemo(
     () => beds.filter((b) => (b as { propertyId?: string }).propertyId === property.id),
@@ -172,12 +179,12 @@ export function BedBoardV2({ property }: { property: Property }) {
     });
   }
 
-  async function postMove(occId: string, fromBedId: string, toBedId: string): Promise<boolean> {
+  async function postMove(occId: string, fromBedId: string, toBedId: string, chargeMode?: string): Promise<boolean> {
     try {
       const r = await fetch(`${apiBase()}api/beds/move`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ occupantId: occId, fromBedId, toBedId }),
+        body: JSON.stringify({ occupantId: occId, fromBedId, toBedId, ...(chargeMode ? { chargeMode } : {}) }),
       });
       if (!r.ok) throw new Error("move failed");
       try {
@@ -268,15 +275,17 @@ export function BedBoardV2({ property }: { property: Property }) {
     }
   }
 
-  // cross-property move (#11): move to a bed in another property + confirm
-  async function doXPropMove(occ: Occupant, fromBedId: string, toBedId: string) {
+  // cross-property move (#11) + charge-follows-move (#26): ask once which rate to
+  // use, remember the choice for the session, pass chargeMode to the move.
+  async function doXPropMove(occ: Occupant, fromBedId: string, toBedId: string, chargeMode: string) {
     setXprop(null);
+    setChargePick(null);
     setOccByBed((prev) => {
       const next = { ...prev };
       delete next[fromBedId];
       return next;
     });
-    const ok = await postMove(occ.id, fromBedId, toBedId);
+    const ok = await postMove(occ.id, fromBedId, toBedId, chargeMode);
     const nm = (occ as { name?: string }).name ?? "person";
     if (!ok) {
       setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
@@ -284,6 +293,30 @@ export function BedBoardV2({ property }: { property: Property }) {
       return;
     }
     toast({ title: `Moved ${nm} to another property` });
+    setUndoBar({
+      label: `Moved ${nm}`,
+      run: async () => {
+        setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
+        await postMove(occ.id, toBedId, fromBedId);
+        setUndoBar(null);
+        toast({ title: "Move undone" });
+      },
+    });
+  }
+
+  // Resolve chargeMode for a cross-property pick: use the remembered choice
+  // silently, else open the one-time prompt.
+  function pickXPropTarget(occ: Occupant, fromBedId: string, toBedId: string) {
+    const remembered = (() => { try { return localStorage.getItem(CHARGE_MODE_KEY) || ""; } catch { return ""; } })();
+    if (remembered) {
+      doXPropMove(occ, fromBedId, toBedId, remembered);
+    } else {
+      setChargePick({ occ, fromBedId, toBedId });
+    }
+  }
+  function commitChargeMode(mode: string) {
+    try { localStorage.setItem(CHARGE_MODE_KEY, mode); } catch { /* ignore */ }
+    if (chargePick) doXPropMove(chargePick.occ, chargePick.fromBedId, chargePick.toBedId, mode);
   }
 
   // smart suggestions (#20): rank open beds for the dragged occupant
@@ -326,6 +359,87 @@ export function BedBoardV2({ property }: { property: Property }) {
       .sort((a, b) => a.propName.localeCompare(b.propName));
   }, [xprop, beds, occupants, properties, property.id]);
 
+  // #21 Move-in queue: upcoming projected move-ins for THIS property.
+  const projectedQuery = useListAllProjectedMoveIns();
+  const upcomingMoveIns = useMemo(() => {
+    const rows = (projectedQuery.data ?? []) as Array<{ id: string; propertyId: string; personName: string; projectedMoveInDate: string; convertedOccupantId?: string | null }>;
+    return rows
+      .filter((m) => m.propertyId === property.id && !m.convertedOccupantId)
+      .sort((a, b) => String(a.projectedMoveInDate).localeCompare(String(b.projectedMoveInDate)));
+  }, [projectedQuery.data, property.id]);
+
+  // #21 convert a projected move-in onto an open bed
+  async function convertMoveIn(moveInId: string, name: string, toBedId: string) {
+    setDragMoveIn(null);
+    try {
+      const r = await fetch(`${apiBase()}api/properties/${property.id}/projected-move-ins/${moveInId}/convert`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bedId: toBedId }),
+      });
+      if (!r.ok) throw new Error("convert failed");
+      const body = (await r.json().catch(() => ({}))) as { occupant?: { id?: string }; projectedMoveIn?: { convertedOccupantId?: string | null } };
+      const newOccId = body.occupant?.id || body.projectedMoveIn?.convertedOccupantId || "";
+      if (newOccId) setOccByBed((prev) => ({ ...prev, [toBedId]: newOccId }));
+      toast({ title: `${name} moved in` });
+      projectedQuery.refetch?.();
+    } catch {
+      toast({ title: "Move-in failed", variant: "destructive" as never });
+    }
+  }
+
+  // #22 bulk move: pair selected occupied beds with open beds in THIS property
+  async function doBulkMove() {
+    const sel = [...selected];
+    const opens = openBedsHere.map((o) => o.id).filter((id) => !sel.includes(id));
+    const moves: Array<{ occupantId: string; fromBedId: string; toBedId: string }> = [];
+    sel.forEach((fromBedId, i) => {
+      const occId = occByBed[fromBedId];
+      const toBedId = opens[i];
+      if (occId && toBedId) moves.push({ occupantId: occId, fromBedId, toBedId });
+    });
+    if (moves.length === 0) {
+      toast({ title: "Not enough open beds here" });
+      return;
+    }
+    const prevMap = { ...occByBed };
+    setOccByBed((prev) => {
+      const next = { ...prev };
+      moves.forEach((m) => {
+        delete next[m.fromBedId];
+        next[m.toBedId] = m.occupantId;
+      });
+      return next;
+    });
+    try {
+      const r = await fetch(`${apiBase()}api/beds/move-batch`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ moves }),
+      });
+      if (!r.ok) throw new Error("batch failed");
+      toast({ title: `Moved ${moves.length} people` });
+      setUndoBar({
+        label: `Moved ${moves.length} people`,
+        run: async () => {
+          setOccByBed(prevMap);
+          await fetch(`${apiBase()}api/beds/move-batch`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ moves: moves.map((m) => ({ occupantId: m.occupantId, fromBedId: m.toBedId, toBedId: m.fromBedId })) }),
+          });
+          setUndoBar(null);
+          toast({ title: "Bulk move undone" });
+        },
+      });
+    } catch {
+      setOccByBed(prevMap);
+      toast({ title: "Bulk move failed", variant: "destructive" as never });
+    }
+    setSelected(new Set());
+    setSelectMode(false);
+  }
+
   return (
     <div>
       <div className="mb-4">
@@ -350,7 +464,7 @@ export function BedBoardV2({ property }: { property: Property }) {
         </div>
       </div>
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-faint">Color by</span>
         <Seg
           options={[
@@ -361,6 +475,59 @@ export function BedBoardV2({ property }: { property: Property }) {
           value={colorBy}
           onChange={setColorBy}
         />
+        <button
+          type="button"
+          onClick={() => { setSelectMode((s) => !s); setSelected(new Set()); }}
+          className={[
+            "ml-auto rounded-[9px] border px-3 py-1.5 text-[12px] font-bold",
+            selectMode ? "border-brand bg-brand text-white" : "border-line bg-panel text-ink",
+          ].join(" ")}
+        >
+          {selectMode ? "Done" : "Select"}
+        </button>
+      </div>
+
+      {/* #22 bulk action bar */}
+      {selectMode && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-[12px] border border-brand/30 bg-accent px-3 py-2 text-[13px]">
+          <b className="text-ink">{selected.size} selected</b>
+          <button
+            type="button"
+            disabled={selected.size === 0}
+            onClick={doBulkMove}
+            className="rounded-[9px] bg-brand px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-40"
+          >
+            Move to open beds here →
+          </button>
+          {selected.size > 0 && (
+            <button type="button" onClick={() => setSelected(new Set())} className="text-[12px] font-semibold text-muted-foreground">Clear</button>
+          )}
+          <span className="text-[12px] text-faint">Tap people to select, then fill the open beds in this property.</span>
+        </div>
+      )}
+
+      {/* #21 Move-in queue */}
+      <div className="mb-3 rounded-[14px] border border-line bg-panel p-3 print:hidden">
+        <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.6px] text-faint">Coming this week — drag onto an open bed</div>
+        {upcomingMoveIns.length === 0 ? (
+          <div className="text-[12px] text-muted-foreground">No upcoming move-ins.</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {upcomingMoveIns.map((m) => (
+              <div
+                key={m.id}
+                draggable
+                onDragStart={() => setDragMoveIn({ id: m.id, name: m.personName })}
+                onDragEnd={() => setDragMoveIn(null)}
+                className="flex cursor-grab items-center gap-2 rounded-[10px] border border-dashed border-brand/40 bg-accent px-2.5 py-1.5 text-[12px] text-ink"
+                title={`Projected ${m.projectedMoveInDate}`}
+              >
+                <span className="font-semibold">{m.personName}</span>
+                <span className="text-faint">{m.projectedMoveInDate}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <PrintView title={`${(property as { name?: string }).name ?? "Property"} — Beds`} subtitle={(property as { address?: string }).address || undefined}>
@@ -385,7 +552,8 @@ export function BedBoardV2({ property }: { property: Property }) {
                       onDrop={(e) => {
                         e.preventDefault();
                         setOverOpen(null);
-                        if (dragOcc) doMove(dragOcc.occ, dragOcc.fromBedId, b.id);
+                        if (dragMoveIn) convertMoveIn(dragMoveIn.id, dragMoveIn.name, b.id);
+                        else if (dragOcc) doMove(dragOcc.occ, dragOcc.fromBedId, b.id);
                       }}
                       className={
                         overOpen === b.id
@@ -401,15 +569,20 @@ export function BedBoardV2({ property }: { property: Property }) {
                   );
                 }
                 const nm = (occ as { name?: string }).name ?? "?";
+                const isSel = selected.has(b.id);
                 return (
-                  <Bed
+                  <div
                     key={b.id}
+                    onClick={selectMode ? () => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; }) : undefined}
+                    className={selectMode ? `cursor-pointer rounded-[11px] outline ${isSel ? "outline-2 outline-brand" : "outline-1 outline-line"}` : undefined}
+                  >
+                  <Bed
                     name={nm}
                     sub={shiftSub(occ)}
                     initials={initialsOf(nm)}
                     accent={avatarAccent(occ, colorBy)}
                     badge={badgeFor(occ)}
-                    draggable
+                    draggable={!selectMode}
                     onDragStart={() => {
                       setDragOcc({ occ, fromBedId: b.id });
                       loadSuggestions(occ.id);
@@ -419,7 +592,7 @@ export function BedBoardV2({ property }: { property: Property }) {
                       setSuggested(new Set());
                     }}
                     testId={`bed-occ-${b.id}`}
-                    actions={
+                    actions={selectMode ? undefined : (
                       <div className="ml-1.5 hidden gap-1 group-hover:flex print:hidden">
                         <button
                           type="button"
@@ -450,8 +623,9 @@ export function BedBoardV2({ property }: { property: Property }) {
                           ✕
                         </button>
                       </div>
-                    }
+                    )}
                   />
+                  </div>
                 );
               })}
             </RoomCard>
@@ -550,7 +724,7 @@ export function BedBoardV2({ property }: { property: Property }) {
                 <button
                   key={ob.bedId}
                   type="button"
-                  onClick={() => doXPropMove(xprop.occ, xprop.fromBedId, ob.bedId)}
+                  onClick={() => pickXPropTarget(xprop.occ, xprop.fromBedId, ob.bedId)}
                   className="flex w-full items-center justify-between border-b border-line px-1 py-2 text-left text-[13px] text-ink hover:bg-accent"
                 >
                   <span><b>{ob.propName}</b> · {ob.label}</span>
@@ -559,6 +733,32 @@ export function BedBoardV2({ property }: { property: Property }) {
               ))}
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* Charge-follows-move prompt (#26) — asked once, remembered */}
+      {chargePick && (
+        <Modal onClose={() => setChargePick(null)} title="Which rent should follow them?">
+          <div className="mb-4 text-[13px] text-muted-foreground">
+            {(chargePick.occ as { name?: string }).name ?? "This person"} is moving to a different client's property.
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => commitChargeMode("keep")}
+              className="rounded-[9px] border border-line bg-panel px-3 py-2 text-left text-[13px] font-semibold text-ink hover:bg-accent"
+            >
+              Keep their current weekly rent
+            </button>
+            <button
+              type="button"
+              onClick={() => commitChargeMode("client_default")}
+              className="rounded-[9px] border border-line bg-panel px-3 py-2 text-left text-[13px] font-semibold text-ink hover:bg-accent"
+            >
+              Use the new client's rate
+            </button>
+          </div>
+          <div className="mt-3 text-[11px] text-faint">We'll remember this choice for this session.</div>
         </Modal>
       )}
 

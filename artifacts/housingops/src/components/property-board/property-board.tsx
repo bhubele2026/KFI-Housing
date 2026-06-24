@@ -3,7 +3,12 @@ import type { Property } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { shortPropertyName } from "@/lib/property-name";
 import { PropertyBedTable } from "@/components/bed-grid";
-import { StatusDot, MoneyTile, type MoneyStat } from "@/components/kit";
+import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
+import { StatusDot, MoneyTile, PrintView, type MoneyStat } from "@/components/kit";
+import { BoardSection } from "./board-section";
+import { ShiftCoverage } from "./shift-coverage";
+import { ContactRoster } from "./contact-roster";
+import { VehiclesPanel } from "./vehicles-panel";
 
 const WEEKS_PER_MONTH = 52 / 12;
 
@@ -26,7 +31,14 @@ function Stat({ label, value }: { label: string; value: number }) {
  * cards so the numbers agree everywhere.
  */
 export function PropertyBoard({ property }: { property: Property }) {
-  const { beds, occupants, customers } = useData();
+  const { beds, occupants, customers, rooms } = useData();
+
+  const propBeds = useMemo(() => beds.filter((b) => b.propertyId === property.id), [beds, property.id]);
+  const propRooms = useMemo(() => rooms.filter((r) => r.propertyId === property.id), [rooms, property.id]);
+  const propOccupants = useMemo(
+    () => occupants.filter((o) => o.propertyId === property.id),
+    [occupants, property.id],
+  );
 
   const monthlyRent = Number((property as { monthlyRent?: number }).monthlyRent) || 0;
 
@@ -84,48 +96,68 @@ export function PropertyBoard({ property }: { property: Property }) {
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Header band — reads like the top of the manager's tab. */}
-      <div className="rounded-lg border border-line bg-surface p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-lg font-bold text-ink">
-                {shortPropertyName(property.name)}
-              </h2>
-              <StatusDot
-                status={isActive ? "ok" : "neutral"}
-                label={isActive ? "Active" : "Inactive"}
-                size="md"
-              />
-            </div>
-            {address && <p className="text-sm text-muted-foreground">{address}</p>}
-            {client && (
-              <p className="text-sm font-medium text-brand">{client.name}</p>
-            )}
-          </div>
-          {/* Summary strip */}
+    <PrintView
+      title={shortPropertyName(property.name)}
+      subtitle={address || undefined}
+      meta={client ? <span className="font-medium text-brand">{client.name}</span> : undefined}
+      testId="property-board"
+    >
+      <div className="space-y-4">
+        {/* Status + the live counts the manager scans first. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <StatusDot
+            status={isActive ? "ok" : "neutral"}
+            label={isActive ? "Active" : "Inactive"}
+            size="md"
+          />
           <div className="flex items-center gap-6 rounded-md border border-line bg-panel px-4 py-2">
             <Stat label="Capacity" value={capacity} />
             <Stat label="Occupied" value={occupied} />
             <Stat label="Available" value={available} />
           </div>
         </div>
-      </div>
 
-      {/* Money truth */}
-      <MoneyTile title="This property" stats={moneyStats} />
-      <p className="-mt-2 px-1 text-[11px] text-muted-foreground">
-        Collected = monthlized weekly rent deducted from payroll-linked associates.
-        At-risk = the rent we pay for beds whose occupant isn&apos;t linked or has a
-        $0 deduction. Utilities land in the Money view.
-      </p>
+        {/* Money truth */}
+        <MoneyTile title="This property" stats={moneyStats} />
+        <p className="-mt-2 px-1 text-[11px] text-muted-foreground">
+          Collected = monthlized weekly rent deducted from payroll-linked associates.
+          At-risk = the rent we pay for beds whose occupant isn&apos;t linked or has a
+          $0 deduction. Utilities land in the Money view.
+        </p>
 
-      {/* Bed grid — the heart of the tab. PropertyBedTable is self-contained
-          (assign / move / clear, live counts, building-aware). */}
-      <div className="rounded-lg border border-line bg-panel p-2">
-        <PropertyBedTable property={property} showHeaderLink={false} />
+        {/* The rest of the manager's tab, brought onto one page (Stage 5). */}
+        <BoardSection title="Move-in / move-out ledger">
+          <ProjectedMoveInsSection
+            propertyId={property.id}
+            propRooms={propRooms}
+            propBeds={propBeds}
+            propOccupants={propOccupants}
+          />
+        </BoardSection>
+
+        <BoardSection title="Shifts">
+          <ShiftCoverage occupants={propOccupants} />
+        </BoardSection>
+
+        <BoardSection title="Contact roster" count={propOccupants.filter((o) => o.status === "Active").length}>
+          <ContactRoster
+            occupants={propOccupants}
+            beds={propBeds}
+            rooms={propRooms}
+            propertyName={shortPropertyName(property.name)}
+          />
+        </BoardSection>
+
+        <BoardSection title="Vehicles & transport">
+          <VehiclesPanel propertyId={property.id} occupants={propOccupants} />
+        </BoardSection>
+
+        {/* Bed grid — the heart of the tab. PropertyBedTable is self-contained
+            (assign / move / clear, live counts, building-aware). */}
+        <BoardSection title="Beds">
+          <PropertyBedTable property={property} showHeaderLink={false} />
+        </BoardSection>
       </div>
-    </div>
+    </PrintView>
   );
 }

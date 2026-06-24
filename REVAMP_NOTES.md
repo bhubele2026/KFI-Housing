@@ -33,13 +33,40 @@ Stage 6 target nav: **Dashboard · Clients · Properties · Roster · Money** (E
 - **Acceptance:** `pnpm run build` green + app identical → verify on Replit. Kit renders (no consumer yet wired, so zero behavior change).
 - **Replit follow-up:** none beyond the standard pull + (later) codegen for the openapi deltas + `db push` for migrations.
 
-### Stage 1 — Property Board ⭐ — (pending)
-### Stage 2 — Data backfill — (pending; prod write gated)
-### Stage 3 — Deductions everywhere + Zenople matching — (pending)
-### Stage 4 — Money view — (pending)
-### Stage 5 — Remaining board modules — (pending)
-### Stage 6 — Nav + design rollout — (pending)
-### Stage 7 — Retire the spreadsheet — (pending)
+### Stage 1 — Property Board ⭐ ✅ (commit 7de18d0)
+- `<PropertyBoard>` (components/property-board/property-board.tsx): warm header + Capacity·Occupied·Available + MoneyTile + existing PropertyBedTable. Added a "Board" tab to property-detail.tsx, default landing when BOARD_VIEW_ENABLED. Counts match existing stat cards. Cast-safe.
+
+### Stage 2 — Data backfill — ✅ DRY-RUN only (commit 22bbb22); prod write GATED
+- imports/_stage2_dryrun.py + imports/stage2-backfill-dryrun.md. 102 reconciled vs 130 live occupants (name-dup guard): **44 single-property safe · 33 cluster (need master unit) · 12 property-not-live (Chateau Knoll ×11, Econo Lodge ×1) · 13 decision-blocked (El Paso Bartlett ×4, Orgill ×9) · 0 dups.** Rent backfill (24 props) + the actual occupant POSTs NOT done (needs SharePoint OCR + sign-off + the open decisions).
+
+### Stage 3 — Deductions + Zenople matching
+- **3a backend ✅ (commit 57af1d3):** lib/occupant-deduction.ts (getOccupantDeduction/Batch, no N+1) + GET /occupants attaches read-only `deduction` + openapi Occupant/Vehicle deltas. Surfaces after Replit codegen + db push.
+- **3a frontend** — IN PROGRESS (badge on occupants/bed-grid/roster/customer roll-up).
+- **3c/3d/3e backend** — IN PROGRESS (zenople status writing in sync; POST /api/zenople/match/suggest AI route; GET unlinked tray endpoint).
+- **3d/3e backend confirm route ✅ (5cbb205):** POST /api/zenople/match/confirm (action confirm/mark_not/reject) — the only manual link-status write path.
+- **3e frontend ✅ (3196bea):** pages/zenople-review.tsx review queue (unlinked list → AI suggest → Confirm/Reject/Mark) + top-nav payroll-gaps count badge + /zenople-review route.
+
+### Stage 4 — Money view ✅ (d647aab)
+- dashboard "Not in payroll yet" strip + "Money leaks" card (each one-click into the fix); property-board money tile split collected-vs-at-risk; customer-detail recovery split; finance portfolio MoneyTile. Skipped (noted): charge≠client-expected (needs Stage 2 weekly cost), unmapped-QBO count.
+
+### Stage 5 — Board modules ✅ (this commit)
+- components/property-board/: BoardSection, ShiftCoverage, ContactRoster (DataTable + CSV in sheet col order), VehiclesPanel (reuses useListVehicles/Riders, color cast-safe). Reused existing ProjectedMoveInsSection for the move-in/out ledger (Record move-out = PATCH Former; Promote = convert route). Board wrapped in PrintView (Print/Export). Backend write-paths for shiftTime/color: openapi only (2488b87), normalizers pass through.
+- **col-A roster code (86/125): FLAGGED not guessed** — not on the occupant schema; needs the open decision + optional client_code column.
+- Skipped (noted): day/night rider split (needs vehicle_ride_overrides), inline roster-cell edit (links through to occupant edit).
+
+### Stage 6 — Nav + design rollout ✅ partial (637ed95)
+- Nav collapsed to Dashboard·Clients·Properties·Roster·Money (Money = dropdown over Finance/Economics/Accounting). Label pass via i18n en.json VALUES only.
+- **DEFERRED polish (noted):** full DataTable rollout across every list page; sweeping hardcoded non-i18n page strings; the warm re-skin of legacy pages beyond the Board. High-risk-blind / mechanical; recommend after a green Replit typecheck.
+
+### Stage 7 — Retire the spreadsheet — manual sign-off (not code)
+- Side-by-side check on 2 properties + cheat-sheet + flip VITE_BOARD_VIEW on in prod. Needs a human; the cheat-sheet (where-did-my-column-go) is a quick follow-up.
+
+## Replit follow-ups accumulated (run once, batched)
+1. `pnpm --filter @workspace/api-spec run codegen` — REQUIRED (openapi gained Occupant.deduction/zenople fields + Vehicle.color + Stage 3d/e routes). Also fixes the pre-existing GetVersionResponse red build.
+2. `pnpm --filter @workspace/db run push` — applies the 3 additive migrations (occupant zenople/shift_time, vehicle color).
+3. `pnpm run typecheck` + package tests (the per-phase gate I can't run locally).
+4. Deploy ▸ Redeploy; hard-refresh.
+5. VITE_BOARD_VIEW is on in dev by default; set it on in prod when ready to show the Board on the live site.
 
 ---
 

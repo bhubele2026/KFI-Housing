@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { seedHousingDeductions } from "../lib/seed-housing-deductions";
+import { recomputeZenopleLinkStatus } from "../lib/zenople-link-status";
 import { fetchHousingDeductionsByWeek } from "../lib/zenople-client";
 import {
   isSaturdayDate,
@@ -66,6 +67,9 @@ router.post(
       let totalRows = 0;
       const unmatchedPersonIds = new Set<string>();
       const lowConfidencePersonIds = new Set<string>();
+      // Occupants matched only via the fragile name-only fallback -> flagged
+      // needs_review by the Stage 3c link-status recompute below.
+      const lowConfidenceOccupantIds = new Set<string>();
       const weeks: Array<{
         payWeekEndDate: string;
         deductionsImported: number;
@@ -85,6 +89,9 @@ router.post(
         for (const u of result.unmatched) unmatchedPersonIds.add(u.personId);
         for (const lc of result.lowConfidenceMatches) {
           lowConfidencePersonIds.add(lc.personId);
+          if (lc.matched?.occupantId) {
+            lowConfidenceOccupantIds.add(lc.matched.occupantId);
+          }
         }
         weeks.push({
           payWeekEndDate: bucket.payWeekEndDate,
@@ -93,6 +100,14 @@ router.post(
           unmatchedCount: result.unmatched.length,
         });
       }
+
+      // Stage 3c: now that the deductions are written, recompute every
+      // occupant's Zenople link status from them (re-runnable; promotes
+      // not_in_zenople -> linked as people appear in payroll).
+      const linkStatus = await recomputeZenopleLinkStatus({
+        logger,
+        needsReviewOccupantIds: [...lowConfidenceOccupantIds],
+      });
 
       res.json({
         sinceSat,
@@ -103,6 +118,7 @@ router.post(
         totalAmount: Math.round(totalAmount * 100) / 100,
         unmatchedCount: unmatchedPersonIds.size,
         lowConfidenceCount: lowConfidencePersonIds.size,
+        linkStatus,
         weeks,
       });
     } catch (err) {

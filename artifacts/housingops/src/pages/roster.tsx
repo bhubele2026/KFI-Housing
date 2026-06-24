@@ -33,6 +33,7 @@ import { useData } from "@/context/data-store";
 import { AssignOccupantDialog } from "@/components/assign-occupant-dialog";
 import { shortPropertyName } from "@/lib/property-name";
 import { titleCaseName } from "@/lib/name-format";
+import { DeductionBadge } from "@/components/kit";
 import { Sparkles } from "lucide-react";
 import type { Occupant } from "@/data/mockData";
 
@@ -602,11 +603,10 @@ export default function RosterPage() {
                               {r.jobTitle || "—"}
                             </TableCell>
                             <TableCell>
-                              {r.hasDeduction ? (
-                                <span className="text-sm font-medium">{money(r.weeklyDeduction)}</span>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">—</span>
-                              )}
+                              <DeductionBadge
+                                weeklyAmount={r.hasDeduction ? r.weeklyDeduction : null}
+                                zenopleStatus={occ ? "linked" : gap ? "needs_review" : "pending"}
+                              />
                             </TableCell>
                             <TableCell>
                               {occ ? (

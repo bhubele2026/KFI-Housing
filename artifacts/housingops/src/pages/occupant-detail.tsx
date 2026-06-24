@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyStateRow } from "@/components/empty-state";
+import { DeductionBadge } from "@/components/kit";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { shortPropertyName } from "@/lib/property-name";
 import { InlineEdit } from "@/pages/property-detail";
@@ -149,6 +150,16 @@ export default function OccupantDetail() {
                 #{occupant.employeeId}
               </span>
             )}
+            <DeductionBadge
+              weeklyAmount={
+                (occupant as { deduction?: { weeklyAmount?: number; source?: string } }).deduction?.weeklyAmount ??
+                lastWeek?.weeklyAmount ??
+                (occupant as { chargePerBed?: number }).chargePerBed ??
+                null
+              }
+              zenopleStatus={(occupant as { zenopleStatus?: string }).zenopleStatus}
+              source={(occupant as { deduction?: { source?: string } }).deduction?.source}
+            />
           </span>
         }
         actions={

@@ -4,6 +4,7 @@ import { useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DeductionBadge } from "@/components/kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -478,13 +479,24 @@ export function PropertyOccupantDetail({ property }: { property: Property }) {
                   <td className="px-3 py-2.5 whitespace-nowrap text-muted-foreground">{room} · Bed {bedNum}</td>
                   <td className="px-3 py-2.5">
                     <div className="font-medium">{titleCaseName(occ.name)}</div>
-                    <div className="mt-0.5 flex items-center gap-2 text-[11px]">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
                       {occ.employeeId ? <span className="text-muted-foreground">ID {occ.employeeId}</span> : null}
                       {matched ? (
                         <span className="text-emerald-600">✓ matched</span>
                       ) : (
                         <span className="text-amber-600">⚠ needs match</span>
                       )}
+                      <DeductionBadge
+                        size="sm"
+                        weeklyAmount={
+                          (occ as { deduction?: { weeklyAmount?: number } }).deduction?.weeklyAmount ??
+                          (occ.chargeSource === "payroll" && occ.chargePerBed > 0 ? wk : null)
+                        }
+                        zenopleStatus={
+                          (occ as { zenopleStatus?: string }).zenopleStatus ??
+                          (matched ? "linked" : "not_in_zenople")
+                        }
+                      />
                     </div>
                   </td>
                   <td className="px-3 py-2.5">
@@ -721,6 +733,17 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
             ) : (
               <span className="text-amber-600">⚠ needs match</span>
             )}
+            <DeductionBadge
+              size="sm"
+              weeklyAmount={
+                (occ as { deduction?: { weeklyAmount?: number } }).deduction?.weeklyAmount ??
+                (payrollDeduction > 0 ? wk : null)
+              }
+              zenopleStatus={
+                (occ as { zenopleStatus?: string }).zenopleStatus ??
+                (matched ? "linked" : "not_in_zenople")
+              }
+            />
           </span>
           <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-tight text-muted-foreground">
             {payrollDeduction > 0 && <span>${Math.round(payrollDeduction)}/wk</span>}

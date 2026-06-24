@@ -17,6 +17,7 @@ import {
   CheckCircle2, ChevronLeft, ChevronRight, RefreshCw,
 } from "lucide-react";
 import { EmptyStateRow } from "@/components/empty-state";
+import { DeductionBadge } from "@/components/kit";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { ConfirmDeleteButton } from "@/components/confirm-delete-button";
 import { MoveOccupantDialog } from "@/components/move-occupant-dialog";
@@ -872,21 +873,32 @@ export default function Occupants() {
                           data-testid={`cell-occupant-weekly-${occupant.id}`}
                         >
                           {(() => {
-                            const amt = weekDeductionByOccupantId.get(occupant.id);
-                            if (amt !== undefined) return formatUsd(amt);
-                            if (occupant.status !== "Active") {
+                            // Prefer the API's computed deduction (after codegen),
+                            // then the pay-week map already loaded on this page,
+                            // then the occupant's manual chargePerBed.
+                            const ded = (occupant as { deduction?: { weeklyAmount?: number; source?: string } }).deduction;
+                            const mapAmt = weekDeductionByOccupantId.get(occupant.id);
+                            const weekly =
+                              ded?.weeklyAmount ??
+                              mapAmt ??
+                              (occupant as { chargePerBed?: number }).chargePerBed ??
+                              null;
+                            const zStatus = (occupant as { zenopleStatus?: string }).zenopleStatus;
+                            // Former occupants with nothing to recover stay quiet.
+                            if (occupant.status !== "Active" && !weekly) {
                               return <span className="text-muted-foreground">—</span>;
                             }
                             return (
-                              <Badge
-                                variant="outline"
-                                className="border-amber-500 text-amber-700 dark:text-amber-400"
-                                data-testid={`badge-occupant-week-missing-${occupant.id}`}
-                                title={`No deduction imported for week ending ${payWeek}`}
+                              <div
+                                className="flex justify-end"
+                                data-testid={`badge-occupant-week-${occupant.id}`}
                               >
-                                <AlertTriangle className="h-3 w-3 mr-1" />
-                                Missing
-                              </Badge>
+                                <DeductionBadge
+                                  weeklyAmount={weekly}
+                                  zenopleStatus={zStatus}
+                                  source={ded?.source}
+                                />
+                              </div>
                             );
                           })()}
                         </TableCell>

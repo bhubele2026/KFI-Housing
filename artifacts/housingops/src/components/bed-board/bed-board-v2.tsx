@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
-import { StatCard, Seg, accentFor, initialsOf } from "@/components/kit-v2";
+import { StatCard, Seg, accentFor, initialsOf, PrintView } from "@/components/kit-v2";
 import { Bed, RoomCard } from "@/components/kit-v2";
 import { toWeeklyCharge, formatUsdWhole, type Property, type Occupant } from "@/data/mockData";
 
@@ -45,7 +45,6 @@ function avatarAccent(occ: Occupant, colorBy: ColorBy): string {
     const w = weeklyOf(occ);
     return w >= 120 ? "purple" : w >= 70 ? "blue" : w > 0 ? "teal" : "red";
   }
-  // shift (default-ish)
   const shift = String((occ as { shift?: string }).shift ?? "");
   if (/1|day/i.test(shift)) return "blue";
   if (/2|night|pm/i.test(shift)) return "purple";
@@ -59,22 +58,32 @@ function shiftSub(occ: Occupant): string {
   return [shift, time].filter(Boolean).join(" · ") || "—";
 }
 
+const MOVE_OUT_REASONS = ["Left job", "Transferred", "Terminated", "Other"] as const;
+
 /**
- * The Property Beds board — the management centerpiece, matching the v2 mockup
- * "#beds" screen: stat cards + room cards with draggable bed rows, a move-out
- * drop zone, and a color-by toggle. Drag a person onto an open bed to move
- * them (optimistic + POST /api/beds/move); drag to the zone or hit ✕ to move
- * them out (POST /api/occupants/:id/move-out).
+ * The Property Beds board — the management centerpiece (v2 mockup "#beds").
+ * Stat cards + room cards with draggable bed rows. Drag (or click-to-move) a
+ * person onto an open bed -> POST /api/beds/move (optimistic + Undo). Drag to
+ * the zone / hit ✕ -> a move-out prompt (reason + bed-ready). ⇄ opens a
+ * cross-property picker. Open beds get ranked "suggested" highlights while
+ * dragging (GET /api/beds/open). Print/Export via PrintView.
  */
 export function BedBoardV2({ property }: { property: Property }) {
-  const { rooms, beds, occupants, customers, updateBed, updateOccupant } = useData();
+  const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant } = useData();
   const { toast } = useToast();
   const [colorBy, setColorBy] = useState<ColorBy>("shift");
   const [dragOcc, setDragOcc] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
   const [overOpen, setOverOpen] = useState<string | null>(null);
   const [overZone, setOverZone] = useState(false);
-  // local optimistic occupant→bed overlay so moves reflect instantly
   const [occByBed, setOccByBed] = useState<Record<string, string>>({});
+  // refinements
+  const [moveOutModal, setMoveOutModal] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
+  const [moReason, setMoReason] = useState<string>(MOVE_OUT_REASONS[0]);
+  const [moBedReady, setMoBedReady] = useState(false);
+  const [undoBar, setUndoBar] = useState<{ label: string; run: () => void } | null>(null);
+  const [xprop, setXprop] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
+  const [clickMove, setClickMove] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
+  const [suggested, setSuggested] = useState<Set<string>>(new Set());
 
   const propBeds = useMemo(
     () => beds.filter((b) => (b as { propertyId?: string }).propertyId === property.id),
@@ -93,7 +102,6 @@ export function BedBoardV2({ property }: { property: Property }) {
     return m;
   }, [occupants]);
 
-  // seed the optimistic overlay from the real data (bedId → occupantId)
   useEffect(() => {
     const seed: Record<string, string> = {};
     occupants.forEach((o) => {
@@ -103,6 +111,13 @@ export function BedBoardV2({ property }: { property: Property }) {
     });
     setOccByBed(seed);
   }, [occupants]);
+
+  // auto-dismiss the undo bar after 6s
+  useEffect(() => {
+    if (!undoBar) return;
+    const t = setTimeout(() => setUndoBar(null), 6000);
+    return () => clearTimeout(t);
+  }, [undoBar]);
 
   const occupantInBed = (bedId: string): Occupant | undefined => {
     const oid = occByBed[bedId];
@@ -122,7 +137,19 @@ export function BedBoardV2({ property }: { property: Property }) {
     return m;
   }, [propBeds]);
 
-  // counts
+  // open beds in THIS property (for click-to-move menu)
+  const openBedsHere = useMemo(
+    () => propBeds.filter((b) => !occByBed[b.id]).map((b) => ({ id: b.id, label: roomBedLabel(b.id) })),
+    [propBeds, occByBed],
+  );
+  function roomBedLabel(bedId: string): string {
+    const b = propBeds.find((x) => x.id === bedId);
+    const room = propRooms.find((r) => r.id === (b as { roomId?: string })?.roomId);
+    const rn = (room as { name?: string })?.name ?? "Unit";
+    const bn = (b as { bedNumber?: number })?.bedNumber ?? "";
+    return `${rn} · Bed ${bn}`;
+  }
+
   const capacity = propBeds.length;
   const occupied = propBeds.filter((b) => occByBed[b.id]).length;
   const open = Math.max(0, capacity - occupied);
@@ -135,44 +162,62 @@ export function BedBoardV2({ property }: { property: Property }) {
   const clientName =
     customers.find((c) => c.id === (property as { customerId?: string }).customerId)?.name ?? "Customers";
 
-  async function doMove(occ: Occupant, fromBedId: string, toBedId: string) {
-    if (fromBedId === toBedId) return;
-    // optimistic
+  // low-level optimistic move (no undo registration) — used by doMove + undo
+  function optimisticMove(occId: string, fromBedId: string, toBedId: string) {
     setOccByBed((prev) => {
       const next = { ...prev };
-      delete next[fromBedId];
-      next[toBedId] = occ.id;
+      if (fromBedId) delete next[fromBedId];
+      next[toBedId] = occId;
       return next;
     });
+  }
+
+  async function postMove(occId: string, fromBedId: string, toBedId: string): Promise<boolean> {
     try {
       const r = await fetch(`${apiBase()}api/beds/move`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ occupantId: occ.id, fromBedId, toBedId }),
+        body: JSON.stringify({ occupantId: occId, fromBedId, toBedId }),
       });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || "move failed");
-      // sync the shared cache so other views agree
+      if (!r.ok) throw new Error("move failed");
       try {
-        updateBed(fromBedId, { occupantId: "", status: "Vacant", cleaningStatus: "needs_cleaning" } as never);
-        updateBed(toBedId, { occupantId: occ.id, status: "Occupied" } as never);
-        updateOccupant(occ.id, { bedId: toBedId } as never);
+        if (fromBedId) updateBed(fromBedId, { occupantId: "", status: "Vacant", cleaningStatus: "needs_cleaning" } as never);
+        updateBed(toBedId, { occupantId: occId, status: "Occupied" } as never);
+        updateOccupant(occId, { bedId: toBedId } as never);
       } catch {
         /* cache sync best-effort */
       }
-      toast({ title: `Moved ${(occ as { name?: string }).name ?? "person"}` });
-    } catch (e) {
-      // roll back
-      setOccByBed((prev) => {
-        const next = { ...prev };
-        delete next[toBedId];
-        next[fromBedId] = occ.id;
-        return next;
-      });
-      toast({ title: "Move failed — put them back", variant: "destructive" as never });
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  async function doMoveOut(occ: Occupant, fromBedId: string) {
+  async function doMove(occ: Occupant, fromBedId: string, toBedId: string) {
+    if (fromBedId === toBedId) return;
+    optimisticMove(occ.id, fromBedId, toBedId);
+    const ok = await postMove(occ.id, fromBedId, toBedId);
+    if (!ok) {
+      optimisticMove(occ.id, toBedId, fromBedId); // roll back
+      toast({ title: "Move failed — put them back", variant: "destructive" as never });
+      return;
+    }
+    const nm = (occ as { name?: string }).name ?? "person";
+    toast({ title: `Moved ${nm}` });
+    // Undo (refinement #15): replay the inverse move.
+    setUndoBar({
+      label: `Moved ${nm}`,
+      run: async () => {
+        optimisticMove(occ.id, toBedId, fromBedId);
+        await postMove(occ.id, toBedId, fromBedId);
+        setUndoBar(null);
+        toast({ title: "Move undone" });
+      },
+    });
+  }
+
+  async function reallyMoveOut(occ: Occupant, fromBedId: string, reason: string, bedReady: boolean) {
+    setMoveOutModal(null);
     setOccByBed((prev) => {
       const next = { ...prev };
       delete next[fromBedId];
@@ -182,29 +227,104 @@ export function BedBoardV2({ property }: { property: Property }) {
       const r = await fetch(`${apiBase()}api/occupants/${occ.id}/move-out`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reason: "", bedReady: false }),
+        body: JSON.stringify({ reason, bedReady }),
       });
       if (!r.ok) throw new Error("move-out failed");
       try {
-        updateBed(fromBedId, { occupantId: "", status: "Vacant", cleaningStatus: "needs_cleaning" } as never);
+        updateBed(fromBedId, {
+          occupantId: "",
+          status: "Vacant",
+          cleaningStatus: bedReady ? "ready" : "needs_cleaning",
+        } as never);
         updateOccupant(occ.id, { status: "Former", bedId: "" } as never);
       } catch {
         /* best-effort */
       }
-      toast({ title: `${(occ as { name?: string }).name ?? "Person"} moved out — bed is open` });
+      const nm = (occ as { name?: string }).name ?? "Person";
+      toast({ title: `${nm} moved out — bed is ${bedReady ? "ready" : "in cleaning"}` });
+      // Undo (#15): re-seat them.
+      setUndoBar({
+        label: `${nm} moved out`,
+        run: async () => {
+          setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
+          try {
+            await fetch(`${apiBase()}api/occupants/${occ.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ status: "Active", bedId: fromBedId }),
+            });
+            updateBed(fromBedId, { occupantId: occ.id, status: "Occupied" } as never);
+            updateOccupant(occ.id, { status: "Active", bedId: fromBedId } as never);
+          } catch {
+            /* best-effort */
+          }
+          setUndoBar(null);
+          toast({ title: "Move-out undone" });
+        },
+      });
     } catch {
       setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
       toast({ title: "Move-out failed", variant: "destructive" as never });
     }
   }
 
-  function crossPropertyMove(occ: Occupant) {
-    // Cross-property picker is heavier; ship drag + move-out now, surface intent.
-    toast({
-      title: `Move ${(occ as { name?: string }).name ?? "person"} to another property`,
-      description: "Open the Properties board and drag them onto an open bed there (full picker coming).",
+  // cross-property move (#11): move to a bed in another property + confirm
+  async function doXPropMove(occ: Occupant, fromBedId: string, toBedId: string) {
+    setXprop(null);
+    setOccByBed((prev) => {
+      const next = { ...prev };
+      delete next[fromBedId];
+      return next;
     });
+    const ok = await postMove(occ.id, fromBedId, toBedId);
+    const nm = (occ as { name?: string }).name ?? "person";
+    if (!ok) {
+      setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
+      toast({ title: "Cross-property move failed", variant: "destructive" as never });
+      return;
+    }
+    toast({ title: `Moved ${nm} to another property` });
   }
+
+  // smart suggestions (#20): rank open beds for the dragged occupant
+  async function loadSuggestions(occId: string) {
+    try {
+      const r = await fetch(`${apiBase()}api/beds/open?occupantId=${encodeURIComponent(occId)}`);
+      if (!r.ok) return;
+      const body = (await r.json()) as { rows?: Array<{ bedId?: string }> } | Array<{ bedId?: string }>;
+      const rows = Array.isArray(body) ? body : body.rows ?? [];
+      setSuggested(new Set(rows.map((x) => String(x.bedId)).filter(Boolean)));
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  // open beds across OTHER properties for the cross-property picker
+  const otherOpenBeds = useMemo(() => {
+    if (!xprop) return [] as Array<{ propName: string; bedId: string; label: string }>;
+    const occupiedBedIds = new Set(
+      occupants
+        .filter((o) => String((o as { status?: string }).status ?? "Active") !== "Former")
+        .map((o) => (o as { bedId?: string }).bedId)
+        .filter(Boolean) as string[],
+    );
+    return beds
+      .filter((b) => {
+        const pid = (b as { propertyId?: string }).propertyId;
+        return pid && pid !== property.id && !occupiedBedIds.has(b.id);
+      })
+      .slice(0, 60)
+      .map((b) => {
+        const pid = (b as { propertyId?: string }).propertyId;
+        const pn = properties.find((p) => p.id === pid);
+        return {
+          propName: (pn as { name?: string })?.name ?? "Property",
+          bedId: b.id,
+          label: `Bed ${(b as { bedNumber?: number }).bedNumber ?? ""}`,
+        };
+      })
+      .sort((a, b) => a.propName.localeCompare(b.propName));
+  }, [xprop, beds, occupants, properties, property.id]);
 
   return (
     <div>
@@ -243,6 +363,7 @@ export function BedBoardV2({ property }: { property: Property }) {
         />
       </div>
 
+      <PrintView title={`${(property as { name?: string }).name ?? "Property"} — Beds`} subtitle={(property as { address?: string }).address || undefined}>
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         {propRooms.map((room) => {
           const rbeds = bedsByRoom.get(room.id) ?? [];
@@ -252,6 +373,7 @@ export function BedBoardV2({ property }: { property: Property }) {
               {rbeds.map((b) => {
                 const occ = occupantInBed(b.id);
                 if (!occ) {
+                  const isSuggested = suggested.has(b.id) && !!dragOcc;
                   return (
                     <div
                       key={b.id}
@@ -265,7 +387,14 @@ export function BedBoardV2({ property }: { property: Property }) {
                         setOverOpen(null);
                         if (dragOcc) doMove(dragOcc.occ, dragOcc.fromBedId, b.id);
                       }}
-                      className={overOpen === b.id ? "rounded-[11px] outline outline-2 outline-brand" : undefined}
+                      className={
+                        overOpen === b.id
+                          ? "rounded-[11px] outline outline-2 outline-brand"
+                          : isSuggested
+                          ? "rounded-[11px] outline outline-2 outline-ok/60"
+                          : undefined
+                      }
+                      title={isSuggested ? "Suggested — same client/shift/property" : undefined}
                     >
                       <Bed open testId={`bed-open-${b.id}`} />
                     </div>
@@ -281,15 +410,29 @@ export function BedBoardV2({ property }: { property: Property }) {
                     accent={avatarAccent(occ, colorBy)}
                     badge={badgeFor(occ)}
                     draggable
-                    onDragStart={() => setDragOcc({ occ, fromBedId: b.id })}
-                    onDragEnd={() => setDragOcc(null)}
+                    onDragStart={() => {
+                      setDragOcc({ occ, fromBedId: b.id });
+                      loadSuggestions(occ.id);
+                    }}
+                    onDragEnd={() => {
+                      setDragOcc(null);
+                      setSuggested(new Set());
+                    }}
                     testId={`bed-occ-${b.id}`}
                     actions={
-                      <div className="ml-1.5 hidden gap-1 group-hover:flex">
+                      <div className="ml-1.5 hidden gap-1 group-hover:flex print:hidden">
+                        <button
+                          type="button"
+                          title="Move to a bed (click-to-move)"
+                          onClick={() => setClickMove({ occ, fromBedId: b.id })}
+                          className="flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:text-ink"
+                        >
+                          ⇲
+                        </button>
                         <button
                           type="button"
                           title="Move to another property"
-                          onClick={() => crossPropertyMove(occ)}
+                          onClick={() => setXprop({ occ, fromBedId: b.id })}
                           className="flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:text-ink"
                         >
                           ⇄
@@ -297,7 +440,11 @@ export function BedBoardV2({ property }: { property: Property }) {
                         <button
                           type="button"
                           title="Move out / remove"
-                          onClick={() => doMoveOut(occ, b.id)}
+                          onClick={() => {
+                            setMoReason(MOVE_OUT_REASONS[0]);
+                            setMoBedReady(false);
+                            setMoveOutModal({ occ, fromBedId: b.id });
+                          }}
                           className="flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:border-risk/40 hover:bg-risk-soft hover:text-risk"
                         >
                           ✕
@@ -311,6 +458,7 @@ export function BedBoardV2({ property }: { property: Property }) {
           );
         })}
       </div>
+      </PrintView>
 
       <div
         onDragOver={(e) => {
@@ -321,14 +469,116 @@ export function BedBoardV2({ property }: { property: Property }) {
         onDrop={(e) => {
           e.preventDefault();
           setOverZone(false);
-          if (dragOcc) doMoveOut(dragOcc.occ, dragOcc.fromBedId);
+          if (dragOcc) {
+            setMoReason(MOVE_OUT_REASONS[0]);
+            setMoBedReady(false);
+            setMoveOutModal({ occ: dragOcc.occ, fromBedId: dragOcc.fromBedId });
+          }
         }}
         className={[
-          "mt-4 rounded-[14px] border-2 border-dashed p-4 text-center text-[13px] font-bold transition-colors",
+          "print:hidden mt-4 rounded-[14px] border-2 border-dashed p-4 text-center text-[13px] font-bold transition-colors",
           overZone ? "border-risk bg-risk-soft text-risk" : "border-[#E2A9B4] bg-[#FDF3F5] text-[#B0405A]",
         ].join(" ")}
       >
         ↩ Drag a person here to move them out / unassign
+      </div>
+
+      {/* Move-out reason prompt (#24 + confirm #17) */}
+      {moveOutModal && (
+        <Modal onClose={() => setMoveOutModal(null)} title={`Move out ${(moveOutModal.occ as { name?: string }).name ?? "person"}?`}>
+          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-faint">Reason</label>
+          <select
+            value={moReason}
+            onChange={(e) => setMoReason(e.target.value)}
+            className="mb-3 w-full rounded-[9px] border border-line bg-panel px-3 py-2 text-sm text-ink"
+          >
+            {MOVE_OUT_REASONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <label className="mb-4 flex items-center gap-2 text-[13px] text-ink">
+            <input type="checkbox" checked={moBedReady} onChange={(e) => setMoBedReady(e.target.checked)} />
+            Bed is clean &amp; ready now (otherwise it goes to cleaning)
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setMoveOutModal(null)} className="rounded-[9px] border border-line px-3 py-1.5 text-[13px] font-semibold text-ink">Cancel</button>
+            <button
+              type="button"
+              onClick={() => reallyMoveOut(moveOutModal.occ, moveOutModal.fromBedId, moReason, moBedReady)}
+              className="rounded-[9px] bg-risk px-3 py-1.5 text-[13px] font-semibold text-white"
+            >
+              Move out
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Click-to-move (#23): open-bed menu in this property */}
+      {clickMove && (
+        <Modal onClose={() => setClickMove(null)} title={`Move ${(clickMove.occ as { name?: string }).name ?? "person"} to…`}>
+          {openBedsHere.length === 0 ? (
+            <div className="text-[13px] text-muted-foreground">No open beds in this property.</div>
+          ) : (
+            <div className="max-h-72 overflow-auto">
+              {openBedsHere.map((ob) => (
+                <button
+                  key={ob.id}
+                  type="button"
+                  onClick={() => {
+                    doMove(clickMove.occ, clickMove.fromBedId, ob.id);
+                    setClickMove(null);
+                  }}
+                  className="flex w-full items-center justify-between border-b border-line px-1 py-2 text-left text-[13px] text-ink hover:bg-accent"
+                >
+                  <span>{ob.label}</span>
+                  <span className="text-brand">Move →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Cross-property picker (#11) */}
+      {xprop && (
+        <Modal onClose={() => setXprop(null)} title={`Move ${(xprop.occ as { name?: string }).name ?? "person"} to another property`}>
+          {otherOpenBeds.length === 0 ? (
+            <div className="text-[13px] text-muted-foreground">No open beds at other properties.</div>
+          ) : (
+            <div className="max-h-80 overflow-auto">
+              {otherOpenBeds.map((ob) => (
+                <button
+                  key={ob.bedId}
+                  type="button"
+                  onClick={() => doXPropMove(xprop.occ, xprop.fromBedId, ob.bedId)}
+                  className="flex w-full items-center justify-between border-b border-line px-1 py-2 text-left text-[13px] text-ink hover:bg-accent"
+                >
+                  <span><b>{ob.propName}</b> · {ob.label}</span>
+                  <span className="text-brand">Move →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* Undo bar (#15) */}
+      {undoBar && (
+        <div className="print:hidden fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-[12px] bg-ink px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg">
+          <span>✓ {undoBar.label}</span>
+          <button type="button" onClick={undoBar.run} className="rounded-[7px] bg-white/15 px-2.5 py-1 hover:bg-white/25">Undo</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-[16px] bg-panel p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="mb-3 text-[15px] font-bold text-ink">{title}</h3>
+        {children}
       </div>
     </div>
   );

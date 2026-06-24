@@ -125,10 +125,15 @@ router.post("/occupants", async (req, res): Promise<void> => {
     chargeSourcePersonId: "",
     ...body.data,
   });
-  if (!STRICT_DATE_RE.test(normalized.moveInDate as string)) {
+  // moveInDate: optional at creation. The master files only record a move-in
+  // date for recent (2026) arrivals, so established residents legitimately have
+  // none — and the Occupants page already supports a blank date via its inline
+  // date-picker. So we ACCEPT empty (operators fill it later) but still reject a
+  // malformed non-empty value. Never fabricate a date for a real person.
+  const miv = (normalized.moveInDate as string | undefined) ?? "";
+  if (miv !== "" && !STRICT_DATE_RE.test(miv)) {
     res.status(400).json({
-      error:
-        "moveInDate is required when creating an occupant and must be in YYYY-MM-DD format.",
+      error: "moveInDate must be in YYYY-MM-DD format (or left blank).",
     });
     return;
   }

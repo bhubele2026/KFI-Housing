@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "wouter";
-import { useListAllProjectedMoveIns } from "@workspace/api-client-react";
+import { Link, useLocation } from "wouter";
+import { useListAllProjectedMoveIns, useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
-import { StatCard, Seg, accentFor, initialsOf, PrintView } from "@/components/kit-v2";
+import { StatCard, Seg, accentFor, initialsOf, PrintView, WhyPopover } from "@/components/kit-v2";
 import { Bed, RoomCard } from "@/components/kit-v2";
 import { toWeeklyCharge, formatUsdWhole, type Property, type Occupant } from "@/data/mockData";
 
@@ -71,9 +71,14 @@ const MOVE_OUT_REASONS = ["Left job", "Transferred", "Terminated", "Other"] as c
  * dragging (GET /api/beds/open). Print/Export via PrintView.
  */
 export function BedBoardV2({ property }: { property: Property }) {
-  const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant } = useData();
+  const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant, addOccupant } = useData();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [colorBy, setColorBy] = useState<ColorBy>("shift");
+  // #5 assign-bed picker (Zenople roster or manual) for an open bed
+  const [assignBed, setAssignBed] = useState<string | null>(null);
+  const [assignQ, setAssignQ] = useState("");
+  const [assignBusy, setAssignBusy] = useState(false);
   const [dragOcc, setDragOcc] = useState<{ occ: Occupant; fromBedId: string } | null>(null);
   const [overOpen, setOverOpen] = useState<string | null>(null);
   const [overZone, setOverZone] = useState(false);
@@ -108,6 +113,48 @@ export function BedBoardV2({ property }: { property: Property }) {
     occupants.forEach((o) => m.set(o.id, o));
     return m;
   }, [occupants]);
+
+  // #5 — the live Zenople roster powers the "+ assign bed" picker. Cast-safe:
+  // the shape comes from the direct /api/roster/active endpoint.
+  const rosterQuery = useListActiveRoster();
+  const rosterPeople = useMemo(
+    () =>
+      ((rosterQuery.data as unknown as {
+        people?: Array<{ personId: string; name?: string; company?: string; weeklyDeduction?: number }>;
+      })?.people ?? []),
+    [rosterQuery.data],
+  );
+  // employeeId(personId) -> existing occupant, so picking someone already in the
+  // system MOVES them (never duplicates). Prefer an Active record.
+  const occByEmp = useMemo(() => {
+    const m = new Map<string, Occupant>();
+    occupants.forEach((o) => {
+      const eid = (o as { employeeId?: string }).employeeId;
+      if (!eid) return;
+      const prev = m.get(eid);
+      const active = String((o as { status?: string }).status ?? "Active") !== "Former";
+      if (!prev || active) m.set(eid, o);
+    });
+    return m;
+  }, [occupants]);
+  const assignChoices = useMemo(() => {
+    const q = assignQ.trim().toLowerCase();
+    return rosterPeople
+      .map((p) => {
+        const existing = occByEmp.get(p.personId);
+        return {
+          personId: p.personId,
+          name: p.name || "—",
+          company: p.company || "",
+          weekly: typeof p.weeklyDeduction === "number" ? p.weeklyDeduction : 0,
+          existing,
+          placed: !!(existing && (existing as { bedId?: string }).bedId),
+        };
+      })
+      .filter((r) => !q || r.name.toLowerCase().includes(q) || r.company.toLowerCase().includes(q))
+      .sort((a, b) => Number(a.placed) - Number(b.placed) || a.name.localeCompare(b.name))
+      .slice(0, 40);
+  }, [rosterPeople, occByEmp, assignQ]);
 
   useEffect(() => {
     const seed: Record<string, string> = {};
@@ -440,6 +487,67 @@ export function BedBoardV2({ property }: { property: Property }) {
     setSelectMode(false);
   }
 
+  // #5 — assign a roster person to an open bed. Existing occupant => a real move
+  // (so we never duplicate them); brand-new => create them seated here. We never
+  // fabricate a rent — chargePerBed starts at 0 and is flagged until payroll sets it.
+  async function assignExisting(toBedId: string, occ: Occupant, name: string) {
+    setAssignBed(null);
+    setAssignQ("");
+    const from = (occ as { bedId?: string }).bedId || "";
+    await doMove(occ, from, toBedId);
+    if (!from) toast({ title: `Assigned ${name} to a bed` });
+  }
+  async function createSeated(toBedId: string, name: string, personId: string, company: string) {
+    setAssignBed(null);
+    setAssignQ("");
+    setAssignBusy(true);
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setAssignBusy(false);
+      return;
+    }
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `occ-${toBedId}-${trimmed.replace(/\W+/g, "")}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const occ = {
+      id,
+      name: trimmed,
+      email: "",
+      phone: "",
+      bedId: toBedId,
+      propertyId: property.id,
+      moveInDate: today,
+      moveOutDate: null,
+      status: "Active",
+      chargePerBed: 0,
+      billingFrequency: "Weekly",
+      employeeId: personId || "",
+      company: company || "",
+      chargeSource: "",
+      chargeSourceCustomer: "",
+      chargeSourcePersonId: "",
+      shift: null,
+      zenoplePersonId: personId || undefined,
+      zenopleStatus: personId ? "linked" : "needs_review",
+    } as unknown as Occupant;
+    try {
+      addOccupant(occ);
+      setOccByBed((prev) => ({ ...prev, [toBedId]: id }));
+      try {
+        updateBed(toBedId, { occupantId: id, status: "Occupied", cleaningStatus: "occupied" } as never);
+      } catch {
+        /* best-effort cache sync */
+      }
+      toast({ title: `Added ${trimmed}${personId ? "" : " — flag for payroll match"}` });
+    } catch {
+      toast({ title: "Could not add the person", variant: "destructive" as never });
+    } finally {
+      setAssignBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4">
@@ -457,10 +565,44 @@ export function BedBoardV2({ property }: { property: Property }) {
 
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard label="Capacity" value={capacity} />
-          <StatCard label="Occupied" value={occupied} tone="ok" />
-          <StatCard label="Open" value={open} tone="warn" />
-          <StatCard label="Net /mo" value={formatUsdWhole(net)} tone={net < 0 ? "risk" : "ok"} />
+          <WhyPopover
+            className="block w-full text-left [text-decoration:none]"
+            title="Capacity"
+            formula="Every bed configured in this property"
+            rows={[{ k: "Rooms", v: propRooms.length }, { k: "Beds", v: capacity }]}
+          >
+            <StatCard label="Capacity" value={capacity} />
+          </WhyPopover>
+          <WhyPopover
+            className="block w-full text-left [text-decoration:none]"
+            title="Occupied"
+            formula="Beds with an active person assigned"
+            rows={[{ k: "Occupied", v: occupied }, { k: "Open", v: open }, { k: "Capacity", v: capacity }]}
+          >
+            <StatCard label="Occupied" value={occupied} tone="ok" />
+          </WhyPopover>
+          <WhyPopover
+            className="block w-full text-left [text-decoration:none]"
+            title="Open beds"
+            formula="Capacity − Occupied"
+            rows={[{ k: "Capacity", v: capacity }, { k: "Occupied", v: occupied }, { k: "Open", v: open }]}
+          >
+            <StatCard label="Open" value={open} tone="warn" />
+          </WhyPopover>
+          <WhyPopover
+            className="block w-full text-left [text-decoration:none]"
+            title="Net per month"
+            formula="Collected from associates − Rent paid to landlord"
+            rows={[
+              { k: "Collected /mo", v: formatUsdWhole(collectedMo) },
+              { k: "Rent /mo", v: formatUsdWhole(rentMo) },
+              { k: "Net /mo", v: formatUsdWhole(net) },
+            ]}
+            href="/money"
+            hrefLabel="See the money view →"
+          >
+            <StatCard label="Net /mo" value={formatUsdWhole(net)} tone={net < 0 ? "risk" : "ok"} />
+          </WhyPopover>
         </div>
       </div>
 
@@ -531,7 +673,7 @@ export function BedBoardV2({ property }: { property: Property }) {
       </div>
 
       <PrintView title={`${(property as { name?: string }).name ?? "Property"} — Beds`} subtitle={(property as { address?: string }).address || undefined}>
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {propRooms.map((room) => {
           const rbeds = bedsByRoom.get(room.id) ?? [];
           const rOcc = rbeds.filter((b) => occByBed[b.id]).length;
@@ -544,6 +686,7 @@ export function BedBoardV2({ property }: { property: Property }) {
                   return (
                     <div
                       key={b.id}
+                      onClick={selectMode ? undefined : () => { setAssignQ(""); setAssignBed(b.id); }}
                       onDragOver={(e) => {
                         e.preventDefault();
                         setOverOpen(b.id);
@@ -555,14 +698,15 @@ export function BedBoardV2({ property }: { property: Property }) {
                         if (dragMoveIn) convertMoveIn(dragMoveIn.id, dragMoveIn.name, b.id);
                         else if (dragOcc) doMove(dragOcc.occ, dragOcc.fromBedId, b.id);
                       }}
-                      className={
+                      className={[
+                        selectMode ? "" : "cursor-pointer",
                         overOpen === b.id
                           ? "rounded-[11px] outline outline-2 outline-brand"
                           : isSuggested
                           ? "rounded-[11px] outline outline-2 outline-ok/60"
-                          : undefined
-                      }
-                      title={isSuggested ? "Suggested — same client/shift/property" : undefined}
+                          : "",
+                      ].filter(Boolean).join(" ") || undefined}
+                      title={isSuggested ? "Suggested — same client/shift/property" : "Click to assign someone"}
                     >
                       <Bed open testId={`bed-open-${b.id}`} />
                     </div>
@@ -573,8 +717,13 @@ export function BedBoardV2({ property }: { property: Property }) {
                 return (
                   <div
                     key={b.id}
-                    onClick={selectMode ? () => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; }) : undefined}
-                    className={selectMode ? `cursor-pointer rounded-[11px] outline ${isSel ? "outline-2 outline-brand" : "outline-1 outline-line"}` : undefined}
+                    onClick={
+                      selectMode
+                        ? () => setSelected((prev) => { const n = new Set(prev); if (n.has(b.id)) n.delete(b.id); else n.add(b.id); return n; })
+                        : () => navigate(`/occupants/${occ.id}`)
+                    }
+                    title={selectMode ? undefined : `Open ${nm}'s profile`}
+                    className={selectMode ? `cursor-pointer rounded-[11px] outline ${isSel ? "outline-2 outline-brand" : "outline-1 outline-line"}` : "cursor-pointer"}
                   >
                   <Bed
                     name={nm}
@@ -597,7 +746,7 @@ export function BedBoardV2({ property }: { property: Property }) {
                         <button
                           type="button"
                           title="Move to a bed (click-to-move)"
-                          onClick={() => setClickMove({ occ, fromBedId: b.id })}
+                          onClick={(e) => { e.stopPropagation(); setClickMove({ occ, fromBedId: b.id }); }}
                           className="flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:text-ink"
                         >
                           ⇲
@@ -605,7 +754,7 @@ export function BedBoardV2({ property }: { property: Property }) {
                         <button
                           type="button"
                           title="Move to another property"
-                          onClick={() => setXprop({ occ, fromBedId: b.id })}
+                          onClick={(e) => { e.stopPropagation(); setXprop({ occ, fromBedId: b.id }); }}
                           className="flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:text-ink"
                         >
                           ⇄
@@ -613,7 +762,8 @@ export function BedBoardV2({ property }: { property: Property }) {
                         <button
                           type="button"
                           title="Move out / remove"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setMoReason(MOVE_OUT_REASONS[0]);
                             setMoBedReady(false);
                             setMoveOutModal({ occ, fromBedId: b.id });
@@ -759,6 +909,67 @@ export function BedBoardV2({ property }: { property: Property }) {
             </button>
           </div>
           <div className="mt-3 text-[11px] text-faint">We'll remember this choice for this session.</div>
+        </Modal>
+      )}
+
+      {/* Assign a bed (#5) — Zenople roster picker or manual add */}
+      {assignBed && (
+        <Modal onClose={() => { setAssignBed(null); setAssignQ(""); }} title={`Assign ${roomBedLabel(assignBed)}`}>
+          <input
+            autoFocus
+            value={assignQ}
+            onChange={(e) => setAssignQ(e.target.value)}
+            placeholder="Search the active roster by name or client…"
+            className="mb-2 w-full rounded-[9px] border border-line bg-panel px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+          />
+          <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.5px] text-faint">
+            {rosterQuery.isLoading ? "Loading roster…" : `Active roster (${assignChoices.length}${assignChoices.length === 40 ? "+" : ""})`}
+          </div>
+          <div className="max-h-64 overflow-auto rounded-[10px] border border-line">
+            {assignChoices.length === 0 ? (
+              <div className="px-3 py-4 text-center text-[12.5px] text-muted-foreground">
+                {rosterQuery.isLoading ? "Loading…" : assignQ.trim() ? "No roster match — add them manually below." : "No active roster available."}
+              </div>
+            ) : (
+              assignChoices.map((c) => (
+                <button
+                  key={c.personId}
+                  type="button"
+                  disabled={assignBusy}
+                  onClick={() =>
+                    c.existing
+                      ? assignExisting(assignBed, c.existing, c.name)
+                      : createSeated(assignBed, c.name, c.personId, c.company)
+                  }
+                  className="flex w-full items-center justify-between gap-2 border-b border-line px-3 py-2 text-left text-[13px] text-ink last:border-b-0 hover:bg-accent disabled:opacity-50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{c.name}</span>
+                    <span className="block truncate text-[11.5px] text-muted-foreground">
+                      {c.company || "—"}
+                      {c.placed ? " · already in a bed (will move)" : ""}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[11.5px] font-semibold text-faint">
+                    {c.weekly > 0 ? `$${Math.round(c.weekly)}/wk` : "no deduction"}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+          {assignQ.trim() && (
+            <button
+              type="button"
+              disabled={assignBusy}
+              onClick={() => createSeated(assignBed, assignQ, "", "")}
+              className="mt-3 w-full rounded-[9px] border border-dashed border-brand/50 bg-accent px-3 py-2 text-[13px] font-semibold text-brand hover:bg-accent/70 disabled:opacity-50"
+            >
+              + Add “{assignQ.trim()}” as a new person (flag for payroll match)
+            </button>
+          )}
+          <div className="mt-2 text-[11px] text-faint">
+            Picking someone already in the system moves them here. New people start at $0 rent until payroll matches them.
+          </div>
         </Modal>
       )}
 

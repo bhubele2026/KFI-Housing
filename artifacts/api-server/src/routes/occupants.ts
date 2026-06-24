@@ -55,7 +55,11 @@ router.get("/occupants", async (_req, res): Promise<void> => {
   // batched query (no N+1 at ~500 occupants); fall back to the occupant's
   // cached chargePerBed when there's no payroll snapshot. (The field is
   // stripped by the response parse until codegen surfaces it on Replit.)
-  const deductions = await getOccupantDeductionsBatch(rows.map((r) => r.id));
+  // Resilient: a payroll-deductions query hiccup must NOT 500 the whole
+  // occupants list — fall back to each row's cached chargePerBed below.
+  const deductions = await getOccupantDeductionsBatch(rows.map((r) => r.id)).catch(
+    () => new Map<string, ReturnType<typeof deductionFromOccupant>>(),
+  );
   const serialized = rows.map((r) => {
     const normalized = normalizeOccupantRow(r);
     const deduction = deductions.get(r.id) ?? deductionFromOccupant(r);

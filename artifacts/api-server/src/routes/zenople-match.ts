@@ -292,4 +292,77 @@ router.get("/zenople/unlinked", async (_req, res): Promise<void> => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Stage 3d/3e — persist a HUMAN decision from the review queue.
+// POST /api/zenople/match/confirm  { occupantId, action, zenoplePersonId? }
+//   action "confirm"        -> zenopleStatus=linked + stamp zenoplePersonId
+//   action "mark_not"       -> zenopleStatus=not_in_zenople (housed, payroll
+//                              doesn't know them — keeps it off the AI queue)
+//   action "reject"         -> zenopleStatus=needs_review (clears a bad suggest,
+//                              leaves it for another look; no id written)
+// Always stamps zenopleCheckedAt. This is the ONLY write path for the link
+// status outside the automatic sync — suggest/ tray never write.
+// Direct-fetch (not specced), matching the rest of this router.
+// ---------------------------------------------------------------------------
+router.post("/zenople/match/confirm", async (req, res): Promise<void> => {
+  try {
+    const body = (req.body ?? {}) as {
+      occupantId?: string;
+      action?: string;
+      zenoplePersonId?: string;
+    };
+    const occupantId = (body.occupantId ?? "").trim();
+    const action = (body.action ?? "confirm").trim();
+    if (!occupantId) {
+      res.status(400).json({ error: "occupantId is required" });
+      return;
+    }
+    const occRows = await db
+      .select({ id: occupantsTable.id })
+      .from(occupantsTable)
+      .where(eq(occupantsTable.id, occupantId))
+      .limit(1);
+    if (occRows.length === 0) {
+      res.status(404).json({ error: `occupant ${occupantId} not found` });
+      return;
+    }
+
+    let status: string;
+    let personId: string | undefined;
+    if (action === "confirm") {
+      const pid = (body.zenoplePersonId ?? "").trim();
+      if (!pid) {
+        res.status(400).json({ error: "zenoplePersonId is required to confirm" });
+        return;
+      }
+      status = "linked";
+      personId = pid;
+    } else if (action === "mark_not") {
+      status = "not_in_zenople";
+    } else if (action === "reject") {
+      status = "needs_review";
+    } else {
+      res.status(400).json({ error: `unknown action "${action}"` });
+      return;
+    }
+
+    const patch: Record<string, unknown> = {
+      zenopleStatus: status,
+      zenopleCheckedAt: new Date(),
+    };
+    if (personId !== undefined) patch.zenoplePersonId = personId;
+
+    await db
+      .update(occupantsTable)
+      .set(patch)
+      .where(eq(occupantsTable.id, occupantId));
+
+    res.json({ occupantId, zenopleStatus: status, zenoplePersonId: personId ?? null });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: message }, "zenople match confirm failed");
+    res.status(500).json({ error: message });
+  }
+});
+
 export default router;

@@ -3146,6 +3146,12 @@ components:
             See `Occupant.shift` for accepted values. Standard
             "Days"/"Nights"/"Overnights" plus any per-customer custom
             shift title.
+        shiftTime:
+          type: string
+          description: |
+            Free-text shift time window (e.g. "6a-2:30p") shown on the
+            Property Board contact roster. Separate from `shift`, which is
+            the named bucket.
         language:
           type: ["string", "null"]
           enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
@@ -3191,6 +3197,12 @@ components:
             See `Occupant.shift` for accepted values. Standard
             "Days"/"Nights"/"Overnights" plus any per-customer custom
             shift title.
+        shiftTime:
+          type: string
+          description: |
+            Free-text shift time window (e.g. "6a-2:30p") shown on the
+            Property Board contact roster. Separate from `shift`, which is
+            the named bucket.
         language:
           type: ["string", "null"]
           enum: ["Bilingual", "English only", "Spanish only", "French only", "Other only", null]
@@ -3393,6 +3405,7 @@ components:
           type: ["integer", "null"]
         make: { type: string }
         model: { type: string }
+        color: { type: string }
         seats: { type: integer }
         merchantUnit: { type: string }
         bookValue: { type: number }

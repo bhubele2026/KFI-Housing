@@ -16,6 +16,22 @@ vi.mock("@/components/layout/main-layout", () => ({
   MainLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
+// PropertyDetail calls useQueryClient() directly (added 2026-05-07); provide a
+// stub so the page mounts without a real QueryClientProvider.
+vi.mock("@tanstack/react-query", async () => {
+  const actual = await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query",
+  );
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      getQueryData: () => undefined,
+      setQueryData: vi.fn(),
+      invalidateQueries: vi.fn(),
+    }),
+  };
+});
+
 vi.mock("@workspace/api-client-react", () => ({
   useListRoomNightLogs: () => ({ data: [] }),
   useListPropertyViolations: () => ({ data: [] }),

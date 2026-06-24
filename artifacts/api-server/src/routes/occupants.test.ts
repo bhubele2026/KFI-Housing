@@ -250,11 +250,24 @@ describe("POST /api/occupants — moveInDate is required at creation (Task #259)
     expect(updatedRows[0]).not.toHaveProperty("chargeSource");
   });
 
-  it("rejects with 400 when moveInDate is an empty string", async () => {
+  it("accepts an empty moveInDate at creation (operator fills it later)", async () => {
+    // The master files only record move-in dates for recent arrivals, so the
+    // import creates established residents date-blank; the Occupants page fills
+    // it via its inline picker. Empty is allowed; we never fabricate a date.
     const res = await fetch(`${baseUrl}/api/occupants`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...validBody(), moveInDate: "" }),
+    });
+    expect(res.status).toBe(201);
+    expect(insertedRows).toHaveLength(1);
+  });
+
+  it("rejects with 400 when moveInDate is a malformed non-empty string", async () => {
+    const res = await fetch(`${baseUrl}/api/occupants`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...validBody(), moveInDate: "06/01/2026" }),
     });
     expect(res.status).toBe(400);
     expect(insertedRows).toHaveLength(0);

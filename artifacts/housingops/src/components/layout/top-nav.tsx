@@ -51,6 +51,9 @@ export function TopNav() {
   // Direct fetch — the endpoint isn't in the generated client.
   const [payrollGapCount, setPayrollGapCount] = useState(0);
   useEffect(() => {
+    // Skip in the test environment: many page tests render the real TopNav and
+    // shouldn't fire a network call (it would leak a post-unmount state update).
+    if (import.meta.env.MODE === "test") return;
     let alive = true;
     const baseUrl = import.meta.env.BASE_URL ?? "/";
     fetch(`${baseUrl}api/zenople/unlinked`)

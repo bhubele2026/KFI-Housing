@@ -4,28 +4,43 @@ import { useTranslation } from "react-i18next";
 import { KfiLogo } from "@/components/kfi-logo";
 import { useData } from "@/context/data-store";
 import { computeHousingAudit } from "@/components/housing-audit-panel";
-import { Settings, ClipboardList, AlertTriangle } from "lucide-react";
+import { Settings, ClipboardList, AlertTriangle, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 /**
  * Professional top navigation bar (navy), the primary "clicker" for the main
- * areas — like a bank's top nav. Sits above the page content; the sidebar
- * stays for the full list. Flat, brand-consistent, active section underlined.
+ * areas — like a bank's top nav. Collapsed (Stage 6) to the five areas a
+ * manager works in: Dashboard · Clients · Properties · Roster · Money.
+ * The money pages (Finance / Economics / Accounting) are grouped under the
+ * single "Money" menu so the nav stops being a wall of tabs. Reconciliation /
+ * Insurance / QBO stay reachable by their routes but off the top level.
  */
-// Top bar is now the ONLY nav (sidebar removed). Keep it to the core
-// areas; Transportation is intentionally hidden for now.
 const PRIMARY = [
   { href: "/dashboard", key: "nav.dashboard", fallback: "Dashboard" },
-  { href: "/customers", key: "nav.customers", fallback: "Customers" },
+  { href: "/customers", key: "nav.customers", fallback: "Clients" },
+  { href: "/properties", key: "nav.properties", fallback: "Properties" },
   { href: "/roster", key: "nav.roster", fallback: "Roster" },
+];
+
+// Grouped under the "Money" menu.
+const MONEY_GROUP = [
+  { href: "/finance", key: "nav.finance", fallback: "Finance" },
   { href: "/economics", key: "nav.economics", fallback: "Economics" },
   { href: "/accounting", key: "nav.accounting", fallback: "Accounting" },
-  { href: "/finance", key: "nav.finance", fallback: "Finance" },
 ];
 
 export function TopNav() {
   const [location] = useLocation();
   const { t } = useTranslation();
   const { properties, leases } = useData();
+  const moneyActive = MONEY_GROUP.some(
+    (m) => location === m.href || location.startsWith(m.href + "/"),
+  );
   // Open data-quality issue count for the Review badge.
   const reviewCount = useMemo(() => {
     const a = computeHousingAudit(properties, leases);
@@ -77,6 +92,34 @@ export function TopNav() {
             </Link>
           );
         })}
+
+        {/* Money menu — groups Finance / Economics / Accounting. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            data-testid="topnav-money"
+            className={
+              "relative inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium outline-none transition-colors " +
+              (moneyActive
+                ? "text-white"
+                : "text-blue-100/70 hover:text-white hover:bg-white/5")
+            }
+          >
+            {t("nav.money", "Money")}
+            <ChevronDown className="h-3.5 w-3.5" />
+            {moneyActive && (
+              <span className="absolute inset-x-3 -bottom-[2px] h-0.5 rounded-full bg-blue-300" />
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {MONEY_GROUP.map((item) => (
+              <DropdownMenuItem key={item.href} asChild>
+                <Link href={item.href} data-testid={`topnav-${item.href.slice(1)}`}>
+                  {t(item.key, item.fallback)}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </nav>
 
       <div className="ml-auto flex items-center gap-3">

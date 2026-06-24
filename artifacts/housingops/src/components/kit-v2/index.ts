@@ -27,3 +27,5 @@ export { Ring, AreaChart, Heatmap, type HeatKind } from "./charts";
 export { Bed, RoomCard } from "./beds";
 export { DataTable, type Column } from "./data-table";
 export { PrintView } from "./print-view";
+
+export { WhyPopover, type WhyRow, type WhyPopoverProps } from "./why-popover";

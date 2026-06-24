@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { Users, Building2, ClipboardList, DollarSign, ChevronRight } from "lucide-react";
+import { Users, Building2, ClipboardList, DollarSign, ChevronRight, Search } from "lucide-react";
 import { KfiLogo } from "@/components/kfi-logo";
+import { CommandBar } from "@/components/command-bar/command-bar";
+import { AddMenu } from "@/components/add-menu/add-menu";
 import { useData } from "@/context/data-store";
 import { cn } from "@/lib/utils";
 
@@ -107,12 +109,23 @@ export function AppShell() {
             </div>
           </Link>
           <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
-            {today}
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("kfi:command-open"))}
+              className="flex items-center gap-1.5 rounded-[9px] border border-line bg-panel px-2.5 py-1.5 text-[12.5px] text-faint transition-colors hover:text-ink"
+              aria-label="Search (Command+K)"
+            >
+              <Search className="h-3.5 w-3.5" /> Search
+              <kbd className="rounded bg-track px-1 py-0.5 text-[10px] font-semibold">⌘K</kbd>
+            </button>
+            <AddMenu />
+            <span className="hidden md:inline">{today}</span>
             <span className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#DCE7FB] text-[13px] font-bold text-brand">
               BH
             </span>
           </div>
         </div>
+        <CommandBar />
 
         {/* four nav boxes */}
         <div className="grid grid-cols-2 gap-4 pb-5 md:grid-cols-4">

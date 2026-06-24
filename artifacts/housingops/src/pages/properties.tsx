@@ -12,6 +12,7 @@ import {
   type ERow,
 } from "@/components/kit-v2";
 import { AddPropertyDialog } from "@/components/add-property/add-property-dialog";
+import { netDisplay } from "@/lib/money-honesty";
 
 const MO = 52 / 12;
 const money = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(Math.round(n)).toLocaleString()}`;
@@ -55,9 +56,14 @@ export default function PropertiesPage() {
       if (b.status === "Occupied") occByProp.set(b.propertyId, (occByProp.get(b.propertyId) ?? 0) + 1);
     }
     const collectedByProp = new Map<string, number>();
+    const activeByProp = new Map<string, number>();
     for (const o of occupants) {
       const oo = o as { propertyId?: string; bedId?: string; status?: string; chargePerBed?: number; deduction?: { weeklyAmount?: number } };
-      if (!oo.propertyId || !oo.bedId || oo.status === "Former") continue;
+      if (!oo.propertyId || oo.status === "Former") continue;
+      // Active occupants in scope (placed or not) — lets money-honesty tell
+      // "empty property" apart from "people housed, deductions still syncing".
+      activeByProp.set(oo.propertyId, (activeByProp.get(oo.propertyId) ?? 0) + 1);
+      if (!oo.bedId) continue;
       const wk = oo.deduction?.weeklyAmount ?? oo.chargePerBed ?? 0;
       collectedByProp.set(oo.propertyId, (collectedByProp.get(oo.propertyId) ?? 0) + wk);
     }
@@ -68,6 +74,9 @@ export default function PropertiesPage() {
         const occ = occByProp.get(p.id) ?? 0;
         const rent = (p as { monthlyRent?: number }).monthlyRent ?? 0;
         const collected = (collectedByProp.get(p.id) ?? 0) * MO;
+        const occupantsCount = activeByProp.get(p.id) ?? 0;
+        // Phase 11 — honest net: only a hard number when collected is real.
+        const netInfo = netDisplay({ collected, rent, occupants: occupantsCount });
         return {
           p,
           total,
@@ -76,6 +85,8 @@ export default function PropertiesPage() {
           rent,
           collected,
           net: collected - rent,
+          netInfo,
+          occupantsCount,
           customerId: (p as { customerId?: string }).customerId ?? "",
           city: (p as { city?: string }).city ?? "",
           state: (p as { state?: string }).state ?? "",
@@ -102,7 +113,9 @@ export default function PropertiesPage() {
     if (clientFilter && r.customerId !== clientFilter) return false;
     if (stateFilter && r.state !== stateFilter) return false;
     if (openOnly && r.open <= 0) return false;
-    if (atRiskOnly && r.net >= 0) return false;
+    // At-risk = a REAL negative net (not a property whose deductions are
+    // still syncing — that's not a loss, just incomplete collections).
+    if (atRiskOnly && !(r.netInfo.kind === "net" && r.netInfo.value < 0)) return false;
     return true;
   });
   const anyFilter = clientFilter || stateFilter || openOnly || atRiskOnly;
@@ -162,7 +175,7 @@ export default function PropertiesPage() {
           Open beds
         </button>
         <button type="button" className={chip(atRiskOnly)} onClick={() => setAtRiskOnly((v) => !v)}>
-          At-risk ($0)
+          Losing money
         </button>
         {anyFilter && (
           <button
@@ -194,11 +207,51 @@ export default function PropertiesPage() {
             </small>
           </button>
 
-          {shown.map(({ p, total, occ, open, rent, collected, net }) => {
+          {shown.map(({ p, total, occ, open, rent, collected, netInfo, occupantsCount }) => {
+            const noBeds = total === 0;
+            // Phase 11 — honest net cell: a real number, a muted "syncing"
+            // state, or (no beds) an actionable empty label. Never a scary −$.
+            const netValue: ReactNode = noBeds ? (
+              <span className="text-xs font-semibold text-muted-foreground">No beds set</span>
+            ) : netInfo.kind === "syncing" ? (
+              <NoNav>
+                <WhyPopover
+                  title="Collecting"
+                  formula="Rent is set; housing deductions are still syncing"
+                  rows={[
+                    { k: "Housed", v: occupantsCount },
+                    { k: "Rent /mo", v: money(rent) },
+                    { k: "Collected /mo", v: money(collected) },
+                  ]}
+                  href={`/properties/${p.id}`}
+                  hrefLabel="Open bed board →"
+                >
+                  <span className="text-warn">Collecting · rent set</span>
+                </WhyPopover>
+              </NoNav>
+            ) : (
+              <NoNav>
+                <WhyPopover
+                  title="Net /mo"
+                  formula="Collected − Rent (monthly)"
+                  rows={[
+                    { k: "Collected /mo", v: money(collected) },
+                    { k: "Rent /mo", v: money(rent) },
+                    { k: "Net", v: money(netInfo.value) },
+                  ]}
+                  href={`/properties/${p.id}`}
+                  hrefLabel="Open bed board →"
+                >
+                  <span className={netInfo.value < 0 ? "text-risk" : "text-ok"}>{money(netInfo.value)}</span>
+                </WhyPopover>
+              </NoNav>
+            );
             const erows: ERow[] = [
               {
                 label: "Beds",
-                value: (
+                value: noBeds ? (
+                  <span className="text-xs font-semibold text-warn">No beds — add a unit</span>
+                ) : (
                   <NoNav>
                     <WhyPopover
                       title="Occupancy"
@@ -216,27 +269,11 @@ export default function PropertiesPage() {
                   </NoNav>
                 ),
               },
-              { label: "Open", value: open, tone: open > 0 ? "risk" : "ink" },
+              { label: "Open", value: noBeds ? "—" : open, tone: open > 0 ? "risk" : "ink" },
               {
                 label: "Net /mo",
-                value: (
-                  <NoNav>
-                    <WhyPopover
-                      title="Net /mo"
-                      formula="Collected − Rent (monthly)"
-                      rows={[
-                        { k: "Collected /mo", v: money(collected) },
-                        { k: "Rent /mo", v: money(rent) },
-                        { k: "Net", v: money(net) },
-                      ]}
-                      href={`/properties/${p.id}`}
-                      hrefLabel="Open bed board →"
-                    >
-                      <span className={net < 0 ? "text-risk" : "text-ok"}>{money(net)}</span>
-                    </WhyPopover>
-                  </NoNav>
-                ),
-                tone: net < 0 ? "risk" : "ok",
+                value: netValue,
+                tone: netInfo.kind === "net" && netInfo.value < 0 ? "risk" : netInfo.kind === "net" ? "ok" : "ink",
               },
             ];
             return (
@@ -291,7 +328,12 @@ export default function PropertiesPage() {
                     style={{
                       left: `${x}%`,
                       top: `${y}%`,
-                      background: r.net < 0 ? "hsl(var(--risk))" : r.open > 0 ? "hsl(var(--warn))" : "hsl(var(--ok))",
+                      background:
+                        r.netInfo.kind === "net" && r.netInfo.value < 0
+                          ? "hsl(var(--risk))"
+                          : r.open > 0
+                            ? "hsl(var(--warn))"
+                            : "hsl(var(--ok))",
                     }}
                   />
                 );

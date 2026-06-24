@@ -10,10 +10,24 @@ import {
 } from "@/data/mockData";
 import { Card, CardHead, StatCard, Ring, WhyPopover, type WhyRow } from "@/components/kit-v2";
 import { NotFoundScreen } from "@/components/not-found-screen";
+import { netDisplay, type NetInput } from "@/lib/money-honesty";
 
 /** Signed money, mockup style: +$1,518 / −$210. */
 function net$(n: number): string {
   return (n < 0 ? "−" : "+") + formatUsd(Math.abs(Math.round(n)));
+}
+
+/**
+ * Phase 11 — money honesty. Renders a real net only when collected is real;
+ * otherwise a muted "Collecting · rent set" so the page never shows a false
+ * red −$ that's really just deductions still syncing.
+ */
+function NetFigure({ input, className = "" }: { input: NetInput; className?: string }) {
+  const nd = netDisplay(input);
+  if (nd.kind === "syncing") {
+    return <span className={`tabular-nums text-muted-foreground ${className}`}>{nd.label}</span>;
+  }
+  return <span className={`tabular-nums ${nd.value < 0 ? "text-risk" : "text-ok"} ${className}`}>{net$(nd.value)}</span>;
 }
 const weeklyOf = (o: { chargePerBed?: number; deduction?: { weeklyAmount?: number } }): number =>
   (o.deduction?.weeklyAmount ?? o.chargePerBed ?? 0);
@@ -56,7 +70,7 @@ export default function CustomerDetail() {
       );
       const rent = Number((p as { monthlyRent?: number }).monthlyRent) || 0;
       const util = sumOtherCostsForProperty(otherCosts, p.id);
-      return { p, total, occ, open, collected, rent, util, net: collected - rent - util };
+      return { p, total, occ, open, collected, rent, util, people: occs.length, net: collected - rent - util };
     };
 
     const perProp = props.map(statFor).sort((a, b) => b.net - a.net);
@@ -112,6 +126,9 @@ export default function CustomerDetail() {
   }
 
   const bedsHref = `/customers/${id}/beds`;
+  // Phase 11 — money honesty for the client-level net.
+  const netInput: NetInput = { collected: view.collected, rent: view.rent, utilities: view.utilities, occupants: view.housed };
+  const netIsSyncing = netDisplay(netInput).kind === "syncing";
   // A KPI card whose value explains itself + links to the rows behind it.
   const KPI = (props: {
     label: string;
@@ -162,7 +179,7 @@ export default function CustomerDetail() {
           <KPI label="Open beds" value={view.open} tone="warn" sub="ready now"
             title="Open beds" formula="Vacant beds that are clean & ready" rows={[{ k: "Open & ready", v: view.open }]} href={bedsHref} />
 
-          <KPI label="Net / mo" value={net$(view.net)} tone={view.net < 0 ? "risk" : "ok"} sub="collected − rent − util"
+          <KPI label="Net / mo" value={<NetFigure input={netInput} />} tone={netIsSyncing ? "warn" : view.net < 0 ? "risk" : "ok"} sub={netIsSyncing ? "rent set · syncing" : "collected − rent − util"}
             title="Net / mo" formula="Collected − Rent we pay − Utilities" rows={[{ k: "Collected", v: formatUsd(view.collected) }, { k: "Rent", v: formatUsd(view.rent) }, { k: "Utilities", v: formatUsd(view.utilities) }]} href="/finance" />
           <KPI label="Collected / wk" value={formatUsd(view.collectedWeekly)} sub="deductions"
             title="Collected / wk" formula="Monthly collected × 12 ÷ 52" rows={[{ k: "Collected / mo", v: formatUsd(view.collected) }]} href="/finance" />
@@ -186,23 +203,27 @@ export default function CustomerDetail() {
               link={<Link href={bedsHref} className="text-[12.5px] font-semibold text-brand">All beds →</Link>}
             />
             <div className="space-y-3">
-              {view.perProp.map(({ p, total, occ, open, net }) => {
+              {view.perProp.map(({ p, total, occ, open, collected, rent, util, people }) => {
                 const pct = total > 0 ? occ / total : 0;
                 return (
                   <div
                     key={p.id}
+                    role="link"
+                    tabIndex={0}
                     onClick={() => navigate(`/properties/${p.id}`)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/properties/${p.id}`); } }}
                     data-testid={`row-customer-property-${p.id}`}
-                    className="flex cursor-pointer items-center gap-3.5 rounded-2xl bg-panel p-3 shadow-[0_1px_2px_rgba(16,24,40,.05),0_4px_14px_rgba(16,24,40,.06)] transition-all hover:-translate-y-0.5"
+                    title={`Open ${p.name}'s bed board`}
+                    className="flex cursor-pointer items-center gap-3.5 rounded-2xl bg-panel p-3 shadow-[0_1px_2px_rgba(16,24,40,.05),0_4px_14px_rgba(16,24,40,.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(16,24,40,.08),0_8px_24px_rgba(16,24,40,.10)]"
                   >
                     <Ring size={44} stroke={5} fraction={pct} color={pct >= 0.85 ? "grad1" : "warn"} centerLabel={`${Math.round(pct * 100)}`} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[15px] font-bold text-ink">{p.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
+                      <div className="truncate text-xs text-muted-foreground tabular-nums">
                         {(p as { city?: string }).city ?? ""} · {total} beds · {open} open
                       </div>
                     </div>
-                    <b className={net < 0 ? "text-risk" : "text-ok"}>{net$(net)}</b>
+                    <NetFigure input={{ collected, rent, utilities: util, occupants: people }} className="font-bold text-[14px]" />
                   </div>
                 );
               })}
@@ -222,7 +243,7 @@ export default function CustomerDetail() {
               <Ring
                 size={116}
                 fraction={view.rent > 0 ? Math.min(1, view.collected / view.rent) : 0}
-                color={view.net < 0 ? "risk" : "ok"}
+                color={netIsSyncing ? "grad1" : view.net < 0 ? "risk" : "ok"}
                 centerLabel={`${view.rent > 0 ? Math.round((view.collected / view.rent) * 100) : 0}%`}
                 centerSub="RECOVERED"
               />
@@ -235,7 +256,7 @@ export default function CustomerDetail() {
                     rows={[{ k: "Collected", v: formatUsd(view.collected) }, { k: "Rent", v: formatUsd(view.rent) }, { k: "Utilities", v: formatUsd(view.utilities) }]}
                     href="/finance"
                   >
-                    <span className={`text-[22px] font-extrabold tabular-nums ${view.net < 0 ? "text-risk" : "text-ok"}`}>{net$(view.net)}</span>
+                    <NetFigure input={netInput} className="text-[22px] font-extrabold" />
                   </WhyPopover>
                 </div>
                 <div className="flex items-center justify-between border-t border-line py-1.5 text-[13.5px]">

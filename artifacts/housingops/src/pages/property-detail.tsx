@@ -37,6 +37,7 @@ import type { LucideIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Lease, Property, Room, Bed, Occupant, Utility, InsuranceCertificate, OtherCost, PropertyViolation, PropertyViolationCategory, PROPERTY_VIOLATION_CATEGORIES, PROPERTY_VIOLATION_CATEGORY_LABELS, UTILITY_TYPES, BILLING_FREQUENCIES, PROPERTY_TYPE_OPTIONS, type PropertyType, toMonthlyCharge, toWeeklyCharge, formatUsd, formatUsdWhole, getRenewalInfo, FURNISHING_CATEGORIES, ALL_FURNISHINGS_COUNT, type FurnishingCategory, RATING_CATEGORIES, EMPTY_RATINGS, computeOverallRating, computeRoomTotals, computePricePerSqft, computeRentPerBed, computeElectricPerBed, computeRentPlusElectricPerBed, getActiveLeasesForProperty, sortLeases, estimateLeaseMonthlyRent, getLatestRoomNightLog, sumActiveRentEstimated, sumOtherCostsForProperty, daysUntil, type Ratings, type RentFrequency, type BillingFrequency } from "@/data/mockData";
 import { formatYMDPretty, isBlankYMD } from "@/lib/lease-dates";
+import { netDisplay } from "@/lib/money-honesty";
 import {
   useListRoomNightLogs,
   useListPropertyViolations,
@@ -1539,6 +1540,15 @@ export default function PropertyDetail() {
   // `hotelRateLeaseEstimates` is memoized above the early returns.
   const totalCost = monthlyLeaseCost + monthlyUtilCost;
   const profit = monthlyRevenue - totalCost;
+  // Phase 11 — money honesty. A property with rent set but $0 collected isn't
+  // losing money — its deductions just haven't synced yet. Show "Collecting"
+  // instead of a scary red −$rent until real recovery lands.
+  const netView = netDisplay({
+    collected: monthlyRevenue,
+    rent: monthlyLeaseCost,
+    utilities: monthlyUtilCost,
+    occupants: occupiedBeds,
+  });
   const roomTotals = computeRoomTotals(propRooms);
   const pricePerSqft = computePricePerSqft(roomTotals.totalMonthlyRent, roomTotals.totalSqft);
   // Difference between the sum of per-room expected rent and the actual lease
@@ -1805,9 +1815,13 @@ export default function PropertyDetail() {
                   <span className="inline-flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="text-muted-foreground">{t("pages.propertyDetail.summaryNetProfit")}</span>
-                    <span className={`font-semibold ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
-                      {profit >= 0 ? "+" : ""}{formatUsdWhole(profit)}
-                    </span>
+                    {netView.kind === "net" ? (
+                      <span className={`font-semibold tabular-nums ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
+                        {profit >= 0 ? "+" : ""}{formatUsdWhole(profit)}
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-muted-foreground">Collecting</span>
+                    )}
                   </span>
                 </div>
               </CardContent>
@@ -1923,7 +1937,25 @@ export default function PropertyDetail() {
             why={{ title: "Rent + electric / bed", formula: "(Monthly rent + monthly electric) ÷ total beds", rows: [{ k: "Monthly rent", v: formatUsdWhole(property.monthlyRent ?? 0) }, { k: "Monthly electric", v: formatUsdWhole(monthlyElectricCost) }, { k: "Total beds", v: propBeds.length }, { k: "Per bed", v: rentPlusElectricPerBed === null ? "—" : formatUsdWhole(rentPlusElectricPerBed) }] }}
             sub={t("pages.propertyDetail.statRentPlusElectricPerBedSub", { count: propBeds.length, cost: formatUsdWhole(monthlyElectricCost) })}
           />
-          <StatCard label={t("pages.propertyDetail.statNetProfit")} value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} why={{ title: "Net profit / mo", formula: "Housing recovery − lease rent − utilities", rows: [{ k: "Recovery / mo", v: formatUsdWhole(monthlyRevenue) }, { k: "− Lease rent", v: formatUsdWhole(monthlyLeaseCost) }, { k: "− Utilities", v: formatUsdWhole(monthlyUtilCost) }, { k: "= Net", v: `${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}` }] }} />
+          <StatCard
+            label={t("pages.propertyDetail.statNetProfit")}
+            value={netView.kind === "net" ? `${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}` : "Collecting"}
+            icon={DollarSign}
+            color={netView.kind === "net" ? (profit >= 0 ? "text-green-600" : "text-destructive") : "text-muted-foreground"}
+            sub={netView.kind === "syncing" ? "rent set · deductions syncing" : undefined}
+            why={{
+              title: "Net profit / mo",
+              formula: netView.kind === "net"
+                ? "Housing recovery − lease rent − utilities"
+                : "Recovery hasn't synced yet — rent is set but $0 collected, so this isn't a real loss.",
+              rows: [
+                { k: "Recovery / mo", v: formatUsdWhole(monthlyRevenue) },
+                { k: "− Lease rent", v: formatUsdWhole(monthlyLeaseCost) },
+                { k: "− Utilities", v: formatUsdWhole(monthlyUtilCost) },
+                { k: netView.kind === "net" ? "= Net" : "= Net (pending)", v: netView.kind === "net" ? `${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}` : "Collecting" },
+              ],
+            }}
+          />
         </div>
           )}
         </div>
@@ -3450,9 +3482,13 @@ export default function PropertyDetail() {
                 </div>
 
                 <Separator />
-                <div className={`flex justify-between text-base font-bold py-2 ${profit >= 0 ? "text-green-600" : "text-destructive"}`}>
+                <div className={`flex justify-between text-base font-bold py-2 ${netView.kind !== "net" ? "text-muted-foreground" : profit >= 0 ? "text-green-600" : "text-destructive"}`}>
                   <span>{t("pages.propertyDetail.netProfitLoss")}</span>
-                  <span>{profit >= 0 ? "+" : ""}{formatUsd(profit)}</span>
+                  {netView.kind === "net" ? (
+                    <span className="tabular-nums">{profit >= 0 ? "+" : ""}{formatUsd(profit)}</span>
+                  ) : (
+                    <span className="text-sm font-medium">Collecting · rent set</span>
+                  )}
                 </div>
               </CardContent>
             </Card>

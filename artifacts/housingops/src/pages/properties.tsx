@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useData } from "@/context/data-store";
 import {
@@ -6,6 +6,7 @@ import {
   EntityCard,
   Seg,
   EmptyState,
+  WhyPopover,
   accentFor,
   initialsOf,
   type ERow,
@@ -15,11 +16,30 @@ import { AddPropertyDialog } from "@/components/add-property/add-property-dialog
 const MO = 52 / 12;
 const money = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(Math.round(n)).toLocaleString()}`;
 
+/** Stop a figure's WhyPopover click from also firing the card's navigate. */
+function NoNav({ children }: { children: ReactNode }) {
+  return (
+    <span onClick={(e) => e.stopPropagation()} role="presentation">
+      {children}
+    </span>
+  );
+}
+
 export default function PropertiesPage() {
   const [, navigate] = useLocation();
-  const { properties, beds, occupants, customers } = useData();
+  // Guard every list read so a briefly-undefined query never crashes the page.
+  const {
+    properties = [],
+    beds = [],
+    occupants = [],
+    customers = [],
+  } = useData();
   const [view, setView] = useState<"table" | "map">("table");
   const [addOpen, setAddOpen] = useState(false);
+  const [clientFilter, setClientFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [openOnly, setOpenOnly] = useState(false);
+  const [atRiskOnly, setAtRiskOnly] = useState(false);
 
   const customerName = useMemo(() => {
     const m = new Map<string, string>();
@@ -53,7 +73,10 @@ export default function PropertiesPage() {
           total,
           occ,
           open: Math.max(0, total - occ),
+          rent,
+          collected,
           net: collected - rent,
+          customerId: (p as { customerId?: string }).customerId ?? "",
           city: (p as { city?: string }).city ?? "",
           state: (p as { state?: string }).state ?? "",
           lat: (p as { lat?: number | null }).lat ?? null,
@@ -63,25 +86,98 @@ export default function PropertiesPage() {
       .sort((a, b) => a.p.name.localeCompare(b.p.name));
   }, [properties, beds, occupants]);
 
-  const withCoords = rows.filter((r) => typeof r.lat === "number" && typeof r.lng === "number");
+  const clientOpts = useMemo(
+    () =>
+      [...new Set(rows.map((r) => r.customerId).filter(Boolean))]
+        .map((id) => ({ id, name: customerName.get(id) || "Unassigned" }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [rows, customerName],
+  );
+  const stateOpts = useMemo(
+    () => [...new Set(rows.map((r) => r.state).filter(Boolean))].sort(),
+    [rows],
+  );
+
+  const shown = rows.filter((r) => {
+    if (clientFilter && r.customerId !== clientFilter) return false;
+    if (stateFilter && r.state !== stateFilter) return false;
+    if (openOnly && r.open <= 0) return false;
+    if (atRiskOnly && r.net >= 0) return false;
+    return true;
+  });
+  const anyFilter = clientFilter || stateFilter || openOnly || atRiskOnly;
+  const withCoords = shown.filter((r) => typeof r.lat === "number" && typeof r.lng === "number");
+
+  const chip = (active: boolean) =>
+    `rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+      active
+        ? "border-brand bg-brand text-white"
+        : "border-line bg-panel text-muted-foreground hover:border-brand/40"
+    }`;
 
   return (
     <section>
-      <div className="mb-4 flex items-end justify-between gap-3">
+      <div className="mb-3 flex items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink">Properties</h1>
           <p className="text-sm text-muted-foreground">
-            {rows.length} locations · click one to open its bed board · or drop a lease to add one
+            {shown.length} of {rows.length} locations · click one to open its bed board · or drop a lease to add one
           </p>
         </div>
         <Seg
           value={view}
-          onChange={(v) => setView(v)}
+          onChange={(v) => setView(v as "table" | "map")}
           options={[
             { value: "table", label: "Grid" },
             { value: "map", label: "Map" },
           ]}
         />
+      </div>
+
+      {/* Filter chips */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <select
+          value={clientFilter}
+          onChange={(e) => setClientFilter(e.target.value)}
+          className="rounded-full border border-line bg-panel px-3 py-1 text-xs font-semibold text-ink"
+          aria-label="Filter by client"
+        >
+          <option value="">All clients</option>
+          {clientOpts.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value)}
+          className="rounded-full border border-line bg-panel px-3 py-1 text-xs font-semibold text-ink"
+          aria-label="Filter by state"
+        >
+          <option value="">All states</option>
+          {stateOpts.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <button type="button" className={chip(openOnly)} onClick={() => setOpenOnly((v) => !v)}>
+          Open beds
+        </button>
+        <button type="button" className={chip(atRiskOnly)} onClick={() => setAtRiskOnly((v) => !v)}>
+          At-risk ($0)
+        </button>
+        {anyFilter && (
+          <button
+            type="button"
+            className="text-xs font-semibold text-brand hover:underline"
+            onClick={() => {
+              setClientFilter("");
+              setStateFilter("");
+              setOpenOnly(false);
+              setAtRiskOnly(false);
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {view === "table" ? (
@@ -98,11 +194,50 @@ export default function PropertiesPage() {
             </small>
           </button>
 
-          {rows.map(({ p, total, occ, open, net }) => {
+          {shown.map(({ p, total, occ, open, rent, collected, net }) => {
             const erows: ERow[] = [
-              { label: "Beds", value: `${occ} / ${total}` },
+              {
+                label: "Beds",
+                value: (
+                  <NoNav>
+                    <WhyPopover
+                      title="Occupancy"
+                      formula="Occupied beds ÷ total beds"
+                      rows={[
+                        { k: "Occupied", v: occ },
+                        { k: "Total beds", v: total },
+                        { k: "Open", v: open },
+                      ]}
+                      href={`/properties/${p.id}`}
+                      hrefLabel="Open bed board →"
+                    >
+                      {occ} / {total}
+                    </WhyPopover>
+                  </NoNav>
+                ),
+              },
               { label: "Open", value: open, tone: open > 0 ? "risk" : "ink" },
-              { label: "Net /mo", value: money(net), tone: net < 0 ? "risk" : "ok" },
+              {
+                label: "Net /mo",
+                value: (
+                  <NoNav>
+                    <WhyPopover
+                      title="Net /mo"
+                      formula="Collected − Rent (monthly)"
+                      rows={[
+                        { k: "Collected /mo", v: money(collected) },
+                        { k: "Rent /mo", v: money(rent) },
+                        { k: "Net", v: money(net) },
+                      ]}
+                      href={`/properties/${p.id}`}
+                      hrefLabel="Open bed board →"
+                    >
+                      <span className={net < 0 ? "text-risk" : "text-ok"}>{money(net)}</span>
+                    </WhyPopover>
+                  </NoNav>
+                ),
+                tone: net < 0 ? "risk" : "ok",
+              },
             ];
             return (
               <EntityCard
@@ -120,17 +255,20 @@ export default function PropertiesPage() {
             );
           })}
 
-          {rows.length === 0 && (
+          {shown.length === 0 && (
             <Card className="sm:col-span-2 lg:col-span-3">
-              <EmptyState title="No active properties" hint="Drop a lease to add one." />
+              <EmptyState
+                title={anyFilter ? "No properties match these filters" : "No active properties"}
+                hint={anyFilter ? "Clear the filters to see them all." : "Drop a lease to add one."}
+              />
             </Card>
           )}
         </div>
       ) : (
         <Card>
           <p className="mb-3 text-sm text-muted-foreground">
-            {withCoords.length} of {rows.length} properties have map coordinates.
-            {withCoords.length < rows.length && " Set lat/lng on a property to plot it here."}
+            {withCoords.length} of {shown.length} properties have map coordinates.
+            {withCoords.length < shown.length && " Set lat/lng on a property to plot it here."}
           </p>
           {withCoords.length === 0 ? (
             <EmptyState title="No mapped locations yet" hint="Properties plot here once they have coordinates." />

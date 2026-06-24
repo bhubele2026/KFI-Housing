@@ -5,6 +5,7 @@ import { KfiLogo } from "@/components/kfi-logo";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import { AddMenu } from "@/components/add-menu/add-menu";
 import { useData } from "@/context/data-store";
+import { useListActiveRoster } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 
 const GRAD = "bg-[linear-gradient(135deg,hsl(var(--grad1)),hsl(var(--grad2)))]";
@@ -73,6 +74,11 @@ export function AppShell() {
   const [location] = useLocation();
   const active = activeKey(location);
   const { customers, properties, occupants, beds } = useData();
+  // Whole active Zenople roster (cast-safe) — the Roster box should reflect
+  // everyone on payroll, not just the few already placed in a bed.
+  const rosterQuery = useListActiveRoster();
+  const rosterTotal =
+    ((rosterQuery.data as unknown as { people?: unknown[] })?.people?.length) ?? 0;
 
   const stats = useMemo(() => {
     const activeProps = properties.filter((p) => (p as { status?: string }).status !== "Inactive");
@@ -131,7 +137,7 @@ export function AppShell() {
         <div className="grid grid-cols-2 gap-4 pb-5 md:grid-cols-4">
           <NavBox navKey="cust" href="/customers" icon={Users} label="Customers" big={stats.customers} sub="active clients" active={active === "cust"} />
           <NavBox navKey="props" href="/properties" icon={Building2} label="Properties" big={stats.properties} sub={stats.propsSub} active={active === "props"} />
-          <NavBox navKey="roster" href="/roster" icon={ClipboardList} label="Roster" big={stats.housed} sub="housed associates" active={active === "roster"} />
+          <NavBox navKey="roster" href="/roster" icon={ClipboardList} label="Roster" big={rosterTotal > 0 ? rosterTotal : stats.housed} sub={rosterTotal > 0 ? `${stats.housed} of ${rosterTotal} placed` : "housed associates"} active={active === "roster"} />
           <NavBox navKey="money" href="/finance" icon={DollarSign} label="Money" big={<span className="text-[22px]">Review</span>} sub="week & month" active={active === "money"} />
         </div>
       </div>

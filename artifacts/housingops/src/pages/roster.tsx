@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
 import {
   Card,
@@ -8,38 +9,55 @@ import {
   Pill,
   Seg,
   EmptyState,
+  WhyPopover,
   type Column,
 } from "@/components/kit-v2";
 
 /**
- * Roster — v2 (KFI_Housing_Redesign_Mockup_v2 #roster).
- * Everyone housed, annotated with their Zenople payroll-link status + weekly
- * rent deducted. Read-only table; bed management lives on the Beds page.
+ * Roster — the FULL active Zenople roster (everyone paid on the last run, ~513),
+ * annotated placed (in a bed) vs unplaced, with their housing deduction. Fixes
+ * the old "89" (which only counted people already in a bed). Two rules: every
+ * number explains itself (WhyPopover); unplaced people route to where you place
+ * them.
  */
-type Filter = "all" | "notpayroll" | "zeroded";
+type Filter = "all" | "placed" | "unplaced" | "zeroded";
 
-function shortProp(name: string): string {
-  return (
-    (name || "").split(/[–\-·]/)[0].trim() || name || "—"
-  );
-}
+type RosterPerson = {
+  personId: string;
+  name: string;
+  company?: string;
+  jobTitle?: string;
+  weeklyDeduction?: number;
+  hasDeduction?: boolean;
+};
 
 type Row = {
-  id: string;
+  personId: string;
   name: string;
-  clientProp: string;
-  shift: string;
+  company: string;
+  occId?: string;
+  placedProp: string;
+  placed: boolean;
   weekly: number;
   pillKind: "ok" | "risk" | "grey";
   pillLabel: string;
 };
 
+function shortProp(name: string): string {
+  return (name || "").split(/[–\-·]/)[0].trim() || name || "—";
+}
+
 export default function RosterPage() {
   const [, navigate] = useLocation();
   const [filter, setFilter] = useState<Filter>("all");
 
-  // Cast-safe: deduction/zenopleStatus are surfaced by the API after codegen;
-  // read them defensively so the page renders the best value available today.
+  // Full Zenople active roster (cast-safe — shape comes from the direct API).
+  const rosterQuery = useListActiveRoster();
+  const people = ((rosterQuery.data as unknown as { people?: RosterPerson[] })
+    ?.people ?? []) as RosterPerson[];
+  const loading = rosterQuery.isLoading;
+
+  // App occupants/properties to resolve who's actually placed in a bed.
   const data = useData() as unknown as {
     occupants: Array<Record<string, unknown>>;
     properties: Array<{ id: string; name: string }>;
@@ -53,49 +71,69 @@ export default function RosterPage() {
     return m;
   }, [properties]);
 
-  const rows: Row[] = useMemo(() => {
-    const out: Row[] = [];
+  // employeeId(personId) -> the occupant record, preferring a bed-placed one.
+  const occByEmp = useMemo(() => {
+    const m = new Map<string, { id: string; propertyId: string; bedId: string }>();
     for (const o of occupants) {
       if ((o.status as string) === "Former") continue;
-      const name = (o.fullName as string) || (o.name as string) || "";
-      if (!name) continue;
-      const company = (o.company as string) || "";
-      const prop = propName.get((o.propertyId as string) || "") || "";
-      const clientProp =
-        company && prop ? `${company} → ${prop}` : company || prop || "—";
-      const ded = o.deduction as { weeklyAmount?: number } | undefined;
-      const weekly = ded?.weeklyAmount ?? (o.chargePerBed as number) ?? 0;
-      const z = (o.zenopleStatus as string) || "";
+      const emp = (o.employeeId as string) || "";
+      if (!emp) continue;
+      const bedId = (o.bedId as string) || "";
+      const prev = m.get(emp);
+      if (!prev || (bedId && !prev.bedId)) {
+        m.set(emp, {
+          id: o.id as string,
+          propertyId: (o.propertyId as string) || "",
+          bedId,
+        });
+      }
+    }
+    return m;
+  }, [occupants]);
+
+  const rows: Row[] = useMemo(() => {
+    const out: Row[] = [];
+    for (const p of people) {
+      const match = occByEmp.get(p.personId);
+      const placed = !!(match && match.bedId);
+      const placedProp = placed ? propName.get(match!.propertyId) || "—" : "";
+      const weekly = Number(p.weeklyDeduction ?? 0) || 0;
       let pillKind: Row["pillKind"];
       let pillLabel: string;
       if (weekly > 0) {
         pillKind = "ok";
-        pillLabel = "Linked";
-      } else if (z === "linked") {
+        pillLabel = "Deducted";
+      } else if (placed) {
         pillKind = "risk";
-        pillLabel = "Not deducted";
+        pillLabel = "No deduction";
       } else {
         pillKind = "grey";
-        pillLabel = "Not in payroll yet";
+        pillLabel = "No deduction";
       }
       out.push({
-        id: o.id as string,
-        name,
-        clientProp,
-        shift: (o.shift as string) || "—",
+        personId: p.personId,
+        name: p.name || "—",
+        company: p.company || "—",
+        occId: match?.id,
+        placedProp,
+        placed,
         weekly,
         pillKind,
         pillLabel,
       });
     }
-    out.sort((a, b) => a.name.localeCompare(b.name));
+    // Placed first, then alphabetical.
+    out.sort((a, b) => Number(b.placed) - Number(a.placed) || a.name.localeCompare(b.name));
     return out;
-  }, [occupants, propName]);
+  }, [people, occByEmp, propName]);
+
+  const placedCount = rows.filter((r) => r.placed).length;
 
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
-        if (filter === "notpayroll") return r.pillLabel === "Not in payroll yet";
+        if (filter === "placed") return r.placed;
+        if (filter === "unplaced") return !r.placed;
         if (filter === "zeroded") return r.weekly === 0;
         return true;
       }),
@@ -109,11 +147,20 @@ export default function RosterPage() {
       cell: (r) => <span className="font-medium text-ink">{r.name}</span>,
     },
     {
-      header: "Client → property",
+      header: "Client",
       align: "left",
-      cell: (r) => <span className="text-muted-foreground">{r.clientProp}</span>,
+      cell: (r) => <span className="text-muted-foreground">{r.company}</span>,
     },
-    { header: "Shift", align: "left", cell: (r) => r.shift },
+    {
+      header: "Placement",
+      align: "left",
+      cell: (r) =>
+        r.placed ? (
+          <span className="text-ink">{r.placedProp}</span>
+        ) : (
+          <span className="font-medium text-warn">Unplaced · assign →</span>
+        ),
+    },
     {
       header: "Weekly rent",
       cell: (r) =>
@@ -134,17 +181,30 @@ export default function RosterPage() {
       <div className="mb-4">
         <h1 className="text-[21px] font-semibold tracking-tight text-ink">Roster</h1>
         <p className="mt-0.5 text-[13px] text-muted-foreground">
-          {rows.length} associates housed · pulled from Zenople (active, paid last payroll)
+          <WhyPopover
+            title="Roster"
+            formula="Active people paid on the last Zenople payroll run"
+            rows={[
+              { k: "On payroll", v: rows.length },
+              { k: "Placed in a bed", v: placedCount },
+              { k: "Unplaced", v: rows.length - placedCount },
+            ]}
+          >
+            <span className="font-semibold text-ink">{rows.length}</span> on payroll ·{" "}
+            {placedCount} placed
+          </WhyPopover>{" "}
+          · pulled from Zenople (active, paid last payroll)
         </p>
       </div>
       <Card>
         <CardHead
-          label="Everyone housed"
+          label="Active roster"
           link={
             <Seg<Filter>
               options={[
                 { value: "all", label: "All" },
-                { value: "notpayroll", label: "Not in payroll" },
+                { value: "placed", label: "Placed" },
+                { value: "unplaced", label: "Unplaced" },
                 { value: "zeroded", label: "$0 deduction" },
               ]}
               value={filter}
@@ -155,9 +215,15 @@ export default function RosterPage() {
         <DataTable
           columns={columns}
           rows={filtered}
-          getKey={(r) => r.id}
-          onRowClick={(r) => navigate(`/occupants/${r.id}`)}
-          empty={<EmptyState title="No associates match this filter" />}
+          getKey={(r) => r.personId}
+          onRowClick={(r) =>
+            r.occId ? navigate(`/occupants/${r.occId}`) : navigate(`/properties`)
+          }
+          empty={
+            <EmptyState
+              title={loading ? "Loading the roster…" : "No associates match this filter"}
+            />
+          }
           testId="roster-table"
         />
       </Card>

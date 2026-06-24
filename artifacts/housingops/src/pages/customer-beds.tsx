@@ -14,13 +14,15 @@ import {
 import { ChevronLeft, BedDouble } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
-import { PropertyBedTable } from "@/components/bed-grid";
+import { BedBoardV2 } from "@/components/bed-board/bed-board-v2";
 
 /**
- * Customer-scoped BED GRID — the "who's in which bed" drill-down off a
- * customer file. One card per property, rendered by the shared
- * <PropertyBedTable> (the same grid the property page uses). Above it, a
- * move-in / move-out scheduler scoped to whichever property you pick.
+ * Customer-scoped CARD BED VIEW (Consolidated Fix §6) — the "who's in which
+ * bed" drill-down off a customer file. Renders ALL of this client's
+ * properties' rooms in the same v2 card board, one <BedBoardV2> per property
+ * (its property-name header doubles as the per-property section header — the
+ * identical board the property page uses). Above it, a move-in / move-out
+ * scheduler scoped to whichever property you pick.
  */
 
 export default function CustomerBeds() {
@@ -139,7 +141,9 @@ export default function CustomerBeds() {
           </Card>
         ) : (
           orderedProperties.map((property) => (
-            <PropertyBedTable key={property.id} property={property} />
+            <section key={property.id} data-testid={`customer-bed-section-${property.id}`}>
+              <BedBoardV2 property={property} />
+            </section>
           ))
         )}
       </div>

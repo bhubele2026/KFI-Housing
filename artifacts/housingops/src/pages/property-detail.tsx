@@ -4,6 +4,13 @@ import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WhyPopover } from "@/components/kit-v2";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { BedBoardV2 } from "@/components/bed-board/bed-board-v2";
 import { BOARD_VIEW_ENABLED } from "@/lib/flags";
 import { LayoutDashboard } from "lucide-react";
@@ -257,28 +264,45 @@ const TYPE_COLORS: Record<string, string> = {
   Other:    "bg-gray-100 text-gray-700",
 };
 
-function StatCard({ label, value, sub, icon: Icon, color = "text-foreground", testId, onClick }: { label: string; value: string | number; sub?: React.ReactNode; icon?: React.ElementType; color?: string; testId?: string; onClick?: () => void }) {
+/** Consolidated Fix §0: the "why" payload for a self-explaining KPI. */
+type StatWhy = {
+  title?: string;
+  formula?: string;
+  rows?: { k: string; v: string | number }[];
+  href?: string;
+};
+
+function StatCard({ label, value, sub, icon: Icon, color = "text-ink", testId, onClick, why }: { label: string; value: string | number; sub?: React.ReactNode; icon?: React.ElementType; color?: string; testId?: string; onClick?: () => void; why?: StatWhy }) {
   const clickable = !!onClick;
+  // When a KPI has a "why", clicking the dotted value opens the popover — keep
+  // that from also firing the card's scroll-to-section onClick.
+  const valueEl = why ? (
+    <span onClick={(e) => e.stopPropagation()}>
+      <WhyPopover title={why.title ?? label} formula={why.formula} rows={why.rows} href={why.href}>
+        {value}
+      </WhyPopover>
+    </span>
+  ) : (
+    value
+  );
   return (
-    <Card
+    <div
       data-testid={testId}
       onClick={onClick}
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
       onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick!(); } } : undefined}
-      className={clickable ? "cursor-pointer transition-all hover:shadow-md hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : undefined}
+      className={`rounded-2xl border border-line bg-panel p-3.5 shadow-sm transition-all ${clickable ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50" : ""}`}
     >
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-1.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide leading-tight">{label}</p>
-            <p className={`text-lg font-bold mt-0.5 leading-tight whitespace-nowrap ${color}`}>{value}</p>
-          </div>
-          {Icon && <div className="p-1 rounded-md bg-muted shrink-0"><Icon className="h-3 w-3 text-muted-foreground" /></div>}
+      <div className="flex items-start justify-between gap-1.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold text-faint uppercase tracking-wide leading-tight">{label}</p>
+          <p className={`text-[22px] font-extrabold mt-1 leading-tight tabular-nums whitespace-nowrap ${color}`}>{valueEl}</p>
         </div>
-        {sub && <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{sub}</p>}
-      </CardContent>
-    </Card>
+        {Icon && <div className="p-1.5 rounded-xl bg-[hsl(var(--chip))] shrink-0"><Icon className="h-3.5 w-3.5 text-brand" /></div>}
+      </div>
+      {sub && <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">{sub}</p>}
+    </div>
   );
 }
 
@@ -1792,8 +1816,8 @@ export default function PropertyDetail() {
 
           {statsExpanded && (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-4">
-          <StatCard label={t("pages.propertyDetail.statTotalBeds")} value={propBeds.length} icon={BedDouble} onClick={() => scrollToSection("section-bed-occupancy")} />
-          <StatCard label={t("pages.propertyDetail.statOccupied")} value={occupiedBeds} icon={Users} color="text-green-600" onClick={() => scrollToSection("section-bed-occupancy")} />
+          <StatCard label={t("pages.propertyDetail.statTotalBeds")} value={propBeds.length} icon={BedDouble} onClick={() => scrollToSection("section-bed-occupancy")} why={{ title: "Total beds", formula: "Occupied + available + needs-cleaning", rows: [{ k: "Occupied", v: occupiedBeds }, { k: "Available", v: availableBeds }, { k: "Needs cleaning", v: bedsNeedsCleaning }, { k: "Vacant (all)", v: vacantBeds }] }} />
+          <StatCard label={t("pages.propertyDetail.statOccupied")} value={occupiedBeds} icon={Users} color="text-green-600" onClick={() => scrollToSection("section-bed-occupancy")} why={{ title: "Occupied beds", formula: "Beds with an active occupant", rows: [{ k: "Occupied", v: occupiedBeds }, { k: "of total", v: propBeds.length }, { k: "Occupancy", v: propBeds.length > 0 ? `${Math.round((occupiedBeds / propBeds.length) * 100)}%` : "—" }] }} />
           <StatCard
             testId="stat-available-beds"
             onClick={() => scrollToSection("section-bed-occupancy")}
@@ -1801,6 +1825,7 @@ export default function PropertyDetail() {
             value={availableBeds}
             icon={BedDouble}
             color={availableBeds > 0 ? "text-amber-500" : "text-muted-foreground"}
+            why={{ title: "Available beds", formula: "Vacant & ready (excludes needs-cleaning)", rows: [{ k: "Available now", v: availableBeds }, { k: "Needs cleaning", v: bedsNeedsCleaning }, { k: "Vacant (all)", v: vacantBeds }] }}
             sub={
               bedsNeedsCleaning > 0 ? (
                 <span
@@ -1815,7 +1840,7 @@ export default function PropertyDetail() {
               )
             }
           />
-          <StatCard label={t("pages.propertyDetail.statMonthlyRevenue")} value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" />
+          <StatCard label={t("pages.propertyDetail.statMonthlyRevenue")} value={formatUsdWhole(monthlyRevenue)} icon={TrendingUp} color="text-green-600" why={{ title: "Housing recovery / mo", formula: "Sum of per-occupant weekly deduction × 4 weeks", rows: [{ k: "Weekly recovery", v: formatUsdWhole(weeklyRecovery) }, { k: "× 4 weeks", v: formatUsdWhole(monthlyRevenue) }, { k: "Occupied beds", v: occupiedBeds }] }} />
           <StatCard
             testId="stat-lease-rent"
             onClick={() => { setActiveTab("leases"); scrollToSection("section-tabs"); }}
@@ -1827,6 +1852,11 @@ export default function PropertyDetail() {
             }
             icon={KeyRound}
             color="text-destructive"
+            why={
+              property.rentFree
+                ? { title: "Other costs / mo", formula: "Recurring non-rent line items (rent-free property)", rows: [{ k: "Other costs", v: formatUsdWhole(propOtherCostsTotal) }] }
+                : { title: "Lease rent / mo", formula: "Active lease rent + hotel-rate estimates", rows: [{ k: "Active leases", v: activeLeases.length }, { k: "Monthly lease cost", v: formatUsdWhole(monthlyLeaseCost) }] }
+            }
             sub={
               <span className="flex flex-col gap-0.5">
                 <span>
@@ -1868,12 +1898,13 @@ export default function PropertyDetail() {
               </span>
             }
           />
-          <StatCard label={t("pages.propertyDetail.statUtilityCost")} value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={t("pages.propertyDetail.statServicesCount", { count: propUtils.length })} onClick={() => { setActiveTab("utilities"); scrollToSection("section-tabs"); }} />
+          <StatCard label={t("pages.propertyDetail.statUtilityCost")} value={formatUsdWhole(monthlyUtilCost)} icon={Zap} color="text-destructive" sub={t("pages.propertyDetail.statServicesCount", { count: propUtils.length })} onClick={() => { setActiveTab("utilities"); scrollToSection("section-tabs"); }} why={{ title: "Utility cost / mo", formula: "Sum of monthly utility services on this property", rows: [{ k: "Services", v: propUtils.length }, { k: "Monthly total", v: formatUsdWhole(monthlyUtilCost) }, { k: "of which electric", v: formatUsdWhole(monthlyElectricCost) }] }} />
           <StatCard
             testId="stat-rent-per-bed"
             label={t("pages.propertyDetail.statRentPerBed")}
             value={rentPerBed === null ? "—" : formatUsdWhole(rentPerBed)}
             icon={DollarSign}
+            why={{ title: "Rent / bed", formula: "Property monthly rent ÷ total beds", rows: [{ k: "Monthly rent", v: formatUsdWhole(property.monthlyRent ?? 0) }, { k: "Total beds", v: propBeds.length }, { k: "Rent / bed", v: rentPerBed === null ? "—" : formatUsdWhole(rentPerBed) }] }}
             sub={t("pages.propertyDetail.statRentPerBedSub", { count: propBeds.length })}
           />
           <StatCard
@@ -1881,6 +1912,7 @@ export default function PropertyDetail() {
             label={t("pages.propertyDetail.statElectricPerBed")}
             value={electricPerBed === null ? "—" : formatUsdWhole(electricPerBed)}
             icon={Zap}
+            why={{ title: "Electric / bed", formula: "Monthly electric cost ÷ total beds", rows: [{ k: "Monthly electric", v: formatUsdWhole(monthlyElectricCost) }, { k: "Total beds", v: propBeds.length }, { k: "Electric / bed", v: electricPerBed === null ? "—" : formatUsdWhole(electricPerBed) }] }}
             sub={t("pages.propertyDetail.statElectricPerBedSub", { count: propBeds.length, cost: formatUsdWhole(monthlyElectricCost) })}
           />
           <StatCard
@@ -1888,9 +1920,10 @@ export default function PropertyDetail() {
             label={t("pages.propertyDetail.statRentPlusElectricPerBed")}
             value={rentPlusElectricPerBed === null ? "—" : formatUsdWhole(rentPlusElectricPerBed)}
             icon={DollarSign}
+            why={{ title: "Rent + electric / bed", formula: "(Monthly rent + monthly electric) ÷ total beds", rows: [{ k: "Monthly rent", v: formatUsdWhole(property.monthlyRent ?? 0) }, { k: "Monthly electric", v: formatUsdWhole(monthlyElectricCost) }, { k: "Total beds", v: propBeds.length }, { k: "Per bed", v: rentPlusElectricPerBed === null ? "—" : formatUsdWhole(rentPlusElectricPerBed) }] }}
             sub={t("pages.propertyDetail.statRentPlusElectricPerBedSub", { count: propBeds.length, cost: formatUsdWhole(monthlyElectricCost) })}
           />
-          <StatCard label={t("pages.propertyDetail.statNetProfit")} value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} />
+          <StatCard label={t("pages.propertyDetail.statNetProfit")} value={`${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}`} icon={DollarSign} color={profit >= 0 ? "text-green-600" : "text-destructive"} why={{ title: "Net profit / mo", formula: "Housing recovery − lease rent − utilities", rows: [{ k: "Recovery / mo", v: formatUsdWhole(monthlyRevenue) }, { k: "− Lease rent", v: formatUsdWhole(monthlyLeaseCost) }, { k: "− Utilities", v: formatUsdWhole(monthlyUtilCost) }, { k: "= Net", v: `${profit >= 0 ? "+" : ""}${formatUsdWhole(profit)}` }] }} />
         </div>
           )}
         </div>
@@ -1903,41 +1936,73 @@ export default function PropertyDetail() {
 
         {/* Tabs */}
         <Tabs id="section-tabs" value={activeTab} onValueChange={setActiveTab} className="space-y-4 scroll-mt-20">
-          <TabsList
-            className={`grid w-full max-w-4xl ${
-              BOARD_VIEW_ENABLED
-                ? propertyUnits.length > 0 ? "grid-cols-10" : "grid-cols-9"
-                : propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"
-            }`}
-          >
+          {/* Consolidated Fix §2: the bed board is the default view; the other
+              eight detail panels collapse behind ONE compact "Details ▾" menu so
+              the page leads with beds, not a 10-tab strip. The menu button shows
+              the active panel's name + a count badge for violations; every item
+              keeps its original data-testid so deep-links + tests still resolve. */}
+          <div className="flex flex-wrap items-center gap-2">
             {BOARD_VIEW_ENABLED && (
-              <TabsTrigger value="board" data-testid="tab-trigger-board"><LayoutDashboard className="h-3.5 w-3.5 mr-1.5" />Board</TabsTrigger>
+              <TabsList className="bg-transparent p-0">
+                <TabsTrigger value="board" data-testid="tab-trigger-board" className="rounded-xl"><LayoutDashboard className="h-3.5 w-3.5 mr-1.5" />Board</TabsTrigger>
+              </TabsList>
             )}
-            <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.info")}</TabsTrigger>
-            <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.leases")}</TabsTrigger>
-            {propertyUnits.length > 0 && (
-              <TabsTrigger value="units" data-testid="tab-trigger-units">
-                <Building2 className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.units")}
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="beds"><BedDouble className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.beds")}</TabsTrigger>
-            <TabsTrigger value="furnishings"><Sofa className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.furnishings")}</TabsTrigger>
-            <TabsTrigger value="utilities"><Zap className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.utilities")}</TabsTrigger>
-            <TabsTrigger value="insurance" data-testid="tab-trigger-insurance"><ShieldCheck className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.insurance")}</TabsTrigger>
-            <TabsTrigger value="violations" data-testid="tab-trigger-violations">
-              <ShieldAlert className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.violations")}
-              {propertyViolations.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1.5 h-4 px-1 text-[10px] tabular-nums"
-                  data-testid="badge-violations-count"
-                >
-                  {propertyViolations.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="finance"><DollarSign className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.finance")}</TabsTrigger>
-          </TabsList>
+            {(() => {
+              const detailTabs: { value: string; icon: LucideIcon; label: string }[] = [
+                { value: "overview", icon: Home, label: t("pages.propertyDetail.tabs.info") },
+                { value: "leases", icon: KeyRound, label: t("pages.propertyDetail.tabs.leases") },
+                ...(propertyUnits.length > 0 ? [{ value: "units", icon: Building2, label: t("pages.propertyDetail.tabs.units") }] : []),
+                { value: "beds", icon: BedDouble, label: t("pages.propertyDetail.tabs.beds") },
+                { value: "furnishings", icon: Sofa, label: t("pages.propertyDetail.tabs.furnishings") },
+                { value: "utilities", icon: Zap, label: t("pages.propertyDetail.tabs.utilities") },
+                { value: "insurance", icon: ShieldCheck, label: t("pages.propertyDetail.tabs.insurance") },
+                { value: "violations", icon: ShieldAlert, label: t("pages.propertyDetail.tabs.violations") },
+                { value: "finance", icon: DollarSign, label: t("pages.propertyDetail.tabs.finance") },
+              ];
+              const active = detailTabs.find((d) => d.value === activeTab);
+              const ActiveIcon = active?.icon ?? LayoutDashboard;
+              return (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      data-testid="property-details-menu"
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[13px] font-semibold transition-colors ${active ? "border-brand bg-brand text-brand-foreground" : "border-line bg-panel text-ink hover:border-brand/40"}`}
+                    >
+                      <ActiveIcon className="h-3.5 w-3.5" />
+                      {active ? active.label : "Details"}
+                      {!active && propertyViolations.length > 0 && (
+                        <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white tabular-nums">{propertyViolations.length}</span>
+                      )}
+                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                    {detailTabs.map((item) => (
+                      <DropdownMenuItem
+                        key={item.value}
+                        data-testid={`tab-trigger-${item.value}`}
+                        onSelect={() => setActiveTab(item.value)}
+                        className={`gap-2 ${activeTab === item.value ? "bg-accent" : ""}`}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        <span className="flex-1">{item.label}</span>
+                        {item.value === "violations" && propertyViolations.length > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="h-4 px-1 text-[10px] tabular-nums"
+                            data-testid="badge-violations-count"
+                          >
+                            {propertyViolations.length}
+                          </Badge>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            })()}
+          </div>
 
           {/* ── OVERVIEW TAB ── */}
           {BOARD_VIEW_ENABLED && (

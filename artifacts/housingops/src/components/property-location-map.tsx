@@ -720,11 +720,11 @@ export function PropertyLocationMap({
           // branch out of the previous iframe implementation; the
           // contract carried forward into the JS SDK rewrite.
           <div
-            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-2"
+            className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-2"
             data-testid="property-location-map-error"
             data-error-code={effectiveErrorCode ?? ""}
           >
-            <div className="flex items-start gap-2 text-xs text-destructive">
+            <div className="flex items-start gap-2 text-xs text-amber-700">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <span data-testid="property-location-map-error-text">
                 {errorMessage}
@@ -794,10 +794,10 @@ export function PropertyLocationMap({
           </div>
         ) : isConfigError ? (
           <div
-            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3"
+            className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-3"
             data-testid="property-location-map-config-error"
           >
-            <div className="flex items-start gap-2 text-xs text-destructive">
+            <div className="flex items-start gap-2 text-xs text-amber-700">
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               <span data-testid="property-location-map-config-error-text">
                 Couldn't load the map config from{" "}

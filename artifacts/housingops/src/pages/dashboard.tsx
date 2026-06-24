@@ -53,6 +53,20 @@ export default function Dashboard() {
     retry: false,
     staleTime: 300_000,
   });
+  const attention = useQuery({
+    queryKey: ["dash-attention"],
+    queryFn: async () => {
+      const base = import.meta.env.BASE_URL ?? "/";
+      const r = await fetch(`${base}api/attention`);
+      if (!r.ok) throw new Error(String(r.status));
+      return (await r.json()) as {
+        rows: { kind: string; label: string; dollarsAtRisk: number; fixHref: string }[];
+        totalAtRisk: number;
+      };
+    },
+    retry: false,
+    staleTime: 300_000,
+  });
 
   const weeklyByOcc = useMemo(() => {
     const m = new Map<string, number>();
@@ -70,6 +84,26 @@ export default function Dashboard() {
   );
   const atRisk = placed.filter((o) => !((weeklyByOcc.get(o.id) ?? Number((o as { chargePerBed?: number }).chargePerBed) ?? 0) > 0)).length;
   const vacantReady = beds.filter((b) => (b as { status?: string }).status === "Vacant" && (b as { cleaningStatus?: string }).cleaningStatus === "ready").length;
+
+  // #30 empty-bed nudge — weekly cost of open-ready beds (rent / beds-in-prop,
+  // monthly→weekly). Properties with $0 rent contribute nothing (no guessing).
+  const idleWeekly = useMemo(() => {
+    const bedsPerProp = new Map<string, number>();
+    for (const b of beds) {
+      const pid = (b as { propertyId?: string }).propertyId;
+      if (pid) bedsPerProp.set(pid, (bedsPerProp.get(pid) ?? 0) + 1);
+    }
+    let w = 0;
+    for (const b of beds) {
+      if ((b as { status?: string }).status !== "Vacant" || (b as { cleaningStatus?: string }).cleaningStatus !== "ready") continue;
+      const pid = (b as { propertyId?: string }).propertyId;
+      const p = properties.find((pp) => pp.id === pid) as { monthlyRent?: number } | undefined;
+      const rent = Number(p?.monthlyRent) || 0;
+      const tb = (pid && bedsPerProp.get(pid)) || 1;
+      if (rent) w += (rent / tb) * (12 / 52);
+    }
+    return w;
+  }, [beds, properties]);
 
   const totalBeds = summary.totalBeds || beds.length;
   const occupied = summary.totalOccupied || placed.length;
@@ -135,6 +169,38 @@ export default function Dashboard() {
   return (
     <MainLayout>
       <div className="mx-auto max-w-[1180px] px-6 pb-10 pt-2">
+        {/* needs attention — refinement #1 */}
+        {(() => {
+          const aRows = [...(attention.data?.rows ?? [])].sort((a, b) => (Number(b.dollarsAtRisk) || 0) - (Number(a.dollarsAtRisk) || 0));
+          const aTotal = Number(attention.data?.totalAtRisk) || 0;
+          if (attention.isLoading || (aRows.length === 0 && vacantReady === 0)) return null;
+          return (
+            <Card className="mb-4 border-l-4 border-l-risk">
+              <CardHead
+                label={<span className="text-risk">Needs attention{aTotal > 0 ? ` — ${formatUsdWhole(aTotal)}/mo at risk` : ""}</span>}
+                link={<span className="cursor-pointer text-[12.5px] font-semibold text-brand" onClick={() => navigate("/attention")}>See all →</span>}
+              />
+              {aRows.slice(0, 4).map((r, i) => (
+                <div key={`${r.kind}-${i}`} className="flex items-center justify-between border-t border-line py-2 text-[13.5px] first:border-t-0">
+                  <span className="text-ink">{r.label}</span>
+                  <span className="flex items-center gap-3">
+                    <span className="font-bold tabular-nums text-risk">{formatUsdWhole(Number(r.dollarsAtRisk) || 0)}</span>
+                    <span className="cursor-pointer font-semibold text-brand" onClick={() => navigate(r.fixHref || "/attention")}>Fix →</span>
+                  </span>
+                </div>
+              ))}
+              {vacantReady > 0 && (
+                <div className="mt-2 border-t border-line pt-2 text-[12.5px] text-muted-foreground">
+                  {vacantReady} open bed{vacantReady === 1 ? "" : "s"} ready
+                  {idleWeekly > 0 ? <> — about <span className="font-bold tabular-nums text-ink">{formatUsdWhole(idleWeekly)}/wk</span> sitting idle</> : <> (set property rent to see the cost)</>}
+                  {" · "}
+                  <span className="cursor-pointer font-semibold text-brand" onClick={() => navigate("/properties")}>fill them →</span>
+                </div>
+              )}
+            </Card>
+          );
+        })()}
+
         {/* row 1 */}
         <div className="mb-4 grid gap-4 md:grid-cols-3">
           <Card>

@@ -42,6 +42,7 @@ const Customers = lazyWithReload(() => import("@/pages/customers"));
 const CustomerDetail = lazyWithReload(() => import("@/pages/customer-detail"));
 const CustomerBeds = lazyWithReload(() => import("@/pages/customer-beds"));
 const Properties = lazyWithReload(() => import("@/pages/properties"));
+const Attention = lazyWithReload(() => import("@/pages/attention"));
 const Review = lazyWithReload(() => import("@/pages/review"));
 const PropertyDetail = lazyWithReload(() => import("@/pages/property-detail"));
 const Leases = lazyWithReload(() => import("@/pages/leases"));
@@ -155,6 +156,7 @@ function AppRoutes() {
         <Route path="/customers/:id/beds" component={CustomerBeds} />
         <Route path="/customers/:id" component={CustomerDetail} />
         <Route path="/properties" component={Properties} />
+        <Route path="/attention" component={Attention} />
         <Route path="/properties/:id" component={PropertyDetail} />
         <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
         <Route path="/leases" component={Leases} />

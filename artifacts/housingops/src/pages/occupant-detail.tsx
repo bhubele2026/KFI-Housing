@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyStateRow } from "@/components/empty-state";
 import { DeductionBadge } from "@/components/kit";
+import { OccupantTimeline } from "@/components/timeline/occupant-timeline";
 import { SkeletonRows } from "@/components/skeleton-rows";
 import { shortPropertyName } from "@/lib/property-name";
 import { InlineEdit } from "@/pages/property-detail";
@@ -551,6 +552,8 @@ export default function OccupantDetail() {
           </Table>
         </CardContent>
       </Card>
+
+      <OccupantTimeline occupantId={occupantId} />
     </MainLayout>
   );
 }

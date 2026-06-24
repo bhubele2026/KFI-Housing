@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MoneyTile, type MoneyStat } from "@/components/kit";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -248,6 +249,21 @@ export default function CustomerDetail() {
       occupiedBeds += s.occupiedBeds;
       monthlyRevenue += s.monthlyRevenue;
     }
+    // Stage 4 — split the customer's monthly charge into collected (payroll-
+    // linked) vs at-risk (unlinked / $0 deduction). Reads the new deduction
+    // object + zenopleStatus cast-safe so it works before/after Replit codegen.
+    const propIds = new Set(propertyStats.map((s) => s.property.id));
+    let collectedMonthly = 0;
+    let atRiskMonthly = 0;
+    for (const o of occupants) {
+      if (o.status !== "Active" || !o.propertyId || !propIds.has(o.propertyId)) continue;
+      const monthly = toMonthlyCharge(o.chargePerBed, o.billingFrequency ?? "Monthly");
+      const weekly = Number((o as { deduction?: { weeklyAmount?: number } }).deduction?.weeklyAmount) || 0;
+      const zStatus = (o as { zenopleStatus?: string }).zenopleStatus;
+      const linked = zStatus === "linked" || weekly > 0;
+      if (linked) collectedMonthly += monthly;
+      else atRiskMonthly += monthly;
+    }
     const occupancyPct = totalBeds > 0 ? (occupiedBeds / totalBeds) * 100 : 0;
     return {
       propertyCount: propertyStats.length,
@@ -255,8 +271,10 @@ export default function CustomerDetail() {
       occupiedBeds,
       occupancyPct,
       monthlyRevenue,
+      collectedMonthly: Math.round(collectedMonthly),
+      atRiskMonthly: Math.round(atRiskMonthly),
     };
-  }, [propertyStats]);
+  }, [propertyStats, occupants]);
 
   if (isLoading) {
     return (
@@ -418,6 +436,26 @@ export default function CustomerDetail() {
             testId="stat-revenue"
           />
         </div>
+
+        {/* Stage 4 — collected (payroll-linked) vs at-risk (unlinked / $0) split */}
+        {totals.monthlyRevenue > 0 && (
+          <MoneyTile
+            title="Recovery this customer"
+            testId="customer-recovery-split"
+            stats={
+              [
+                { label: "Monthly charge", amount: totals.monthlyRevenue, tone: "neutral" },
+                { label: "Collected (linked)", amount: totals.collectedMonthly, tone: "ok" },
+                {
+                  label: "At-risk (not in payroll)",
+                  amount: totals.atRiskMonthly,
+                  tone: "risk",
+                  emphasize: totals.atRiskMonthly > 0,
+                },
+              ] satisfies MoneyStat[]
+            }
+          />
+        )}
 
         {/* Customer-paid monthly rent (LOI / corporate-responsibility leases) */}
         <Card data-testid="card-customer-paid-rent">

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { PropertyNameCell } from "@/components/property-name-cell";
 import { formatPropertyName } from "@/lib/property-name";
 import { useData } from "@/context/data-store";
+import { MoneyTile, type MoneyStat } from "@/components/kit";
 import { ALL_CUSTOMERS, useCustomerScope } from "@/context/customer-scope";
 import { sumActiveRentBreakdown, toMonthlyCharge, formatUsd, type Lease, type RoomNightLog } from "@/data/mockData";
 import { useListRoomNightLogs } from "@workspace/api-client-react";
@@ -648,6 +649,22 @@ export default function Finance() {
             </span>
           </div>
         )}
+
+        {/* Stage 4 — portfolio money truth: Rent we pay · Collected · Utilities ·
+            Net spread (red when negative). Reuses the page's own totals so it
+            always agrees with the per-property table below. */}
+        <MoneyTile
+          title={activeCustomerName ? `Money — ${activeCustomerName}` : "Money — whole portfolio"}
+          testId="finance-money-tile"
+          stats={
+            [
+              { label: "Rent we pay", amount: Math.round(totals.leaseCost), tone: "neutral" },
+              { label: "Collected", amount: Math.round(totals.revenue), tone: "ok" },
+              { label: "Utilities", amount: Math.round(totals.utilCost), tone: "neutral" },
+              { label: "Net spread", amount: Math.round(totals.profit), tone: "auto", emphasize: true },
+            ] satisfies MoneyStat[]
+          }
+        />
 
         {/* Extended portfolio KPI cards. Positioned right under the
             page header so operators get the headline metrics at a

@@ -110,6 +110,21 @@ export default function Dashboard() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // "Not in payroll yet" — housed people whose rent isn't being deducted
+  // (Stage 3e tray; direct-fetch, not in the generated client). Highest-value
+  // leak: we pay rent and recover nothing. "—" if the endpoint is unavailable.
+  const unlinked = useQuery({
+    queryKey: ["dash-unlinked"],
+    queryFn: async () => {
+      const baseUrl = import.meta.env.BASE_URL ?? "/";
+      const r = await fetch(`${baseUrl}api/zenople/unlinked`);
+      if (!r.ok) throw new Error(String(r.status));
+      return (await r.json()) as { count: number; totalMonthlyAtRisk: number };
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const renewals = useMemo(
     () =>
       leases
@@ -139,6 +154,44 @@ export default function Dashboard() {
     }
     return names;
   }, [deductions, occupants, effectivePeriod]);
+
+  // Weekly amount actually deducted per occupant for the period (for leak math).
+  const weeklyByOcc = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of deductions) {
+      if (effectivePeriod && (d.payWeekEndDate || "").slice(0, 7) !== effectivePeriod) continue;
+      if (!d.occupantId) continue;
+      const w = Number((d as { weeklyAmount?: number }).weeklyAmount) || 0;
+      const prev = m.get(d.occupantId) ?? 0;
+      if (w > prev) m.set(d.occupantId, w);
+    }
+    return m;
+  }, [deductions, effectivePeriod]);
+
+  // Stage 4 — money leaks, each one click into the records that fix it.
+  const leaks = useMemo(() => {
+    const placed = occupants.filter((o) => o.bedId && o.status === "Active");
+    const occByProp = new Map<string, number>();
+    for (const o of placed) {
+      if (o.propertyId) occByProp.set(o.propertyId, (occByProp.get(o.propertyId) ?? 0) + 1);
+    }
+    const weeklyOf = (o: { id: string; chargePerBed?: number }) =>
+      weeklyByOcc.get(o.id) ?? Number((o as { chargePerBed?: number }).chargePerBed) ?? 0;
+
+    const zeroCharge = placed.filter((o) => !(weeklyOf(o) > 0));
+    const activeProps = properties.filter((p) => p.status !== "Inactive");
+    const rentNoOccupants = activeProps.filter(
+      (p) => Number((p as { monthlyRent?: number }).monthlyRent) > 0 && (occByProp.get(p.id) ?? 0) === 0,
+    );
+    const occupantsNoRent = activeProps.filter(
+      (p) => (occByProp.get(p.id) ?? 0) > 0 && !(Number((p as { monthlyRent?: number }).monthlyRent) > 0),
+    );
+    const moveOutStillCharged = occupants.filter((o) => {
+      const former = o.status === "Former" || Boolean((o as { moveOutDate?: string }).moveOutDate);
+      return former && (weeklyByOcc.get(o.id) ?? 0) > 0;
+    });
+    return { zeroCharge, rentNoOccupants, occupantsNoRent, moveOutStillCharged };
+  }, [occupants, properties, weeklyByOcc]);
 
   const gapPositive = summary.totalRecoveryGap > 0;
   // All properties this period (recovered or not), worst gap first — the card
@@ -196,6 +249,54 @@ export default function Dashboard() {
             </div>
           </Link>
         )}
+
+        {/* Not in payroll yet — the highest-value leak: housed people whose rent
+            isn't being deducted at all. (Stage 3e tray.) */}
+        {unlinked.data && unlinked.data.count > 0 && (
+          <Link href="/zenople-review">
+            <div className="flex items-center justify-between gap-2 rounded-md border border-risk/40 bg-risk-soft px-4 py-2.5 text-sm hover:brightness-95">
+              <span className="flex items-center gap-2 text-risk">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  <b>{unlinked.data.count}</b> housed but not in payroll —{" "}
+                  <b className="tabular-nums">{formatUsdWhole(unlinked.data.totalMonthlyAtRisk)}/mo</b> at risk. Confirm them in Zenople.
+                </span>
+              </span>
+              <ArrowRight className="h-4 w-4 text-risk shrink-0" />
+            </div>
+          </Link>
+        )}
+
+        {/* Money leaks — each one clicks into the records that fix it. */}
+        {(() => {
+          const items: { key: string; n: number; label: string; to: string }[] = [
+            { key: "zero", n: leaks.zeroCharge.length, label: "occupied bed(s) with a $0 weekly charge", to: "/occupants" },
+            { key: "rentNoOcc", n: leaks.rentNoOccupants.length, label: "propert(ies) we pay rent on with nobody housed", to: "/economics" },
+            { key: "occNoRent", n: leaks.occupantsNoRent.length, label: "propert(ies) with people but $0 rent recorded", to: "/leases" },
+            { key: "moveOut", n: leaks.moveOutStillCharged.length, label: "moved-out associate(s) still being charged", to: "/occupants" },
+          ].filter((x) => x.n > 0);
+          if (items.length === 0) return null;
+          return (
+            <Card className="overflow-hidden border-line">
+              <div className="px-4 py-3 border-b border-line">
+                <h2 className="font-semibold text-sm flex items-center gap-2 text-ink">
+                  <AlertTriangle className="h-4 w-4 text-warn" /> Money leaks
+                </h2>
+              </div>
+              <CardContent className="p-2 divide-y divide-line">
+                {items.map((it) => (
+                  <Link key={it.key} href={it.to} className="flex items-center justify-between gap-2 px-2 py-2 text-sm hover:bg-surface rounded">
+                    <span className="flex items-center gap-2">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-risk-soft px-1.5 text-xs font-bold tabular-nums text-risk">{it.n}</span>
+                      <span className="text-ink">{it.label}</span>
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         <div className="grid lg:grid-cols-3 gap-5">
           {/* Properties — all of them, worst gap first */}

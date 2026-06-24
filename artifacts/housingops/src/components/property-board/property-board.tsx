@@ -3,7 +3,7 @@ import type { Property } from "@/data/mockData";
 import { useData } from "@/context/data-store";
 import { shortPropertyName } from "@/lib/property-name";
 import { PropertyBedTable } from "@/components/bed-grid";
-import { StatusDot, MoneyTile, buildPropertyMoneyStats } from "@/components/kit";
+import { StatusDot, MoneyTile, type MoneyStat } from "@/components/kit";
 
 const WEEKS_PER_MONTH = 52 / 12;
 
@@ -28,36 +28,60 @@ function Stat({ label, value }: { label: string; value: number }) {
 export function PropertyBoard({ property }: { property: Property }) {
   const { beds, occupants, customers } = useData();
 
-  const { capacity, occupied, available, collectedMonthly } = useMemo(() => {
-    const propBeds = beds.filter((b) => b.propertyId === property.id);
-    const occ = propBeds.filter((b) => b.status === "Occupied").length;
-    const avail = propBeds.filter(
-      (b) => b.status === "Vacant" && (b as { cleaningStatus?: string }).cleaningStatus === "ready",
-    ).length;
-    // Collected = weekly rent deducted from the people actually placed here,
-    // monthlized. Real where the charge is in hand; Stage 4 replaces this with
-    // payroll-verified collection vs at-risk. Never fabricated.
-    const weekly = occupants
-      .filter((o) => o.propertyId === property.id && o.status === "Active" && o.bedId)
-      .reduce((sum, o) => sum + (Number((o as { chargePerBed?: number }).chargePerBed) || 0), 0);
-    return {
-      capacity: propBeds.length,
-      occupied: occ,
-      available: avail,
-      collectedMonthly: weekly * WEEKS_PER_MONTH,
-    };
-  }, [beds, occupants, property.id]);
+  const monthlyRent = Number((property as { monthlyRent?: number }).monthlyRent) || 0;
+
+  const { capacity, occupied, available, collectedMonthly, atRiskMonthly, atRiskBeds } =
+    useMemo(() => {
+      const propBeds = beds.filter((b) => b.propertyId === property.id);
+      const cap = propBeds.length;
+      const occ = propBeds.filter((b) => b.status === "Occupied").length;
+      const avail = propBeds.filter(
+        (b) => b.status === "Vacant" && (b as { cleaningStatus?: string }).cleaningStatus === "ready",
+      ).length;
+      const rentPerBed = cap > 0 ? monthlyRent / cap : 0;
+
+      // Stage 4: split the people placed here into collected-from-linked vs
+      // at-risk (unlinked or $0 deduction). Reads the new deduction object
+      // cast-safe, falling back to the manual charge, so it works before and
+      // after Replit codegen. Never fabricated.
+      let collectedWeekly = 0;
+      let riskBeds = 0;
+      for (const o of occupants) {
+        if (o.propertyId !== property.id || o.status !== "Active" || !o.bedId) continue;
+        const ded = (o as { deduction?: { weeklyAmount?: number } }).deduction;
+        const weekly =
+          Number(ded?.weeklyAmount ?? (o as { chargePerBed?: number }).chargePerBed) || 0;
+        const zStatus = (o as { zenopleStatus?: string }).zenopleStatus;
+        const recovered = weekly > 0 && (zStatus === "linked" || zStatus == null);
+        if (recovered) collectedWeekly += weekly;
+        else riskBeds += 1;
+      }
+      return {
+        capacity: cap,
+        occupied: occ,
+        available: avail,
+        collectedMonthly: collectedWeekly * WEEKS_PER_MONTH,
+        atRiskMonthly: riskBeds * rentPerBed,
+        atRiskBeds: riskBeds,
+      };
+    }, [beds, occupants, property.id, monthlyRent]);
 
   const client = customers.find((c) => c.id === property.customerId);
   const isActive = property.status === "Active";
   const address = (property as { address?: string }).address ?? "";
-  const monthlyRent = Number((property as { monthlyRent?: number }).monthlyRent) || 0;
 
-  const moneyStats = buildPropertyMoneyStats({
-    rentWePay: monthlyRent,
-    collected: collectedMonthly,
-    utilities: 0,
-  });
+  const netSpread = collectedMonthly - monthlyRent; // utilities land in the Money view
+  const moneyStats: MoneyStat[] = [
+    { label: "Rent we pay", amount: monthlyRent, tone: "neutral" },
+    { label: "Collected", amount: collectedMonthly, tone: "ok" },
+    {
+      label: "At-risk",
+      amount: atRiskMonthly,
+      tone: "risk",
+      hint: atRiskBeds > 0 ? `${atRiskBeds} bed${atRiskBeds === 1 ? "" : "s"} unrecovered` : undefined,
+    },
+    { label: "Net spread", amount: netSpread, tone: "auto", emphasize: true },
+  ];
 
   return (
     <div className="space-y-4">
@@ -92,8 +116,9 @@ export function PropertyBoard({ property }: { property: Property }) {
       {/* Money truth */}
       <MoneyTile title="This property" stats={moneyStats} />
       <p className="-mt-2 px-1 text-[11px] text-muted-foreground">
-        Collected is monthlized from weekly charges on placed associates;
-        utilities and payroll-verified collection land in the Money view.
+        Collected = monthlized weekly rent deducted from payroll-linked associates.
+        At-risk = the rent we pay for beds whose occupant isn&apos;t linked or has a
+        $0 deduction. Utilities land in the Money view.
       </p>
 
       {/* Bed grid — the heart of the tab. PropertyBedTable is self-contained

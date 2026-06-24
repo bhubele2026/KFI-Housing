@@ -4,7 +4,7 @@ import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PropertyBoard } from "@/components/property-board/property-board";
+import { BedBoardV2 } from "@/components/bed-board/bed-board-v2";
 import { BOARD_VIEW_ENABLED } from "@/lib/flags";
 import { LayoutDashboard } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1942,7 +1942,7 @@ export default function PropertyDetail() {
           {/* ── OVERVIEW TAB ── */}
           {BOARD_VIEW_ENABLED && (
             <TabsContent value="board" className="space-y-4">
-              <PropertyBoard property={property} />
+              <BedBoardV2 property={property} />
             </TabsContent>
           )}
 

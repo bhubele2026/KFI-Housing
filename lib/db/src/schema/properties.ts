@@ -106,10 +106,6 @@ export const propertiesTable = pgTable("properties", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),
-  // Geocoordinates for the Properties map toggle (overhaul refinement #17).
-  // Null until geocoded.
-  lat: doublePrecision("lat"),
-  lng: doublePrecision("lng"),
 });
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;

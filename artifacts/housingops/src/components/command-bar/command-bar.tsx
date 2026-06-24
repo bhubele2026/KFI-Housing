@@ -50,6 +50,7 @@ export function CommandBar() {
       const t = setTimeout(() => inputRef.current?.focus(), 20);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [open]);
 
   // Debounced search.

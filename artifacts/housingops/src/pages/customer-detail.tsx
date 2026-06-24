@@ -61,7 +61,7 @@ export default function CustomerDetail() {
     const occupied = perProp.reduce((s, x) => s + x.occ, 0);
     const open = perProp.reduce((s, x) => s + x.open, 0);
     const housed = occupants.filter(
-      (o) => propIds.has(o.propertyId) && (o.status ?? "Active") !== "Former",
+      (o) => propIds.has(o.propertyId ?? "") && (o.status ?? "Active") !== "Former",
     ).length;
     const collected = perProp.reduce((s, x) => s + x.collected, 0);
     const rent = sumCustomerResponsibleRent(leases, properties, id);

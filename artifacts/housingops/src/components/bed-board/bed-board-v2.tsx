@@ -473,7 +473,7 @@ export function BedBoardV2({ property }: { property: Property }) {
             { value: "deduction", label: "Deduction" },
           ]}
           value={colorBy}
-          onChange={setColorBy}
+          onChange={(v) => setColorBy(v as ColorBy)}
         />
         <button
           type="button"

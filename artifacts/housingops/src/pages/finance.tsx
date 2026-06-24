@@ -188,7 +188,7 @@ export default function FinancePage() {
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Seg options={KINDS} value={kind} onChange={setKind} />
+        <Seg options={KINDS} value={kind} onChange={(v) => setKind(v as Kind)} />
         <span className="ml-auto text-[12px] text-faint">Floor: Jun 1, 2026</span>
       </div>
 

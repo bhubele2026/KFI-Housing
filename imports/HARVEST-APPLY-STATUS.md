@@ -1,5 +1,24 @@
 # Harvest Apply — Status & Open Items
 
+## ⚠️ OPEN — duplicate occupants from the 2026-06-23 reconcile seating (found 2026-06-24, left as-is per user)
+The reconcile seating created a SECOND occupant for the two people who already had a
+record matched by `employeeId`, instead of attaching the existing record to the bed:
+
+| Person | emp | Pre-existing (unplaced) | Reconcile insert (seated) |
+|---|---|---|---|
+| Jayden Robertson | 2004690 | `occ-prop-burnett-hinckley-7th-st-se-jayden-robertson-1-1` (no bed) | `occ-recon-20260623-robertson` → bed `…hinckley-1-2` |
+| Isidro Guerrero | 2005207 | `occ-prop-burnett-hinckley-7th-st-se-isidro-guerrero-10-1` (no bed) | `occ-recon-20260623-guerrero` → bed `…hinckley-10-2` |
+
+Benson (2004757) and Laslie (no emp) did NOT collide — single record each, fine.
+
+**Live symptoms:** dashboard "Charged, not placed: Jayden Robertson" (deduction matches the
+bed-less pre-existing record by employeeId); occupancy count inflated by 2.
+**Fix when ready:** delete the 2 pre-existing unplaced duplicates (deductions match by
+employeeId, not occupant FK, so the seated record then carries the match). User chose to
+LEAVE IT for now — do not delete without a fresh go-ahead.
+
+
+
 ## 🏁 FINAL ACCOUNTING (2026-06-23) — harvest lease-apply COMPLETE
 Every lease fillable from available data is filled. The 10 remaining zero-economic-data leases on active properties are all un-fillable: **held by decision** (Bartlett El Paso, Red Roof Morehead), **stale** (Beau Chateau Dexter ×5, Orgill=Sikeston), or **no rate in any source** (Copa Parque, Holts Summit, Town Point — no lease folder, no master rate, no email rate). TB Rentals property address also corrected (Sikeston → 720 E Front St, Morehouse MO 63868). Confirmed already-seeded from the master (not empty, just `monthlyRent=0` + flagged needsReview): Express Inn ($60.50/nt), Chalie Wesley ($150.50/wk).
 

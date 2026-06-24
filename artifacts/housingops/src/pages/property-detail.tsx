@@ -4,6 +4,9 @@ import { useParams, Link, useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PropertyBoard } from "@/components/property-board/property-board";
+import { BOARD_VIEW_ENABLED } from "@/lib/flags";
+import { LayoutDashboard } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -952,13 +955,15 @@ export default function PropertyDetail() {
   // at first render because the browser's location is the source of
   // truth.
   const PROPERTY_TABS = useMemo(
-    () => new Set(["overview", "leases", "units", "beds", "furnishings", "utilities", "insurance", "violations", "finance"]),
+    () => new Set(["board", "overview", "leases", "units", "beds", "furnishings", "utilities", "insurance", "violations", "finance"]),
     [],
   );
+  // The Property Board is the default landing tab when the flag is on (Stage 1).
+  const DEFAULT_TAB = BOARD_VIEW_ENABLED ? "board" : "overview";
   const [activeTab, setActiveTab] = useState<string>(() => {
-    if (typeof window === "undefined") return "overview";
+    if (typeof window === "undefined") return DEFAULT_TAB;
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return tab && PROPERTY_TABS.has(tab) ? tab : "overview";
+    return tab && PROPERTY_TABS.has(tab) ? tab : DEFAULT_TAB;
   });
   // Keep `activeTab` in sync with `?tab=` whenever the URL changes
   // (Task #596). Without this, in-app navigation that only changes
@@ -1899,8 +1904,15 @@ export default function PropertyDetail() {
         {/* Tabs */}
         <Tabs id="section-tabs" value={activeTab} onValueChange={setActiveTab} className="space-y-4 scroll-mt-20">
           <TabsList
-            className={`grid w-full max-w-4xl ${propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"}`}
+            className={`grid w-full max-w-4xl ${
+              BOARD_VIEW_ENABLED
+                ? propertyUnits.length > 0 ? "grid-cols-10" : "grid-cols-9"
+                : propertyUnits.length > 0 ? "grid-cols-9" : "grid-cols-8"
+            }`}
           >
+            {BOARD_VIEW_ENABLED && (
+              <TabsTrigger value="board" data-testid="tab-trigger-board"><LayoutDashboard className="h-3.5 w-3.5 mr-1.5" />Board</TabsTrigger>
+            )}
             <TabsTrigger value="overview"><Home className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.info")}</TabsTrigger>
             <TabsTrigger value="leases"><KeyRound className="h-3.5 w-3.5 mr-1.5" />{t("pages.propertyDetail.tabs.leases")}</TabsTrigger>
             {propertyUnits.length > 0 && (
@@ -1928,6 +1940,12 @@ export default function PropertyDetail() {
           </TabsList>
 
           {/* ── OVERVIEW TAB ── */}
+          {BOARD_VIEW_ENABLED && (
+            <TabsContent value="board" className="space-y-4">
+              <PropertyBoard property={property} />
+            </TabsContent>
+          )}
+
           <TabsContent value="overview" className="space-y-4">
             {/*
               Location map — sits at the top of Overview so operators see

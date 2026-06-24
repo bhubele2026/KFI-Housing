@@ -22,6 +22,7 @@ export {
   CARD_SHADOW_HOVER,
   type ERow,
 } from "./primitives";
+export { ExplainBadge, type ExplainKind } from "./explain-badge";
 export { Ring, AreaChart, Heatmap, type HeatKind } from "./charts";
 export { Bed, RoomCard } from "./beds";
 export { DataTable, type Column } from "./data-table";

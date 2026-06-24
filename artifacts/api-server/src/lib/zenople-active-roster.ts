@@ -358,11 +358,24 @@ export async function fetchLastPayrollPeople(
       : "";
   const targetPeriod = requested || periods[0] || "";
 
+  // MATCH POOL vs PERIOD VIEW. When a specific ?period= is requested (the roster
+  // period selector), scope to exactly that AccountingPeriod. But the DEFAULT
+  // call — which drives the bed-grid "matched" check (rosterIds) — must take the
+  // UNION of everyone on payroll across the whole lookback window (~60d), NOT
+  // just the latest period. The most recent weekly run is frequently not yet
+  // imported, and latest-period-only made housed people who were paid only days
+  // ago show "needs match" despite a valid payroll id + a live housing deduction.
+  // Union still respects the go-live floor (don't surface pre-go-live people);
+  // rows with no period marker fall through (week-to-week membership is stable).
+  const scopeToPeriod = requested; // "" => union over the window
   const byPerson = new Map<string, PayrollPerson>();
   for (const row of raw) {
-    // Scope to the target period when we have one; otherwise (no period
-    // markers at all) take everyone in the window.
-    if (targetPeriod && periodOf(row) !== targetPeriod) continue;
+    if (scopeToPeriod) {
+      if (periodOf(row) !== scopeToPeriod) continue;
+    } else {
+      const p = periodOf(row);
+      if (p && p < PAYROLL_GO_LIVE_FLOOR) continue;
+    }
     const personId = str(pick(row, PERSON_ID_KEYS));
     let name = str(pick(row, NAME_KEYS));
     if (!name) {

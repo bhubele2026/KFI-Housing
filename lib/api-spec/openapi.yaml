@@ -3058,6 +3058,47 @@ components:
             Null for legacy rows inserted before the column existed.
             Used by the dashboard to show how long pending-placement
             occupants have been waiting (task #391).
+        # --- Revamp additive fields (optional, not required, so they stay
+        # safe across the migration/codegen window). ---
+        shiftTime:
+          type: string
+          description: |
+            Free-form shift label + time window for this person (e.g.
+            "Days 5a–2p"). Empty when not recorded. Complements `shift`
+            (Stage 5).
+        zenoplePersonId:
+          type: string
+          description: |
+            Zenople person id this occupant is linked to once matched.
+            Empty until linked.
+        zenopleStatus:
+          type: string
+          description: |
+            Payroll-link status: "linked", "not_in_zenople",
+            "needs_review", or "pending" (default). Drives the status dot
+            on the deduction badge.
+        zenopleCheckedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: ISO timestamp of the last Zenople match attempt; null if never checked.
+        deduction:
+          type: object
+          readOnly: true
+          description: |
+            Computed, read-only. The occupant's current weekly housing
+            deduction — the latest payroll_deductions snapshot, falling
+            back to chargePerBed. Rendered by the DeductionBadge on every
+            surface a person appears.
+          required:
+            - weeklyAmount
+            - source
+            - payWeekEndDate
+            - frequency
+          properties:
+            weeklyAmount: { type: number }
+            source: { type: string }
+            payWeekEndDate: { type: string }
+            frequency: { type: string }
     # Like `Occupant` but with the chargeSource* provenance fields
     # optional — newly-created occupants are assumed to be manually
     # entered, and the seeder is the only writer that stamps these.
@@ -3252,6 +3293,9 @@ components:
           description: Model year. Null when unknown.
         make: { type: string }
         model: { type: string }
+        color:
+          type: string
+          description: Exterior color (e.g. "White", "Silver"). Empty when unknown (Stage 5).
         seats:
           type: integer
           description: Passenger capacity; compared with `associatesTransported` to flag under-utilised vans.

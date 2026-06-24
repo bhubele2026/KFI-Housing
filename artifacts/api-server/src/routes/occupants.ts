@@ -10,16 +10,34 @@ import {
   DeleteOccupantParams,
 } from "@workspace/api-zod";
 import { normalizeOccupantRow } from "../lib/db-row-normalizers";
+import {
+  getOccupantDeductionsBatch,
+  deductionFromOccupant,
+} from "../lib/occupant-deduction";
 
 const router: IRouter = Router();
 
 function serializeOccupant<R extends { createdAt: Date | string | null }>(row: R) {
+  // `zenopleCheckedAt` is a timestamptz (Date) on the row; coerce it to ISO
+  // like createdAt so it round-trips as a date-time string once codegen
+  // surfaces it. Read cast-safe so this is a no-op on rows without the
+  // column (e.g. before the migration runs).
+  const checkedAt = (row as { zenopleCheckedAt?: Date | string | null })
+    .zenopleCheckedAt;
   return {
     ...row,
     createdAt:
       row.createdAt instanceof Date
         ? row.createdAt.toISOString()
         : row.createdAt ?? null,
+    ...(checkedAt !== undefined
+      ? {
+          zenopleCheckedAt:
+            checkedAt instanceof Date
+              ? checkedAt.toISOString()
+              : checkedAt ?? null,
+        }
+      : {}),
   };
 }
 
@@ -31,7 +49,18 @@ router.get("/occupants", async (_req, res): Promise<void> => {
   // canonical shape instead of 500ing the whole list endpoint. The
   // normaliser also backfills the task #500 fields (responsibilities /
   // isLead / keysIssued) on legacy rows.
-  const serialized = rows.map((r) => serializeOccupant(normalizeOccupantRow(r)));
+  //
+  // Attach the read-only computed `deduction` (Stage 3a) so the
+  // DeductionBadge can render on every surface a person appears. ONE
+  // batched query (no N+1 at ~500 occupants); fall back to the occupant's
+  // cached chargePerBed when there's no payroll snapshot. (The field is
+  // stripped by the response parse until codegen surfaces it on Replit.)
+  const deductions = await getOccupantDeductionsBatch(rows.map((r) => r.id));
+  const serialized = rows.map((r) => {
+    const normalized = normalizeOccupantRow(r);
+    const deduction = deductions.get(r.id) ?? deductionFromOccupant(r);
+    return serializeOccupant({ ...normalized, deduction });
+  });
   res.json(ListOccupantsResponse.parse(serialized));
 });
 

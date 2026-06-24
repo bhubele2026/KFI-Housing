@@ -223,9 +223,12 @@ describe("POST /api/leases/import-pdf", () => {
     expect(extractLeaseFromText).not.toHaveBeenCalled();
   });
 
-  it("returns 422 when the PDF parses but contains no readable text", async () => {
-    // pdf-parse returns very little text for tiny/empty PDFs. Use a bytes-
-    // only PDF whose extracted text is well under the 50-char threshold.
+  it("falls back to OCR for a low-text PDF and returns 502 when even OCR can't read it", async () => {
+    // pdf-parse returns very little text for tiny/empty PDFs (< 50 chars), so
+    // the route takes the vision-OCR fallback path. With the anthropic client
+    // mocked to no-op, OCR yields nothing and the route returns 502 with the
+    // "couldn't read this scanned PDF, even with OCR" guidance. The text-path
+    // extractor (extractLeaseFromText) is NOT used on the OCR branch.
     const tinyPdf = Buffer.from(
       "%PDF-1.4\n" +
         "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n" +
@@ -239,18 +242,20 @@ describe("POST /api/leases/import-pdf", () => {
     );
 
     const res = await postPdf(pdfFormData(tinyPdf));
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(502);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/text|scanned|OCR/i);
     expect(extractLeaseFromText).not.toHaveBeenCalled();
   });
 
-  it("returns 422 when pdf-parse cannot parse the bytes at all", async () => {
+  it("returns 502 when pdf-parse cannot parse the bytes (OCR fallback also fails)", async () => {
     // Garbage bytes with a .pdf name + PDF mime — passes the mime gate, fails
-    // pdf-parse, should map to 422 (unprocessable entity).
+    // pdf-parse, so the route falls through to the vision-OCR path; with OCR
+    // mocked to no-op it can't extract anything and returns 502. The text-path
+    // extractor is never reached.
     const garbage = Buffer.from("this is definitely not a pdf file at all", "utf8");
     const res = await postPdf(pdfFormData(garbage));
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(502);
     expect(extractLeaseFromText).not.toHaveBeenCalled();
   });
 

@@ -192,6 +192,8 @@ vi.mock("@workspace/db", () => ({
     "notes",
   ]),
   insuranceCertificatesTable: makeColumns("insuranceCertificates", ["id"]),
+  otherCostsTable: makeColumns("otherCosts", ["id"]),
+  propertyViolationsTable: makeColumns("propertyViolations", ["id"]),
   buildingsTable: makeColumns("buildings", ["id"]),
 }));
 

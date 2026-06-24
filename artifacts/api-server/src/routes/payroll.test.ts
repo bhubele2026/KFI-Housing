@@ -11,10 +11,12 @@ import { AddressInfo } from "node:net";
 import http from "node:http";
 import express, { type Express } from "express";
 
-// The route imports `@workspace/db` transitively via
-// `seed-housing-deductions`, which throws at import time when DATABASE_URL
-// is unset. Mock the seeder itself so the route test can focus on the
-// HTTP contract (shape + zod validation) without a Postgres dependency.
+// GET /payroll/unplaced is now READ-ONLY. The bundled-payroll auto-seeder was
+// removed — operators import an Excel deductions file from the Occupants page,
+// and `unmatched` / `lowConfidenceMatches` are computed per-import inside
+// POST /api/payroll/import-deductions. The GET endpoint is preserved for
+// existing callers and degrades to empty arrays. We keep a spy on the old
+// seeder so we can assert it is NEVER invoked on GET anymore.
 const seedMock = vi.fn();
 
 vi.mock("../lib/seed-housing-deductions", () => ({
@@ -52,198 +54,34 @@ describe("GET /payroll/unplaced", () => {
     seedMock.mockReset();
   });
 
-  it("returns the seeder's `unmatched` and `lowConfidenceMatches` arrays verbatim", async () => {
-    seedMock.mockResolvedValueOnce({
-      totalRows: 4,
-      matched: 2,
-      updated: 0,
-      alreadyCorrect: 2,
-      unmatched: [
-        {
-          customer: "Adient",
-          name: "ANDREW GRANVILLE",
-          personId: "2004810",
-          weekly: 25,
-          suggestions: [],
-        },
-        {
-          customer: "Bell Timber, Inc.",
-          name: "GERARD A DERBY",
-          personId: "2004445",
-          weekly: 150.5,
-          suggestions: [
-            {
-              occupantId: "occ-1",
-              name: "Gerard Derby",
-              company: "Bell Timber, Inc.",
-              propertyName: "Maple Court",
-              score: 0.85,
-              crossEmployer: false,
-            },
-          ],
-        },
-      ],
-      lowConfidenceMatches: [
-        {
-          customer: "Burnett Dairy - Grantsburg",
-          name: "JOSE GARCIA",
-          personId: "2002150",
-          weekly: 125,
-          matched: {
-            occupantId: "occ-jg-a",
-            name: "Jose Garcia",
-            company: "Burnett Dairy - Grantsburg",
-            propertyName: "Hilltop",
-            score: 1,
-            crossEmployer: false,
-          },
-          suggestions: [
-            {
-              occupantId: "occ-jg-b",
-              name: "Jose Garcia",
-              company: "Burnett Dairy - Grantsburg",
-              propertyName: "Lakeside",
-              score: 1,
-              crossEmployer: false,
-            },
-          ],
-        },
-      ],
-    });
-
-    const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    // Background dashboard polls (no payWeekEndDate) get the legacy
-    // shape — `importSummary` is only emitted when the operator
-    // triggers a Saturday-stamped re-import (Task #597).
-    expect(body).toEqual({
-      unmatched: [
-        { customer: "Adient", name: "ANDREW GRANVILLE", personId: "2004810", weekly: 25, suggestions: [] },
-        {
-          customer: "Bell Timber, Inc.",
-          name: "GERARD A DERBY",
-          personId: "2004445",
-          weekly: 150.5,
-          suggestions: [
-            {
-              occupantId: "occ-1",
-              name: "Gerard Derby",
-              company: "Bell Timber, Inc.",
-              propertyName: "Maple Court",
-              score: 0.85,
-              crossEmployer: false,
-            },
-          ],
-        },
-      ],
-      lowConfidenceMatches: [
-        {
-          customer: "Burnett Dairy - Grantsburg",
-          name: "JOSE GARCIA",
-          personId: "2002150",
-          weekly: 125,
-          matched: {
-            occupantId: "occ-jg-a",
-            name: "Jose Garcia",
-            company: "Burnett Dairy - Grantsburg",
-            propertyName: "Hilltop",
-            score: 1,
-            crossEmployer: false,
-          },
-          suggestions: [
-            {
-              occupantId: "occ-jg-b",
-              name: "Jose Garcia",
-              company: "Burnett Dairy - Grantsburg",
-              propertyName: "Lakeside",
-              score: 1,
-              crossEmployer: false,
-            },
-          ],
-        },
-      ],
-    });
-    // Re-running the seeder on every request is the contract — the
-    // dashboard relies on this so a freshly assigned occupant disappears
-    // from the list on the next refetch.
-    expect(seedMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("defaults to seeding with reclaimOverridden=false (safe — skips manual overrides)", async () => {
-    seedMock.mockResolvedValueOnce({
-      totalRows: 0,
-      matched: 0,
-      updated: 0,
-      alreadyCorrect: 0,
-      unmatched: [],
-      lowConfidenceMatches: [],
-    });
-    const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
-    expect(res.status).toBe(200);
-    expect(seedMock).toHaveBeenCalledTimes(1);
-    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: false });
-  });
-
-  it("passes reclaimOverridden=true when ?reclaimOverridden=true is set (Task #330)", async () => {
-    seedMock.mockResolvedValueOnce({
-      totalRows: 0,
-      matched: 0,
-      updated: 0,
-      alreadyCorrect: 0,
-      unmatched: [],
-      lowConfidenceMatches: [],
-    });
-    const res = await fetch(`${baseUrl}/api/payroll/unplaced?reclaimOverridden=true`);
-    expect(res.status).toBe(200);
-    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: true });
-  });
-
-  it("ignores any value other than the literal 'true' for reclaimOverridden", async () => {
-    seedMock.mockResolvedValueOnce({
-      totalRows: 0,
-      matched: 0,
-      updated: 0,
-      alreadyCorrect: 0,
-      unmatched: [],
-      lowConfidenceMatches: [],
-    });
-    const res = await fetch(`${baseUrl}/api/payroll/unplaced?reclaimOverridden=1`);
-    expect(res.status).toBe(200);
-    expect(seedMock.mock.calls[0]![0]).toMatchObject({ reclaimOverridden: false });
-  });
-
-  it("returns empty arrays when every payroll row matches an occupant cleanly", async () => {
-    seedMock.mockResolvedValueOnce({
-      totalRows: 5,
-      matched: 5,
-      updated: 0,
-      alreadyCorrect: 5,
-      unmatched: [],
-      lowConfidenceMatches: [],
-    });
-
+  it("is read-only: returns 200 with empty unmatched + lowConfidenceMatches", async () => {
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ unmatched: [], lowConfidenceMatches: [] });
   });
 
-  it("rejects malformed seeder output via zod (extra/missing fields would otherwise leak through)", async () => {
-    // Missing required `weekly` field — zod should refuse to encode it
-    // and the route should 500 rather than silently ship a bad shape
-    // to the dashboard.
-    seedMock.mockResolvedValueOnce({
-      totalRows: 1,
-      matched: 0,
-      updated: 0,
-      alreadyCorrect: 0,
-      unmatched: [
-        { customer: "Adient", name: "X", personId: "1" },
-      ],
-      lowConfidenceMatches: [],
-    });
+  it("does NOT run the deductions seeder on GET (matching moved to import-deductions)", async () => {
+    await fetch(`${baseUrl}/api/payroll/unplaced`);
+    expect(seedMock).not.toHaveBeenCalled();
+  });
 
+  it("ignores query params (e.g. ?reclaimOverridden) and still returns the empty shape", async () => {
+    const res = await fetch(
+      `${baseUrl}/api/payroll/unplaced?reclaimOverridden=true`,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ unmatched: [], lowConfidenceMatches: [] });
+    expect(seedMock).not.toHaveBeenCalled();
+  });
+
+  it("always returns a response that conforms to the ListUnplacedPayroll shape", async () => {
     const res = await fetch(`${baseUrl}/api/payroll/unplaced`);
-    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual([
+      "lowConfidenceMatches",
+      "unmatched",
+    ]);
+    expect(Array.isArray(body.unmatched)).toBe(true);
+    expect(Array.isArray(body.lowConfidenceMatches)).toBe(true);
   });
 });

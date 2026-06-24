@@ -180,6 +180,9 @@ vi.mock("@workspace/db", () => ({
   utilitiesTable: makeColumns("utilities", ["id"]),
   roomNightLogsTable: makeColumns("roomNightLogs", ["id"]),
   insuranceCertificatesTable: makeColumns("insuranceCertificates", ["id"]),
+  otherCostsTable: makeColumns("otherCosts", ["id"]),
+  propertyViolationsTable: makeColumns("propertyViolations", ["id"]),
+  buildingsTable: makeColumns("buildings", ["id"]),
   schedulerStateTable: makeColumns("schedulerState", ["id", "lastSentKey"]),
 }));
 

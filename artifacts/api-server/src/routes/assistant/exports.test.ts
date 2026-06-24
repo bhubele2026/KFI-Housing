@@ -105,13 +105,13 @@ describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
     currentUser = "user-A";
     // Wipe prior rows so ordering assertions are deterministic across files.
     await db.delete(assistantExportsTable);
-    const oldId = await seedExport({
+    const { id: oldId } = await seedExport({
       id: "ax-old",
       createdAt: new Date(Date.now() - 60_000),
       expiresAt: new Date(Date.now() + 30_000),
       filename: "older.xlsx",
     });
-    const newId = await seedExport({
+    const { id: newId } = await seedExport({
       id: "ax-new",
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + 60_000),
@@ -129,7 +129,7 @@ describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
   it("filters out expired rows server-side", async () => {
     currentUser = "user-A";
     await db.delete(assistantExportsTable);
-    const liveId = await seedExport({ id: "ax-live" });
+    const { id: liveId } = await seedExport({ id: "ax-live" });
     await seedExport({
       id: "ax-expired",
       expiresAt: new Date(Date.now() - 1000),
@@ -143,7 +143,7 @@ describe("GET /assistant/exports (Task #683 — Recent exports tray)", () => {
   it("scopes results to the calling user", async () => {
     currentUser = "user-A";
     await db.delete(assistantExportsTable);
-    const mine = await seedExport({ id: "ax-mine", userId: "user-A" });
+    const { id: mine } = await seedExport({ id: "ax-mine", userId: "user-A" });
     await seedExport({ id: "ax-theirs", userId: "user-B" });
     const res = await fetch(`${baseUrl}/assistant/exports`);
     const body = (await res.json()) as { exports: Array<{ id: string }> };

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Layout } from "./Shared";
-import { properties, customers, Property } from "../_housingops-fixtures/data";
+import { properties, customers, type Property } from "../_housingops-fixtures/data";
 import { Search, List, LayoutGrid, MapPin, MoreHorizontal, BedDouble, Users, DollarSign } from "lucide-react";
 import "./_group.css";
 

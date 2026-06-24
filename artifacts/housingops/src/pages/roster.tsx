@@ -455,7 +455,7 @@ export default function RosterPage() {
                 </button>
                 {showStale && (
                   <div className="border-t">
-                    <Table>
+                    <Table className="[&_tbody_tr]:border-line [&_tbody_tr:nth-child(even)]:bg-surface/40 [&_td]:tabular-nums">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>

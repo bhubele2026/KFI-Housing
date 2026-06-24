@@ -18,6 +18,7 @@ import {
   FinancePayrollWeeklyTab,
   FinancePayrollMonthlyTab,
   FinancePayrollByCustomerTab,
+  FinanceMoneyReviewTab,
 } from "@/components/finance-payroll-tabs";
 import {
   BarChart,
@@ -595,6 +596,9 @@ export default function Finance() {
             <TabsTrigger value="overview" data-testid="tab-finance-overview">
               {t("pages.finance.tabs.overview")}
             </TabsTrigger>
+            <TabsTrigger value="moneyReview" data-testid="tab-finance-money-review">
+              Money review
+            </TabsTrigger>
             <TabsTrigger value="weekly" data-testid="tab-finance-weekly">
               {t("pages.finance.tabs.weekly")}
             </TabsTrigger>
@@ -605,6 +609,10 @@ export default function Finance() {
               {t("pages.finance.tabs.byCustomer")}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="moneyReview" className="space-y-6">
+            <FinanceMoneyReviewTab />
+          </TabsContent>
 
           <TabsContent value="weekly" className="space-y-6">
             <FinancePayrollWeeklyTab

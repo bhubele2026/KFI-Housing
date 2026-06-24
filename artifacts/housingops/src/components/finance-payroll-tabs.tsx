@@ -18,8 +18,9 @@
 // the page-level `customerFilter` so the operator can drill into a
 // single tenant without reaching for the chip.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { MoneyTile, StatusDot, DeductionBadge, EmptyState, type MoneyStat } from "@/components/kit";
 import {
   useListFinanceWeekly,
   useListFinanceMonthly,
@@ -1021,5 +1022,259 @@ export function FinancePayrollByCustomerTab(props: SharedProps) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ── Money review (week-by-week) ────────────────────────────────────
+// Period-scoped recovery review with vs-prior deltas, a new/stopped/
+// amount-changed week-diff, and a "mark reviewed" action. Backed by the
+// direct-fetch endpoints /api/finance/period | week-diff | week-review
+// (NOT in the generated client — same pattern as the roster/zenople
+// routes). All reads are tolerant of partial/missing data so the tab
+// never crashes while the (live-Zenople-backed) endpoints warm up.
+
+const PERIOD_KINDS = [
+  { kind: "this-week", label: "This week" },
+  { kind: "last-week", label: "Last week" },
+  { kind: "this-month", label: "This month" },
+  { kind: "last-month", label: "Last month" },
+  { kind: "this-quarter", label: "This quarter" },
+] as const;
+type PeriodKind = (typeof PERIOD_KINDS)[number]["kind"];
+
+const apiBase = (): string => import.meta.env.BASE_URL ?? "/";
+
+type PeriodResp = {
+  period?: string;
+  collected?: number;
+  rentWePay?: number;
+  propertyCount?: number;
+  net?: number;
+  prior?: { collected?: number; rentWePay?: number; net?: number };
+  deltas?: { collected?: number; rentWePay?: number; net?: number };
+};
+type DiffPerson = { name?: string; personId?: string; weekly?: number };
+type DiffChanged = { name?: string; from?: number; to?: number };
+type WeekDiffResp = {
+  week?: string;
+  added?: DiffPerson[];
+  stopped?: DiffPerson[];
+  changed?: DiffChanged[];
+};
+
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/** This week's (or last week's) Saturday end-date as YYYY-MM-DD. */
+function weekSaturday(kind: PeriodKind): string {
+  const d = new Date();
+  const day = d.getDay(); // 0 Sun … 6 Sat
+  const toSat = (6 - day + 7) % 7;
+  d.setDate(d.getDate() + toSat);
+  if (kind === "last-week") d.setDate(d.getDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
+function Delta({ value }: { value: number }) {
+  if (!value) return <span className="text-muted-foreground tabular-nums text-[11px]">no change</span>;
+  const up = value > 0;
+  return (
+    <span className={`tabular-nums text-[11px] ${up ? "text-ok" : "text-risk"}`}>
+      {up ? "▲" : "▼"} {formatUsd(Math.abs(value))}
+    </span>
+  );
+}
+
+export function FinanceMoneyReviewTab() {
+  const [kind, setKind] = useState<PeriodKind>("this-week");
+  const [period, setPeriod] = useState<PeriodResp | null>(null);
+  const [diff, setDiff] = useState<WeekDiffResp | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
+  const [marking, setMarking] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setErr(false);
+    setReviewed(false);
+    const wk = weekSaturday(kind === "last-week" ? "last-week" : "this-week");
+    Promise.allSettled([
+      fetch(`${apiBase()}api/finance/period?kind=${encodeURIComponent(kind)}`).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
+      ),
+      fetch(`${apiBase()}api/finance/week-diff?week=${encodeURIComponent(wk)}`).then((r) =>
+        r.ok ? r.json() : Promise.reject(new Error(String(r.status))),
+      ),
+    ]).then((res) => {
+      if (!alive) return;
+      const [p, d] = res;
+      if (p.status === "fulfilled") setPeriod(p.value as PeriodResp);
+      else setPeriod(null);
+      if (d.status === "fulfilled") setDiff(d.value as WeekDiffResp);
+      else setDiff(null);
+      if (p.status === "rejected" && d.status === "rejected") setErr(true);
+      setLoading(false);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [kind]);
+
+  const markReviewed = async () => {
+    setMarking(true);
+    try {
+      const res = await fetch(`${apiBase()}api/finance/week-review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ periodKey: period?.period ?? kind }),
+      });
+      if (res.ok) setReviewed(true);
+    } catch {
+      /* non-fatal */
+    } finally {
+      setMarking(false);
+    }
+  };
+
+  const collected = num(period?.collected);
+  const rent = num(period?.rentWePay);
+  const net = period ? num(period.net) : collected - rent;
+  const stats: MoneyStat[] = [
+    { label: "Collected", amount: collected, tone: "ok" },
+    { label: "Rent we pay", amount: rent, tone: "neutral" },
+    { label: "Properties", amount: num(period?.propertyCount), tone: "neutral" },
+    { label: "Net spread", amount: net, tone: "auto", emphasize: true },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Money review</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Are we recovering the rent we pay? Pick a period and review what changed.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as PeriodKind)}
+              data-testid="select-finance-money-period"
+              className="h-8 rounded-md border border-line bg-panel px-2 text-sm"
+            >
+              {PERIOD_KINDS.map((p) => (
+                <option key={p.kind} value={p.kind}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant={reviewed ? "outline" : "default"}
+              size="sm"
+              onClick={markReviewed}
+              disabled={marking || reviewed || loading}
+              data-testid="button-finance-week-review"
+            >
+              {reviewed ? "✓ Reviewed" : marking ? "Saving…" : "Mark reviewed"}
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-16 rounded-lg border border-line bg-muted/30 animate-pulse" />
+            ))}
+          </div>
+        ) : err ? (
+          <EmptyState
+            title="Couldn't load the period"
+            description="The payroll figures weren't reachable just now. Try another period."
+            testId="finance-money-error"
+          />
+        ) : (
+          <>
+            <MoneyTile title={PERIOD_KINDS.find((p) => p.kind === kind)?.label} stats={stats} />
+            {period?.deltas && (
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                <span className="text-muted-foreground">vs prior period:</span>
+                <span className="flex items-center gap-1">Collected <Delta value={num(period.deltas.collected)} /></span>
+                <span className="flex items-center gap-1">Rent <Delta value={num(period.deltas.rentWePay)} /></span>
+                <span className="flex items-center gap-1">Net <Delta value={num(period.deltas.net)} /></span>
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <DiffColumn
+                title="New this week"
+                tone="ok"
+                people={diff?.added ?? []}
+              />
+              <DiffColumn
+                title="Stopped"
+                tone="risk"
+                people={diff?.stopped ?? []}
+              />
+              <div className="rounded-lg border border-line bg-panel p-3">
+                <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <StatusDot status="warn" size="sm" /> Amount changed
+                </div>
+                {(diff?.changed ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">None</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {(diff?.changed ?? []).map((c, i) => (
+                      <li key={`${c.name}-${i}`} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="truncate">{c.name ?? "—"}</span>
+                        <span className="tabular-nums text-xs text-muted-foreground">
+                          {formatUsd(num(c.from))} → <span className="text-ink font-medium">{formatUsd(num(c.to))}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DiffColumn({
+  title,
+  tone,
+  people,
+}: {
+  title: string;
+  tone: "ok" | "risk";
+  people: DiffPerson[];
+}) {
+  return (
+    <div className="rounded-lg border border-line bg-panel p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <StatusDot status={tone} size="sm" /> {title}
+        <span className="ml-auto tabular-nums">{people.length}</span>
+      </div>
+      {people.length === 0 ? (
+        <p className="text-xs text-muted-foreground">None</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {people.map((p, i) => (
+            <li key={`${p.personId ?? p.name}-${i}`} className="flex items-center justify-between gap-2 text-sm">
+              <span className="truncate">{p.name ?? p.personId ?? "—"}</span>
+              <DeductionBadge size="sm" weeklyAmount={p.weekly ?? null} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

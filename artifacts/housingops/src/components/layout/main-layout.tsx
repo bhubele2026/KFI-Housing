@@ -1,6 +1,6 @@
 import { ReactNode, useEffect } from "react";
 import { Copy } from "lucide-react";
-import { TopNav } from "./top-nav";
+import { AppShell } from "./app-shell";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
 import { Link, Redirect, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -33,7 +33,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   // every screen size. Content sits full-width beneath it.
   return (
     <div className="flex h-screen flex-col bg-background overflow-hidden">
-      <TopNav />
+      <AppShell />
       <main className="flex-1 overflow-y-auto">
         {/* Inline notice when the data store dropped one or more
             malformed rows from a list response, so a single bad row can't

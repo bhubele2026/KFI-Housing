@@ -45,12 +45,21 @@
      border-line / bg-surface utilities etc. Existing pages keep the old
      tokens until the Stage 6 design rollout re-skins them. */
   --color-ink: hsl(var(--ink));
+  --color-ink2: hsl(var(--ink2));
   --color-surface: hsl(var(--surface));
   --color-panel: hsl(var(--panel));
   --color-line: hsl(var(--line));
+  --color-track: hsl(var(--track));
+  --color-faint: hsl(var(--faint));
   --color-brand: hsl(var(--brand));
   --color-brand-foreground: hsl(var(--brand-foreground));
-  --color-brand-warm: hsl(var(--brand-warm));
+  --color-brand2: hsl(var(--brand2));
+  --color-grad1: hsl(var(--grad1));
+  --color-grad2: hsl(var(--grad2));
+  --color-chip: hsl(var(--chip));
+  --color-chipink: hsl(var(--chipink));
+  --color-purple: hsl(var(--purple));
+  --color-teal: hsl(var(--teal));
   --color-ok: hsl(var(--ok));
   --color-ok-foreground: hsl(var(--ok-foreground));
   --color-ok-soft: hsl(var(--ok-soft));
@@ -104,53 +113,66 @@
      the warm palette so EVERY page reads as the warm, dense ledger in the
      mockup — paper bg, white panels, warm hairline borders, ink text, navy
      accents — without per-page work. */
-  --background: 40 30% 97%;      /* warm paper canvas */
-  --foreground: 213 28% 17%;     /* ink */
-  --border: 40 24% 88%;          /* warm hairline */
-  --card: 0 0% 100%;             /* white panel */
-  --card-foreground: 213 28% 17%;
-  --card-border: 40 24% 88%;
-  --sidebar: 216 62% 22%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 216 50% 30%;
-  --sidebar-primary: 217 75% 55%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 216 50% 30%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 75% 55%;
+  /* v2 REDESIGN palette (KFI_Housing_Redesign_Mockup_v2). Cool light-grey
+     canvas, white cards, blue accent, gradient hero. Ported from the mockup
+     :root so the whole app reads as the redesign. */
+  --background: 220 33% 97%;     /* #F4F6FA cool canvas */
+  --foreground: 222 43% 11%;     /* #101828 ink */
+  --border: 220 16% 93%;         /* #EAECF0 hairline */
+  --card: 0 0% 100%;             /* white card */
+  --card-foreground: 222 43% 11%;
+  --card-border: 220 16% 93%;
+  --sidebar: 224 48% 23%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-border: 224 46% 31%;
+  --sidebar-primary: 224 48% 23%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 224 35% 93%;
+  --sidebar-accent-foreground: 224 48% 23%;
+  --sidebar-ring: 224 48% 23%;
   --popover: 0 0% 100%;
-  --popover-foreground: 213 28% 17%;
-  --popover-border: 40 24% 88%;
-  --primary: 214 51% 25%;        /* navy brand */
+  --popover-foreground: 222 43% 11%;
+  --popover-border: 220 16% 93%;
+  --primary: 224 48% 23%;        /* KFI navy #1E2D56 */
   --primary-foreground: 0 0% 100%;
-  --secondary: 40 25% 94%;       /* warm neutral */
-  --secondary-foreground: 213 28% 17%;
-  --muted: 40 22% 94%;
-  --muted-foreground: 35 10% 42%;  /* warm grey */
-  --accent: 40 28% 92%;
-  --accent-foreground: 213 28% 17%;
-  --destructive: 358 64% 42%;    /* risk red */
+  --secondary: 220 33% 96%;      /* cool neutral */
+  --secondary-foreground: 222 43% 11%;
+  --muted: 220 25% 96%;
+  --muted-foreground: 218 15% 46%;  /* #667085 */
+  --accent: 224 35% 93%;         /* light navy chip */
+  --accent-foreground: 224 48% 23%;
+  --destructive: 347 77% 50%;    /* #E11D48 */
   --destructive-foreground: 0 0% 100%;
-  --input: 40 24% 88%;
-  --ring: 214 51% 25%;
+  --input: 220 16% 93%;
+  --ring: 224 48% 23%;
 
-  /* --- HousingOps warm operations palette (light) --- */
-  --ink: 213 28% 17%;          /* #1F2A37 text / headers */
-  --surface: 45 33% 98%;       /* #FBFAF7 warm paper page bg */
-  --panel: 0 0% 100%;          /* #FFFFFF cards / grid */
-  --line: 40 24% 88%;          /* #E7E2D8 warm hairline */
-  --brand: 214 51% 25%;        /* #1F3A5F navy */
+  /* --- v2 kit palette --- */
+  --ink: 222 43% 11%;          /* #101828 */
+  --ink2: 217 24% 27%;         /* #344054 */
+  --surface: 220 33% 97%;      /* #F4F6FA page bg */
+  --panel: 0 0% 100%;          /* white card */
+  --line: 220 16% 93%;         /* #EAECF0 */
+  --track: 222 25% 95%;        /* #EEF1F6 */
+  --faint: 215 16% 65%;        /* #98A2B3 */
+  --brand: 224 48% 23%;        /* KFI navy #1E2D56 */
   --brand-foreground: 0 0% 100%;
-  --brand-warm: 26 90% 37%;    /* #B45309 amber accent */
-  --ok: 146 61% 30%;           /* #1E7A46 full / paid / linked */
+  --brand-warm: 38 92% 50%;    /* legacy alias → orange */
+  --brand2: 221 48% 35%;       /* medium navy #2F4A86 — thin strokes/links/fills */
+  --grad1: 224 48% 17%;        /* deep navy #16213F (gradient start) */
+  --grad2: 224 46% 31%;        /* lighter navy #2A3E73 (gradient end) */
+  --chip: 224 35% 93%;         /* light navy chip */
+  --chipink: 224 48% 23%;      /* navy glyph */
+  --purple: 258 90% 66%;       /* #8B5CF6 */
+  --teal: 173 80% 40%;         /* #14B8A6 */
+  --ok: 142 71% 36%;           /* #16A34A linked/paid/full */
   --ok-foreground: 0 0% 100%;
-  --ok-soft: 146 50% 94%;
-  --warn: 26 90% 37%;          /* #B45309 needs a look / partial */
+  --ok-soft: 142 52% 92%;
+  --warn: 38 92% 50%;          /* #F59E0B open/review */
   --warn-foreground: 0 0% 100%;
-  --warn-soft: 38 90% 93%;
-  --risk: 358 64% 37%;         /* #9B2226 money leak / $0 / not in payroll */
+  --warn-soft: 38 92% 93%;
+  --risk: 347 77% 50%;         /* #E11D48 at-risk/$0 */
   --risk-foreground: 0 0% 100%;
-  --risk-soft: 358 70% 95%;
+  --risk-soft: 347 80% 95%;
 
   --chart-1: 217 71% 21%;
   --chart-2: 217 75% 45%;

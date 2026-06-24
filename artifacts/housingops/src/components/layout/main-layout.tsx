@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, createContext, useContext } from "react";
 import { Copy } from "lucide-react";
 import { AppShell } from "./app-shell";
 import { useAuth, writeLastRoute } from "@/hooks/use-auth";
@@ -9,7 +9,15 @@ import { useData, type DroppedRow } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
 
+// Phase 1 — the app shell is now wrapped ONCE around every route in App.tsx,
+// so no page can ever render bare (no header / no way home). Many pages still
+// self-wrap in <MainLayout>; this context makes the inner wrap a no-op so we
+// never paint two top bars. A nested MainLayout just passes its children
+// through (the outer one already supplies AppShell + the body ErrorBoundary).
+const LayoutMountedContext = createContext(false);
+
 export function MainLayout({ children }: { children: ReactNode }) {
+  const alreadyMounted = useContext(LayoutMountedContext);
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
   const { dataIssues } = useData();
@@ -23,6 +31,12 @@ export function MainLayout({ children }: { children: ReactNode }) {
     writeLastRoute(location);
   }, [isAuthenticated, location]);
 
+  // Nested inside the app-level shell — render children only, no second shell.
+  // (Hooks above run unconditionally first so this early return is safe.)
+  if (alreadyMounted) {
+    return <>{children}</>;
+  }
+
   const publicMode =
     String(import.meta.env.VITE_PUBLIC_MODE ?? "").toLowerCase() === "true";
   if (!publicMode && !isAuthenticated) {
@@ -32,6 +46,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   // Sidebar fully removed — the top bar (TopNav) is the only nav now, on
   // every screen size. Content sits full-width beneath it.
   return (
+    <LayoutMountedContext.Provider value={true}>
     <div className="flex h-screen flex-col bg-background overflow-hidden">
       <AppShell />
       <main className="flex-1 overflow-y-auto">
@@ -45,6 +60,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
       </main>
       <AssistantBubble />
     </div>
+    </LayoutMountedContext.Provider>
   );
 }
 

@@ -6,7 +6,8 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { Toaster } from "@/components/ui/toaster";
 import { VersionUpdatePrompt } from "@/components/version-update-prompt";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, readLastRoute } from "@/hooks/use-auth";
+import { AuthProvider } from "@/hooks/use-auth";
+import { MainLayout } from "@/components/layout/main-layout";
 import { DataProvider } from "@/context/data-store";
 import { CustomerScopeProvider } from "@/context/customer-scope";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -148,40 +149,51 @@ function AppRoutes() {
           error inline (with its message) instead of blanking the whole app,
           and remounts fresh on the next navigation. */}
       <ErrorBoundary key={loc}>
+      {/* Phase 1 — the login page renders bare; every other route is wrapped
+          ONCE in MainLayout so the top bar (logo Home + four nav boxes +
+          search + add) is present on EVERY screen and no page can render
+          bare again. MainLayout is idempotent, so pages that still self-wrap
+          don't paint a second shell. */}
       <Switch>
-        <Route path="/" component={() => <Redirect to={readLastRoute() ?? "/customers"} />} />
         <Route path="/login" component={Login} />
-        <Route path="/dashboard" component={Dashboard} />
-        <Route path="/customers" component={Customers} />
-        <Route path="/customers/:id/beds" component={CustomerBeds} />
-        <Route path="/customers/:id" component={CustomerDetail} />
-        <Route path="/properties" component={Properties} />
-        <Route path="/attention" component={Attention} />
-        <Route path="/properties/:id" component={PropertyDetail} />
-        <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
-        <Route path="/leases" component={Leases} />
-        <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
-        <Route path="/leases/new" component={LeaseDetail} />
-        <Route path="/leases/:id" component={LeaseDetail} />
-        <Route path="/beds" component={Beds} />
-        <Route path="/occupants" component={Occupants} />
-        <Route path="/occupants/:id" component={OccupantDetail} />
-        <Route path="/utilities" component={Utilities} />
-        <Route path="/finance" component={Finance} />
-        <Route path="/economics" component={Economics} />
-        <Route path="/accounting" component={Accounting} />
-        <Route path="/rental-companies" component={RentalCompanies} />
-        <Route path="/roster" component={Roster} />
-        <Route path="/zenople-review" component={ZenopleReview} />
-        <Route path="/reconciliation" component={Reconciliation} />
-        <Route path="/qbo/mapping-rules" component={QboMappingRules} />
-        <Route path="/insurance" component={InsuranceCertificates} />
-        <Route path="/review" component={Review} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="/assistant/changelog" component={AssistantChangelog} />
-        {/* Transportation is out of scope: redirect any parked /transport/* path home. */}
-        <Route path="/transport/*" component={() => <Redirect to="/customers" />} />
-        <Route component={NotFound} />
+        <Route>
+          <MainLayout>
+            <Switch>
+              <Route path="/" component={() => <Redirect to="/dashboard" />} />
+              <Route path="/dashboard" component={Dashboard} />
+              <Route path="/customers" component={Customers} />
+              <Route path="/customers/:id/beds" component={CustomerBeds} />
+              <Route path="/customers/:id" component={CustomerDetail} />
+              <Route path="/properties" component={Properties} />
+              <Route path="/attention" component={Attention} />
+              <Route path="/properties/:id" component={PropertyDetail} />
+              <Route path="/properties/:id/buildings/:buildingId" component={PropertyDetail} />
+              <Route path="/leases" component={Leases} />
+              <Route path="/leases/snoozed" component={SnoozedLeaseAlerts} />
+              <Route path="/leases/new" component={LeaseDetail} />
+              <Route path="/leases/:id" component={LeaseDetail} />
+              <Route path="/beds" component={Beds} />
+              <Route path="/occupants" component={Occupants} />
+              <Route path="/occupants/:id" component={OccupantDetail} />
+              <Route path="/utilities" component={Utilities} />
+              <Route path="/finance" component={Finance} />
+              <Route path="/economics" component={Economics} />
+              <Route path="/accounting" component={Accounting} />
+              <Route path="/rental-companies" component={RentalCompanies} />
+              <Route path="/roster" component={Roster} />
+              <Route path="/zenople-review" component={ZenopleReview} />
+              <Route path="/reconciliation" component={Reconciliation} />
+              <Route path="/qbo/mapping-rules" component={QboMappingRules} />
+              <Route path="/insurance" component={InsuranceCertificates} />
+              <Route path="/review" component={Review} />
+              <Route path="/settings" component={SettingsPage} />
+              <Route path="/assistant/changelog" component={AssistantChangelog} />
+              {/* Transportation is out of scope: redirect any parked /transport/* path home. */}
+              <Route path="/transport/*" component={() => <Redirect to="/dashboard" />} />
+              <Route component={NotFound} />
+            </Switch>
+          </MainLayout>
+        </Route>
       </Switch>
       </ErrorBoundary>
     </Suspense>

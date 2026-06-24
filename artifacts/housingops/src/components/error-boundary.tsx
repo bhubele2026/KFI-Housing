@@ -68,41 +68,40 @@ class ErrorBoundaryInner extends Component<Props, State> {
     if (this.props.fallback) return this.props.fallback(this.reset, error);
     const { t } = this.props;
 
+    // Phase 2/14/19 — quiet, inline fallback. A throwing child must NEVER
+    // paint a giant colored rectangle (the old min-h-[60vh] bg-destructive/5
+    // card was the "red dead-block" framing the bed boards + the "red
+    // popover"). This is a small, neutral notice that stays inline so the
+    // surrounding layout (top bar, sibling cards) is untouched, with the
+    // message + a quiet retry for operators.
     return (
-      <div className="flex min-h-[60vh] w-full items-center justify-center p-8">
-        <div
-          className="max-w-md w-full rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-4"
-          role="alert"
-          data-testid="error-boundary-fallback"
+      <div
+        className="my-2 flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-xs text-muted-foreground"
+        role="alert"
+        data-testid="error-boundary-fallback"
+      >
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+        <span className="min-w-0 flex-1">
+          {t("errorBoundary.description")}
+          {error.message ? (
+            <span
+              className="ml-1 font-mono text-muted-foreground/70 break-words"
+              data-testid="error-boundary-message"
+            >
+              — {error.message}
+            </span>
+          ) : null}
+        </span>
+        <Button
+          onClick={this.reset}
+          size="sm"
+          variant="ghost"
+          className="h-6 shrink-0 px-2 text-xs"
+          data-testid="button-error-boundary-retry"
         >
-          <div className="flex justify-center">
-            <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
-              <AlertTriangle className="h-6 w-6 text-destructive" />
-            </div>
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              {t("errorBoundary.title")}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              {t("errorBoundary.description")}
-            </p>
-            {error.message && (
-              <p
-                className="text-xs text-muted-foreground/80 mt-3 font-mono break-words"
-                data-testid="error-boundary-message"
-              >
-                {error.message}
-              </p>
-            )}
-          </div>
-          <Button
-            onClick={this.reset}
-            data-testid="button-error-boundary-retry"
-          >
-            {t("common.tryAgain")}
-          </Button>
-        </div>
+          <RefreshCw className="mr-1 h-3 w-3" aria-hidden />
+          {t("common.tryAgain")}
+        </Button>
       </div>
     );
   }

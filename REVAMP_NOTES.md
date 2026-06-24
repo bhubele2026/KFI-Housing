@@ -70,12 +70,20 @@ Stage 6 target nav: **Dashboard · Clients · Properties · Roster · Money** (E
 
 ---
 
-## Open human decisions (flagged, code handles via needsReview)
-1. Roster col-A code (86/125) — meaning? (client code? Zenople id?)
-2. The 37 app-only people — moved out or spelled differently?
-3. 5 who-lives-where conflicts (Greenock 45/49, the Ridge).
-4. Orgill = Dexter or Sikeston? Two "Ridge" motels = one property or two?
-5. Process: declare the app source-of-truth and stop updating spreadsheets.
+## Open human decisions — answers captured 2026-06-24
+1. Roster col-A code (86/125) — **DEFER** (user will figure out).
+2. The 37 app-only people — **REMOVE them (treat as moved out).** Action plan: mark
+   status=Former (frees bed, stops charge, keeps history — NOT hard delete). BLOCKED:
+   the authoritative list is `KFI_HousingOps_Name_Reconciliation.xlsx` "In App Only"
+   tab, not on disk. My harvest covers only 11/34 properties and 3 of those (Greenock,
+   Penda/New Pinery, Hickory) are the known-stale master side, so a derived list is
+   unreliable. ONLY confidently-moved-out from current data = 3 Schuette Wausau names
+   (Giovanni, Jaylon, Marquis — that tab has an explicit MOVE-OUT column). Awaiting the
+   reconciliation file before removing the rest; nothing written to prod yet.
+3. 5 who-lives-where conflicts — **DEFER** (not sure).
+4. Orgill = Dexter/Sikeston? two Ridge motels? — **DEFER** (user will figure out).
+5. Source-of-truth — **KEEP BOTH for now** (keep updating app AND spreadsheets; do NOT
+   declare the app the sole source of truth yet).
 
 ## Companion files
 - `~/Downloads/KFI_HousingOps_Audit.xlsx` ✅, `~/Downloads/missing_from_app.csv` ✅, brief ✅.

@@ -26,6 +26,7 @@ import { createVehicleInsuranceTableIfNeeded } from "./migrations/create-vehicle
 import { addOccupantZenopleFieldsIfNeeded } from "./migrations/add-occupant-zenople-fields";
 import { addOccupantShiftTimeIfNeeded } from "./migrations/add-occupant-shift-time";
 import { addVehicleColorIfNeeded } from "./migrations/add-vehicle-color";
+import { createWeeklyReviewsTableIfNeeded } from "./migrations/create-weekly-reviews-table";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -177,6 +178,10 @@ export async function pushSchemaIfNeeded(
 
   // Stage 5: add `vehicles.color`. Idempotent, runs before pushSchema.
   await addVehicleColorIfNeeded(pool, log);
+
+  // Completion Runbook B: weekly_reviews (Money review sign-off). Idempotent,
+  // runs before pushSchema so a deployed DB gets the table at boot.
+  await createWeeklyReviewsTableIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

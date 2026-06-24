@@ -5,6 +5,8 @@ import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
 import { StatCard, Seg, accentFor, initialsOf, PrintView, WhyPopover } from "@/components/kit-v2";
 import { Bed, RoomCard } from "@/components/kit-v2";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { netDisplay } from "@/lib/money-honesty";
 import { toWeeklyCharge, formatUsdWhole, type Property, type Occupant } from "@/data/mockData";
 
 const apiBase = (): string => (import.meta.env.BASE_URL ?? "/") as string;
@@ -96,6 +98,10 @@ export function BedBoardV2({ property }: { property: Property }) {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set()); // selected occupied bedIds
   const [dragMoveIn, setDragMoveIn] = useState<{ id: string; name: string } | null>(null);
+  // Phase 6 — a big ALL-empty room (e.g. a synthetic "Auto — capacity backfill"
+  // with 9-11 open slots) is collapsed to a compact "N open beds" card so it
+  // can't blow card height; operators expand it to assign bed-by-bed.
+  const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
 
   const propBeds = useMemo(
     () => beds.filter((b) => (b as { propertyId?: string }).propertyId === property.id),
@@ -212,7 +218,10 @@ export function BedBoardV2({ property }: { property: Property }) {
     return s + (o ? weeklyOf(o) * MONTH_WK : 0);
   }, 0);
   const rentMo = (property as { monthlyRent?: number }).monthlyRent ?? 0;
-  const net = collectedMo - rentMo;
+  // Phase 4/11 money honesty — only call it a loss when collected is real.
+  // People housed + rent set but $0 collected => deductions still syncing,
+  // not a −$rent loss. netDisplay returns {kind:"syncing"} in that case.
+  const netD = netDisplay({ collected: collectedMo, rent: rentMo, occupants: occupied });
   const clientName =
     customers.find((c) => c.id === (property as { customerId?: string }).customerId)?.name ?? "Customers";
 
@@ -592,16 +601,26 @@ export function BedBoardV2({ property }: { property: Property }) {
           <WhyPopover
             className="block w-full text-left [text-decoration:none]"
             title="Net per month"
-            formula="Collected from associates − Rent paid to landlord"
+            formula={
+              netD.kind === "syncing"
+                ? "Rent is set, but payroll deductions for this property are still syncing — so this isn't a loss yet."
+                : "Collected from associates − Rent paid to landlord"
+            }
             rows={[
               { k: "Collected /mo", v: formatUsdWhole(collectedMo) },
               { k: "Rent /mo", v: formatUsdWhole(rentMo) },
-              { k: "Net /mo", v: formatUsdWhole(net) },
+              netD.kind === "syncing"
+                ? { k: "Status", v: "Deductions syncing" }
+                : { k: "Net /mo", v: formatUsdWhole(netD.value) },
             ]}
-            href="/money"
+            href="/finance"
             hrefLabel="See the money view →"
           >
-            <StatCard label="Net /mo" value={formatUsdWhole(net)} tone={net < 0 ? "risk" : "ok"} />
+            {netD.kind === "syncing" ? (
+              <StatCard label="Net /mo" value="Syncing…" sub="rent set · deductions syncing" />
+            ) : (
+              <StatCard label="Net /mo" value={formatUsdWhole(netD.value)} tone={netD.value < 0 ? "risk" : "ok"} />
+            )}
           </WhyPopover>
         </div>
       </div>
@@ -673,12 +692,29 @@ export function BedBoardV2({ property }: { property: Property }) {
       </div>
 
       <PrintView title={`${(property as { name?: string }).name ?? "Property"} — Beds`} subtitle={(property as { address?: string }).address || undefined}>
-      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {/* Phase 5 — items-start (NOT auto-rows-fr): each card sizes to its own
+          content, so a room with many open slots can't stretch its neighbors
+          and leave giant blank gaps. */}
+      <div className="grid items-start grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {propRooms.map((room) => {
           const rbeds = bedsByRoom.get(room.id) ?? [];
           const rOcc = rbeds.filter((b) => occByBed[b.id]).length;
+          const roomName = (room as { name?: string }).name ?? "Unit";
+          // Phase 6 — collapse a big all-empty room (synthetic backfill etc.).
+          const collapsedEmpty = rOcc === 0 && rbeds.length >= 6 && !expandedRooms.has(room.id);
+          const firstOpen = rbeds.find((b) => !occByBed[b.id]);
           return (
-            <RoomCard key={room.id} unit={(room as { name?: string }).name ?? "Unit"} occupied={rOcc} capacity={rbeds.length}>
+            // Per-card boundary (Phase 2): one bad room can never blank the board.
+            <ErrorBoundary key={room.id}>
+            {collapsedEmpty ? (
+              <CompactEmptyRoom
+                name={roomName}
+                count={rbeds.length}
+                onAssign={firstOpen ? () => { setAssignQ(""); setAssignBed(firstOpen.id); } : undefined}
+                onExpand={() => setExpandedRooms((p) => { const n = new Set(p); n.add(room.id); return n; })}
+              />
+            ) : (
+            <RoomCard unit={roomName} occupied={rOcc} capacity={rbeds.length}>
               {rbeds.map((b) => {
                 const occ = occupantInBed(b.id);
                 if (!occ) {
@@ -779,6 +815,8 @@ export function BedBoardV2({ property }: { property: Property }) {
                 );
               })}
             </RoomCard>
+            )}
+            </ErrorBoundary>
           );
         })}
       </div>
@@ -980,6 +1018,50 @@ export function BedBoardV2({ property }: { property: Property }) {
           <button type="button" onClick={undoBar.run} className="rounded-[7px] bg-white/15 px-2.5 py-1 hover:bg-white/25">Undo</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Phase 6 — a compact stand-in for a big all-empty room so a synthetic
+ *  backfill room with many open slots stays a small, tidy card. */
+function CompactEmptyRoom({
+  name,
+  count,
+  onAssign,
+  onExpand,
+}: {
+  name: string;
+  count: number;
+  onAssign?: () => void;
+  onExpand: () => void;
+}) {
+  return (
+    <div className="rounded-[14px] border border-line bg-panel p-3.5">
+      <div className="flex items-center justify-between">
+        <div className="truncate text-[13px] font-bold text-ink">{name}</div>
+        <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold text-brand tabular-nums">
+          {count} open
+        </span>
+      </div>
+      <div className="mt-1 text-[12px] text-muted-foreground">All beds open — nobody assigned yet.</div>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {onAssign && (
+          <button
+            type="button"
+            onClick={onAssign}
+            className="rounded-[9px] bg-brand px-2.5 py-1.5 text-[12px] font-bold text-white hover:opacity-90"
+          >
+            + Assign a bed
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onExpand}
+          className="rounded-[9px] border border-line bg-panel px-2.5 py-1.5 text-[12px] font-semibold text-ink hover:bg-accent"
+        >
+          Show all {count} beds
+        </button>
+      </div>
     </div>
   );
 }

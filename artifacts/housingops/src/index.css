@@ -100,14 +100,16 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Soft neutral canvas (not stark white) so white cards read as flat,
-     bordered panels — the corporate look. */
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  /* WARM operations theme (global re-skin). The core shadcn tokens now point at
+     the warm palette so EVERY page reads as the warm, dense ledger in the
+     mockup — paper bg, white panels, warm hairline borders, ink text, navy
+     accents — without per-page work. */
+  --background: 40 30% 97%;      /* warm paper canvas */
+  --foreground: 213 28% 17%;     /* ink */
+  --border: 40 24% 88%;          /* warm hairline */
+  --card: 0 0% 100%;             /* white panel */
+  --card-foreground: 213 28% 17%;
+  --card-border: 40 24% 88%;
   --sidebar: 216 62% 22%;
   --sidebar-foreground: 210 40% 98%;
   --sidebar-border: 216 50% 30%;
@@ -117,20 +119,20 @@
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-ring: 217 75% 55%;
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
-  --primary: 217 71% 21%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222 47% 11%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222 47% 11%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --input: 214 32% 91%;
-  --ring: 217 65% 22%;
+  --popover-foreground: 213 28% 17%;
+  --popover-border: 40 24% 88%;
+  --primary: 214 51% 25%;        /* navy brand */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 40 25% 94%;       /* warm neutral */
+  --secondary-foreground: 213 28% 17%;
+  --muted: 40 22% 94%;
+  --muted-foreground: 35 10% 42%;  /* warm grey */
+  --accent: 40 28% 92%;
+  --accent-foreground: 213 28% 17%;
+  --destructive: 358 64% 42%;    /* risk red */
+  --destructive-foreground: 0 0% 100%;
+  --input: 40 24% 88%;
+  --ring: 214 51% 25%;
 
   /* --- HousingOps warm operations palette (light) --- */
   --ink: 213 28% 17%;          /* #1F2A37 text / headers */

@@ -58,6 +58,31 @@ import type { Bed, Occupant, Property } from "@/data/mockData";
 const MAX_BED_COLS = 6;
 const today = () => new Date().toISOString().split("T")[0];
 
+/**
+ * A housed person counts as matched-to-payroll when they carry payroll proof on
+ * their OWN record — a payroll-sourced deduction or chargeSource "payroll"
+ * (server truth, always present). This is the durable signal. We only fall back
+ * to the live `/roster/active` set for occupants matched there but not yet
+ * carrying a seeded deduction. Relying on the live roster ALONE was the bug:
+ * that set only spans recently-imported pay periods, so people paid a couple
+ * weeks ago (valid id + a real $125 deduction) showed "needs match" whenever the
+ * latest weekly run wasn't imported yet.
+ */
+function isPayrollMatched(
+  occ: {
+    employeeId?: string;
+    chargeSource?: string;
+    deduction?: { source?: string; weeklyAmount?: number };
+  },
+  rosterIds: Set<string>,
+): boolean {
+  if (!occ.employeeId) return false;
+  const ded = occ.deduction;
+  if (ded && ((ded.weeklyAmount ?? 0) > 0 || ded.source === "payroll")) return true;
+  if (occ.chargeSource === "payroll") return true;
+  return rosterIds.has(occ.employeeId);
+}
+
 type RosterPerson = {
   personId: string;
   name: string;
@@ -470,7 +495,7 @@ export function PropertyOccupantDetail({ property }: { property: Property }) {
           </thead>
           <tbody>
             {rows.map(({ occ, room, bedNum }) => {
-              const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
+              const matched = isPayrollMatched(occ, rosterIds);
               const freq = occ.billingFrequency ?? "Monthly";
               const wk = occ.chargePerBed > 0 ? toWeeklyCharge(occ.chargePerBed, freq) : 0;
               const mo = occ.chargePerBed > 0 ? toMonthlyCharge(occ.chargePerBed, freq) : 0;
@@ -718,7 +743,7 @@ function ManageOccupantDialog({ bed, occ, rosterPeople, rosterIds, vacantBeds, o
   const freq = occ.billingFrequency ?? "Monthly";
   const wk = occ.chargePerBed > 0 ? toWeeklyCharge(occ.chargePerBed, freq) : 0;
   const mo = occ.chargePerBed > 0 ? toMonthlyCharge(occ.chargePerBed, freq) : 0;
-  const matched = !!occ.employeeId && rosterIds.has(occ.employeeId);
+  const matched = isPayrollMatched(occ, rosterIds);
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger asChild>

@@ -25,6 +25,8 @@ type TableName =
   | "utilities"
   | "roomNightLogs"
   | "insuranceCertificates"
+  | "otherCosts"
+  | "propertyViolations"
   | "buildings";
 
 interface Row {
@@ -42,6 +44,8 @@ const stores: Record<TableName, Map<string, Row>> = {
   utilities: new Map(),
   roomNightLogs: new Map(),
   insuranceCertificates: new Map(),
+  otherCosts: new Map(),
+  propertyViolations: new Map(),
   // Buildings (Task #570) — wiped + reinserted alongside the other
   // tables when the importer round-trips a bundle.
   buildings: new Map(),

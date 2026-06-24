@@ -26,6 +26,9 @@ type TableName =
   | "utilities"
   | "roomNightLogs"
   | "insuranceCertificates"
+  | "otherCosts"
+  | "propertyViolations"
+  | "buildings"
   | "schedulerState";
 
 const stores: Record<TableName, Map<string, Row>> = {
@@ -38,6 +41,9 @@ const stores: Record<TableName, Map<string, Row>> = {
   utilities: new Map(),
   roomNightLogs: new Map(),
   insuranceCertificates: new Map(),
+  otherCosts: new Map(),
+  propertyViolations: new Map(),
+  buildings: new Map(),
   schedulerState: new Map(),
 };
 

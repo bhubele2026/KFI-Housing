@@ -61,6 +61,7 @@ const QboMappingRules = lazyWithReload(() => import("@/pages/qbo-mapping-rules")
 const InsuranceCertificates = lazyWithReload(() => import("@/pages/insurance-certificates"));
 const SettingsPage = lazyWithReload(() => import("@/pages/settings"));
 const AssistantChangelog = lazyWithReload(() => import("@/pages/assistant-changelog"));
+const ZenopleReview = lazyWithReload(() => import("@/pages/zenople-review"));
 // Transportation is out of scope — the app is a pure housing product. The
 // vehicle pages/stub remain parked on disk (and the vehicle-* API + tables are
 // untouched), but nothing routes to them: every /transport/* path redirects to
@@ -169,6 +170,7 @@ function AppRoutes() {
         <Route path="/accounting" component={Accounting} />
         <Route path="/rental-companies" component={RentalCompanies} />
         <Route path="/roster" component={Roster} />
+        <Route path="/zenople-review" component={ZenopleReview} />
         <Route path="/reconciliation" component={Reconciliation} />
         <Route path="/qbo/mapping-rules" component={QboMappingRules} />
         <Route path="/insurance" component={InsuranceCertificates} />

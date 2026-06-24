@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTranslation } from "react-i18next";
 import { KfiLogo } from "@/components/kfi-logo";
 import { useData } from "@/context/data-store";
 import { computeHousingAudit } from "@/components/housing-audit-panel";
-import { Settings, ClipboardList } from "lucide-react";
+import { Settings, ClipboardList, AlertTriangle } from "lucide-react";
 
 /**
  * Professional top navigation bar (navy), the primary "clicker" for the main
@@ -31,6 +31,23 @@ export function TopNav() {
     const a = computeHousingAudit(properties, leases);
     return a.missingRent.length + a.missingDates.length + a.rentAnomalies.length + a.duplicates.length;
   }, [properties, leases]);
+
+  // Payroll-gap count: people we house that payroll doesn't know yet (Stage 3e).
+  // Direct fetch — the endpoint isn't in the generated client.
+  const [payrollGapCount, setPayrollGapCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const baseUrl = import.meta.env.BASE_URL ?? "/";
+    fetch(`${baseUrl}api/zenople/unlinked`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { count?: number } | null) => {
+        if (alive && b && typeof b.count === "number") setPayrollGapCount(b.count);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 bg-[#0b1f3a] px-4 py-2 text-white sm:px-6">
@@ -63,6 +80,23 @@ export function TopNav() {
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
+        <Link
+          href="/zenople-review"
+          data-testid="topnav-zenople-review"
+          aria-label="Payroll gaps"
+          title="Payroll gaps — housed people not yet deducted"
+          className={
+            "relative rounded-md p-2 transition-colors hover:bg-white/5 hover:text-white " +
+            (location === "/zenople-review" ? "text-white" : "text-blue-100/70")
+          }
+        >
+          <AlertTriangle className="h-5 w-5" />
+          {payrollGapCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold leading-4 text-white">
+              {payrollGapCount > 99 ? "99+" : payrollGapCount}
+            </span>
+          )}
+        </Link>
         <Link
           href="/review"
           data-testid="topnav-review"

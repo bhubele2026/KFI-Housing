@@ -27,6 +27,8 @@ import { addOccupantZenopleFieldsIfNeeded } from "./migrations/add-occupant-zeno
 import { addOccupantShiftTimeIfNeeded } from "./migrations/add-occupant-shift-time";
 import { addVehicleColorIfNeeded } from "./migrations/add-vehicle-color";
 import { createWeeklyReviewsTableIfNeeded } from "./migrations/create-weekly-reviews-table";
+import { addOccupantMoveOutReasonIfNeeded } from "./migrations/add-occupant-move-out-reason";
+import { addPropertyLatLngIfNeeded } from "./migrations/add-property-latlng";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -182,6 +184,10 @@ export async function pushSchemaIfNeeded(
   // Completion Runbook B: weekly_reviews (Money review sign-off). Idempotent,
   // runs before pushSchema so a deployed DB gets the table at boot.
   await createWeeklyReviewsTableIfNeeded(pool, log);
+
+  // Overhaul: move-out reason on occupants + lat/lng on properties (map).
+  await addOccupantMoveOutReasonIfNeeded(pool, log);
+  await addPropertyLatLngIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

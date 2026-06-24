@@ -1,0 +1,224 @@
+[
+ {
+  "name": "Abel A Guzman",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Benjamin Zacatzontle",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Bucky Lee Gonzalez -T4",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": 175,
+  "status": "Active"
+ },
+ {
+  "name": "Christian Decuire",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Christopher Hopson",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Claudio Alvarado",
+  "propertyId": "prop-prairie-hill-village",
+  "weekly": 130,
+  "status": "Former"
+ },
+ {
+  "name": "Cody S. Ogden",
+  "propertyId": "prop-burnett-webster-7112-zielsdorf",
+  "weekly": 116,
+  "status": "Active"
+ },
+ {
+  "name": "Cody Troy Smith - T5",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Devin (last name TBD)",
+  "propertyId": "prop-burnett-hinckley-7th-st-se",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Devin M. Law",
+  "propertyId": "prop-burnett-hinckley-7th-st-se",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Eduardo Campos",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Evarado Delgado",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Frank Quinones",
+  "propertyId": "prop-burnett-hinckley-7th-st-se",
+  "weekly": 86,
+  "status": "Active"
+ },
+ {
+  "name": "Gilberto Frias",
+  "propertyId": "prop-iwg-bloomfield-st",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Isidro Guerrero",
+  "propertyId": "prop-burnett-hinckley-7th-st-se",
+  "weekly": 116,
+  "status": "Former"
+ },
+ {
+  "name": "Jacob Mullinax",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Jared Lemert",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Jared Novak",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Jasmine Arce -T4",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Jerry Rivas",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Jonathan P Wheeler - T5",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Jonathan Reynosa",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Joy Doran",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Juan Lozada Lugo",
+  "propertyId": "prop-prairie-hill-village",
+  "weekly": null,
+  "status": "Former"
+ },
+ {
+  "name": "Luis Rodriguez Rivera",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Martin Hust",
+  "propertyId": "prop-hickory-haven-gilman",
+  "weekly": 107,
+  "status": "Active"
+ },
+ {
+  "name": "Nicholas R Franklin",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Paul L Jackson",
+  "propertyId": "prop-iwg-bloomfield-st",
+  "weekly": 106.8,
+  "status": "Active"
+ },
+ {
+  "name": "Ramon Almeida Ruiz",
+  "propertyId": "prop-burnett-webster-7112-zielsdorf",
+  "weekly": 116,
+  "status": "Active"
+ },
+ {
+  "name": "Ricco A. Lorenzana",
+  "propertyId": "prop-prairie-hill-village",
+  "weekly": null,
+  "status": "Former"
+ },
+ {
+  "name": "Richard Fuller",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Robert Bradford",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Rolando Rene Avitia",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Sam Houston",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ },
+ {
+  "name": "Thalia Romero",
+  "propertyId": "prop-penda-2900-new-pinery",
+  "weekly": null,
+  "status": "Active"
+ },
+ {
+  "name": "Tyrek J Patterson",
+  "propertyId": "prop-park-place-plymouth",
+  "weekly": 125,
+  "status": "Active"
+ },
+ {
+  "name": "Xavier Aaron Addison",
+  "propertyId": "prop-shusters-900-seneca-mckeesport",
+  "weekly": 75,
+  "status": "Active"
+ }
+]

@@ -84,6 +84,9 @@ export const occupantsTable = pgTable("occupants", {
   // When the matcher last evaluated this occupant against the roster.
   // Null until the first sync touches the row.
   zenopleCheckedAt: timestamp("zenople_checked_at", { withTimezone: true }),
+  // Why the person moved out (left job / transferred / terminated / other),
+  // captured by the one-tap move-out (overhaul refinement #12).
+  moveOutReason: text("move_out_reason").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 

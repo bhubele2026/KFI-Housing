@@ -2039,7 +2039,10 @@ export default function PropertyDetail() {
           {/* ── OVERVIEW TAB ── */}
           {BOARD_VIEW_ENABLED && (
             <TabsContent value="board" className="space-y-4">
-              <BedBoardV2 property={property} />
+              {/* Item 6 — the property header above already shows Total Beds /
+                  Occupied / Available / Net, so suppress the board's duplicate
+                  stat strip here (kept on the customer all-beds view). */}
+              <BedBoardV2 property={property} showStats={false} />
             </TabsContent>
           )}
 

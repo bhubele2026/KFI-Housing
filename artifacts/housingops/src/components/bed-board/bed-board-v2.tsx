@@ -72,7 +72,20 @@ const MOVE_OUT_REASONS = ["Left job", "Transferred", "Terminated", "Other"] as c
  * cross-property picker. Open beds get ranked "suggested" highlights while
  * dragging (GET /api/beds/open). Print/Export via PrintView.
  */
-export function BedBoardV2({ property }: { property: Property }) {
+export function BedBoardV2({
+  property,
+  showStats = true,
+}: {
+  property: Property;
+  /**
+   * Item 6 — the property-detail page already renders its own richer KPI
+   * header (Total Beds / Occupied / Available / Net Profit + financials), so
+   * it passes showStats={false} to suppress this board's duplicate Capacity/
+   * Occupied/Open/Net strip. Defaults true so the customer all-beds view (no
+   * page header) keeps the stats — the gold look is unchanged there.
+   */
+  showStats?: boolean;
+}) {
   const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant, addOccupant } = useData();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -572,6 +585,7 @@ export function BedBoardV2({ property }: { property: Property }) {
         </div>
       </div>
 
+      {showStats && (
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">
           <WhyPopover
@@ -624,6 +638,7 @@ export function BedBoardV2({ property }: { property: Property }) {
           </WhyPopover>
         </div>
       </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-faint">Color by</span>

@@ -217,8 +217,21 @@ export default function Dashboard() {
 
           <Card>
             <CardHead label="Money — this period" link={<span className="cursor-pointer text-[12.5px] font-semibold text-brand" onClick={() => navigate("/finance")}>Review →</span>} />
-            <div className={`text-[27px] font-extrabold ${net >= 0 ? "text-ok" : "text-risk"}`}>{net >= 0 ? "+" : ""}{formatUsdWhole(net)}</div>
-            <div className="mb-3 text-[12.5px] text-muted-foreground">net spread (collected − rent)</div>
+            {/* Item 3 — money honesty: a negative spread driven by housed
+                people who aren't collecting yet ($0-deduction / not-synced) is
+                NOT a real loss. Show "syncing" rather than a scary red −$.
+                Layout unchanged; only the false-negative logic. */}
+            {net < 0 && atRisk > 0 ? (
+              <>
+                <div className="text-[27px] font-extrabold text-ink">Syncing…</div>
+                <div className="mb-3 text-[12.5px] text-muted-foreground">rent set · {atRisk} housed not collecting yet</div>
+              </>
+            ) : (
+              <>
+                <div className={`text-[27px] font-extrabold ${net >= 0 ? "text-ok" : "text-risk"}`}>{net >= 0 ? "+" : ""}{formatUsdWhole(net)}</div>
+                <div className="mb-3 text-[12.5px] text-muted-foreground">net spread (collected − rent)</div>
+              </>
+            )}
             <Kv label="Collected (deductions)" value={formatUsdWhole(collected)} />
             <Kv label="Rent we pay" value={formatUsdWhole(rent)} />
             <Kv label="Utilities" value={formatUsdWhole((summary as { totalUtilities?: number }).totalUtilities ?? 0)} />

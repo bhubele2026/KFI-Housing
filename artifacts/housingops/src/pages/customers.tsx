@@ -35,7 +35,16 @@ interface CustAgg {
  */
 export default function Customers() {
   const [, navigate] = useLocation();
-  const { customers, properties, leases, occupants, utilities, isLoading } = useData();
+  // Defensive defaults — a briefly-undefined list must never throw into the
+  // page ErrorBoundary (that throw is what paints the red fallback block).
+  const {
+    customers = [],
+    properties = [],
+    leases = [],
+    occupants = [],
+    utilities = [],
+    isLoading,
+  } = useData();
 
   const cards = useMemo(() => {
     const { rows } = computePropertyEconomics(properties, leases, occupants, utilities);

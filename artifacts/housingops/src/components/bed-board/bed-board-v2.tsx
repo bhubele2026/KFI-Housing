@@ -94,6 +94,8 @@ export function BedBoardV2({
   // add a room). Deliberately separate from assigning a PERSON to a bed so the
   // two never get confused. Off by default.
   const [editBeds, setEditBeds] = useState(false);
+  // Item 3 guard rail — confirm before removing a bed (only empty beds).
+  const [confirmRemoveBed, setConfirmRemoveBed] = useState<string | null>(null);
   // #5 assign-bed picker (Zenople roster or manual) for an open bed
   const [assignBed, setAssignBed] = useState<string | null>(null);
   const [assignQ, setAssignQ] = useState("");
@@ -804,7 +806,7 @@ export function BedBoardV2({
                         <Bed open testId={`bed-open-${b.id}`} />
                         <button
                           type="button"
-                          onClick={() => handleRemoveBed(b.id)}
+                          onClick={() => setConfirmRemoveBed(b.id)}
                           title="Remove this empty bed"
                           data-testid={`bed-remove-${b.id}`}
                           className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:border-risk/40 hover:bg-risk-soft hover:text-risk"
@@ -959,6 +961,38 @@ export function BedBoardV2({
       >
         ↩ Drag a person here to move them out / unassign
       </div>
+
+      {/* Item 3 — confirm before removing a bed from inventory. */}
+      {confirmRemoveBed && (
+        <Modal onClose={() => setConfirmRemoveBed(null)} title="Remove this empty bed?">
+          <div className="space-y-4 text-[13px] text-ink2">
+            <p>
+              This removes the bed from the room&apos;s inventory. It has no one assigned,
+              so nobody is affected — you can add it back anytime with <b>+ Add bed</b>.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRemoveBed(null)}
+                className="rounded-[9px] border border-line bg-panel px-3.5 py-2 text-[13px] font-semibold text-ink2 hover:bg-track"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="bed-remove-confirm"
+                onClick={() => {
+                  handleRemoveBed(confirmRemoveBed);
+                  setConfirmRemoveBed(null);
+                }}
+                className="rounded-[9px] bg-risk px-3.5 py-2 text-[13px] font-bold text-white hover:bg-risk/90"
+              >
+                Remove bed
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Move-out reason prompt (#24 + confirm #17) */}
       {moveOutModal && (

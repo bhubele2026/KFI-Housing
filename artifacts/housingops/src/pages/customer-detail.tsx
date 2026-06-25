@@ -44,7 +44,7 @@ const weeklyOf = (o: { chargePerBed?: number; deduction?: { weeklyAmount?: numbe
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer } = useData();
+  const { customers, properties, beds, occupants, leases, utilities, otherCosts, isLoading, updateCustomer } = useData();
 
   const customer = customers.find((c) => c.id === id);
   const isInactive = !!(customer as { isInactive?: boolean } | undefined)?.isInactive;
@@ -73,8 +73,26 @@ export default function CustomerDetail() {
         0,
       );
       const rent = Number((p as { monthlyRent?: number }).monthlyRent) || 0;
-      const util = sumOtherCostsForProperty(otherCosts, p.id);
-      return { p, total, occ, open, collected, rent, util, people: occs.length, net: collected - rent - util };
+      // BUG FIX — utilities roll up from the property's UTILITY SERVICES (the
+      // `utilities` table), the same source the property page sums. The old
+      // code read `otherCosts` (empty), so customer utilities showed $0.
+      const utilServices = utilities
+        .filter((u) => (u as { propertyId?: string }).propertyId === p.id)
+        .reduce((s, u) => s + (Number((u as { monthlyCost?: number }).monthlyCost) || 0), 0);
+      const util = utilServices + sumOtherCostsForProperty(otherCosts, p.id);
+      // Bed economics (per the "are we charging enough per bed?" spec). Uses
+      // TOTAL beds (occupancy is irrelevant to the per-bed cost question).
+      const cost = rent + util;
+      const shouldChargeBedMo = total > 0 ? cost / total : 0;
+      const collectedWk = (collected * 12) / 52;
+      const collectingBedWk = total > 0 ? collectedWk / total : 0;
+      const shouldChargeBedWk = (shouldChargeBedMo * 12) / 52;
+      return {
+        p, total, occ, open, collected, rent, util, people: occs.length,
+        net: collected - rent - util,
+        cost, shouldChargeBedMo, shouldChargeBedWk, collectingBedWk,
+        gapBedWk: collectingBedWk - shouldChargeBedWk,
+      };
     };
 
     const perProp = props.map(statFor).sort((a, b) => b.net - a.net);
@@ -101,16 +119,29 @@ export default function CustomerDetail() {
     const aptCount = props.filter((p) => /apart/i.test(String((p as { type?: string }).type ?? ""))).length;
     const occPct = capacity > 0 ? Math.round((occupied / capacity) * 100) : 0;
 
+    // Blended bed economics across the client (TOTAL beds).
+    const costMo = rent + utilities;
+    const costWk = (costMo * 12) / 52;
+    const collectedWk = (collected * 12) / 52;
+    const shouldChargeBedMo = capacity > 0 ? costMo / capacity : 0;
+    const shouldChargeBedWk = (shouldChargeBedMo * 12) / 52;
+    const collectingBedWk = capacity > 0 ? collectedWk / capacity : 0;
+
     return {
       perProp, capacity, occupied, open, housed, collected, rent, utilities,
       net: collected - rent - utilities, cities, occPct,
       collectedWeekly: Math.round((collected * 12) / 52),
       rentWeekly: Math.round((rent * 12) / 52),
       avgRentBed: capacity > 0 ? Math.round(rent / capacity) : 0,
+      // Bed economics roll-up:
+      costMo, costWk, collectedWk,
+      shouldChargeBedMo, shouldChargeBedWk, collectingBedWk,
+      gapBedWk: collectingBedWk - shouldChargeBedWk,
+      surplusWk: collectedWk - costWk,
       notInPayroll, zeroDeduction, needsCleaning,
       propCount: props.length, aptCount, motelCount: props.length - aptCount,
     };
-  }, [id, properties, beds, occupants, leases, otherCosts]);
+  }, [id, properties, beds, occupants, leases, utilities, otherCosts]);
 
   if (isLoading && !customer) {
     return (
@@ -252,7 +283,7 @@ export default function CustomerDetail() {
               label="Properties — click a row to open its beds"
             />
             <div className="space-y-3">
-              {view.perProp.map(({ p, total, occ, open, collected, rent, util, people }) => {
+              {view.perProp.map(({ p, total, occ, open, collected, rent, util, people, shouldChargeBedWk, collectingBedWk, gapBedWk }) => {
                 const pct = total > 0 ? occ / total : 0;
                 return (
                   <div
@@ -270,6 +301,15 @@ export default function CustomerDetail() {
                       <div className="truncate text-[15px] font-bold text-ink">{p.name}</div>
                       <div className="truncate text-xs text-muted-foreground tabular-nums">
                         {(p as { city?: string }).city ?? ""} · {total} beds · {open} open
+                      </div>
+                      {/* Per-bed economics: collecting vs should-charge, gap color-coded. */}
+                      <div className="truncate text-[11px] tabular-nums">
+                        <span className="text-muted-foreground">
+                          {formatUsd(Math.round(collectingBedWk))}/bed collected vs {formatUsd(Math.round(shouldChargeBedWk))} needed ·{" "}
+                        </span>
+                        <span className={gapBedWk >= 0 ? "font-semibold text-ok" : "font-semibold text-risk"}>
+                          {gapBedWk >= 0 ? "+" : "−"}{formatUsd(Math.abs(Math.round(gapBedWk)))}/bed/wk
+                        </span>
                       </div>
                     </div>
                     <NetFigure input={{ collected, rent, utilities: util, occupants: people }} className="font-bold text-[14px]" />
@@ -321,6 +361,43 @@ export default function CustomerDetail() {
             </div>
           </Card>
         </div>
+
+        {/* Bed economics — "are we charging enough per bed?" Blended across all
+            of this client's properties, using TOTAL beds. Recomputes live as
+            rent/utilities change in the data store. */}
+        <Card className="mt-4">
+          <CardHead label="Bed economics — are we charging enough per bed?" />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatCard
+              label="Should charge / bed"
+              value={`${formatUsd(Math.round(view.shouldChargeBedWk))}/wk`}
+              sub={`${formatUsd(Math.round(view.shouldChargeBedMo))}/mo · (rent + util) ÷ ${view.capacity} beds`}
+            />
+            <StatCard
+              label="Collecting / bed"
+              value={`${formatUsd(Math.round(view.collectingBedWk))}/wk`}
+              sub="recovered ÷ total beds"
+            />
+            <StatCard
+              label="Gap / bed"
+              value={`${view.gapBedWk >= 0 ? "+" : "−"}${formatUsd(Math.abs(Math.round(view.gapBedWk)))}/wk`}
+              tone={view.gapBedWk >= 0 ? "ok" : "risk"}
+              sub="collecting − should-charge"
+            />
+            <StatCard
+              label="Weekly surplus"
+              value={`${view.surplusWk >= 0 ? "+" : "−"}${formatUsd(Math.abs(Math.round(view.surplusWk)))}`}
+              tone={view.surplusWk >= 0 ? "ok" : "risk"}
+              sub={`${formatUsd(Math.round(view.collectedWk))} collected vs ${formatUsd(Math.round(view.costWk))} cost /wk`}
+            />
+          </div>
+          <div className={`mt-3 text-[13px] ${view.gapBedWk >= 0 ? "text-ok" : "text-risk"}`}>
+            {view.gapBedWk >= 0
+              ? `Covering costs — about ${formatUsd(Math.abs(Math.round(view.gapBedWk)))}/bed/wk above breakeven across this client.`
+              : `Charging about ${formatUsd(Math.abs(Math.round(view.gapBedWk)))}/bed/wk under what's needed to cover rent + utilities across this client.`}
+            <span className="ml-1 text-muted-foreground">Cost basis = rent ({formatUsd(view.rent)}/mo) + utilities ({formatUsd(view.utilities)}/mo). Edit a property's rent/utilities to update this live.</span>
+          </div>
+        </Card>
       </div>
     </MainLayout>
   );

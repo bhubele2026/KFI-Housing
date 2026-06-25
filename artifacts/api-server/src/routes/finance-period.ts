@@ -108,6 +108,10 @@ async function loadInputs(): Promise<{
   rentWeekly: number;
   activeProperties: number;
   collectedByWeek: Map<string, number>;
+  personsByWeek: Map<
+    string,
+    Map<string, { personId: string; name: string; company: string; propertyId: string; amount: number }>
+  >;
 }> {
   let rentWeekly = 0;
   let activeProperties = 0;

@@ -180,6 +180,86 @@ export function useHealthCheck<
 }
 
 /**
+ * Returns the running server's per-deploy build id. The web client
+polls this and, when the value changes from what it first saw
+(i.e. the app was republished), shows a "new version — refresh"
+prompt. Changes on every server reboot.
+
+ * @summary Deployed build identifier
+ */
+export const getGetVersionUrl = () => {
+  return `/api/version`;
+};
+
+export const getVersion = async (
+  options?: RequestInit,
+): Promise<VersionStatus> => {
+  return customFetch<VersionStatus>(getGetVersionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetVersionQueryKey = () => {
+  return [`/api/version`] as const;
+};
+
+export const getGetVersionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getVersion>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getVersion>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetVersionQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getVersion>>> = ({
+    signal,
+  }) => getVersion({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getVersion>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetVersionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getVersion>>
+>;
+export type GetVersionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Deployed build identifier
+ */
+
+export function useGetVersion<
+  TData = Awaited<ReturnType<typeof getVersion>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getVersion>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetVersionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * Returns the small set of runtime values the housingops web app needs
 but cannot bake into its bundle — currently just the Google Maps
 Embed API key. The key is exposed deliberately so it can be rotated
@@ -254,156 +334,6 @@ export function useGetRuntimeConfig<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetRuntimeConfigQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Active employee roster (active assignments) from Zenople
- */
-export const getListActiveRosterUrl = () => {
-  return `/api/roster/active`;
-};
-
-export const listActiveRoster = async (
-  options?: RequestInit,
-): Promise<ActiveRosterResponse> => {
-  return customFetch<ActiveRosterResponse>(getListActiveRosterUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getListActiveRosterQueryKey = () => {
-  return [`/api/roster/active`] as const;
-};
-
-export const getListActiveRosterQueryOptions = <
-  TData = Awaited<ReturnType<typeof listActiveRoster>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listActiveRoster>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getListActiveRosterQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof listActiveRoster>>
-  > = ({ signal }) => listActiveRoster({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof listActiveRoster>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListActiveRosterQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listActiveRoster>>
->;
-export type ListActiveRosterQueryError = ErrorType<unknown>;
-
-/**
- * @summary Active employee roster (active assignments) from Zenople
- */
-
-export function useListActiveRoster<
-  TData = Awaited<ReturnType<typeof listActiveRoster>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof listActiveRoster>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListActiveRosterQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Deployed build identifier
- */
-export const getGetVersionUrl = () => {
-  return `/api/version`;
-};
-
-export const getVersion = async (
-  options?: RequestInit,
-): Promise<VersionStatus> => {
-  return customFetch<VersionStatus>(getGetVersionUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetVersionQueryKey = () => {
-  return [`/api/version`] as const;
-};
-
-export const getGetVersionQueryOptions = <
-  TData = Awaited<ReturnType<typeof getVersion>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getVersion>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetVersionQueryKey();
-
-  const queryFn: QueryFunction<
-    Awaited<ReturnType<typeof getVersion>>
-  > = ({ signal }) => getVersion({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getVersion>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetVersionQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getVersion>>
->;
-export type GetVersionQueryError = ErrorType<unknown>;
-
-/**
- * @summary Deployed build identifier
- */
-
-export function useGetVersion<
-  TData = Awaited<ReturnType<typeof getVersion>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getVersion>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetVersionQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -4869,6 +4799,87 @@ export const useCreateOccupant = <
 > => {
   return useMutation(getCreateOccupantMutationOptions(options));
 };
+
+/**
+ * The pool of employees currently on assignment as of the last
+payroll run, pulled live from Zenople (`AssignmentData`). This is
+what the Roster page lets an operator place into a property/bed —
+distinct from the housing-deduction list (which is only people who
+already carry a housing charge). Cached in-memory for 15 minutes.
+
+ * @summary Active employee roster (active assignments) from Zenople
+ */
+export const getListActiveRosterUrl = () => {
+  return `/api/roster/active`;
+};
+
+export const listActiveRoster = async (
+  options?: RequestInit,
+): Promise<ActiveRosterResponse> => {
+  return customFetch<ActiveRosterResponse>(getListActiveRosterUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListActiveRosterQueryKey = () => {
+  return [`/api/roster/active`] as const;
+};
+
+export const getListActiveRosterQueryOptions = <
+  TData = Awaited<ReturnType<typeof listActiveRoster>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRoster>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListActiveRosterQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listActiveRoster>>
+  > = ({ signal }) => listActiveRoster({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRoster>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListActiveRosterQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listActiveRoster>>
+>;
+export type ListActiveRosterQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Active employee roster (active assignments) from Zenople
+ */
+
+export function useListActiveRoster<
+  TData = Awaited<ReturnType<typeof listActiveRoster>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listActiveRoster>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListActiveRosterQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Update an occupant

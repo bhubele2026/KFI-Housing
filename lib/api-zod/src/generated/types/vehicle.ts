@@ -29,6 +29,8 @@ export interface Vehicle {
   year?: number | null;
   make: string;
   model: string;
+  /** Exterior color (e.g. "White", "Silver"). Empty when unknown (Stage 5). */
+  color?: string;
   /** Passenger capacity; compared with `associatesTransported` to flag under-utilised vans. */
   seats: number;
   /** Internal "Merchant Unit */

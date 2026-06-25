@@ -7,6 +7,7 @@
  */
 import type { OccupantBillingFrequency } from "./occupantBillingFrequency";
 import type { OccupantChargeSource } from "./occupantChargeSource";
+import type { OccupantDeduction } from "./occupantDeduction";
 import type { OccupantGender } from "./occupantGender";
 import type { OccupantLanguage } from "./occupantLanguage";
 import type { OccupantStatus } from "./occupantStatus";
@@ -101,4 +102,29 @@ occupants have been waiting (task #391).
    * @nullable
    */
   createdAt?: Date | null;
+  /** Free-form shift label + time window for this person (e.g.
+"Days 5a–2p"). Empty when not recorded. Complements `shift`
+(Stage 5).
+ */
+  shiftTime?: string;
+  /** Zenople person id this occupant is linked to once matched.
+Empty until linked.
+ */
+  zenoplePersonId?: string;
+  /** Payroll-link status: "linked", "not_in_zenople",
+"needs_review", or "pending" (default). Drives the status dot
+on the deduction badge.
+ */
+  zenopleStatus?: string;
+  /**
+   * ISO timestamp of the last Zenople match attempt; null if never checked.
+   * @nullable
+   */
+  zenopleCheckedAt?: Date | null;
+  /** Computed, read-only. The occupant's current weekly housing
+deduction — the latest payroll_deductions snapshot, falling
+back to chargePerBed. Rendered by the DeductionBadge on every
+surface a person appears.
+ */
+  readonly deduction?: OccupantDeduction;
 }

@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./activeRosterPerson";
+export * from "./activeRosterResponse";
 export * from "./backfillPropertyCoords200";
 export * from "./bed";
 export * from "./bedCleaningStatus";
@@ -75,6 +77,7 @@ export * from "./occupantCreateGender";
 export * from "./occupantCreateLanguage";
 export * from "./occupantCreateStatus";
 export * from "./occupantCreateTitle";
+export * from "./occupantDeduction";
 export * from "./occupantGender";
 export * from "./occupantLanguage";
 export * from "./occupantStatus";
@@ -152,3 +155,4 @@ export * from "./vehicleStatus";
 export * from "./vehicleUpdate";
 export * from "./vehicleUpdateOwnership";
 export * from "./vehicleUpdateStatus";
+export * from "./versionStatus";

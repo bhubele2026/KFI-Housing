@@ -5,40 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface ActiveRosterPerson {
-  /** Zenople PersonId — equals occupant.employeeId. */
-  personId: string;
-  name: string;
-  /**
-   * Other distinct names Zenople has shown for this personId — for lookup
-   * when an occupant was entered under a different spelling. Excludes name.
-   */
-  aliases?: string[];
-  /** Staffing client/customer from the active assignment ("" if none). */
-  company: string;
-  jobTitle: string;
-  /** True when the person carries a weekly housing deduction. */
-  hasDeduction: boolean;
-  /** Weekly housing-deduction rate (0 when none). */
-  weeklyDeduction: number;
-}
-
-export interface ActiveRosterResponse {
-  /** ISO timestamp the roster was pulled. */
-  asOf: string;
-  /** Zenople actions composed (PayrollData + AssignmentData + DeductionData). */
-  source: string;
-  /** The last payroll period (AccountingPeriod) the headcount is scoped to. */
-  payPeriod: string;
-  /** Available payroll periods (>= the June go-live floor), newest first. */
-  periods?: string[];
-  /** Total people on the last payroll run. */
-  count: number;
-  /** How many of those carry a housing deduction. */
-  withDeduction: number;
-  people: ActiveRosterPerson[];
-}
-
 export interface UploadUrlRequest {
   /** @minLength 1 */
   name: string;
@@ -60,11 +26,6 @@ export interface ErrorEnvelope {
 
 export interface HealthStatus {
   status: string;
-}
-
-export interface VersionStatus {
-  /** Per-deploy build identifier (changes on every server reboot). */
-  version: string;
 }
 
 /**
@@ -1057,6 +1018,42 @@ export interface BedUpdate {
   cleaningStatus?: BedUpdateCleaningStatus;
 }
 
+export interface VersionStatus {
+  /** Per-deploy build identifier (changes on every server reboot). */
+  version: string;
+}
+
+export interface ActiveRosterPerson {
+  /** Zenople PersonId — equals occupant.employeeId. */
+  personId: string;
+  name: string;
+  /** Other distinct names Zenople has shown for this personId (payroll / assignment / deduction) — for lookup when an occupant was entered under a different spelling or nickname. Excludes name. */
+  aliases?: string[];
+  /** Staffing client/customer from the active assignment ("" if none). */
+  company: string;
+  jobTitle: string;
+  /** True when the person carries a weekly housing deduction. */
+  hasDeduction: boolean;
+  /** Weekly housing-deduction rate (0 when none). */
+  weeklyDeduction: number;
+}
+
+export interface ActiveRosterResponse {
+  /** ISO timestamp the roster was pulled. */
+  asOf: string;
+  /** Zenople actions composed (PayrollData + AssignmentData + DeductionData). */
+  source: string;
+  /** The last payroll period (AccountingPeriod) the headcount is scoped to. */
+  payPeriod: string;
+  /** Available payroll periods (>= the June go-live floor), newest first. */
+  periods?: string[];
+  /** Total people on the last payroll run. */
+  count: number;
+  /** How many of those carry a housing deduction. */
+  withDeduction: number;
+  people: ActiveRosterPerson[];
+}
+
 export type OccupantStatus =
   (typeof OccupantStatus)[keyof typeof OccupantStatus];
 
@@ -1134,6 +1131,20 @@ export const OccupantTitle = {
   Associate: "Associate",
   Mentor: "Mentor",
 } as const;
+
+/**
+ * Computed, read-only. The occupant's current weekly housing
+deduction — the latest payroll_deductions snapshot, falling
+back to chargePerBed. Rendered by the DeductionBadge on every
+surface a person appears.
+
+ */
+export type OccupantDeduction = {
+  readonly weeklyAmount: number;
+  readonly source: string;
+  readonly payWeekEndDate: string;
+  readonly frequency: string;
+};
 
 export interface Occupant {
   id: string;
@@ -1223,6 +1234,31 @@ occupants have been waiting (task #391).
    * @nullable
    */
   createdAt?: string | null;
+  /** Free-form shift label + time window for this person (e.g.
+"Days 5a–2p"). Empty when not recorded. Complements `shift`
+(Stage 5).
+ */
+  shiftTime?: string;
+  /** Zenople person id this occupant is linked to once matched.
+Empty until linked.
+ */
+  zenoplePersonId?: string;
+  /** Payroll-link status: "linked", "not_in_zenople",
+"needs_review", or "pending" (default). Drives the status dot
+on the deduction badge.
+ */
+  zenopleStatus?: string;
+  /**
+   * ISO timestamp of the last Zenople match attempt; null if never checked.
+   * @nullable
+   */
+  zenopleCheckedAt?: string | null;
+  /** Computed, read-only. The occupant's current weekly housing
+deduction — the latest payroll_deductions snapshot, falling
+back to chargePerBed. Rendered by the DeductionBadge on every
+surface a person appears.
+ */
+  readonly deduction?: OccupantDeduction;
 }
 
 export type OccupantCreateStatus =
@@ -1321,6 +1357,11 @@ shift title.
    * @nullable
    */
   shift?: string | null;
+  /** Free-text shift time window (e.g. "6a-2:30p") shown on the
+Property Board contact roster. Separate from `shift`, which is
+the named bucket.
+ */
+  shiftTime?: string;
   /** @nullable */
   language?: OccupantCreateLanguage;
   /** @nullable */
@@ -1429,6 +1470,11 @@ shift title.
    * @nullable
    */
   shift?: string | null;
+  /** Free-text shift time window (e.g. "6a-2:30p") shown on the
+Property Board contact roster. Separate from `shift`, which is
+the named bucket.
+ */
+  shiftTime?: string;
   /** @nullable */
   language?: OccupantUpdateLanguage;
   /** @nullable */
@@ -1557,6 +1603,8 @@ export interface Vehicle {
   year?: number | null;
   make: string;
   model: string;
+  /** Exterior color (e.g. "White", "Silver"). Empty when unknown (Stage 5). */
+  color?: string;
   /** Passenger capacity; compared with `associatesTransported` to flag under-utilised vans. */
   seats: number;
   /** Internal "Merchant Unit */
@@ -1653,6 +1701,7 @@ export interface VehicleUpdate {
   year?: number | null;
   make?: string;
   model?: string;
+  color?: string;
   seats?: number;
   merchantUnit?: string;
   bookValue?: number;

@@ -19,6 +19,7 @@ export interface VehicleUpdate {
   year?: number | null;
   make?: string;
   model?: string;
+  color?: string;
   seats?: number;
   merchantUnit?: string;
   bookValue?: number;

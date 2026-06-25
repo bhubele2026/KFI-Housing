@@ -24,7 +24,9 @@ prompt. Changes on every server reboot.
  * @summary Deployed build identifier
  */
 export const GetVersionResponse = zod.object({
-  version: zod.string(),
+  version: zod
+    .string()
+    .describe("Per-deploy build identifier (changes on every server reboot)."),
 });
 
 /**
@@ -500,6 +502,12 @@ export const ImportDataBody = zod.object({
         .nullish()
         .describe(
           'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
+        ),
+      shiftTime: zod
+        .string()
+        .optional()
+        .describe(
+          'Free-text shift time window (e.g. \"6a-2:30p\") shown on the\nProperty Board contact roster. Separate from `shift`, which is\nthe named bucket.\n',
         ),
       language: zod
         .union([
@@ -2962,6 +2970,41 @@ export const ConvertProjectedMoveInResponse = zod.object({
       .describe(
         "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
       ),
+    shiftTime: zod
+      .string()
+      .optional()
+      .describe(
+        'Free-form shift label + time window for this person (e.g.\n\"Days 5a–2p\"). Empty when not recorded. Complements `shift`\n(Stage 5).\n',
+      ),
+    zenoplePersonId: zod
+      .string()
+      .optional()
+      .describe(
+        "Zenople person id this occupant is linked to once matched.\nEmpty until linked.\n",
+      ),
+    zenopleStatus: zod
+      .string()
+      .optional()
+      .describe(
+        'Payroll-link status: \"linked\", \"not_in_zenople\",\n\"needs_review\", or \"pending\" (default). Drives the status dot\non the deduction badge.\n',
+      ),
+    zenopleCheckedAt: zod.coerce
+      .date()
+      .nullish()
+      .describe(
+        "ISO timestamp of the last Zenople match attempt; null if never checked.",
+      ),
+    deduction: zod
+      .object({
+        weeklyAmount: zod.number(),
+        source: zod.string(),
+        payWeekEndDate: zod.string(),
+        frequency: zod.string(),
+      })
+      .optional()
+      .describe(
+        "Computed, read-only. The occupant's current weekly housing\ndeduction — the latest payroll_deductions snapshot, falling\nback to chargePerBed. Rendered by the DeductionBadge on every\nsurface a person appears.\n",
+      ),
   }),
 });
 
@@ -3294,6 +3337,41 @@ export const ListOccupantsResponseItem = zod.object({
     .describe(
       "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
     ),
+  shiftTime: zod
+    .string()
+    .optional()
+    .describe(
+      'Free-form shift label + time window for this person (e.g.\n\"Days 5a–2p\"). Empty when not recorded. Complements `shift`\n(Stage 5).\n',
+    ),
+  zenoplePersonId: zod
+    .string()
+    .optional()
+    .describe(
+      "Zenople person id this occupant is linked to once matched.\nEmpty until linked.\n",
+    ),
+  zenopleStatus: zod
+    .string()
+    .optional()
+    .describe(
+      'Payroll-link status: \"linked\", \"not_in_zenople\",\n\"needs_review\", or \"pending\" (default). Drives the status dot\non the deduction badge.\n',
+    ),
+  zenopleCheckedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO timestamp of the last Zenople match attempt; null if never checked.",
+    ),
+  deduction: zod
+    .object({
+      weeklyAmount: zod.number(),
+      source: zod.string(),
+      payWeekEndDate: zod.string(),
+      frequency: zod.string(),
+    })
+    .optional()
+    .describe(
+      "Computed, read-only. The occupant's current weekly housing\ndeduction — the latest payroll_deductions snapshot, falling\nback to chargePerBed. Rendered by the DeductionBadge on every\nsurface a person appears.\n",
+    ),
 });
 export const ListOccupantsResponse = zod.array(ListOccupantsResponseItem);
 
@@ -3333,6 +3411,12 @@ export const CreateOccupantBody = zod.object({
     .describe(
       'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
     ),
+  shiftTime: zod
+    .string()
+    .optional()
+    .describe(
+      'Free-text shift time window (e.g. \"6a-2:30p\") shown on the\nProperty Board contact roster. Separate from `shift`, which is\nthe named bucket.\n',
+    ),
   language: zod
     .union([
       zod.literal("Bilingual"),
@@ -3361,6 +3445,65 @@ export const CreateOccupantBody = zod.object({
   responsibilities: zod.array(zod.string()).optional(),
   isLead: zod.boolean().optional(),
   keysIssued: zod.number().optional(),
+});
+
+/**
+ * The pool of employees currently on assignment as of the last
+payroll run, pulled live from Zenople (`AssignmentData`). This is
+what the Roster page lets an operator place into a property/bed —
+distinct from the housing-deduction list (which is only people who
+already carry a housing charge). Cached in-memory for 15 minutes.
+
+ * @summary Active employee roster (active assignments) from Zenople
+ */
+export const ListActiveRosterResponse = zod.object({
+  asOf: zod.string().describe("ISO timestamp the roster was pulled."),
+  source: zod
+    .string()
+    .describe(
+      "Zenople actions composed (PayrollData + AssignmentData + DeductionData).",
+    ),
+  payPeriod: zod
+    .string()
+    .describe(
+      "The last payroll period (AccountingPeriod) the headcount is scoped to.",
+    ),
+  periods: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Available payroll periods (>= the June go-live floor), newest first.",
+    ),
+  count: zod.number().describe("Total people on the last payroll run."),
+  withDeduction: zod
+    .number()
+    .describe("How many of those carry a housing deduction."),
+  people: zod.array(
+    zod.object({
+      personId: zod
+        .string()
+        .describe("Zenople PersonId — equals occupant.employeeId."),
+      name: zod.string(),
+      aliases: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Other distinct names Zenople has shown for this personId (payroll \/ assignment \/ deduction) — for lookup when an occupant was entered under a different spelling or nickname. Excludes name.",
+        ),
+      company: zod
+        .string()
+        .describe(
+          'Staffing client\/customer from the active assignment (\"\" if none).',
+        ),
+      jobTitle: zod.string(),
+      hasDeduction: zod
+        .boolean()
+        .describe("True when the person carries a weekly housing deduction."),
+      weeklyDeduction: zod
+        .number()
+        .describe("Weekly housing-deduction rate (0 when none)."),
+    }),
+  ),
 });
 
 /**
@@ -3403,6 +3546,12 @@ export const UpdateOccupantBody = zod.object({
     .nullish()
     .describe(
       'See `Occupant.shift` for accepted values. Standard\n\"Days\"\/\"Nights\"\/\"Overnights\" plus any per-customer custom\nshift title.\n',
+    ),
+  shiftTime: zod
+    .string()
+    .optional()
+    .describe(
+      'Free-text shift time window (e.g. \"6a-2:30p\") shown on the\nProperty Board contact roster. Separate from `shift`, which is\nthe named bucket.\n',
     ),
   language: zod
     .union([
@@ -3527,6 +3676,41 @@ export const UpdateOccupantResponse = zod.object({
     .nullish()
     .describe(
       "ISO-8601 timestamp of when this occupant record was created.\nNull for legacy rows inserted before the column existed.\nUsed by the dashboard to show how long pending-placement\noccupants have been waiting (task #391).\n",
+    ),
+  shiftTime: zod
+    .string()
+    .optional()
+    .describe(
+      'Free-form shift label + time window for this person (e.g.\n\"Days 5a–2p\"). Empty when not recorded. Complements `shift`\n(Stage 5).\n',
+    ),
+  zenoplePersonId: zod
+    .string()
+    .optional()
+    .describe(
+      "Zenople person id this occupant is linked to once matched.\nEmpty until linked.\n",
+    ),
+  zenopleStatus: zod
+    .string()
+    .optional()
+    .describe(
+      'Payroll-link status: \"linked\", \"not_in_zenople\",\n\"needs_review\", or \"pending\" (default). Drives the status dot\non the deduction badge.\n',
+    ),
+  zenopleCheckedAt: zod.coerce
+    .date()
+    .nullish()
+    .describe(
+      "ISO timestamp of the last Zenople match attempt; null if never checked.",
+    ),
+  deduction: zod
+    .object({
+      weeklyAmount: zod.number(),
+      source: zod.string(),
+      payWeekEndDate: zod.string(),
+      frequency: zod.string(),
+    })
+    .optional()
+    .describe(
+      "Computed, read-only. The occupant's current weekly housing\ndeduction — the latest payroll_deductions snapshot, falling\nback to chargePerBed. Rendered by the DeductionBadge on every\nsurface a person appears.\n",
     ),
 });
 
@@ -4144,6 +4328,12 @@ export const ListVehiclesResponseItem = zod
     year: zod.number().nullish().describe("Model year. Null when unknown."),
     make: zod.string(),
     model: zod.string(),
+    color: zod
+      .string()
+      .optional()
+      .describe(
+        'Exterior color (e.g. \"White\", \"Silver\"). Empty when unknown (Stage 5).',
+      ),
     seats: zod
       .number()
       .describe(
@@ -4252,6 +4442,12 @@ export const CreateVehicleBody = zod
     year: zod.number().nullish().describe("Model year. Null when unknown."),
     make: zod.string(),
     model: zod.string(),
+    color: zod
+      .string()
+      .optional()
+      .describe(
+        'Exterior color (e.g. \"White\", \"Silver\"). Empty when unknown (Stage 5).',
+      ),
     seats: zod
       .number()
       .describe(
@@ -4358,6 +4554,7 @@ export const UpdateVehicleBody = zod
     year: zod.number().nullish(),
     make: zod.string().optional(),
     model: zod.string().optional(),
+    color: zod.string().optional(),
     seats: zod.number().optional(),
     merchantUnit: zod.string().optional(),
     bookValue: zod.number().optional(),
@@ -4395,6 +4592,12 @@ export const UpdateVehicleResponse = zod
     year: zod.number().nullish().describe("Model year. Null when unknown."),
     make: zod.string(),
     model: zod.string(),
+    color: zod
+      .string()
+      .optional()
+      .describe(
+        'Exterior color (e.g. \"White\", \"Silver\"). Empty when unknown (Stage 5).',
+      ),
     seats: zod
       .number()
       .describe(

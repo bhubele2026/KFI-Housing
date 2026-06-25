@@ -39,6 +39,11 @@ shift title.
    * @nullable
    */
   shift?: string | null;
+  /** Free-text shift time window (e.g. "6a-2:30p") shown on the
+Property Board contact roster. Separate from `shift`, which is
+the named bucket.
+ */
+  shiftTime?: string;
   /** @nullable */
   language?: OccupantUpdateLanguage;
   /** @nullable */

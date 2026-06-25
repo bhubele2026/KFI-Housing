@@ -5,6 +5,40 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface ActiveRosterPerson {
+  /** Zenople PersonId — equals occupant.employeeId. */
+  personId: string;
+  name: string;
+  /**
+   * Other distinct names Zenople has shown for this personId — for lookup
+   * when an occupant was entered under a different spelling. Excludes name.
+   */
+  aliases?: string[];
+  /** Staffing client/customer from the active assignment ("" if none). */
+  company: string;
+  jobTitle: string;
+  /** True when the person carries a weekly housing deduction. */
+  hasDeduction: boolean;
+  /** Weekly housing-deduction rate (0 when none). */
+  weeklyDeduction: number;
+}
+
+export interface ActiveRosterResponse {
+  /** ISO timestamp the roster was pulled. */
+  asOf: string;
+  /** Zenople actions composed (PayrollData + AssignmentData + DeductionData). */
+  source: string;
+  /** The last payroll period (AccountingPeriod) the headcount is scoped to. */
+  payPeriod: string;
+  /** Available payroll periods (>= the June go-live floor), newest first. */
+  periods?: string[];
+  /** Total people on the last payroll run. */
+  count: number;
+  /** How many of those carry a housing deduction. */
+  withDeduction: number;
+  people: ActiveRosterPerson[];
+}
+
 export interface UploadUrlRequest {
   /** @minLength 1 */
   name: string;

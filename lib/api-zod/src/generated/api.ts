@@ -16,6 +16,18 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Returns the running server's per-deploy build id. The web client
+polls this and, when the value changes from what it first saw
+(i.e. the app was republished), shows a "new version — refresh"
+prompt. Changes on every server reboot.
+
+ * @summary Deployed build identifier
+ */
+export const GetVersionResponse = zod.object({
+  version: zod.string(),
+});
+
+/**
  * Returns the small set of runtime values the housingops web app needs
 but cannot bake into its bundle — currently just the Google Maps
 Embed API key. The key is exposed deliberately so it can be rotated

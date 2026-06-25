@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 /** SVG donut ring. Optional inner arc (dual ring, e.g. occupied + at-risk).
  *  Colors are token names ("grad1", "ok", "warn", "risk", "brand"). */
@@ -110,15 +111,36 @@ export function Heatmap({
 }) {
   return (
     <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${cols},1fr)` }}>
-      {cells.map((c, i) => (
-        <button
-          key={i}
-          type="button"
-          title={c.title}
-          onClick={c.onClick}
-          className={cn("aspect-square rounded-full transition-transform hover:scale-110", HEAT_BG[c.kind])}
-        />
-      ))}
+      {cells.map((c, i) => {
+        const interactive = !!c.onClick;
+        const bubble = (
+          <button
+            key={i}
+            type="button"
+            onClick={c.onClick}
+            aria-label={c.title ? `Open ${c.title}` : undefined}
+            className={cn(
+              "aspect-square rounded-full transition-transform hover:scale-110",
+              // Signal that the existing click does something: pointer, a
+              // subtle hover ring/shadow, and a visible keyboard focus ring.
+              interactive &&
+                "cursor-pointer hover:shadow-sm hover:ring-2 hover:ring-black/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1",
+              HEAT_BG[c.kind],
+            )}
+          />
+        );
+        // No title → no tooltip (legend swatches etc.); just the bubble.
+        if (!c.title) return <span key={i}>{bubble}</span>;
+        return (
+          // ~120ms open delay (vs the slow native title), styled white card.
+          <Tooltip key={i} delayDuration={120}>
+            <TooltipTrigger asChild>{bubble}</TooltipTrigger>
+            <TooltipContent className="border-line bg-panel text-ink shadow-lg">
+              {c.title}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }

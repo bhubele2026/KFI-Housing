@@ -966,6 +966,10 @@ export default function PropertyDetail() {
   const [statsExpanded, setStatsExpanded] = useState<boolean>(
     () => readPersistedStatsExpanded(),
   );
+  // Bed-economics what-if editor (live recalc before save). "" = use the real
+  // value; a typed value overrides it for an instant client-side recompute.
+  const [econRentDraft, setEconRentDraft] = useState<string>("");
+  const [econUtilDraft, setEconUtilDraft] = useState<string>("");
   useEffect(() => {
     writePersistedStatsExpanded(statsExpanded);
   }, [statsExpanded]);
@@ -1967,13 +1971,21 @@ export default function PropertyDetail() {
           )}
           {statsExpanded && propBeds.length > 0 && (() => {
             // Bed economics — "are we charging enough per bed?" (TOTAL beds).
+            // Rent baseline = property.monthlyRent (the field the customer
+            // roll-up also reads, so a Save propagates there live). The two
+            // inputs recompute everything client-side on each keystroke.
             const beds = propBeds.length;
-            const costMo = monthlyLeaseCost + monthlyUtilCost;
+            const realRent = Number((property as { monthlyRent?: number }).monthlyRent) || 0;
+            const effRent = econRentDraft !== "" ? Number(econRentDraft) || 0 : realRent;
+            const effUtil = econUtilDraft !== "" ? Number(econUtilDraft) || 0 : monthlyUtilCost;
+            const costMo = effRent + effUtil;
             const shouldWk = Math.round(((costMo / beds) * 12) / 52);
             const collWk = Math.round(weeklyRecovery / beds);
             const gapWk = collWk - shouldWk;
             const costWk = Math.round((costMo * 12) / 52);
             const surplusWk = Math.round(weeklyRecovery - costWk);
+            const rentDirty = econRentDraft !== "" && Number(econRentDraft) !== realRent;
+            const anyDraft = econRentDraft !== "" || econUtilDraft !== "";
             return (
               <div className="mt-4" data-testid="property-bed-economics">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-faint mb-2">Bed economics — are we charging enough per bed?</p>
@@ -1983,6 +1995,48 @@ export default function PropertyDetail() {
                   <StatCard label="Gap / bed" value={`${gapWk >= 0 ? "+" : "−"}${formatUsdWhole(Math.abs(gapWk))}/wk`} color={gapWk >= 0 ? "text-green-600" : "text-destructive"} sub="collecting − should-charge" />
                   <StatCard label="Weekly surplus" value={`${surplusWk >= 0 ? "+" : "−"}${formatUsdWhole(Math.abs(surplusWk))}`} color={surplusWk >= 0 ? "text-green-600" : "text-destructive"} sub={`${formatUsdWhole(Math.round(weeklyRecovery))} collected vs ${formatUsdWhole(costWk)} cost /wk`} />
                 </div>
+
+                {/* Live what-if editor — recomputes above on every keystroke,
+                    BEFORE any save. Save commits rent (the persisted field the
+                    customer roll-up reads); utilities edits are a live what-if
+                    (edit the Utilities tab to persist per-service). */}
+                <div className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel/60 p-3">
+                  <label className="text-[11px] font-semibold text-muted-foreground">
+                    <span className="block">Rent /mo</span>
+                    <input
+                      type="number" inputMode="decimal" min={0}
+                      value={econRentDraft} placeholder={String(realRent)}
+                      onChange={(e) => setEconRentDraft(e.target.value)}
+                      data-testid="econ-rent-input"
+                      className="mt-1 w-28 rounded-lg border border-line bg-panel px-2 py-1.5 text-[13px] text-ink tabular-nums focus:outline-none focus:ring-2 focus:ring-brand/50"
+                    />
+                  </label>
+                  <label className="text-[11px] font-semibold text-muted-foreground">
+                    <span className="block">Utilities /mo <span className="text-faint">(what-if)</span></span>
+                    <input
+                      type="number" inputMode="decimal" min={0}
+                      value={econUtilDraft} placeholder={String(Math.round(monthlyUtilCost))}
+                      onChange={(e) => setEconUtilDraft(e.target.value)}
+                      data-testid="econ-util-input"
+                      className="mt-1 w-28 rounded-lg border border-line bg-panel px-2 py-1.5 text-[13px] text-ink tabular-nums focus:outline-none focus:ring-2 focus:ring-brand/50"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!rentDirty}
+                    onClick={() => { updateProperty(id, { monthlyRent: effRent } as Partial<Property>); setEconRentDraft(""); }}
+                    data-testid="econ-save-rent"
+                    className="rounded-lg bg-brand px-3 py-2 text-[13px] font-bold text-white disabled:opacity-50"
+                  >
+                    Save rent
+                  </button>
+                  {anyDraft && (
+                    <button type="button" onClick={() => { setEconRentDraft(""); setEconUtilDraft(""); }} className="text-[12.5px] font-semibold text-brand">
+                      Reset
+                    </button>
+                  )}
+                </div>
+
                 <p className={`mt-2 text-[12px] ${gapWk >= 0 ? "text-green-600" : "text-destructive"}`}>
                   {gapWk >= 0
                     ? `Covering costs — about ${formatUsdWhole(Math.abs(gapWk))}/bed/wk above breakeven.`

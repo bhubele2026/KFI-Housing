@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { computePropertyEconomics } from "@/lib/property-economics";
+import { netDisplay } from "@/lib/money-honesty";
 import {
   EntityCard,
   accentFor,
@@ -22,6 +23,8 @@ interface CustAgg {
   beds: number;
   occ: number;
   net: number;
+  collected: number;
+  cost: number;
 }
 
 /**
@@ -38,11 +41,13 @@ export default function Customers() {
     const { rows } = computePropertyEconomics(properties, leases, occupants, utilities);
     const byCust = new Map<string, CustAgg>();
     for (const r of rows) {
-      const e = byCust.get(r.customerId) ?? { props: 0, beds: 0, occ: 0, net: 0 };
+      const e = byCust.get(r.customerId) ?? { props: 0, beds: 0, occ: 0, net: 0, collected: 0, cost: 0 };
       e.props += 1;
       e.beds += r.beds;
       e.occ += r.occupied;
       e.net += r.recoveredMonthly - r.monthlyCost;
+      e.collected += r.recoveredMonthly;
+      e.cost += r.monthlyCost;
       byCust.set(r.customerId, e);
     }
     // distinct states per client, from their properties
@@ -92,11 +97,19 @@ export default function Customers() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {cards.map(({ c, e, states }) => {
               const occPct = e.beds > 0 ? Math.round((e.occ / e.beds) * 100) : null;
-              const rows: ERow[] = [
-                { label: "Housed", value: `${e.occ} / ${e.beds}` },
-                { label: "Occupancy", value: occPct == null ? "—" : `${occPct}%` },
-                { label: "Net / mo", value: fmtNet(e.net), tone: e.net >= 0 ? "ok" : "risk" },
-              ];
+              // Item 5 — no bed inventory: a neutral "add a unit" state, never "x / 0" + "—".
+              // Item 3 — money honesty: when people are housed but collections are still
+              // syncing, show "syncing" not a scary red negative.
+              const nd = netDisplay({ collected: e.collected, rent: e.cost, occupants: e.occ });
+              const rows: ERow[] = e.beds === 0
+                ? [{ label: "Beds", value: "No beds set — add a unit", tone: "ink" }]
+                : [
+                    { label: "Housed", value: `${e.occ} / ${e.beds}` },
+                    { label: "Occupancy", value: occPct == null ? "—" : `${occPct}%` },
+                    nd.kind === "syncing"
+                      ? { label: "Net / mo", value: "rent set · syncing", tone: "ink" }
+                      : { label: "Net / mo", value: fmtNet(nd.value), tone: nd.value >= 0 ? "ok" : "risk" },
+                  ];
               return (
                 <EntityCard
                   key={c.id}

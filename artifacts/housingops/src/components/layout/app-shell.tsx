@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { useMemo, type KeyboardEvent } from "react";
+import { useLocation } from "wouter";
 import { Users, Building2, ClipboardList, DollarSign, ChevronRight, Search } from "lucide-react";
 import { KfiLogo } from "@/components/kfi-logo";
 import { CommandBar } from "@/components/command-bar/command-bar";
@@ -38,12 +38,24 @@ function NavBox({
   sub: string;
   active: boolean;
 }) {
+  const [, navigate] = useLocation();
+  const go = () => navigate(href);
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      go();
+    }
+  };
   return (
-    <Link href={href}>
       <div
         data-nav={navKey}
+        role="link"
+        tabIndex={0}
+        onClick={go}
+        onKeyDown={onKey}
+        aria-label={label}
         className={cn(
-          "cursor-pointer rounded-[18px] border border-transparent p-[18px] shadow-[0_1px_2px_rgba(16,24,40,.05),0_4px_14px_rgba(16,24,40,.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(16,24,40,.10)]",
+          "cursor-pointer rounded-[18px] border border-transparent p-[18px] shadow-[0_1px_2px_rgba(16,24,40,.05),0_4px_14px_rgba(16,24,40,.06)] transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(16,24,40,.10)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
           active ? GRAD : "bg-panel",
         )}
       >
@@ -66,12 +78,11 @@ function NavBox({
         </div>
         <div className={cn("mt-[3px] text-[12.5px]", active ? "text-white/85" : "text-muted-foreground")}>{sub}</div>
       </div>
-    </Link>
   );
 }
 
 export function AppShell() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const active = activeKey(location);
   const { customers, properties, occupants, beds } = useData();
   // Whole active Zenople roster (cast-safe) — the Roster box should reflect
@@ -103,17 +114,27 @@ export function AppShell() {
       <div className="mx-auto max-w-[1180px] px-6 pt-3.5">
         {/* slim top bar */}
         <div className="mb-4 flex items-center justify-between">
-          <Link href="/dashboard">
-            <div className="flex cursor-pointer items-center gap-3">
-              <span className={cn("flex h-9 w-9 items-center justify-center rounded-[11px] p-1.5 text-white", GRAD)}>
-                <KfiLogo variant="mark" className="h-full" />
-              </span>
-              <div className="leading-tight">
-                <b className="text-[15px] text-ink">KFI Workforce Deployment</b>
-                <small className="block text-[11px] font-semibold text-faint">Housing Operations</small>
-              </div>
+          <div
+            role="link"
+            tabIndex={0}
+            onClick={() => navigate("/dashboard")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                navigate("/dashboard");
+              }
+            }}
+            aria-label="Dashboard — home"
+            className="flex cursor-pointer items-center gap-3 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <span className={cn("flex h-9 w-9 items-center justify-center rounded-[11px] p-1.5 text-white", GRAD)}>
+              <KfiLogo variant="mark" className="h-full" />
+            </span>
+            <div className="leading-tight">
+              <b className="text-[15px] text-ink">KFI Workforce Deployment</b>
+              <small className="block text-[11px] font-semibold text-faint">Housing Operations</small>
             </div>
-          </Link>
+          </div>
           <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
             <button
               type="button"

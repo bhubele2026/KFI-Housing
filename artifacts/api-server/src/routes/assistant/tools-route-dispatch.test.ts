@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 describe("Task #646 — assistant write tools route through the HTTP handlers", () => {
-  it("update_bed refuses to flip a not-ready bed to Occupied (cleaning workflow guard #500 fires through dispatch)", async () => {
+  it("update_bed occupies a not-ready bed and auto-clears its cleaning flag (Item 3 — cleaning never blocks a placement)", async () => {
     bedStore.set("bed-1", {
       id: "bed-1",
       propertyId: "p1",
@@ -130,19 +130,20 @@ describe("Task #646 — assistant write tools route through the HTTP handlers", 
       occupantId: null,
     });
 
-    await expect(
-      tool("update_bed").execute({
-        id: "bed-1",
-        status: "Occupied",
-        occupantId: "o-new",
-      }, ctx),
-    ).rejects.toThrow(/cleaning workflow/i);
+    // Item 3: occupying a bed flagged for cleaning is allowed; the seat-write
+    // normalises the Occupied status to cleaningStatus "occupied", clearing
+    // the turnover flag. (The "needs cleaning" badge on OPEN beds is purely
+    // display-only and never gates a placement.)
+    await tool("update_bed").execute({
+      id: "bed-1",
+      status: "Occupied",
+      occupantId: "o-new",
+    }, ctx);
 
-    // Importantly, the bed wasn't mutated — direct db.update would
-    // have flipped it silently.
     const persisted = bedStore.get("bed-1")!;
-    expect(persisted.status).toBe("Vacant");
-    expect(persisted.occupantId).toBeNull();
+    expect(persisted.status).toBe("Occupied");
+    expect(persisted.occupantId).toBe("o-new");
+    expect(persisted.cleaningStatus).toBe("occupied");
   });
 
   it("update_bed succeeds when the bed is ready, and a Vacant patch auto-stamps needs_cleaning", async () => {

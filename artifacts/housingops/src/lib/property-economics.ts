@@ -97,6 +97,8 @@ export interface EconomicsSummary {
   totalRecovery: number;
   // Actual-recovery rollups
   totalRentCost: number;
+  /** Rolled-up monthly utilities across all properties (cost − rent). */
+  totalUtilities: number;
   totalRecovered: number;
   totalRecoveryGap: number;
   blendedRecoveryRate: number | null;
@@ -262,6 +264,7 @@ export function computePropertyEconomics(
     totalMonthlyCost: 0,
     totalRecovery: 0,
     totalRentCost: 0,
+    totalUtilities: 0,
     totalRecovered: 0,
     totalRecoveryGap: 0,
     blendedRecoveryRate: null,
@@ -295,6 +298,9 @@ export function computePropertyEconomics(
     }),
     base,
   );
+  // Utilities = total carrying cost − rent (the rollup the dashboard tile reads;
+  // was previously absent, so the dashboard showed Utilities $0).
+  summary.totalUtilities = round2(summary.totalMonthlyCost - summary.totalRentCost);
   summary.totalRecoveryGap = round2(summary.totalRentCost - summary.totalRecovered);
   summary.blendedRecoveryRate =
     summary.totalRentCost > 0

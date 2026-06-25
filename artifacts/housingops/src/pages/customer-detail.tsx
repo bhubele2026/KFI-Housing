@@ -44,7 +44,7 @@ const weeklyOf = (o: { chargePerBed?: number; deduction?: { weeklyAmount?: numbe
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, leases, utilities, otherCosts, isLoading, updateCustomer } = useData();
+  const { customers, properties, beds, occupants, leases, utilities: utilityServiceRows, otherCosts, isLoading, updateCustomer } = useData();
 
   const customer = customers.find((c) => c.id === id);
   const isInactive = !!(customer as { isInactive?: boolean } | undefined)?.isInactive;
@@ -76,7 +76,7 @@ export default function CustomerDetail() {
       // BUG FIX — utilities roll up from the property's UTILITY SERVICES (the
       // `utilities` table), the same source the property page sums. The old
       // code read `otherCosts` (empty), so customer utilities showed $0.
-      const utilRows = utilities as Array<{ propertyId?: string; monthlyCost?: number }>;
+      const utilRows = utilityServiceRows as Array<{ propertyId?: string; monthlyCost?: number }>;
       const utilServices = utilRows
         .filter((u) => u.propertyId === p.id)
         .reduce((s: number, u) => s + (Number(u.monthlyCost) || 0), 0);
@@ -142,7 +142,7 @@ export default function CustomerDetail() {
       notInPayroll, zeroDeduction, needsCleaning,
       propCount: props.length, aptCount, motelCount: props.length - aptCount,
     };
-  }, [id, properties, beds, occupants, leases, utilities, otherCosts]);
+  }, [id, properties, beds, occupants, leases, utilityServiceRows, otherCosts]);
 
   if (isLoading && !customer) {
     return (

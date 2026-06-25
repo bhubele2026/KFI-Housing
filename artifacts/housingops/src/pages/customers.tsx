@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -35,6 +35,7 @@ interface CustAgg {
  */
 export default function Customers() {
   const [, navigate] = useLocation();
+  const [showInactive, setShowInactive] = useState(false);
   // Defensive defaults — a briefly-undefined list must never throw into the
   // page ErrorBoundary (that throw is what paints the red fallback block).
   const {
@@ -74,21 +75,40 @@ export default function Customers() {
         c,
         e: byCust.get(c.id),
         states: [...(statesByCust.get(c.id) ?? [])].sort().join(", "),
+        isInactive: !!(c as { isInactive?: boolean }).isInactive,
       }))
-      .filter((x): x is { c: (typeof customers)[number]; e: CustAgg; states: string } =>
+      .filter((x): x is { c: (typeof customers)[number]; e: CustAgg; states: string; isInactive: boolean } =>
         !!x.e && x.e.props > 0,
       )
       .sort((a, b) => a.c.name.localeCompare(b.c.name));
   }, [customers, properties, leases, occupants, utilities]);
 
+  // Item 1 — inactive customers drop out of the active list + counts, but stay
+  // reachable behind a toggle.
+  const activeCards = cards.filter((x) => !x.isInactive);
+  const inactiveCount = cards.length - activeCards.length;
+  const shown = showInactive ? cards : activeCards;
+
   return (
     <MainLayout>
       <div className="mx-auto max-w-[1120px] px-6 pb-10 pt-4">
-        <div className="mb-4">
-          <h1 className="text-[21px] font-bold tracking-[-0.3px] text-ink">Customers</h1>
-          <div className="mt-0.5 text-[13px] text-muted-foreground">
-            {cards.length} active client{cards.length === 1 ? "" : "s"} · click a client to see their properties &amp; beds
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-[21px] font-bold tracking-[-0.3px] text-ink">Customers</h1>
+            <div className="mt-0.5 text-[13px] text-muted-foreground">
+              {activeCards.length} active client{activeCards.length === 1 ? "" : "s"} · click a client to see their properties &amp; beds
+            </div>
           </div>
+          {inactiveCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowInactive((v) => !v)}
+              className="rounded-full border border-line bg-panel px-3 py-1.5 text-[12.5px] font-semibold text-ink2 transition-colors hover:bg-track"
+              data-testid="toggle-inactive-customers"
+            >
+              {showInactive ? "Hide inactive" : `Show inactive (${inactiveCount})`}
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -97,14 +117,14 @@ export default function Customers() {
               <div key={i} className="h-[150px] animate-pulse rounded-2xl bg-panel" />
             ))}
           </div>
-        ) : cards.length === 0 ? (
+        ) : shown.length === 0 ? (
           <EmptyState
             title="No clients with active properties"
             hint="Add a customer and a property to see them here."
           />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {cards.map(({ c, e, states }) => {
+            {shown.map(({ c, e, states, isInactive }) => {
               const occPct = e.beds > 0 ? Math.round((e.occ / e.beds) * 100) : null;
               // Item 5 — no bed inventory: a neutral "add a unit" state, never "x / 0" + "—".
               // Item 3 — money honesty: when people are housed but collections are still
@@ -124,7 +144,7 @@ export default function Customers() {
                   key={c.id}
                   initials={initialsOf(c.name)}
                   accent={accentFor(c.name)}
-                  name={c.name}
+                  name={isInactive ? `${c.name} · Inactive` : c.name}
                   sub={`${e.props} ${e.props === 1 ? "property" : "properties"}${states ? ` · ${states}` : ""}`}
                   rows={rows}
                   onClick={() => navigate(`/customers/${c.id}`)}

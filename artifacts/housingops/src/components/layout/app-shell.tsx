@@ -100,7 +100,7 @@ export function AppShell() {
       (o) => (o as { bedId?: string }).bedId && (o as { status?: string }).status === "Active",
     ).length;
     return {
-      customers: customers.length,
+      customers: customers.filter((c) => !(c as { isInactive?: boolean }).isInactive).length,
       properties: activeProps.length,
       propsSub: pct == null ? `${activeProps.length} locations` : `${pct}% full · ${totalBeds} beds`,
       housed,

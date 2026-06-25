@@ -41,9 +41,10 @@ const weeklyOf = (o: { chargePerBed?: number; deduction?: { weeklyAmount?: numbe
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const { customers, properties, beds, occupants, leases, otherCosts, isLoading } = useData();
+  const { customers, properties, beds, occupants, leases, otherCosts, isLoading, updateCustomer } = useData();
 
   const customer = customers.find((c) => c.id === id);
+  const isInactive = !!(customer as { isInactive?: boolean } | undefined)?.isInactive;
 
   const view = useMemo(() => {
     if (!id) return null;
@@ -155,23 +156,52 @@ export default function CustomerDetail() {
   return (
     <MainLayout>
       <div className="mx-auto max-w-[1120px] px-6 py-5">
-        <div className="mb-4">
-          <Link href="/customers" className="mb-1.5 inline-block text-[13px] font-semibold text-brand">
-            ← Customers
-          </Link>
-          <h1 className="text-[21px] tracking-[-0.3px] text-ink" data-testid="customer-detail-name">{customer.name}</h1>
-          <div className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
-            {view.propCount} properties · {view.capacity} beds · {view.occPct}% full
-            {view.cities.length > 0 ? ` · ${view.cities.join(" & ")}` : ""}
-            {" · "}
-            <Link href={bedsHref} className="font-semibold text-brand">manage all beds →</Link>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <Link href="/customers" className="mb-1.5 inline-block text-[13px] font-semibold text-brand">
+              ← Customers
+            </Link>
+            <h1 className="flex items-center gap-2 text-[21px] tracking-[-0.3px] text-ink" data-testid="customer-detail-name">
+              {customer.name}
+              {isInactive && (
+                <span className="rounded-full bg-track px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-faint">
+                  Inactive
+                </span>
+              )}
+            </h1>
+            <div className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
+              {view.propCount} properties · {view.capacity} beds · {view.occPct}% full
+              {view.cities.length > 0 ? ` · ${view.cities.join(" & ")}` : ""}
+            </div>
+          </div>
+          {/* Item 3 — one obvious primary action to the gold bed board, plus
+              the item-1 inactivate/reactivate control. */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(bedsHref)}
+              className="rounded-[10px] bg-brand px-3.5 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-brand/90"
+              data-testid="customer-manage-beds"
+            >
+              Manage beds →
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                updateCustomer(customer.id, { isInactive: !isInactive } as never);
+              }}
+              className="rounded-[10px] border border-line bg-panel px-3.5 py-2 text-[13px] font-semibold text-ink2 transition-colors hover:bg-track"
+              data-testid="customer-toggle-active"
+            >
+              {isInactive ? "Reactivate" : "Inactivate customer"}
+            </button>
           </div>
         </div>
 
         {/* KPI cockpit — every figure clickable + why */}
         <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <KPI label="Properties" value={view.propCount} sub={`${view.aptCount} apts · ${view.motelCount} motel`}
-            title="Properties" formula="Active + shared properties for this client" rows={[{ k: "Apartments", v: view.aptCount }, { k: "Other", v: view.motelCount }]} href="/properties" />
+            title="Properties" formula="Active + shared properties for this client" rows={[{ k: "Apartments", v: view.aptCount }, { k: "Other", v: view.motelCount }]} href={bedsHref} />
           <KPI label="Housed" value={view.housed} sub={`of ${view.capacity} beds`}
             title="Housed" formula="Active occupants in this client's properties" rows={[{ k: "Housed", v: view.housed }, { k: "Capacity", v: view.capacity }]} href={bedsHref} />
           <KPI label="Occupancy" value={`${view.occPct}%`} tone={view.occPct >= 85 ? "ok" : "warn"} sub="occupied ÷ beds"

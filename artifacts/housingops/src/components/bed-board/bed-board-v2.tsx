@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useListAllProjectedMoveIns, useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
 import { useToast } from "@/hooks/use-toast";
-import { StatCard, Seg, accentFor, initialsOf, PrintView, WhyPopover } from "@/components/kit-v2";
+import { StatCard, Seg, initialsOf, PrintView, WhyPopover } from "@/components/kit-v2";
 import { Bed, RoomCard } from "@/components/kit-v2";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { netDisplay } from "@/lib/money-honesty";
@@ -53,14 +53,59 @@ function avatarAccent(occ: Occupant, colorBy: ColorBy): string {
   if (/1|day/i.test(shift)) return "blue";
   if (/2|night|pm/i.test(shift)) return "purple";
   if (/3/.test(shift)) return "orange";
-  return accentFor((occ as { name?: string }).name ?? occ.id);
+  // No / unrecognized shift → a NEUTRAL slate, not a per-name hash color.
+  // (A name-hash color looked meaningful but encoded nothing — the source of
+  // the "5 random colors with no legend" confusion.)
+  return "slate";
 }
 
-function shiftSub(occ: Occupant): string {
+/**
+ * The plain-English meaning of a person's avatar color under the active COLOR
+ * BY mode — used for both the row's sub-label and the avatar's hover/SR title,
+ * so the color is never the only signal. Swaps with the mode.
+ */
+function colorMeaning(occ: Occupant, colorBy: ColorBy): string {
+  if (colorBy === "payroll") {
+    const b = badgeFor(occ);
+    return b.kind === "ok" ? "Deducted" : b.kind === "risk" ? "$0 deduction" : "Not in payroll";
+  }
+  if (colorBy === "deduction") {
+    const w = weeklyOf(occ);
+    return w > 0 ? `$${Math.round(w)}/wk` : "$0/wk";
+  }
   const shift = String((occ as { shift?: string }).shift ?? "").trim();
   const time = String((occ as { shiftTime?: string }).shiftTime ?? "").trim();
-  return [shift, time].filter(Boolean).join(" · ") || "—";
+  return [shift, time].filter(Boolean).join(" · ") || "Shift not set";
 }
+
+/** Legend entries per COLOR BY mode (swatch color name + label). */
+const COLOR_LEGENDS: Record<ColorBy, { accent: string; label: string }[]> = {
+  shift: [
+    { accent: "blue", label: "1st / Day" },
+    { accent: "purple", label: "2nd / Night" },
+    { accent: "orange", label: "3rd" },
+    { accent: "slate", label: "Shift not set" },
+  ],
+  payroll: [
+    { accent: "teal", label: "Deducted" },
+    { accent: "red", label: "$0 deduction" },
+    { accent: "slate", label: "Not in payroll" },
+  ],
+  deduction: [
+    { accent: "purple", label: "≥ $120/wk" },
+    { accent: "blue", label: "≥ $70/wk" },
+    { accent: "teal", label: "< $70/wk" },
+    { accent: "red", label: "$0/wk" },
+  ],
+};
+const LEGEND_BG: Record<string, string> = {
+  blue: "bg-brand",
+  purple: "bg-purple",
+  teal: "bg-teal",
+  orange: "bg-warn",
+  red: "bg-risk",
+  slate: "bg-[#64748B]",
+};
 
 const MOVE_OUT_REASONS = ["Left job", "Transferred", "Terminated", "Other"] as const;
 
@@ -726,6 +771,18 @@ export function BedBoardV2({
           {selectMode ? "Done" : "Select"}
         </button>
       </div>
+
+      {/* Color legend — always matches the active COLOR BY so the avatar
+          colors are decodable (no more "5 colors, no key"). */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-muted-foreground" data-testid="bed-color-legend">
+        {COLOR_LEGENDS[colorBy].map((e) => (
+          <span key={e.accent + e.label} className="inline-flex items-center gap-1.5">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${LEGEND_BG[e.accent] ?? "bg-faint"}`} aria-hidden />
+            {e.label}
+          </span>
+        ))}
+      </div>
+
       {editBeds && (
         <div className="mb-3 rounded-[12px] border border-brand/30 bg-accent px-3 py-2 text-[12.5px] text-ink2">
           <b className="text-ink">Editing bed inventory.</b> Add or remove beds &amp; rooms below — this changes how many beds exist, <i>not</i> who's assigned. Only empty beds can be removed.
@@ -865,7 +922,8 @@ export function BedBoardV2({
                   >
                   <Bed
                     name={nm}
-                    sub={shiftSub(occ)}
+                    sub={colorMeaning(occ, colorBy)}
+                    swatchTitle={`${colorMeaning(occ, colorBy)} (${colorBy})`}
                     initials={initialsOf(nm)}
                     accent={avatarAccent(occ, colorBy)}
                     badge={badgeFor(occ)}

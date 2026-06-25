@@ -16,6 +16,7 @@ export function Bed({
   onDragStart,
   onDragEnd,
   testId,
+  swatchTitle,
 }: {
   name?: string;
   sub?: ReactNode;
@@ -28,6 +29,8 @@ export function Bed({
   onDragStart?: () => void;
   onDragEnd?: () => void;
   testId?: string;
+  /** Hover/SR label for the colored avatar (e.g. the shift the color encodes). */
+  swatchTitle?: string;
 }) {
   if (open) {
     return (
@@ -45,7 +48,9 @@ export function Bed({
       style={draggable ? { cursor: "grab" } : undefined}
       data-testid={testId}
     >
-      <Avatar initials={initials ?? "?"} accent={accent} />
+      <span title={swatchTitle} aria-label={swatchTitle} role={swatchTitle ? "img" : undefined} className="shrink-0">
+        <Avatar initials={initials ?? "?"} accent={accent} />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-ink">{name}</div>
         {sub != null && <div className="truncate text-[11px] font-medium text-muted-foreground">{sub}</div>}

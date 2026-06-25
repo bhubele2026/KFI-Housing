@@ -1965,6 +1965,32 @@ export default function PropertyDetail() {
           />
         </div>
           )}
+          {statsExpanded && propBeds.length > 0 && (() => {
+            // Bed economics — "are we charging enough per bed?" (TOTAL beds).
+            const beds = propBeds.length;
+            const costMo = monthlyLeaseCost + monthlyUtilCost;
+            const shouldWk = Math.round(((costMo / beds) * 12) / 52);
+            const collWk = Math.round(weeklyRecovery / beds);
+            const gapWk = collWk - shouldWk;
+            const costWk = Math.round((costMo * 12) / 52);
+            const surplusWk = Math.round(weeklyRecovery - costWk);
+            return (
+              <div className="mt-4" data-testid="property-bed-economics">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-faint mb-2">Bed economics — are we charging enough per bed?</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <StatCard label="Should charge / bed" value={`${formatUsdWhole(shouldWk)}/wk`} sub={`${formatUsdWhole(Math.round(costMo / beds))}/mo · (rent+util) ÷ ${beds}`} />
+                  <StatCard label="Collecting / bed" value={`${formatUsdWhole(collWk)}/wk`} sub="recovered ÷ total beds" />
+                  <StatCard label="Gap / bed" value={`${gapWk >= 0 ? "+" : "−"}${formatUsdWhole(Math.abs(gapWk))}/wk`} color={gapWk >= 0 ? "text-green-600" : "text-destructive"} sub="collecting − should-charge" />
+                  <StatCard label="Weekly surplus" value={`${surplusWk >= 0 ? "+" : "−"}${formatUsdWhole(Math.abs(surplusWk))}`} color={surplusWk >= 0 ? "text-green-600" : "text-destructive"} sub={`${formatUsdWhole(Math.round(weeklyRecovery))} collected vs ${formatUsdWhole(costWk)} cost /wk`} />
+                </div>
+                <p className={`mt-2 text-[12px] ${gapWk >= 0 ? "text-green-600" : "text-destructive"}`}>
+                  {gapWk >= 0
+                    ? `Covering costs — about ${formatUsdWhole(Math.abs(gapWk))}/bed/wk above breakeven.`
+                    : `Charging about ${formatUsdWhole(Math.abs(gapWk))}/bed/wk under what's needed to cover this property's rent + utilities.`}
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         {/* The chip-grid "Bed Occupancy" card was scrapped (operator

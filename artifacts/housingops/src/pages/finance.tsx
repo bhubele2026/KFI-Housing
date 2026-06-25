@@ -15,6 +15,10 @@ import {
   FinancePayrollMonthlyTab,
   FinancePayrollByCustomerTab,
 } from "@/components/finance-payroll-tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+
+/** Phase 2 — a proper skeleton bar for a KPI value (replaces the "•••" stall). */
+const KpiSkel = () => <Skeleton className="h-7 w-24" />;
 
 // ---------------------------------------------------------------------------
 // Money — week review (v2 redesign, KFI_Housing_Redesign_Mockup_v2 #money).
@@ -54,11 +58,16 @@ function lastSaturday(): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface PeriodPerson { name?: string; company?: string; propertyId?: string; amount?: number }
 interface PeriodResp {
   periodKey?: string;
+  label?: string;
   current?: { collected?: number; rent?: number; net?: number; weeks?: number; properties?: number };
   prior?: { collected?: number; rent?: number; net?: number };
   delta?: { collected?: number; rent?: number; net?: number };
+  // Phase 2 — the people behind the period total (same rows as DEDUCTED).
+  peopleCount?: number;
+  people?: PeriodPerson[];
   reviewed?: boolean;
 }
 interface DiffPerson { name?: string; weekly?: number; prior?: number; current?: number }
@@ -109,25 +118,29 @@ export default function FinancePage() {
     };
   }, [kind]);
 
-  // "Who was deducted" + People count come from the occupant deduction objects.
-  const deducted = useMemo(
-    () =>
-      occupants
-        .map((o) => ({
-          name: (o.fullName as string) || (o.name as string) || "—",
-          company: (o.company as string) || "",
-          propertyId: o.propertyId,
-          ded: o.deduction as { weeklyAmount?: number; payWeekEndDate?: string } | undefined,
-        }))
-        .filter((o) => num(o.ded?.weeklyAmount) > 0)
-        .sort((a, b) => num(b.ded?.weeklyAmount) - num(a.ded?.weeklyAmount))
-        .slice(0, 60),
-    [occupants],
-  );
-  const peopleCount = useMemo(
-    () => occupants.filter((o) => num((o.deduction as { weeklyAmount?: number } | undefined)?.weeklyAmount) > 0).length,
-    [occupants],
-  );
+  // Phase 2 — PEOPLE count + "Who was deducted" come from the SAME period
+  // computation as the DEDUCTED total (period.people), so they can never
+  // disagree. Fall back to the occupant snapshot only if the server build
+  // predates period.people (pre-deploy), so the page still renders.
+  const deducted = useMemo(() => {
+    if (Array.isArray(period?.people)) {
+      return period!.people
+        .map((p) => ({ name: p.name || "—", company: p.company || "", propertyId: p.propertyId, amount: num(p.amount) }))
+        .filter((p) => p.amount > 0)
+        .sort((a, b) => b.amount - a.amount);
+    }
+    return occupants
+      .map((o) => ({
+        name: (o.fullName as string) || (o.name as string) || "—",
+        company: (o.company as string) || "",
+        propertyId: o.propertyId as string | undefined,
+        amount: num((o.deduction as { weeklyAmount?: number } | undefined)?.weeklyAmount),
+      }))
+      .filter((o) => o.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 200);
+  }, [period, occupants]);
+  const peopleCount = period?.peopleCount ?? deducted.length;
 
   const cur = period?.current ?? {};
   const delta = period?.delta ?? {};
@@ -174,8 +187,7 @@ export default function FinancePage() {
         </span>
       ),
     },
-    { header: "Pay-week", cell: (r) => r.ded?.payWeekEndDate || "—" },
-    { header: "Amount", cell: (r) => fmt$(num(r.ded?.weeklyAmount), true) },
+    { header: `Amount (${period?.label ?? "period"})`, cell: (r) => fmt$(num(r.amount), true) },
   ];
 
   return (
@@ -194,16 +206,16 @@ export default function FinancePage() {
 
       {/* KPIs */}
       <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Deducted" value={loading ? "…" : fmt$(num(cur.collected))} sub={deltaSub(delta.collected)} />
-        <StatCard label="People" value={loading ? "…" : peopleCount} sub={deltaSub(peopleDelta, false)} />
+        <StatCard label="Deducted" value={loading ? <KpiSkel /> : fmt$(num(cur.collected))} sub={deltaSub(delta.collected)} />
+        <StatCard label="People" value={loading ? <KpiSkel /> : peopleCount} sub={deltaSub(peopleDelta, false)} />
         <StatCard
           label="Rent paid"
-          value={loading ? "…" : fmt$(num(cur.rent))}
+          value={loading ? <KpiSkel /> : fmt$(num(cur.rent))}
           sub={`${num(cur.properties) || properties.length} properties`}
         />
         <StatCard
           label="Net spread"
-          value={loading ? "…" : fmt$(num(cur.net))}
+          value={loading ? <KpiSkel /> : fmt$(num(cur.net))}
           tone={num(cur.net) < 0 ? "risk" : "ok"}
           sub={deltaSub(delta.net)}
         />

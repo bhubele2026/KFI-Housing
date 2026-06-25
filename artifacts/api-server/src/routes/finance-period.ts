@@ -125,22 +125,69 @@ async function loadInputs(): Promise<{
   }
 
   const collectedByWeek = new Map<string, number>();
+  // Phase 2 — per-person rollup keyed by week, so the period's PEOPLE count
+  // and the WHO-WAS-DEDUCTED table come from the SAME rows as the headline
+  // DEDUCTED total (they can never disagree).
+  type Person = { personId: string; name: string; company: string; propertyId: string; amount: number };
+  const personsByWeek = new Map<string, Map<string, Person>>();
   try {
     const rows = await db
       .select({
         payWeekEndDate: payrollDeductionsTable.payWeekEndDate,
         weeklyAmount: payrollDeductionsTable.weeklyAmount,
+        personId: payrollDeductionsTable.personId,
+        occupantId: payrollDeductionsTable.occupantId,
+        name: payrollDeductionsTable.nameSnapshot,
+        company: payrollDeductionsTable.customerSnapshot,
+        propertyId: payrollDeductionsTable.propertyId,
       })
       .from(payrollDeductionsTable);
     for (const r of rows) {
       const wk = String(r.payWeekEndDate);
-      collectedByWeek.set(wk, (collectedByWeek.get(wk) ?? 0) + (Number(r.weeklyAmount) || 0));
+      const amt = Number(r.weeklyAmount) || 0;
+      collectedByWeek.set(wk, (collectedByWeek.get(wk) ?? 0) + amt);
+      const pid = r.personId || r.occupantId || r.name || `${wk}-${r.name}`;
+      let m = personsByWeek.get(wk);
+      if (!m) {
+        m = new Map<string, Person>();
+        personsByWeek.set(wk, m);
+      }
+      const prev = m.get(pid);
+      m.set(pid, {
+        personId: pid,
+        name: r.name || "—",
+        company: r.company || "",
+        propertyId: r.propertyId || "",
+        amount: (prev?.amount ?? 0) + amt,
+      });
     }
   } catch (err) {
     logger.warn({ err }, "finance/period: deduction load failed");
   }
 
-  return { rentWeekly, activeProperties, collectedByWeek };
+  return { rentWeekly, activeProperties, collectedByWeek, personsByWeek };
+}
+
+/** Roll the per-week person maps up across a period's weeks (summing amounts). */
+function peopleForWeeks(
+  weeks: string[],
+  personsByWeek: Map<string, Map<string, { personId: string; name: string; company: string; propertyId: string; amount: number }>>,
+): { name: string; company: string; propertyId: string; amount: number }[] {
+  const merged = new Map<string, { name: string; company: string; propertyId: string; amount: number }>();
+  for (const wk of weeks) {
+    const m = personsByWeek.get(wk);
+    if (!m) continue;
+    for (const [pid, p] of m) {
+      const prev = merged.get(pid);
+      merged.set(pid, {
+        name: p.name,
+        company: p.company,
+        propertyId: p.propertyId,
+        amount: (prev?.amount ?? 0) + p.amount,
+      });
+    }
+  }
+  return [...merged.values()].filter((p) => p.amount > 0).sort((a, b) => b.amount - a.amount);
 }
 
 function sumWeeks(weeks: string[], collectedByWeek: Map<string, number>): number {
@@ -157,7 +204,7 @@ router.get("/finance/period", async (req, res): Promise<void> => {
     const kind: Kind = (allowed as string[]).includes(kindRaw) ? (kindRaw as Kind) : "this-week";
 
     const { key, label, current, prior } = resolvePeriod(kind, new Date());
-    const { rentWeekly, activeProperties, collectedByWeek } = await loadInputs();
+    const { rentWeekly, activeProperties, collectedByWeek, personsByWeek } = await loadInputs();
 
     const build = (weeks: string[]) => {
       const collected = round2(sumWeeks(weeks, collectedByWeek));
@@ -166,6 +213,13 @@ router.get("/finance/period", async (req, res): Promise<void> => {
     };
     const cur = build(current);
     const pri = build(prior);
+    // The people behind the CURRENT period's total — same rows, capped for payload.
+    const people = peopleForWeeks(current, personsByWeek).map((p) => ({
+      name: p.name,
+      company: p.company,
+      propertyId: p.propertyId,
+      amount: round2(p.amount),
+    }));
 
     let reviewed = false;
     try {
@@ -191,6 +245,8 @@ router.get("/finance/period", async (req, res): Promise<void> => {
         rent: round2(cur.rent - pri.rent),
         net: round2(cur.net - pri.net),
       },
+      peopleCount: people.length,
+      people: people.slice(0, 200),
       reviewed,
     });
   } catch (err) {

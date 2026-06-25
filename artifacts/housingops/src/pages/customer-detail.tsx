@@ -76,9 +76,10 @@ export default function CustomerDetail() {
       // BUG FIX — utilities roll up from the property's UTILITY SERVICES (the
       // `utilities` table), the same source the property page sums. The old
       // code read `otherCosts` (empty), so customer utilities showed $0.
-      const utilServices = utilities
-        .filter((u) => (u as { propertyId?: string }).propertyId === p.id)
-        .reduce((s, u) => s + (Number((u as { monthlyCost?: number }).monthlyCost) || 0), 0);
+      const utilRows = utilities as Array<{ propertyId?: string; monthlyCost?: number }>;
+      const utilServices = utilRows
+        .filter((u) => u.propertyId === p.id)
+        .reduce((s: number, u) => s + (Number(u.monthlyCost) || 0), 0);
       const util = utilServices + sumOtherCostsForProperty(otherCosts, p.id);
       // Bed economics (per the "are we charging enough per bed?" spec). Uses
       // TOTAL beds (occupancy is irrelevant to the per-bed cost question).

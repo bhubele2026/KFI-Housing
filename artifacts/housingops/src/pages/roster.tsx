@@ -3,6 +3,7 @@ import { Link, useLocation, useSearch } from "wouter";
 import { ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
+import { countPlacedRoster } from "@/lib/roster-placement";
 import {
   Card,
   CardHead,
@@ -168,8 +169,11 @@ export default function RosterPage() {
     return out;
   }, [people, occByEmp, propMeta, customerByName]);
 
-  const placedCount = rows.filter((r) => r.placed).length;
-  const unplacedCount = rows.length - placedCount;
+  // Single source of truth shared with the nav tile so the counts always agree.
+  const { placed: placedCount, unplaced: unplacedCount } = countPlacedRoster(
+    people,
+    occupants,
+  );
 
   // Distinct clients for the filter dropdown.
   const clientOptions = useMemo(() => {

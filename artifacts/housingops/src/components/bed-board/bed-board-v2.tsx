@@ -351,7 +351,10 @@ export function BedBoardV2({
       }
       try {
         if (fromBedId) updateBed(fromBedId, { occupantId: "", status: "Vacant", cleaningStatus: "needs_cleaning" } as never);
-        updateBed(toBedId, { occupantId: occId, status: "Occupied" } as never);
+        // Moving someone in clears the destination's cleaning flag (matches the
+        // server's beds/move transaction) so its "needs cleaning" badge drops
+        // immediately, not just after the next refetch. (Item 3 auto-clear.)
+        updateBed(toBedId, { occupantId: occId, status: "Occupied", cleaningStatus: "occupied" } as never);
         updateOccupant(occId, { bedId: toBedId } as never);
       } catch {
         /* cache sync best-effort */

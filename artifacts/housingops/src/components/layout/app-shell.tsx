@@ -7,6 +7,7 @@ import { AddMenu } from "@/components/add-menu/add-menu";
 import { useData } from "@/context/data-store";
 import { useListActiveRoster } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
+import { countPlacedRoster } from "@/lib/roster-placement";
 
 const GRAD = "bg-[linear-gradient(135deg,hsl(var(--grad1)),hsl(var(--grad2)))]";
 
@@ -91,6 +92,18 @@ export function AppShell() {
   const rosterQuery = useListActiveRoster();
   const rosterTotal =
     ((rosterQuery.data as unknown as { people?: unknown[] })?.people?.length) ?? 0;
+  // "Placed" must mean the same thing here as on the Roster page header — a
+  // roster person matched to a bed-holding occupant — so the two never
+  // disagree. (Was counting every active occupant with a bed, a different set.)
+  const rosterPlaced = useMemo(
+    () =>
+      countPlacedRoster(
+        ((rosterQuery.data as unknown as { people?: { personId: string }[] })
+          ?.people) ?? [],
+        occupants as unknown as Record<string, unknown>[],
+      ).placed,
+    [rosterQuery.data, occupants],
+  );
 
   const stats = useMemo(() => {
     const activeProps = properties.filter((p) => (p as { status?: string }).status !== "Inactive");
@@ -162,7 +175,7 @@ export function AppShell() {
           <NavBox navKey="dash" href="/dashboard" icon={LayoutDashboard} label="Dashboard" big={<span className="text-[22px]">Home</span>} sub="overview & alerts" active={active === "dash"} />
           <NavBox navKey="cust" href="/customers" icon={Users} label="Customers" big={stats.customers} sub="active clients" active={active === "cust"} />
           <NavBox navKey="props" href="/properties" icon={Building2} label="Properties" big={stats.properties} sub={stats.propsSub} active={active === "props"} />
-          <NavBox navKey="roster" href="/roster" icon={ClipboardList} label="Roster" big={rosterTotal > 0 ? rosterTotal : stats.housed} sub={rosterTotal > 0 ? `${stats.housed} of ${rosterTotal} placed` : "housed associates"} active={active === "roster"} />
+          <NavBox navKey="roster" href="/roster" icon={ClipboardList} label="Roster" big={rosterTotal > 0 ? rosterTotal : stats.housed} sub={rosterTotal > 0 ? `${rosterPlaced} of ${rosterTotal} placed` : "housed associates"} active={active === "roster"} />
           <NavBox navKey="money" href="/finance" icon={DollarSign} label="Money" big={<span className="text-[22px]">Review</span>} sub="week & month" active={active === "money"} />
         </div>
       </div>

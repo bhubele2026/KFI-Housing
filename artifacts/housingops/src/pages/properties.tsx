@@ -13,6 +13,7 @@ import {
 } from "@/components/kit-v2";
 import { AddPropertyDialog } from "@/components/add-property/add-property-dialog";
 import { netDisplay } from "@/lib/money-honesty";
+import { toMonthlyCharge, sumOtherCostsForProperty } from "@/data/mockData";
 
 const MO = 52 / 12;
 const money = (n: number) => `${n < 0 ? "−" : ""}$${Math.abs(Math.round(n)).toLocaleString()}`;
@@ -34,6 +35,8 @@ export default function PropertiesPage() {
     beds = [],
     occupants = [],
     customers = [],
+    utilities = [],
+    otherCosts = [],
   } = useData();
   const [view, setView] = useState<"table" | "map">("table");
   const [addOpen, setAddOpen] = useState(false);
@@ -67,6 +70,25 @@ export default function PropertiesPage() {
       const wk = oo.deduction?.weeklyAmount ?? oo.chargePerBed ?? 0;
       collectedByProp.set(oo.propertyId, (collectedByProp.get(oo.propertyId) ?? 0) + wk);
     }
+    // "Losing money" uses the SAME per-property bed-economics the customer/
+    // property economics cards show, so the grid filter and the cards never
+    // disagree: collected = Σ each non-Former occupant's monthly charge, full
+    // carrying cost = rent + utilities (utility services + other costs), and a
+    // property is losing money when collected < cost (i.e. weekly surplus < 0;
+    // /4.333 doesn't change the sign). Same helpers the cards call.
+    const cardCollectedByProp = new Map<string, number>();
+    for (const o of occupants) {
+      const oo = o as { propertyId?: string; status?: string; chargePerBed?: number; billingFrequency?: string };
+      if (!oo.propertyId || (oo.status ?? "Active") === "Former") continue;
+      const mo = toMonthlyCharge(oo.chargePerBed || 0, (oo.billingFrequency ?? "Monthly") as never);
+      cardCollectedByProp.set(oo.propertyId, (cardCollectedByProp.get(oo.propertyId) ?? 0) + mo);
+    }
+    const utilByProp = new Map<string, number>();
+    for (const u of utilities) {
+      const uu = u as { propertyId?: string; monthlyCost?: number };
+      if (!uu.propertyId) continue;
+      utilByProp.set(uu.propertyId, (utilByProp.get(uu.propertyId) ?? 0) + (Number(uu.monthlyCost) || 0));
+    }
     return properties
       .filter((p) => (p as { status?: string }).status !== "Inactive")
       .map((p) => {
@@ -79,6 +101,11 @@ export default function PropertiesPage() {
         // collecting; otherwise "syncing" or "no one housed yet" (occ = beds
         // actually filled, the true "housed" signal — fixes AutoZone 0/8).
         const netInfo = netDisplay({ collected, rent, housed: occ });
+        // Card-aligned net for the "Losing money" filter (see above).
+        const cardUtil =
+          (utilByProp.get(p.id) ?? 0) + sumOtherCostsForProperty(otherCosts, p.id);
+        const cardCollected = cardCollectedByProp.get(p.id) ?? 0;
+        const losing = cardCollected - rent - cardUtil < 0;
         return {
           p,
           total,
@@ -88,6 +115,7 @@ export default function PropertiesPage() {
           collected,
           net: collected - rent,
           netInfo,
+          losing,
           occupantsCount,
           customerId: (p as { customerId?: string }).customerId ?? "",
           city: (p as { city?: string }).city ?? "",
@@ -97,7 +125,7 @@ export default function PropertiesPage() {
         };
       })
       .sort((a, b) => a.p.name.localeCompare(b.p.name));
-  }, [properties, beds, occupants]);
+  }, [properties, beds, occupants, utilities, otherCosts]);
 
   const clientOpts = useMemo(
     () =>
@@ -115,9 +143,10 @@ export default function PropertiesPage() {
     if (clientFilter && r.customerId !== clientFilter) return false;
     if (stateFilter && r.state !== stateFilter) return false;
     if (openOnly && r.open <= 0) return false;
-    // At-risk = a REAL negative net (not a property whose deductions are
-    // still syncing — that's not a loss, just incomplete collections).
-    if (atRiskOnly && !(r.netInfo.kind === "net" && r.netInfo.value < 0)) return false;
+    // "Losing money" = the property's bed-economics net is negative (collecting
+    // less than rent + utilities), computed the same way as the economics cards
+    // so the grid and the cards always agree.
+    if (atRiskOnly && !r.losing) return false;
     return true;
   });
   const anyFilter = clientFilter || stateFilter || openOnly || atRiskOnly;

@@ -28,6 +28,11 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface VersionStatus {
+  /** Per-deploy build identifier (changes on every server reboot). */
+  version: string;
+}
+
 /**
  * Runtime config the web app fetches once on mount. The Google Maps
 Embed API key is intentionally exposed (the embed URL puts it on

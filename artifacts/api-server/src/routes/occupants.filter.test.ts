@@ -12,6 +12,11 @@ import http from "node:http";
 import express, { type Express } from "express";
 
 // Perf-pass Step 2: optional `?propertyId=` filter on GET /api/occupants.
+// Mirrors the harness in occupants.test.ts (which proves a populated GET path)
+// — notably it does NOT mock ../lib/occupant-deduction: the route awaits
+// getOccupantDeductionsBatch(...).catch(() => new Map()), so the batch query
+// (which hits an undefined `inArray` here) throws-and-is-swallowed and the
+// real deductionFromOccupant fallback runs, exactly as in the existing suite.
 
 interface OccRow {
   id: string;
@@ -38,7 +43,9 @@ const fakeDb = {
 };
 
 vi.mock("drizzle-orm", () => ({
-  eq: (col: { __field: string }, value: string) => ({ field: col.__field, value }),
+  // Field-capturing eq so the fake `where` can filter; and/ne are stubs the
+  // GET path never calls (present only because the route module imports them).
+  eq: (col: { __field?: string }, value: string) => ({ field: col?.__field, value }),
   and: (...c: unknown[]) => ({ and: c }),
   ne: (col: unknown, value: unknown) => ({ ne: [col, value] }),
 }));
@@ -51,12 +58,6 @@ vi.mock("@workspace/db", () => ({
     propertyId: { __field: "propertyId" },
   },
   bedsTable: { __table: "beds", roomId: { __col: "roomId" } },
-}));
-
-// Isolate the GET filter from the payroll-deduction batch query.
-vi.mock("../lib/occupant-deduction", () => ({
-  getOccupantDeductionsBatch: async () => new Map(),
-  deductionFromOccupant: () => ({}),
 }));
 
 const occupantsRouter = (await import("./occupants")).default;
@@ -111,12 +112,16 @@ beforeEach(() => {
 
 describe("GET /api/occupants — optional propertyId filter (perf Step 2)", () => {
   it("returns every occupant when no propertyId is supplied", async () => {
-    const rows = (await (await fetch(`${baseUrl}/api/occupants`)).json()) as OccRow[];
+    const res = await fetch(`${baseUrl}/api/occupants`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as OccRow[];
     expect(rows.map((r) => r.id).sort()).toEqual(["o1", "o2", "o3"]);
   });
 
   it("returns only the occupants for the given propertyId", async () => {
-    const rows = (await (await fetch(`${baseUrl}/api/occupants?propertyId=p-1`)).json()) as OccRow[];
+    const res = await fetch(`${baseUrl}/api/occupants?propertyId=p-1`);
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as OccRow[];
     expect(rows.map((r) => r.id).sort()).toEqual(["o1", "o2"]);
   });
 

@@ -291,14 +291,19 @@ export function BedBoardV2({
     });
   }
 
-  async function postMove(occId: string, fromBedId: string, toBedId: string, chargeMode?: string): Promise<boolean> {
+  async function postMove(occId: string, fromBedId: string, toBedId: string, chargeMode?: string): Promise<{ ok: boolean; error?: string }> {
     try {
       const r = await fetch(`${apiBase()}api/beds/move`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ occupantId: occId, fromBedId, toBedId, ...(chargeMode ? { chargeMode } : {}) }),
       });
-      if (!r.ok) throw new Error("move failed");
+      if (!r.ok) {
+        // Surface the server's real reason ("target bed is already occupied…")
+        // rather than a generic failure, so the toast tells the operator why.
+        const body = (await r.json().catch(() => ({}))) as { error?: string };
+        return { ok: false, error: body.error || `Move failed (${r.status})` };
+      }
       try {
         if (fromBedId) updateBed(fromBedId, { occupantId: "", status: "Vacant", cleaningStatus: "needs_cleaning" } as never);
         updateBed(toBedId, { occupantId: occId, status: "Occupied" } as never);
@@ -306,19 +311,19 @@ export function BedBoardV2({
       } catch {
         /* cache sync best-effort */
       }
-      return true;
+      return { ok: true };
     } catch {
-      return false;
+      return { ok: false, error: "Move failed — network error" };
     }
   }
 
   async function doMove(occ: Occupant, fromBedId: string, toBedId: string) {
     if (fromBedId === toBedId) return;
     optimisticMove(occ.id, fromBedId, toBedId);
-    const ok = await postMove(occ.id, fromBedId, toBedId);
-    if (!ok) {
+    const res = await postMove(occ.id, fromBedId, toBedId);
+    if (!res.ok) {
       optimisticMove(occ.id, toBedId, fromBedId); // roll back
-      toast({ title: "Move failed — put them back", variant: "destructive" as never });
+      toast({ title: res.error || "Move failed — put them back", variant: "destructive" as never });
       return;
     }
     const nm = (occ as { name?: string }).name ?? "person";
@@ -397,11 +402,11 @@ export function BedBoardV2({
       delete next[fromBedId];
       return next;
     });
-    const ok = await postMove(occ.id, fromBedId, toBedId, chargeMode);
+    const res = await postMove(occ.id, fromBedId, toBedId, chargeMode);
     const nm = (occ as { name?: string }).name ?? "person";
-    if (!ok) {
+    if (!res.ok) {
       setOccByBed((prev) => ({ ...prev, [fromBedId]: occ.id }));
-      toast({ title: "Cross-property move failed", variant: "destructive" as never });
+      toast({ title: res.error || "Cross-property move failed", variant: "destructive" as never });
       return;
     }
     toast({ title: `Moved ${nm} to another property` });

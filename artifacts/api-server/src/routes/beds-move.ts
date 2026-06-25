@@ -72,6 +72,13 @@ async function applyMove(
     .where(eq(occupantsTable.id, occId));
 }
 
+// A move failure is a 400 (bad/missing input, unknown bed) vs a genuine 409
+// conflict (target bed already occupied or not yet cleaned). Reserving 409 for
+// real conflicts makes "bad payload" distinguishable from "race lost".
+function moveErrorStatus(message: string): 400 | 409 {
+  return /required|does not exist/i.test(message) ? 400 : 409;
+}
+
 // POST /api/beds/move { occupantId, fromBedId?, toBedId, chargeMode? }
 router.post("/beds/move", async (req, res): Promise<void> => {
   try {
@@ -82,7 +89,7 @@ router.post("/beds/move", async (req, res): Promise<void> => {
     res.json({ ok: true, occupantId: body.occupantId, toBedId: body.toBedId });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(409).json({ error: message });
+    res.status(moveErrorStatus(message)).json({ error: message });
   }
 });
 
@@ -100,7 +107,7 @@ router.post("/beds/move-batch", async (req, res): Promise<void> => {
     res.json({ ok: true, moved: moves.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(409).json({ error: message });
+    res.status(moveErrorStatus(message)).json({ error: message });
   }
 });
 

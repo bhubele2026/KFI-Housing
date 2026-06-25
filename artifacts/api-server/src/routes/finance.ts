@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, gte, lte, eq } from "drizzle-orm";
+import { and, gte, lte, eq, sql } from "drizzle-orm";
 import {
   bedsTable,
   bedWeeklyRatesTable,
@@ -123,26 +123,39 @@ async function loadSnapshots(since?: string, until?: string): Promise<SnapRow[]>
     since ? gte(payrollDeductionsTable.payWeekEndDate, since) : null,
     until ? lte(payrollDeductionsTable.payWeekEndDate, until) : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null);
+  // Perf (Step 4): pre-aggregate in SQL. Every downstream consumer either
+  // filters on (payWeekEndDate, customerId, propertyId) or sums weeklyAmount
+  // grouped by those keys — never a row count / dedupe / per-row identity — so
+  // GROUP BY (week, customer, property) with SUM is output-identical while
+  // collapsing every payroll row to one row per (week × customer × property).
+  // `mapWith(Number)` keeps weeklyAmount a number (SnapRow shape unchanged).
   return db
     .select({
       payWeekEndDate: payrollDeductionsTable.payWeekEndDate,
       customerId: payrollDeductionsTable.customerId,
       propertyId: payrollDeductionsTable.propertyId,
-      weeklyAmount: payrollDeductionsTable.weeklyAmount,
+      weeklyAmount: sql<number>`sum(${payrollDeductionsTable.weeklyAmount})`.mapWith(Number),
     })
     .from(payrollDeductionsTable)
-    .where(conds.length ? and(...conds) : undefined);
+    .where(conds.length ? and(...conds) : undefined)
+    .groupBy(
+      payrollDeductionsTable.payWeekEndDate,
+      payrollDeductionsTable.customerId,
+      payrollDeductionsTable.propertyId,
+    );
 }
 
 async function resolveAnchorWeek(): Promise<string> {
-  const rows = await db
-    .select({ payWeekEndDate: payrollDeductionsTable.payWeekEndDate })
+  // Perf (Step 4): let Postgres compute the max instead of fetching every
+  // payWeekEndDate to JS-max it. `payWeekEndDate` is a zero-padded
+  // YYYY-MM-DD string so MAX() == lexical == chronological max, identical to
+  // the prior loop. Empty table → NULL → falls back to mostRecentSaturday().
+  const [row] = await db
+    .select({
+      latest: sql<string | null>`max(${payrollDeductionsTable.payWeekEndDate})`,
+    })
     .from(payrollDeductionsTable);
-  let latest = "";
-  for (const r of rows) {
-    if (r.payWeekEndDate > latest) latest = r.payWeekEndDate;
-  }
-  return latest || mostRecentSaturday();
+  return row?.latest || mostRecentSaturday();
 }
 
 function readScopeFilters(req: {

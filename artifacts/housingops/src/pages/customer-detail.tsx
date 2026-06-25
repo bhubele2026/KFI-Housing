@@ -144,7 +144,9 @@ export default function CustomerDetail() {
   const netDisp = netDisplay(netInput);
   const netIsSyncing = netDisp.kind !== "net";
   const netSub = netDisp.kind === "net" ? "collected − rent − util" : netDisp.label;
-  // A KPI card whose value explains itself + links to the rows behind it.
+  // A KPI card that NAVIGATES on click (whole card) to the rows behind the
+  // number, and still explains itself via the dotted "why" on the value (whose
+  // click is stopped from bubbling, so the popover doesn't also navigate).
   const KPI = (props: {
     label: ReactNode;
     value: ReactNode;
@@ -159,6 +161,7 @@ export default function CustomerDetail() {
       label={props.label}
       tone={props.tone}
       sub={props.sub}
+      onClick={() => navigate(props.href)}
       value={
         <WhyPopover title={props.title} formula={props.formula} rows={props.rows} href={props.href}>
           {props.value}
@@ -218,13 +221,13 @@ export default function CustomerDetail() {
         {/* KPI cockpit — every figure clickable + why */}
         <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <KPI label={<span className="inline-flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-faint" aria-hidden />Properties</span>} value={view.propCount} sub={`${view.aptCount} apts · ${view.motelCount} motel`}
-            title="Properties" formula="Active + shared properties for this client" rows={[{ k: "Apartments", v: view.aptCount }, { k: "Other", v: view.motelCount }]} href={bedsHref} />
+            title="Properties" formula="Active + shared properties for this client" rows={[{ k: "Apartments", v: view.aptCount }, { k: "Other", v: view.motelCount }]} href={`/properties?client=${id}`} />
           <KPI label="Housed" value={view.housed} sub={`of ${view.capacity} beds`}
             title="Housed" formula="Active occupants in this client's properties" rows={[{ k: "Housed", v: view.housed }, { k: "Capacity", v: view.capacity }]} href={bedsHref} />
           <KPI label="Occupancy" value={`${view.occPct}%`} tone={view.occPct >= 85 ? "ok" : "warn"} sub="occupied ÷ beds"
             title="Occupancy %" formula="Occupied beds ÷ total beds" rows={[{ k: "Occupied", v: view.occupied }, { k: "Beds", v: view.capacity }]} href={bedsHref} />
           <KPI label="Open beds" value={view.open} tone="warn" sub="ready now"
-            title="Open beds" formula="Vacant beds that are clean & ready" rows={[{ k: "Open & ready", v: view.open }]} href={bedsHref} />
+            title="Open beds" formula="Vacant beds that are clean & ready" rows={[{ k: "Open & ready", v: view.open }]} href={`${bedsHref}?filter=open`} />
 
           <KPI label="Net / mo" value={<NetFigure input={netInput} />} tone={netIsSyncing ? "warn" : view.net < 0 ? "risk" : "ok"} sub={netSub}
             title="Net / mo" formula="Collected − Rent we pay − Utilities" rows={[{ k: "Collected", v: formatUsd(view.collected) }, { k: "Rent", v: formatUsd(view.rent) }, { k: "Utilities", v: formatUsd(view.utilities) }]} href="/finance" />
@@ -236,11 +239,11 @@ export default function CustomerDetail() {
             title="Avg rent / bed" formula="Monthly rent ÷ total beds" rows={[{ k: "Rent / mo", v: formatUsd(view.rent) }, { k: "Beds", v: view.capacity }]} href="/finance" />
 
           <KPI label="Not in payroll" value={view.notInPayroll} tone={view.notInPayroll > 0 ? "warn" : "ink"} sub="not Zenople-linked"
-            title="Not in payroll yet" formula="Housed people not linked to a Zenople payroll record" rows={[{ k: "Not linked", v: view.notInPayroll }, { k: "Housed", v: view.housed }]} href="/roster" />
+            title="Not in payroll yet" formula="Housed people not linked to a Zenople payroll record" rows={[{ k: "Not linked", v: view.notInPayroll }, { k: "Housed", v: view.housed }]} href={`/roster?client=${encodeURIComponent(customer.name)}&filter=not-in-payroll`} />
           <KPI label="$0 deduction" value={view.zeroDeduction} tone={view.zeroDeduction > 0 ? "risk" : "ink"} sub="housed, $0/wk"
-            title="$0 deduction" formula="Housed people with no weekly rent deducted (unrecovered)" rows={[{ k: "$0 deduction", v: view.zeroDeduction }]} href="/roster" />
+            title="$0 deduction" formula="Housed people with no weekly rent deducted (unrecovered)" rows={[{ k: "$0 deduction", v: view.zeroDeduction }]} href={`/roster?client=${encodeURIComponent(customer.name)}&filter=zero-deduction`} />
           <KPI label="Needs cleaning" value={view.needsCleaning} tone={view.needsCleaning > 0 ? "warn" : "ink"} sub="beds in turnover"
-            title="Needs cleaning" formula="Vacated beds awaiting turnover" rows={[{ k: "Needs cleaning", v: view.needsCleaning }]} href={bedsHref} />
+            title="Needs cleaning" formula="Vacated beds awaiting turnover" rows={[{ k: "Needs cleaning", v: view.needsCleaning }]} href={`${bedsHref}?filter=needs-cleaning`} />
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

@@ -1,6 +1,6 @@
 import { useMemo, type KeyboardEvent } from "react";
-import { useLocation } from "wouter";
-import { Users, Building2, ClipboardList, DollarSign, ChevronRight, Search } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { LayoutDashboard, Users, Building2, ClipboardList, DollarSign, ChevronRight, Search } from "lucide-react";
 import { KfiLogo } from "@/components/kfi-logo";
 import { CommandBar } from "@/components/command-bar/command-bar";
 import { AddMenu } from "@/components/add-menu/add-menu";
@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils";
 
 const GRAD = "bg-[linear-gradient(135deg,hsl(var(--grad1)),hsl(var(--grad2)))]";
 
-type NavKey = "cust" | "props" | "roster" | "money";
+type NavKey = "dash" | "cust" | "props" | "roster" | "money";
 
 function activeKey(path: string): NavKey | null {
+  if (path === "/" || path.startsWith("/dashboard")) return "dash";
   if (path.startsWith("/customers")) return "cust";
   if (path.startsWith("/properties") || path.startsWith("/beds")) return "props";
   if (path.startsWith("/roster")) return "roster";
@@ -82,7 +83,7 @@ function NavBox({
 }
 
 export function AppShell() {
-  const [location, navigate] = useLocation();
+  const [location] = useLocation();
   const active = activeKey(location);
   const { customers, properties, occupants, beds } = useData();
   // Whole active Zenople roster (cast-safe) — the Roster box should reflect
@@ -121,18 +122,13 @@ export function AppShell() {
       <div className="mx-auto max-w-[1180px] px-6 pt-3.5">
         {/* slim top bar */}
         <div className="mb-4 flex items-center justify-between">
-          <div
-            role="link"
-            tabIndex={0}
-            onClick={() => navigate("/dashboard")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                navigate("/dashboard");
-              }
-            }}
+          {/* Real anchor to the dashboard — Tab-focusable, supports
+              cmd/ctrl-click to open in a new tab, reads as a link. */}
+          <Link
+            href="/dashboard"
             aria-label="Dashboard — home"
-            className="flex cursor-pointer items-center gap-3 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            title="Go to Dashboard"
+            className="flex cursor-pointer items-center gap-3 rounded-lg transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <span className={cn("flex h-9 w-9 items-center justify-center rounded-[11px] p-1.5 text-white", GRAD)}>
               <KfiLogo variant="mark" className="h-full" />
@@ -141,7 +137,7 @@ export function AppShell() {
               <b className="text-[15px] text-ink">KFI Workforce Deployment</b>
               <small className="block text-[11px] font-semibold text-faint">Housing Operations</small>
             </div>
-          </div>
+          </Link>
           <div className="flex items-center gap-2.5 text-[13px] text-muted-foreground">
             <button
               type="button"
@@ -161,8 +157,9 @@ export function AppShell() {
         </div>
         <CommandBar />
 
-        {/* four nav boxes */}
-        <div className="grid grid-cols-2 gap-4 pb-5 md:grid-cols-4">
+        {/* nav boxes — Dashboard (home) first, then the four sections */}
+        <div className="grid grid-cols-2 gap-4 pb-5 md:grid-cols-3 lg:grid-cols-5">
+          <NavBox navKey="dash" href="/dashboard" icon={LayoutDashboard} label="Dashboard" big={<span className="text-[22px]">Home</span>} sub="overview & alerts" active={active === "dash"} />
           <NavBox navKey="cust" href="/customers" icon={Users} label="Customers" big={stats.customers} sub="active clients" active={active === "cust"} />
           <NavBox navKey="props" href="/properties" icon={Building2} label="Properties" big={stats.properties} sub={stats.propsSub} active={active === "props"} />
           <NavBox navKey="roster" href="/roster" icon={ClipboardList} label="Roster" big={rosterTotal > 0 ? rosterTotal : stats.housed} sub={rosterTotal > 0 ? `${stats.housed} of ${rosterTotal} placed` : "housed associates"} active={active === "roster"} />

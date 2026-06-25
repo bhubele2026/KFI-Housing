@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
 import { useListActiveRoster } from "@workspace/api-client-react";
 import { useData } from "@/context/data-store";
@@ -60,9 +60,23 @@ const normName = (s: string): string => (s || "").trim().toLowerCase();
 
 export default function RosterPage() {
   const [, navigate] = useLocation();
-  const [filter, setFilter] = useState<Filter>("all");
+  // Deep-link support — the customer-detail "$0 deduction" / "Not in payroll"
+  // stat cards link here with ?client=<name>&filter=<...>; honor those so the
+  // roster opens already scoped to the people behind the number.
+  const qs = new URLSearchParams(useSearch());
+  const initialClient = qs.get("client") || "all";
+  const rawFilter = qs.get("filter");
+  const initialFilter: Filter =
+    rawFilter === "zero-deduction" || rawFilter === "zeroded"
+      ? "zeroded"
+      : rawFilter === "placed" || rawFilter === "unplaced"
+      ? rawFilter
+      : rawFilter === "not-in-payroll"
+      ? "unplaced"
+      : "all";
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [search, setSearch] = useState("");
-  const [client, setClient] = useState("all");
+  const [client, setClient] = useState(initialClient);
   const [sortKey, setSortKey] = useState<SortKey>("placement");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 

@@ -61,6 +61,12 @@ export function WhyPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
+          // Stop the click from bubbling to a clickable parent (e.g. a
+          // navigating StatCard) — opening the "why" must not also navigate.
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+          }}
           className={cn(
             "cursor-help underline decoration-dotted decoration-[hsl(var(--line))] underline-offset-2 transition-colors hover:decoration-[hsl(var(--brand))]",
             className,

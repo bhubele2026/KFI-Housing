@@ -101,17 +101,48 @@ export function StatCard({
   sub,
   tone = "ink",
   testId,
+  onClick,
 }: {
   label: ReactNode;
   value: ReactNode;
   sub?: ReactNode;
   tone?: "ink" | "ok" | "warn" | "risk" | "brand";
   testId?: string;
+  /**
+   * When provided the WHOLE card becomes an interactive navigation surface:
+   * pointer cursor, hover lift, focus ring, role=link, Tab-focusable, and
+   * Enter/Space activate it. When omitted the card is flat and static (no
+   * pointer, no hover) so it never *looks* clickable while doing nothing. Fix
+   * the clickability here, once, so every StatCard across the app is uniform.
+   */
+  onClick?: () => void;
 }) {
   const toneClass =
     tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : tone === "risk" ? "text-risk" : tone === "brand" ? "text-brand" : "text-ink";
+  const clickable = !!onClick;
   return (
-    <div className={cn("rounded-[18px] bg-panel p-[18px]", CARD_SHADOW)} data-testid={testId}>
+    <div
+      className={cn(
+        "rounded-[18px] bg-panel p-[18px]",
+        CARD_SHADOW,
+        clickable &&
+          "cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
+      )}
+      data-testid={testId}
+      onClick={onClick}
+      role={clickable ? "link" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <Lab className="mb-1">{label}</Lab>
       <div className={cn("text-[26px] font-extrabold tracking-[-0.3px] tabular-nums", toneClass)}>{value}</div>
       {sub != null && <div className="mt-0.5 text-[12.5px] text-muted-foreground">{sub}</div>}

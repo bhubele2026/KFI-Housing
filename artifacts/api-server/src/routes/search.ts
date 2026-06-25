@@ -34,7 +34,11 @@ router.get("/search", async (req, res): Promise<void> => {
     }
     for (const o of occs) {
       if ((o.name ?? "").toLowerCase().includes(q)) {
-        results.push({ type: "occupant", id: o.id, label: o.name, href: `/occupants/${o.id}` });
+        // Phase 0 — ⌘K on a person jumps STRAIGHT to their bed board (their
+        // property), the "feels-fast" win; falls back to the profile when the
+        // person isn't placed at a property yet.
+        const href = o.propertyId ? `/properties/${o.propertyId}` : `/occupants/${o.id}`;
+        results.push({ type: "occupant", id: o.id, label: o.name, href });
       }
     }
     res.json({ results: results.slice(0, 20) });

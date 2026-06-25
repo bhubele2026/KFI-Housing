@@ -172,9 +172,12 @@ export default function CustomerDetail() {
       <div className="mx-auto max-w-[1120px] px-6 py-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Link href="/customers" className="mb-1.5 inline-block text-[13px] font-semibold text-brand">
-              ← Customers
-            </Link>
+            {/* Phase 0 — breadcrumb so you always know where you are. */}
+            <nav className="mb-1.5 flex items-center gap-1.5 text-[13px]" aria-label="Breadcrumb">
+              <Link href="/customers" className="font-semibold text-brand hover:underline">Customers</Link>
+              <span className="text-faint">›</span>
+              <span className="text-muted-foreground">{customer.name}</span>
+            </nav>
             <h1 className="flex items-center gap-2 text-[21px] tracking-[-0.3px] text-ink" data-testid="customer-detail-name">
               {customer.name}
               {isInactive && (
@@ -243,8 +246,7 @@ export default function CustomerDetail() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHead
-              label="Properties — click to manage beds"
-              link={<Link href={bedsHref} className="text-[12.5px] font-semibold text-brand">All beds →</Link>}
+              label="Properties — click a row to open its beds"
             />
             <div className="space-y-3">
               {view.perProp.map(({ p, total, occ, open, collected, rent, util, people }) => {

@@ -99,8 +99,15 @@ export function AppShell() {
     const housed = occupants.filter(
       (o) => (o as { bedId?: string }).bedId && (o as { status?: string }).status === "Active",
     ).length;
+    // Phase 0 — reconcile the "active clients" count with the Customers list:
+    // a client counts only when it's NOT inactive AND has at least one active
+    // property (the same rule the Customers grid uses). Kills the 33-vs-18 gap.
+    const propCustomerIds = new Set(activeProps.map((p) => (p as { customerId?: string }).customerId));
+    const activeClients = customers.filter(
+      (c) => !(c as { isInactive?: boolean }).isInactive && propCustomerIds.has(c.id),
+    ).length;
     return {
-      customers: customers.filter((c) => !(c as { isInactive?: boolean }).isInactive).length,
+      customers: activeClients,
       properties: activeProps.length,
       propsSub: pct == null ? `${activeProps.length} locations` : `${pct}% full · ${totalBeds} beds`,
       housed,

@@ -3,7 +3,6 @@ import { Link, useParams } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, BedDouble } from "lucide-react";
+import { BedDouble } from "lucide-react";
 import { shortPropertyName } from "@/lib/property-name";
 import { ProjectedMoveInsSection } from "@/components/projected-move-ins-section";
 import { BedBoardV2 } from "@/components/bed-board/bed-board-v2";
@@ -78,13 +77,17 @@ export default function CustomerBeds() {
   return (
     <MainLayout>
       <div className="p-6 max-w-[1400px] mx-auto space-y-5">
-        <div className="flex items-center gap-3">
-          <Link href={`/customers/${encodeURIComponent(id)}`}>
-            <Button variant="ghost" size="sm" className="gap-1.5">
-              <ChevronLeft className="h-4 w-4" />
+        <div>
+          {/* Phase 0 — breadcrumb: Customers › {client} › Beds. */}
+          <nav className="mb-1.5 flex items-center gap-1.5 text-[13px]" aria-label="Breadcrumb">
+            <Link href="/customers" className="font-semibold text-brand hover:underline">Customers</Link>
+            <span className="text-faint">›</span>
+            <Link href={`/customers/${encodeURIComponent(id)}`} className="font-semibold text-brand hover:underline">
               {customer ? customer.name : "Customer"}
-            </Button>
-          </Link>
+            </Link>
+            <span className="text-faint">›</span>
+            <span className="text-muted-foreground">Beds</span>
+          </nav>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <BedDouble className="h-5 w-5 text-muted-foreground" />
             Beds

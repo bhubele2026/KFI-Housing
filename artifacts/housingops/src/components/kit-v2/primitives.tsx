@@ -149,12 +149,24 @@ export function EntityCard({
   return (
     <div
       className={cn(
-        "cursor-pointer rounded-2xl bg-panel p-4 transition-all hover:-translate-y-0.5",
+        "cursor-pointer rounded-2xl bg-panel p-4 transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand",
         CARD_SHADOW,
         CARD_SHADOW_HOVER,
         className,
       )}
       onClick={onClick}
+      role={onClick ? "link" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       data-testid={testId}
     >
       <div className="mb-3 flex items-center gap-3">

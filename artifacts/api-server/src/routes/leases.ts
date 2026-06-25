@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { z } from "zod";
+import { eq, and } from "drizzle-orm";
 import {
   db,
   leasesTable,
@@ -107,8 +108,33 @@ function withDerivedStatus(row: LeaseRow): LeaseRow {
   return { ...row, status: deriveLeaseStatus(row) };
 }
 
-router.get("/leases", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(leasesTable).orderBy(leasesTable.id);
+// Optional server-side filters (perf pass): scope leases to a property and/or
+// the lease's own customerId column (both indexed). Omitting both is identical
+// to the prior full-list behavior.
+const ListLeasesQuery = z
+  .object({
+    propertyId: z.string().min(1).optional(),
+    customerId: z.string().min(1).optional(),
+  })
+  .passthrough();
+
+router.get("/leases", async (req, res): Promise<void> => {
+  const q = ListLeasesQuery.safeParse(req.query);
+  if (!q.success) {
+    res.status(400).json({ error: q.error.message });
+    return;
+  }
+  const { propertyId, customerId } = q.data;
+  const conds = [
+    propertyId ? eq(leasesTable.propertyId, propertyId) : undefined,
+    customerId ? eq(leasesTable.customerId, customerId) : undefined,
+  ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+  const base = db.select().from(leasesTable);
+  // No-filter branch is byte-for-byte the prior query; the filter branch adds
+  // the indexed WHERE (AND of whichever params were supplied).
+  const rows = conds.length
+    ? await base.where(and(...conds)).orderBy(leasesTable.id)
+    : await base.orderBy(leasesTable.id);
   const normalized = rows.map((r) =>
     withDerivedStatus(normalizeLeaseRow(r) as LeaseRow),
   );

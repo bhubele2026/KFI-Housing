@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, bedsTable } from "@workspace/db";
 import {
@@ -13,8 +14,27 @@ import { normalizeBedRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
-router.get("/beds", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(bedsTable).orderBy(bedsTable.id);
+// Optional server-side filter (perf pass). When `propertyId` is omitted the
+// list is identical to before; when present it pushes an indexed WHERE down to
+// Postgres instead of shipping every bed to the client. `.passthrough()` so
+// unrelated query params (e.g. a cache-buster) don't 400.
+const ListBedsQuery = z
+  .object({ propertyId: z.string().min(1).optional() })
+  .passthrough();
+
+router.get("/beds", async (req, res): Promise<void> => {
+  const q = ListBedsQuery.safeParse(req.query);
+  if (!q.success) {
+    res.status(400).json({ error: q.error.message });
+    return;
+  }
+  const { propertyId } = q.data;
+  const base = db.select().from(bedsTable);
+  // No-filter branch is byte-for-byte the prior query so existing callers /
+  // tests are unaffected; the filter branch adds the indexed WHERE.
+  const rows = propertyId
+    ? await base.where(eq(bedsTable.propertyId, propertyId)).orderBy(bedsTable.id)
+    : await base.orderBy(bedsTable.id);
   // Boundary normalize on the way out (Task #416) so a legacy bed
   // row whose `status` is off-list (e.g. "Pending") doesn't 500 the
   // entire list endpoint via the response schema's enum check. The

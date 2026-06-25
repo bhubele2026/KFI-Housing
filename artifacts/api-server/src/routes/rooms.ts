@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, roomsTable, bedsTable } from "@workspace/db";
 import {
@@ -14,8 +15,25 @@ import { normalizeRoomRow } from "../lib/db-row-normalizers";
 
 const router: IRouter = Router();
 
-router.get("/rooms", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(roomsTable).orderBy(roomsTable.id);
+// Optional server-side filter (perf pass): scope rooms to a property (indexed).
+// Omitting it is identical to the prior full-list behavior.
+const ListRoomsQuery = z
+  .object({ propertyId: z.string().min(1).optional() })
+  .passthrough();
+
+router.get("/rooms", async (req, res): Promise<void> => {
+  const q = ListRoomsQuery.safeParse(req.query);
+  if (!q.success) {
+    res.status(400).json({ error: q.error.message });
+    return;
+  }
+  const { propertyId } = q.data;
+  const base = db.select().from(roomsTable);
+  // No-filter branch is byte-for-byte the prior query; filter branch adds the
+  // indexed WHERE.
+  const rows = propertyId
+    ? await base.where(eq(roomsTable.propertyId, propertyId)).orderBy(roomsTable.id)
+    : await base.orderBy(roomsTable.id);
   // Same boundary defence as the other GET routes (Task #416): pipe
   // each row through the room normalizer before the per-row safeParse
   // so any future enum / date columns added to the room shape get the

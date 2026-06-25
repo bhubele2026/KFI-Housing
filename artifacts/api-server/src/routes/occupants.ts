@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { eq, and, ne } from "drizzle-orm";
 import { db, occupantsTable, bedsTable } from "@workspace/db";
 import {
@@ -16,6 +17,12 @@ import {
 } from "../lib/occupant-deduction";
 
 const router: IRouter = Router();
+
+// Optional server-side filter (perf pass): scope the occupant list to one
+// property via an indexed WHERE. Omitting it is identical to before.
+const ListOccupantsQuery = z
+  .object({ propertyId: z.string().min(1).optional() })
+  .passthrough();
 
 function serializeOccupant<R extends { createdAt: Date | string | null }>(row: R) {
   // `zenopleCheckedAt` is a timestamptz (Date) on the row; coerce it to ISO
@@ -41,8 +48,21 @@ function serializeOccupant<R extends { createdAt: Date | string | null }>(row: R
   };
 }
 
-router.get("/occupants", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(occupantsTable).orderBy(occupantsTable.id);
+router.get("/occupants", async (req, res): Promise<void> => {
+  const q = ListOccupantsQuery.safeParse(req.query);
+  if (!q.success) {
+    res.status(400).json({ error: q.error.message });
+    return;
+  }
+  const { propertyId } = q.data;
+  const base = db.select().from(occupantsTable);
+  // No-filter branch is byte-for-byte the prior query (existing tests/callers
+  // unaffected); the filter branch adds the indexed WHERE.
+  const rows = propertyId
+    ? await base
+        .where(eq(occupantsTable.propertyId, propertyId))
+        .orderBy(occupantsTable.id)
+    : await base.orderBy(occupantsTable.id);
   // Run each row through the boundary normalizer before the response
   // schema parse (Task #416) so a legacy off-list value already in the
   // DB (e.g. an unknown billingFrequency or shift) gets coerced into the

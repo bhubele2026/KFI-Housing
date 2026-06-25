@@ -684,6 +684,14 @@ export function normalizeRoomRow<
     const raw = (row as Record<string, unknown>).buildingId;
     out.buildingId = typeof raw === "string" ? raw : "";
   }
+  // Phase 5 — a room NAME is a short label, not free-form notes. A master-file
+  // import once dropped a sentence ("Apt Looking into moving them to another
+  // apartment.") into this field. Collapse whitespace/newlines and cap the
+  // length so a note can never masquerade as a room name again.
+  if ("name" in row) {
+    const raw = (row as Record<string, unknown>).name;
+    out.name = String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, 48);
+  }
   return out as T;
 }
 

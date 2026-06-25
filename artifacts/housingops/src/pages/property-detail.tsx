@@ -1600,9 +1600,16 @@ export default function PropertyDetail() {
             {property.propertyType ? (
               <Badge
                 variant="outline"
-                className="ml-1 text-xs font-medium"
+                className="ml-1 inline-flex items-center gap-1 text-xs font-medium"
                 data-testid="badge-property-type"
               >
+                {/* Phase 5 — property-type → icon with a guaranteed Building2
+                    fallback, so an unmapped type can never render a broken glyph. */}
+                {(() => {
+                  const t = String(property.propertyType).toLowerCase();
+                  const Ic = t.includes("motel") || t.includes("hotel") ? Hotel : t.includes("house") || t.includes("home") ? Home : Building2;
+                  return <Ic className="h-3 w-3" aria-hidden />;
+                })()}
                 {property.propertyType}
               </Badge>
             ) : null}

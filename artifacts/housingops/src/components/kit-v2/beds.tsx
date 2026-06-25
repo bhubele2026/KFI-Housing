@@ -17,6 +17,7 @@ export function Bed({
   onDragEnd,
   testId,
   swatchTitle,
+  needsCleaning,
 }: {
   name?: string;
   sub?: ReactNode;
@@ -31,11 +32,22 @@ export function Bed({
   testId?: string;
   /** Hover/SR label for the colored avatar (e.g. the shift the color encodes). */
   swatchTitle?: string;
+  /** Open bed still awaiting turnover. Display-only — never blocks a drop. */
+  needsCleaning?: boolean;
 }) {
   if (open) {
     return (
-      <div className="mb-2 flex items-center justify-center rounded-[11px] border border-dashed border-[#D7DEEA] bg-[repeating-linear-gradient(45deg,#fbfcfe,#fbfcfe_7px,#f3f6fb_7px,#f3f6fb_14px)] p-2 text-[13px] italic text-faint last:mb-0" data-testid={testId}>
+      <div className="mb-2 flex items-center justify-center gap-2 rounded-[11px] border border-dashed border-[#D7DEEA] bg-[repeating-linear-gradient(45deg,#fbfcfe,#fbfcfe_7px,#f3f6fb_7px,#f3f6fb_14px)] p-2 text-[13px] italic text-faint last:mb-0" data-testid={testId}>
         + assign bed
+        {needsCleaning && (
+          <span
+            className="not-italic rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700"
+            data-testid={testId ? `${testId}-needs-cleaning` : undefined}
+            title="This open bed still needs cleaning — you can still assign someone (it'll clear on move)"
+          >
+            needs cleaning
+          </span>
+        )}
       </div>
     );
   }

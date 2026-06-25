@@ -180,14 +180,7 @@ router.post("/occupants", async (req, res): Promise<void> => {
       });
       return;
     }
-    if (bed.cleaningStatus !== "ready") {
-      res.status(409).json({
-        error:
-          "Bed is not ready for a new occupant — finish the cleaning workflow first.",
-        cleaningStatus: bed.cleaningStatus,
-      });
-      return;
-    }
+    // Item 3: cleaning state never blocks placing a person (occupying clears it).
   }
   const [row] = await db
     .insert(occupantsTable)
@@ -348,14 +341,7 @@ router.patch("/occupants/:id", async (req, res): Promise<void> => {
       });
       return;
     }
-    if (destBed.cleaningStatus !== "ready") {
-      res.status(409).json({
-        error:
-          "Bed is not ready for a new occupant — finish the cleaning workflow first.",
-        cleaningStatus: destBed.cleaningStatus,
-      });
-      return;
-    }
+    // Item 3: cleaning state never blocks a move/assign (occupying clears it).
   }
   // Only fire the freed-bed cleaning side effect when the prior bed is
   // actually being vacated — i.e. the post-patch bedId differs from

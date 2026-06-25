@@ -59,13 +59,13 @@ export function MoveOccupantDialog({
     [customers, currentProperty],
   );
 
-  // Properties with at least one ready vacant bed are the only valid
-  // destinations — same gate AssignOccupantDialog uses, and it matches
-  // the API's destination-bed validation in PATCH /occupants/:id.
+  // Any property with a vacant bed is a valid destination. Cleaning state
+  // never gates a move (Item 3) — occupying a needs_cleaning bed clears its
+  // flag, matching PATCH /occupants/:id and /api/beds/move (both ungated).
   const propertyOptions = useMemo(() => {
     const idsWithVacancy = new Set(
       beds
-        .filter((b) => b.status === "Vacant" && b.cleaningStatus === "ready")
+        .filter((b) => b.status === "Vacant")
         .map((b) => b.propertyId),
     );
     return properties
@@ -86,10 +86,7 @@ export function MoveOccupantDialog({
     if (!destPropertyId) return [];
     return beds
       .filter(
-        (b) =>
-          b.propertyId === destPropertyId &&
-          b.status === "Vacant" &&
-          b.cleaningStatus === "ready",
+        (b) => b.propertyId === destPropertyId && b.status === "Vacant",
       )
       .sort((a, b) => a.bedNumber - b.bedNumber);
   }, [beds, destPropertyId]);

@@ -118,16 +118,10 @@ router.patch("/beds/:id", async (req, res): Promise<void> => {
         });
         return;
       }
-      // Reject if the bed is not in the ready state (covers
-      // needs_cleaning / in_progress / occupied-but-empty edge cases).
-      if (existing.cleaningStatus !== "ready") {
-        res.status(409).json({
-          error:
-            "Bed is not ready for a new occupant — finish the cleaning workflow first.",
-          cleaningStatus: existing.cleaningStatus,
-        });
-        return;
-      }
+      // Item 3: cleaning state NEVER blocks assigning a person. Occupying a
+      // bed clears its cleaning flag — the normaliser pairs an Occupied status
+      // with cleaningStatus "occupied" on the write below. (The "needs
+      // cleaning" badge on OPEN beds is display-only.)
     }
   }
   const wantsVacate =

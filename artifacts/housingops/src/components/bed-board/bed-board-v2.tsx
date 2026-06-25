@@ -903,7 +903,14 @@ export function BedBoardV2({
                       ].filter(Boolean).join(" ") || undefined}
                       title={isSuggested ? "Suggested — same client/shift/property" : "Click to assign someone"}
                     >
-                      <Bed open testId={`bed-open-${b.id}`} />
+                      <Bed
+                        open
+                        testId={`bed-open-${b.id}`}
+                        needsCleaning={
+                          (b as { cleaningStatus?: string }).cleaningStatus ===
+                          "needs_cleaning"
+                        }
+                      />
                     </div>
                   );
                 }

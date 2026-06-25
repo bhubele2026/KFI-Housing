@@ -45,9 +45,10 @@ async function applyMove(
     if (toBed.status === "Occupied" && toBed.occupantId) {
       throw new Error("target bed is already occupied — vacate it first");
     }
-    if (toBed.cleaningStatus !== "ready") {
-      throw new Error("target bed is not ready (finish cleaning first)");
-    }
+    // Item 3: cleaning state NEVER blocks a move. Moving someone into a bed
+    // means it's in use, so the seat-write below clears it to "occupied"
+    // (auto-clearing any needs_cleaning/turnover flag). The board still shows a
+    // "needs cleaning" badge on OPEN turnover beds — display-only, never a gate.
   }
 
   // Seat the occupant in the target bed.

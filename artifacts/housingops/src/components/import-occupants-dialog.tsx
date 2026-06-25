@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListOccupantsQueryKey } from "@workspace/api-client-react";
-import * as XLSX from "xlsx";
+// Type-only import (erased at build) so `xlsx` (~1MB) stays out of the bundle
+// until the operator actually clicks "Download template" — see downloadTemplate.
+import type * as XLSXType from "xlsx";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -89,7 +91,7 @@ const NOTES_LINES = [
   "Leave a column blank to skip it. Bed assignments are done in the app after import.",
 ];
 
-function buildTemplateWorkbook(): XLSX.WorkBook {
+function buildTemplateWorkbook(XLSX: typeof import("xlsx")): XLSXType.WorkBook {
   const wb = XLSX.utils.book_new();
 
   // Sheet 1: occupants template (header + example rows).
@@ -113,8 +115,10 @@ function buildTemplateWorkbook(): XLSX.WorkBook {
   return wb;
 }
 
-function downloadTemplate(): void {
-  const wb = buildTemplateWorkbook();
+async function downloadTemplate(): Promise<void> {
+  // Dynamic import: pulls the xlsx chunk only on the click, not at page load.
+  const XLSX = await import("xlsx");
+  const wb = buildTemplateWorkbook(XLSX);
   XLSX.writeFile(wb, "occupants-import-template.xlsx");
 }
 
@@ -225,7 +229,7 @@ export function ImportOccupantsDialog({ trigger }: ImportOccupantsDialogProps) {
             <Button
               variant="outline"
               size="sm"
-              onClick={downloadTemplate}
+              onClick={() => { void downloadTemplate(); }}
               data-testid="button-download-occupants-template"
               className="w-full"
             >

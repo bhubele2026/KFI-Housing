@@ -6,6 +6,7 @@ import { useData } from "@/context/data-store";
 import { computePropertyEconomics, type DeductionLite } from "@/lib/property-economics";
 import { useListPayrollDeductions } from "@workspace/api-client-react";
 import { formatUsdWhole } from "@/data/mockData";
+import { netDisplay } from "@/lib/money-honesty";
 import { shortPropertyName } from "@/lib/property-name";
 import { Card, CardHead, Lab, Ring, AreaChart, Heatmap, type HeatKind } from "@/components/kit-v2";
 
@@ -109,7 +110,6 @@ export default function Dashboard() {
   const occupied = summary.totalOccupied || placed.length;
   const collected = summary.totalRecovered;
   const rent = summary.totalRentCost;
-  const net = collected - rent;
   const coverage = rent > 0 ? Math.round((collected / rent) * 100) : null;
 
   // weekly collected series (Jun 1 2026 floor) for the area chart
@@ -217,21 +217,23 @@ export default function Dashboard() {
 
           <Card>
             <CardHead label="Money — this period" link={<span className="cursor-pointer text-[12.5px] font-semibold text-brand" onClick={() => navigate("/finance")}>Review →</span>} />
-            {/* Item 3 — money honesty: a negative spread driven by housed
-                people who aren't collecting yet ($0-deduction / not-synced) is
-                NOT a real loss. Show "syncing" rather than a scary red −$.
-                Layout unchanged; only the false-negative logic. */}
-            {net < 0 && atRisk > 0 ? (
-              <>
-                <div className="text-[27px] font-extrabold text-ink">Syncing…</div>
-                <div className="mb-3 text-[12.5px] text-muted-foreground">rent set · {atRisk} housed not collecting yet</div>
-              </>
-            ) : (
-              <>
-                <div className={`text-[27px] font-extrabold ${net >= 0 ? "text-ok" : "text-risk"}`}>{net >= 0 ? "+" : ""}{formatUsdWhole(net)}</div>
-                <div className="mb-3 text-[12.5px] text-muted-foreground">net spread (collected − rent)</div>
-              </>
-            )}
+            {/* Phase 1 — money honesty via the single shared helper. A spread
+                driven by housed people who aren't collecting yet ($0-deduction)
+                is NOT a real loss. Layout unchanged; only the false-neg logic. */}
+            {(() => {
+              const nd = netDisplay({ collected, rent, housed: occupied, zeroDeduction: atRisk });
+              return nd.kind !== "net" ? (
+                <>
+                  <div className="text-[27px] font-extrabold text-ink">{nd.kind === "syncing" ? "Syncing…" : "—"}</div>
+                  <div className="mb-3 text-[12.5px] text-muted-foreground">{nd.label}</div>
+                </>
+              ) : (
+                <>
+                  <div className={`text-[27px] font-extrabold ${nd.value >= 0 ? "text-ok" : "text-risk"}`}>{nd.value >= 0 ? "+" : ""}{formatUsdWhole(nd.value)}</div>
+                  <div className="mb-3 text-[12.5px] text-muted-foreground">net spread (collected − rent)</div>
+                </>
+              );
+            })()}
             <Kv label="Collected (deductions)" value={formatUsdWhole(collected)} />
             <Kv label="Rent we pay" value={formatUsdWhole(rent)} />
             <Kv label="Utilities" value={formatUsdWhole((summary as { totalUtilities?: number }).totalUtilities ?? 0)} />

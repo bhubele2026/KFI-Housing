@@ -25,7 +25,9 @@ function net$(n: number): string {
  */
 function NetFigure({ input, className = "" }: { input: NetInput; className?: string }) {
   const nd = netDisplay(input);
-  if (nd.kind === "syncing") {
+  // "syncing" (deductions not landed) and "none" (nobody housed) both render a
+  // neutral label — never a red −$.
+  if (nd.kind !== "net") {
     return <span className={`tabular-nums text-muted-foreground ${className}`}>{nd.label}</span>;
   }
   return <span className={`tabular-nums ${nd.value < 0 ? "text-risk" : "text-ok"} ${className}`}>{net$(nd.value)}</span>;
@@ -128,9 +130,20 @@ export default function CustomerDetail() {
   }
 
   const bedsHref = `/customers/${id}/beds`;
-  // Phase 11 — money honesty for the client-level net.
-  const netInput: NetInput = { collected: view.collected, rent: view.rent, utilities: view.utilities, occupants: view.housed };
-  const netIsSyncing = netDisplay(netInput).kind === "syncing";
+  // Phase 1 — money honesty for the client-level net, with the richer signals
+  // so a fully-unsynced client (e.g. Burnett: 34 housed / 34 not-in-payroll)
+  // reads "syncing", and a client with nobody housed reads "no one housed yet".
+  const netInput: NetInput = {
+    collected: view.collected,
+    rent: view.rent,
+    utilities: view.utilities,
+    housed: view.housed,
+    notInPayroll: view.notInPayroll,
+    zeroDeduction: view.zeroDeduction,
+  };
+  const netDisp = netDisplay(netInput);
+  const netIsSyncing = netDisp.kind !== "net";
+  const netSub = netDisp.kind === "net" ? "collected − rent − util" : netDisp.label;
   // A KPI card whose value explains itself + links to the rows behind it.
   const KPI = (props: {
     label: ReactNode;
@@ -210,7 +223,7 @@ export default function CustomerDetail() {
           <KPI label="Open beds" value={view.open} tone="warn" sub="ready now"
             title="Open beds" formula="Vacant beds that are clean & ready" rows={[{ k: "Open & ready", v: view.open }]} href={bedsHref} />
 
-          <KPI label="Net / mo" value={<NetFigure input={netInput} />} tone={netIsSyncing ? "warn" : view.net < 0 ? "risk" : "ok"} sub={netIsSyncing ? "rent set · syncing" : "collected − rent − util"}
+          <KPI label="Net / mo" value={<NetFigure input={netInput} />} tone={netIsSyncing ? "warn" : view.net < 0 ? "risk" : "ok"} sub={netSub}
             title="Net / mo" formula="Collected − Rent we pay − Utilities" rows={[{ k: "Collected", v: formatUsd(view.collected) }, { k: "Rent", v: formatUsd(view.rent) }, { k: "Utilities", v: formatUsd(view.utilities) }]} href="/finance" />
           <KPI label="Collected / wk" value={formatUsd(view.collectedWeekly)} sub="deductions"
             title="Collected / wk" formula="Monthly collected × 12 ÷ 52" rows={[{ k: "Collected / mo", v: formatUsd(view.collected) }]} href="/finance" />

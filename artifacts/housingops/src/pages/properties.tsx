@@ -75,8 +75,10 @@ export default function PropertiesPage() {
         const rent = (p as { monthlyRent?: number }).monthlyRent ?? 0;
         const collected = (collectedByProp.get(p.id) ?? 0) * MO;
         const occupantsCount = activeByProp.get(p.id) ?? 0;
-        // Phase 11 — honest net: only a hard number when collected is real.
-        const netInfo = netDisplay({ collected, rent, occupants: occupantsCount });
+        // Phase 1 — honest net: a hard number only when people are housed AND
+        // collecting; otherwise "syncing" or "no one housed yet" (occ = beds
+        // actually filled, the true "housed" signal — fixes AutoZone 0/8).
+        const netInfo = netDisplay({ collected, rent, housed: occ });
         return {
           p,
           total,
@@ -213,11 +215,15 @@ export default function PropertiesPage() {
             // state, or (no beds) an actionable empty label. Never a scary −$.
             const netValue: ReactNode = noBeds ? (
               <span className="text-xs font-semibold text-muted-foreground">No beds set</span>
-            ) : netInfo.kind === "syncing" ? (
+            ) : netInfo.kind !== "net" ? (
               <NoNav>
                 <WhyPopover
-                  title="Collecting"
-                  formula="Rent is set; housing deductions are still syncing"
+                  title={netInfo.kind === "syncing" ? "Collecting" : "No one housed"}
+                  formula={
+                    netInfo.kind === "syncing"
+                      ? "Rent is set; housing deductions are still syncing"
+                      : "Rent is set, but nobody is housed here yet — not a loss"
+                  }
                   rows={[
                     { k: "Housed", v: occupantsCount },
                     { k: "Rent /mo", v: money(rent) },
@@ -226,7 +232,9 @@ export default function PropertiesPage() {
                   href={`/properties/${p.id}`}
                   hrefLabel="Open bed board →"
                 >
-                  <span className="text-warn">Collecting · rent set</span>
+                  <span className={netInfo.kind === "syncing" ? "text-warn" : "text-muted-foreground"}>
+                    {netInfo.kind === "syncing" ? "Collecting · rent set" : netInfo.label}
+                  </span>
                 </WhyPopover>
               </NoNav>
             ) : (

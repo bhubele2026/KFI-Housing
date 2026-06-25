@@ -275,7 +275,7 @@ export function BedBoardV2({
   // Phase 4/11 money honesty — only call it a loss when collected is real.
   // People housed + rent set but $0 collected => deductions still syncing,
   // not a −$rent loss. netDisplay returns {kind:"syncing"} in that case.
-  const netD = netDisplay({ collected: collectedMo, rent: rentMo, occupants: occupied });
+  const netD = netDisplay({ collected: collectedMo, rent: rentMo, housed: occupied });
   const clientName =
     customers.find((c) => c.id === (property as { customerId?: string }).customerId)?.name ?? "Customers";
 
@@ -659,20 +659,22 @@ export function BedBoardV2({
             formula={
               netD.kind === "syncing"
                 ? "Rent is set, but payroll deductions for this property are still syncing — so this isn't a loss yet."
+                : netD.kind === "none"
+                ? "Rent is set, but nobody is housed here yet — so this isn't a loss."
                 : "Collected from associates − Rent paid to landlord"
             }
             rows={[
               { k: "Collected /mo", v: formatUsdWhole(collectedMo) },
               { k: "Rent /mo", v: formatUsdWhole(rentMo) },
-              netD.kind === "syncing"
-                ? { k: "Status", v: "Deductions syncing" }
+              netD.kind !== "net"
+                ? { k: "Status", v: netD.label }
                 : { k: "Net /mo", v: formatUsdWhole(netD.value) },
             ]}
             href="/finance"
             hrefLabel="See the money view →"
           >
-            {netD.kind === "syncing" ? (
-              <StatCard label="Net /mo" value="Syncing…" sub="rent set · deductions syncing" />
+            {netD.kind !== "net" ? (
+              <StatCard label="Net /mo" value={netD.kind === "syncing" ? "Syncing…" : "—"} sub={netD.label} />
             ) : (
               <StatCard label="Net /mo" value={formatUsdWhole(netD.value)} tone={netD.value < 0 ? "risk" : "ok"} />
             )}

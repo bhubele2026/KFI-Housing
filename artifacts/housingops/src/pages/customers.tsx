@@ -129,15 +129,15 @@ export default function Customers() {
               // Item 5 — no bed inventory: a neutral "add a unit" state, never "x / 0" + "—".
               // Item 3 — money honesty: when people are housed but collections are still
               // syncing, show "syncing" not a scary red negative.
-              const nd = netDisplay({ collected: e.collected, rent: e.cost, occupants: e.occ });
+              const nd = netDisplay({ collected: e.collected, rent: e.cost, housed: e.occ });
               const rows: ERow[] = e.beds === 0
                 ? [{ label: "Beds", value: "No beds set — add a unit", tone: "ink" }]
                 : [
                     { label: "Housed", value: `${e.occ} / ${e.beds}` },
                     { label: "Occupancy", value: occPct == null ? "—" : `${occPct}%` },
-                    nd.kind === "syncing"
-                      ? { label: "Net / mo", value: "rent set · syncing", tone: "ink" }
-                      : { label: "Net / mo", value: fmtNet(nd.value), tone: nd.value >= 0 ? "ok" : "risk" },
+                    nd.kind === "net"
+                      ? { label: "Net / mo", value: fmtNet(nd.value), tone: nd.value >= 0 ? "ok" : "risk" }
+                      : { label: "Net / mo", value: nd.label, tone: "ink" },
                   ];
               return (
                 <EntityCard

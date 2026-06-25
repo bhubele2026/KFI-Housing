@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { Building2 } from "lucide-react";
 import { Link, useParams, useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { useData } from "@/context/data-store";
@@ -132,7 +133,7 @@ export default function CustomerDetail() {
   const netIsSyncing = netDisplay(netInput).kind === "syncing";
   // A KPI card whose value explains itself + links to the rows behind it.
   const KPI = (props: {
-    label: string;
+    label: ReactNode;
     value: ReactNode;
     sub?: string;
     tone?: "ink" | "ok" | "warn" | "risk" | "brand";
@@ -200,7 +201,7 @@ export default function CustomerDetail() {
 
         {/* KPI cockpit — every figure clickable + why */}
         <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <KPI label="Properties" value={view.propCount} sub={`${view.aptCount} apts · ${view.motelCount} motel`}
+          <KPI label={<span className="inline-flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-faint" aria-hidden />Properties</span>} value={view.propCount} sub={`${view.aptCount} apts · ${view.motelCount} motel`}
             title="Properties" formula="Active + shared properties for this client" rows={[{ k: "Apartments", v: view.aptCount }, { k: "Other", v: view.motelCount }]} href={bedsHref} />
           <KPI label="Housed" value={view.housed} sub={`of ${view.capacity} beds`}
             title="Housed" formula="Active occupants in this client's properties" rows={[{ k: "Housed", v: view.housed }, { k: "Capacity", v: view.capacity }]} href={bedsHref} />

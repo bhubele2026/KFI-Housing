@@ -86,10 +86,14 @@ export function BedBoardV2({
    */
   showStats?: boolean;
 }) {
-  const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant, addOccupant } = useData();
+  const { rooms, beds, occupants, customers, properties, updateBed, updateOccupant, addOccupant, addBed, deleteBed, addRoom } = useData();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [colorBy, setColorBy] = useState<ColorBy>("shift");
+  // Item 2 — "Edit beds" mode: changes bed/room INVENTORY (add/remove beds,
+  // add a room). Deliberately separate from assigning a PERSON to a bed so the
+  // two never get confused. Off by default.
+  const [editBeds, setEditBeds] = useState(false);
   // #5 assign-bed picker (Zenople roster or manual) for an open bed
   const [assignBed, setAssignBed] = useState<string | null>(null);
   const [assignQ, setAssignQ] = useState("");
@@ -127,6 +131,43 @@ export function BedBoardV2({
         .sort((a, b) => String((a as { name?: string }).name ?? "").localeCompare(String((b as { name?: string }).name ?? ""))),
     [rooms, property.id],
   );
+  // Item 2 — inventory edits (use the existing data-store hooks). IDs are
+  // time-based so they're unique within the session; the server keys on them.
+  const nextBedNumber = () =>
+    propBeds.reduce((m, b) => Math.max(m, Number((b as { bedNumber?: number }).bedNumber) || 0), 0) + 1;
+  const handleAddBed = (roomId: string) => {
+    const n = nextBedNumber();
+    addBed({
+      id: `bed-${roomId}-${Date.now()}`,
+      propertyId: property.id,
+      bedNumber: n,
+      roomId,
+      status: "Vacant",
+      occupantId: null,
+      cleaningStatus: "ready",
+    } as never);
+    toast({ title: "Bed added", description: `Empty bed #${n} added to the room.` });
+  };
+  const handleRemoveBed = (bedId: string) => {
+    // Safety: only ever remove a bed with no person on it.
+    if (occByBed[bedId]) return;
+    deleteBed(bedId);
+    toast({ title: "Bed removed" });
+  };
+  const handleAddRoom = () => {
+    const n = propRooms.length + 1;
+    void addRoom({
+      id: `room-${property.id}-${Date.now()}`,
+      propertyId: property.id,
+      buildingId: "",
+      name: `Room ${n}`,
+      sqft: 0,
+      bathrooms: 1,
+      monthlyRent: 0,
+    } as never);
+    toast({ title: "Room added", description: `“Room ${n}” added — add beds to it.` });
+  };
+
   const occById = useMemo(() => {
     const m = new Map<string, Occupant>();
     occupants.forEach((o) => m.set(o.id, o));
@@ -651,17 +692,36 @@ export function BedBoardV2({
           value={colorBy}
           onChange={(v) => setColorBy(v as ColorBy)}
         />
+        {/* Item 2 — toggle bed/room INVENTORY editing (add/remove beds, add a
+            room). Distinct from assigning a person. */}
+        <button
+          type="button"
+          onClick={() => { setEditBeds((s) => !s); setSelectMode(false); }}
+          title="Add or remove beds & rooms (inventory) — not the same as assigning a person"
+          className={[
+            "ml-auto rounded-[9px] border px-3 py-1.5 text-[12px] font-bold",
+            editBeds ? "border-brand bg-brand text-white" : "border-line bg-panel text-ink",
+          ].join(" ")}
+          data-testid="toggle-edit-beds"
+        >
+          {editBeds ? "Done editing beds" : "Edit beds"}
+        </button>
         <button
           type="button"
           onClick={() => { setSelectMode((s) => !s); setSelected(new Set()); }}
           className={[
-            "ml-auto rounded-[9px] border px-3 py-1.5 text-[12px] font-bold",
+            "rounded-[9px] border px-3 py-1.5 text-[12px] font-bold",
             selectMode ? "border-brand bg-brand text-white" : "border-line bg-panel text-ink",
           ].join(" ")}
         >
           {selectMode ? "Done" : "Select"}
         </button>
       </div>
+      {editBeds && (
+        <div className="mb-3 rounded-[12px] border border-brand/30 bg-accent px-3 py-2 text-[12.5px] text-ink2">
+          <b className="text-ink">Editing bed inventory.</b> Add or remove beds &amp; rooms below — this changes how many beds exist, <i>not</i> who's assigned. Only empty beds can be removed.
+        </div>
+      )}
 
       {/* #22 bulk action bar */}
       {selectMode && (
@@ -734,6 +794,24 @@ export function BedBoardV2({
                 const occ = occupantInBed(b.id);
                 if (!occ) {
                   const isSuggested = suggested.has(b.id) && !!dragOcc;
+                  // Item 2 — in edit mode an empty bed shows a remove control
+                  // (inventory), not the assign-a-person affordance.
+                  if (editBeds) {
+                    return (
+                      <div key={b.id} className="relative">
+                        <Bed open testId={`bed-open-${b.id}`} />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBed(b.id)}
+                          title="Remove this empty bed"
+                          data-testid={`bed-remove-${b.id}`}
+                          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-[7px] border border-line bg-panel text-xs text-muted-foreground hover:border-risk/40 hover:bg-risk-soft hover:text-risk"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  }
                   return (
                     <div
                       key={b.id}
@@ -829,11 +907,31 @@ export function BedBoardV2({
                   </div>
                 );
               })}
+              {editBeds && (
+                <button
+                  type="button"
+                  onClick={() => handleAddBed(room.id)}
+                  data-testid={`room-add-bed-${room.id}`}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-[11px] border border-dashed border-brand/50 bg-accent/40 px-3 py-2 text-[12.5px] font-bold text-brand hover:bg-accent print:hidden"
+                >
+                  <span aria-hidden className="text-[15px] leading-none">＋</span> Add bed to this room
+                </button>
+              )}
             </RoomCard>
             )}
             </ErrorBoundary>
           );
         })}
+        {editBeds && (
+          <button
+            type="button"
+            onClick={handleAddRoom}
+            data-testid="board-add-room"
+            className="flex min-h-[120px] flex-col items-center justify-center gap-2 rounded-[14px] border-2 border-dashed border-brand/40 bg-accent/30 p-4 text-[13px] font-bold text-brand hover:bg-accent print:hidden"
+          >
+            <span aria-hidden className="text-[22px] leading-none">＋</span> Add room / unit
+          </button>
+        )}
       </div>
       </PrintView>
 

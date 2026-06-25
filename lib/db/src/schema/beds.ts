@@ -1,7 +1,9 @@
-import { pgTable, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-export const bedsTable = pgTable("beds", {
+export const bedsTable = pgTable(
+  "beds",
+  {
   id: text("id").primaryKey(),
   propertyId: text("property_id").notNull(),
   bedNumber: integer("bed_number").notNull().default(1),
@@ -37,7 +39,14 @@ export const bedsTable = pgTable("beds", {
   needsCleaningSince: timestamp("needs_cleaning_since", {
     withTimezone: true,
   }),
-});
+  },
+  // Indexes on the foreign keys the bed list/board filters by most
+  // (Task: perf pass). Additive only — no column changes.
+  (table) => ({
+    propertyIdx: index("beds_property_id_idx").on(table.propertyId),
+    roomIdx: index("beds_room_id_idx").on(table.roomId),
+  }),
+);
 
 export type BedRow = typeof bedsTable.$inferSelect;
 export type InsertBedRow = typeof bedsTable.$inferInsert;

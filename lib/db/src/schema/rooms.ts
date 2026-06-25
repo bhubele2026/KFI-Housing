@@ -1,6 +1,8 @@
-import { pgTable, text, integer, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, doublePrecision, index } from "drizzle-orm/pg-core";
 
-export const roomsTable = pgTable("rooms", {
+export const roomsTable = pgTable(
+  "rooms",
+  {
   id: text("id").primaryKey(),
   propertyId: text("property_id").notNull().default(""),
   // Building this room belongs to (Task #570). Empty string when the
@@ -15,7 +17,13 @@ export const roomsTable = pgTable("rooms", {
   sqft: integer("sqft").notNull().default(0),
   bathrooms: doublePrecision("bathrooms").notNull().default(0),
   monthlyRent: doublePrecision("monthly_rent").notNull().default(0),
-});
+  },
+  // Indexes on the foreign keys rooms are grouped by. Additive only.
+  (table) => ({
+    propertyIdx: index("rooms_property_id_idx").on(table.propertyId),
+    buildingIdx: index("rooms_building_id_idx").on(table.buildingId),
+  }),
+);
 
 export type RoomRow = typeof roomsTable.$inferSelect;
 export type InsertRoomRow = typeof roomsTable.$inferInsert;

@@ -1,6 +1,8 @@
-import { pgTable, text, doublePrecision, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, doublePrecision, boolean, integer, index } from "drizzle-orm/pg-core";
 
-export const leasesTable = pgTable("leases", {
+export const leasesTable = pgTable(
+  "leases",
+  {
   id: text("id").primaryKey(),
   propertyId: text("property_id").notNull(),
   startDate: text("start_date").notNull().default(""),
@@ -113,7 +115,15 @@ export const leasesTable = pgTable("leases", {
   // per building. The boundary normalizer coerces blank strings to
   // NULL on write.
   buildingId: text("building_id"),
-});
+  },
+  // Indexes on the foreign keys leases are filtered/grouped by most.
+  // Additive only.
+  (table) => ({
+    propertyIdx: index("leases_property_id_idx").on(table.propertyId),
+    customerIdx: index("leases_customer_id_idx").on(table.customerId),
+    buildingIdx: index("leases_building_id_idx").on(table.buildingId),
+  }),
+);
 
 export type LeaseRow = typeof leasesTable.$inferSelect;
 export type InsertLeaseRow = typeof leasesTable.$inferInsert;

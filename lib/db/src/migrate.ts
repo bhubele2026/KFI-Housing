@@ -29,6 +29,7 @@ import { addVehicleColorIfNeeded } from "./migrations/add-vehicle-color";
 import { createWeeklyReviewsTableIfNeeded } from "./migrations/create-weekly-reviews-table";
 import { addOccupantMoveOutReasonIfNeeded } from "./migrations/add-occupant-move-out-reason";
 import { addPropertyLatLngIfNeeded } from "./migrations/add-property-latlng";
+import { addCoreIndexesIfNeeded } from "./migrations/add-core-indexes";
 
 export interface PushSchemaResult {
   applied: boolean;
@@ -188,6 +189,11 @@ export async function pushSchemaIfNeeded(
   // Overhaul: move-out reason on occupants + lat/lng on properties (map).
   await addOccupantMoveOutReasonIfNeeded(pool, log);
   await addPropertyLatLngIfNeeded(pool, log);
+
+  // Perf pass: ensure the core foreign-key / status indexes exist BEFORE
+  // drizzle's pushSchema so the diff afterwards is empty (the schema now
+  // declares these indexes too). Purely additive — index creation only.
+  await addCoreIndexesIfNeeded(pool, log);
 
   const { pushSchema } = await import("drizzle-kit/api");
 

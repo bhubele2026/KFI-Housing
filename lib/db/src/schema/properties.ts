@@ -1,4 +1,4 @@
-import { pgTable, text, integer, doublePrecision, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, doublePrecision, jsonb, boolean, timestamp, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 /** Per-property subjective ratings, 0–5 whole-star scale. 0 = not rated. */
@@ -20,7 +20,9 @@ const EMPTY_RATINGS: PropertyRatings = {
   valueForMoney: 0,
 };
 
-export const propertiesTable = pgTable("properties", {
+export const propertiesTable = pgTable(
+  "properties",
+  {
   id: text("id").primaryKey(),
   name: text("name").notNull().default(""),
   address: text("address").notNull().default(""),
@@ -106,7 +108,13 @@ export const propertiesTable = pgTable("properties", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .default(sql`now()`),
-});
+  },
+  // Index on the owning-customer foreign key (Properties / Customers
+  // filter by it constantly). Additive only.
+  (table) => ({
+    customerIdx: index("properties_customer_id_idx").on(table.customerId),
+  }),
+);
 
 export type PropertyRow = typeof propertiesTable.$inferSelect;
 export type InsertPropertyRow = typeof propertiesTable.$inferInsert;

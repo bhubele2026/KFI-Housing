@@ -6,9 +6,12 @@ import {
   boolean,
   integer,
   jsonb,
+  index,
 } from "drizzle-orm/pg-core";
 
-export const occupantsTable = pgTable("occupants", {
+export const occupantsTable = pgTable(
+  "occupants",
+  {
   id: text("id").primaryKey(),
   name: text("name").notNull().default(""),
   email: text("email").notNull().default(""),
@@ -88,7 +91,15 @@ export const occupantsTable = pgTable("occupants", {
   // captured by the one-tap move-out (overhaul refinement #12).
   moveOutReason: text("move_out_reason").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+  },
+  // Indexes on the columns the occupant list/roster filters by most
+  // (status) and its foreign keys (property, bed). Additive only.
+  (table) => ({
+    statusIdx: index("occupants_status_idx").on(table.status),
+    propertyIdx: index("occupants_property_id_idx").on(table.propertyId),
+    bedIdx: index("occupants_bed_id_idx").on(table.bedId),
+  }),
+);
 
 export type OccupantRow = typeof occupantsTable.$inferSelect;
 export type InsertOccupantRow = typeof occupantsTable.$inferInsert;

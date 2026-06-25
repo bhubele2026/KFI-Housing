@@ -31,8 +31,10 @@ export type NetDisplay =
   | { kind: "syncing"; cost: number; label: string }
   | { kind: "none"; cost: number; label: string };
 
-/** Fraction of housed people who must be unsynced before we hide the net. */
-const SYNCING_THRESHOLD = 0.8;
+/** Collected/cost ratio below which a shortfall reads as "still syncing"
+ *  rather than a real loss (in this model a synced scope collects ≈ its rent,
+ *  so a big gap is almost always unsynced deductions, not a true loss). */
+const COVERAGE_FLOOR = 0.85;
 
 /**
  * Decide how a scope's net should render:
@@ -58,12 +60,20 @@ export function netDisplay({
     return { kind: "none", cost, label: "no one housed yet" };
   }
 
-  // "Mostly unsynced": nothing collected at all, or ≥80% of the housed are
-  // either not-in-payroll or sitting at a $0 deduction. Use max() (not sum) so
-  // the two overlapping signals don't double-count past 100%.
   const unsynced = Math.max(notInPayroll, zeroDeduction);
-  const mostlyUnsynced = collected === 0 || unsynced >= SYNCING_THRESHOLD * people;
-  if (mostlyUnsynced && cost > 0) {
+  const shortfall = collected < cost; // would render as a red negative
+  const coverage = cost > 0 ? collected / cost : 1;
+  // A negative spread is "still syncing" (NOT a real loss) when the gap is
+  // explained by deductions that haven't landed: nothing collected at all; OR
+  // a shortfall while some housed people are not-in-payroll / at $0; OR a
+  // shortfall where collected sits far below rent (collected ≪ rent). A real
+  // red number only shows when people are housed AND collections are basically
+  // complete (coverage near rent, nobody outstanding) yet still below cost.
+  const mostlyUnsynced =
+    cost > 0 &&
+    (collected === 0 ||
+      (shortfall && (unsynced > 0 || coverage < COVERAGE_FLOOR)));
+  if (mostlyUnsynced) {
     return { kind: "syncing", cost, label: "rent set · syncing" };
   }
 
